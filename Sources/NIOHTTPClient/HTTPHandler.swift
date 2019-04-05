@@ -38,6 +38,8 @@ public struct HTTPClientErrors {
     public struct RemoteConnectionClosedError: HTTPClientError {}
 
     public struct CancelledError: HTTPClientError {}
+
+    public struct InvalidProxyResponseError : HTTPClientError {}
 }
 
 public enum HTTPBody: Equatable {

@@ -37,17 +37,20 @@ public struct HTTPClientConfiguration {
     public var tlsConfiguration: TLSConfiguration?
     public var followRedirects: Bool
     public var timeout: Timeout
+    public var proxy: HTTPClientProxy?
 
-    public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: Bool = false, timeout: Timeout = Timeout()) {
+    public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: HTTPClientProxy? = nil) {
         self.tlsConfiguration = tlsConfiguration
         self.followRedirects = followRedirects
         self.timeout = timeout
+        self.proxy = proxy
     }
 
-    public init(certificateVerification: CertificateVerification, followRedirects: Bool = false, timeout: Timeout = Timeout()) {
+    public init(certificateVerification: CertificateVerification, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: HTTPClientProxy? = nil) {
         self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
         self.followRedirects = followRedirects
         self.timeout = timeout
+        self.proxy = proxy
     }
 }
 
@@ -152,24 +155,44 @@ public class HTTPClient {
         var bootstrap = ClientBootstrap(group: group)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
             .channelInitializer { channel in
-            channel.pipeline.addHTTPClientHandlers().flatMap {
-                self.configureSSL(channel: channel, useTLS: request.useTLS, hostname: request.host)
-            }.flatMap {
-                if let readTimeout = timeout.read {
-                    return channel.pipeline.addHandler(IdleStateHandler(readTimeout: readTimeout))
-                } else {
-                    return channel.eventLoop.makeSucceededFuture(())
+                let encoder = HTTPRequestEncoder()
+                let decoder = ByteToMessageHandler(HTTPResponseDecoder(leftOverBytesStrategy: .forwardBytes))
+                return channel.pipeline.addHandlers([encoder, decoder], position: .first).flatMap {
+                    switch self.configuration.proxy {
+                    case .none:
+                        return channel.pipeline.addSSLHandlerIfNeeded(for: request, tlsConfiguration: self.configuration.tlsConfiguration)
+                    case .some:
+                        return channel.pipeline.addProxyHandler(for: request, decoder: decoder, encoder: encoder, tlsConfiguration: self.configuration.tlsConfiguration)
+                    }
+                }.flatMap {
+                    if let readTimeout = timeout.read {
+                        return channel.pipeline.addHandler(IdleStateHandler(readTimeout: readTimeout))
+                    } else {
+                        return channel.eventLoop.makeSucceededFuture(())
+                    }
+                }.flatMap {
+                    let taskHandler = HTTPTaskHandler(task: task, delegate: delegate, promise: promise, redirectHandler: redirectHandler)
+                    return channel.pipeline.addHandler(taskHandler)
                 }
-            }.flatMap {
-                channel.pipeline.addHandler(HTTPTaskHandler(task: task, delegate: delegate, promise: promise, redirectHandler: redirectHandler))
             }
-        }
 
         if let connectTimeout = timeout.connect {
             bootstrap = bootstrap.connectTimeout(connectTimeout)
         }
 
-        bootstrap.connect(host: request.host, port: request.port)
+        let host: String
+        let port: Int
+
+        switch self.configuration.proxy {
+        case .none:
+            host = request.host
+            port = request.port
+        case .some(let proxy):
+            host = proxy.host
+            port = proxy.port
+        }
+
+        bootstrap.connect(host: host, port: port)
             .map { channel in
                 task.setChannel(channel)
             }
@@ -182,19 +205,35 @@ public class HTTPClient {
 
         return task
     }
+}
 
-    private func configureSSL(channel: Channel, useTLS: Bool, hostname: String) -> EventLoopFuture<Void> {
-        if useTLS {
-            do {
-                let tlsConfiguration = self.configuration.tlsConfiguration ?? TLSConfiguration.forClient()
-                let context = try NIOSSLContext(configuration: tlsConfiguration)
-                return channel.pipeline.addHandler(try NIOSSLClientHandler(context: context, serverHostname: hostname),
-                                                   position: .first)
-            } catch {
-                return channel.eventLoop.makeFailedFuture(error)
+private extension ChannelPipeline {
+    func addProxyHandler(for request: HTTPRequest, decoder: ByteToMessageHandler<HTTPResponseDecoder>, encoder: HTTPRequestEncoder, tlsConfiguration: TLSConfiguration?) -> EventLoopFuture<Void> {
+        let handler = HTTPClientProxyHandler(host: request.host, port: request.port, onConnect: { channel in
+            return channel.pipeline.removeHandler(decoder).flatMap {
+                return channel.pipeline.addHandler(
+                    ByteToMessageHandler(HTTPResponseDecoder(leftOverBytesStrategy: .forwardBytes)),
+                    position: .after(encoder)
+                )
+            }.flatMap {
+                return channel.pipeline.addSSLHandlerIfNeeded(for: request, tlsConfiguration: tlsConfiguration)
             }
-        } else {
-            return channel.eventLoop.makeSucceededFuture(())
+        })
+        return self.addHandler(handler)
+    }
+
+    func addSSLHandlerIfNeeded(for request: HTTPRequest, tlsConfiguration: TLSConfiguration?) -> EventLoopFuture<Void> {
+        guard request.useTLS else {
+            return self.eventLoop.makeSucceededFuture(())
+        }
+
+        do {
+            let tlsConfiguration = tlsConfiguration ?? TLSConfiguration.forClient()
+            let context = try NIOSSLContext(configuration: tlsConfiguration)
+            return self.addHandler(try NIOSSLClientHandler(context: context, serverHostname: request.host),
+                                   position: .first)
+        } catch {
+            return self.eventLoop.makeFailedFuture(error)
         }
     }
 }

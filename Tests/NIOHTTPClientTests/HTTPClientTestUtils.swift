@@ -86,17 +86,32 @@ internal class HttpBin {
         return self.serverChannel.localAddress!
     }
 
+<<<<<<< HEAD
     init(ssl: Bool = false) {
         self.serverChannel = try! ServerBootstrap(group: self.group)
+=======
+    static func configureTLS(channel: Channel) -> EventLoopFuture<Void> {
+        let configuration = TLSConfiguration.forServer(certificateChain: [.certificate(try! NIOSSLCertificate(buffer: cert.utf8.map(Int8.init), format: .pem))],
+                                                       privateKey: .privateKey(try! NIOSSLPrivateKey(buffer: key.utf8.map(Int8.init), format: .pem)))
+        let context = try! NIOSSLContext(configuration: configuration)
+        return channel.pipeline.addHandler(try! NIOSSLServerHandler(context: context), position: .first)
+    }
+
+    init(ssl: Bool = false, simulateProxy: HTTPProxySimulator.Option? = nil) {
+        self.serverChannel = try! ServerBootstrap(group: group)
+>>>>>>> add proxy support
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
             .childChannelInitializer { channel in
-                channel.pipeline.configureHTTPServerPipeline(withPipeliningAssistance: true, withErrorHandling: true).flatMap {
+                return channel.pipeline.configureHTTPServerPipeline(withPipeliningAssistance: true, withErrorHandling: true).flatMap {
+                    if let simulateProxy = simulateProxy {
+                        return channel.pipeline.addHandler(HTTPProxySimulator(option: simulateProxy), position: .first)
+                    } else {
+                        return channel.eventLoop.makeSucceededFuture(())
+                    }
+                }.flatMap {
                     if ssl {
-                        let configuration = TLSConfiguration.forServer(certificateChain: [.certificate(try! NIOSSLCertificate(buffer: cert.utf8.map(Int8.init), format: .pem))],
-                                                                       privateKey: .privateKey(try! NIOSSLPrivateKey(buffer: key.utf8.map(Int8.init), format: .pem)))
-                        let context = try! NIOSSLContext(configuration: configuration)
-                        return channel.pipeline.addHandler(try! NIOSSLServerHandler(context: context), position: .first).flatMap {
+                        return HttpBin.configureTLS(channel: channel).flatMap {
                             channel.pipeline.addHandler(HttpBinHandler())
                         }
                     } else {
@@ -108,6 +123,48 @@ internal class HttpBin {
 
     func shutdown() {
         try! self.group.syncShutdownGracefully()
+    }
+}
+
+final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
+    typealias InboundIn = ByteBuffer
+    typealias InboundOut = ByteBuffer
+    typealias OutboundOut = ByteBuffer
+
+    enum Option {
+        case plaintext
+        case tls
+    }
+
+    let option: Option
+
+    init(option: Option) {
+        self.option = option
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        let response = """
+        HTTP/1.1 200 OK\r\n\
+        Content-Length: 0\r\n\
+        Connection: close\r\n\
+        \r\n
+        """
+        var buffer = self.unwrapInboundIn(data)
+        let request = buffer.readString(length: buffer.readableBytes)!
+        if request.hasPrefix("CONNECT") {
+            var buffer = context.channel.allocator.buffer(capacity: 0)
+            buffer.writeString(response)
+            context.write(self.wrapInboundOut(buffer), promise: nil)
+            context.flush()
+            context.channel.pipeline.removeHandler(self, promise: nil)
+            switch self.option {
+            case .tls:
+                _ = HttpBin.configureTLS(channel: context.channel)
+            case .plaintext: break
+            }
+        } else {
+            fatalError("Expected a CONNECT request")
+        }
     }
 }
 

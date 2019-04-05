@@ -23,6 +23,7 @@ import XCTest
 ///
 
 extension SwiftHTTPTests {
+<<<<<<< HEAD
     static var allTests: [(String, (SwiftHTTPTests) -> () throws -> Void)] {
         return [
             ("testRequestURI", testRequestURI),
@@ -40,4 +41,26 @@ extension SwiftHTTPTests {
             ("testCancel", testCancel),
         ]
     }
+=======
+
+   static var allTests : [(String, (SwiftHTTPTests) -> () throws -> Void)] {
+      return [
+                ("testRequestURI", testRequestURI),
+                ("testHTTPPartsHandler", testHTTPPartsHandler),
+                ("testHTTPPartsHandlerMultiBody", testHTTPPartsHandlerMultiBody),
+                ("testGet", testGet),
+                ("testPost", testPost),
+                ("testGetHttps", testGetHttps),
+                ("testPostHttps", testPostHttps),
+                ("testHttpRedirect", testHttpRedirect),
+                ("testMultipleContentLengthHeaders", testMultipleContentLengthHeaders),
+                ("testStreaming", testStreaming),
+                ("testRemoteClose", testRemoteClose),
+                ("testReadTimeout", testReadTimeout),
+                ("testCancel", testCancel),
+                ("testProxyPlaintext", testProxyPlaintext),
+                ("testProxyTLS", testProxyTLS),
+           ]
+   }
+>>>>>>> add proxy support
 }
