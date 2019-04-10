@@ -16,7 +16,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "NIOHTTPClient",
+    name: "swift-nio-http-client",
     products: [
         .library(name: "NIOHTTPClient", targets: ["NIOHTTPClient"]),
     ],
