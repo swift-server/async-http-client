@@ -1,12 +1,12 @@
 //===----------------------------------------------------------------------===//
 //
-// This source file is part of the SwiftNIOHTTP open source project
+// This source file is part of the SwiftNIOHTTPClient open source project
 //
-// Copyright (c) 2017-2018 Swift Server Working Group and the SwiftNIOHTTP project authors
+// Copyright (c) 2018-2019 Swift Server Working Group and the SwiftNIOHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
-// See CONTRIBUTORS.txt for the list of SwiftNIOHTTP project authors
+// See CONTRIBUTORS.txt for the list of SwiftNIOHTTPClient project authors
 //
 // SPDX-License-Identifier: Apache-2.0
 //
