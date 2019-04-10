@@ -1,53 +1,69 @@
 # swift-nio-http-client
 This package provides simple HTTP Client library built on top of SwiftNIO.
 
-## Getting Started
-
-Add the following entry in your <code>Package.swift</code> to start using <code>HTTPClient</code>:
-
-### Swift 5
-
-```swift
-dependencies: [
-    .package(url: "https://github.com/swift-server/swift-nio-http-client.git", from: "1.0.0")
-]
-```
-
-## Status
-
 This library provides the following:
-1. Async single request methods
-2. Simple follow-redirect support (cookie headers are dropped)
-3. Body download streaming
+1. Asynchronous and non-blocking request methods
+2. Simple follow-redirects (cookie headers are dropped)
+3. Streaming body download
 4. TLS support
 5. Cookie parsing (but not storage)
 
-## How to use
+---
 
-### Request-Response API
+**NOTE**: You will need [Xcode 10.2](https://itunes.apple.com/us/app/xcode/id497799835) or [Swift 5.0](https://swift.org/download/#swift-50) to try out `swift-nio-htt-client`.
+
+---
+
+## Getting Started
+
+#### Adding the dependency
+Add the following entry in your <code>Package.swift</code> to start using <code>HTTPClient</code>:
+
+```swift
+// it's early days here so we haven't tagged a version yet, but will soon
+.package(url: "https://github.com/swift-server/swift-nio-http-client.git", .branch("master"))
+```
+and  ```SwiftNIOHTTP``` dependency to your target:
+```swift
+.target(name: "MyApp", dependencies: ["SwiftNIOHTTP"]),
+```
+
+#### Request-Response API
 The code snippet below illustrates how to make a simple GET request to a remote server:
 
-```import HTTPClient
+```swift
+import HTTPClient
 
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
-let response = try httpClient.get(url: "https://swift.org").wait()
-
-if response.status == .ok {
-    // handle the response
+httpClient.get(url: "https://swift.org").whenComplete { result in
+    switch result {
+    case .failure(let error):
+        // process error
+    case .success(let response):
+        if let response.status == .ok {
+            // handle response
+        } else {
+            // handle remote error
+        }
+    }
 }
+```
 
-// close the client
+It is important to close client instance after use to cleanly shutdown underlying NIO ```EventLoopGroup```:
+```
 try? httpClient.syncShutdown()
 ```
-
-It is important to close client instance after use to cleanly shutdown underlying NIO ```EventLoopGroup```. Alternatively, you can provide shared ```EventLoopGroup```:
-```
+Alternatively, you can provide shared ```EventLoopGroup```:
+```swift
 let httpClient = HTTPClient(eventLoopGroupProvider: .shared(userProvidedGroup))
 ```
 In this case shutdown of the client is not neccecary.
 
-Library provides methods for most HTTP-methods. In case you need to have more control over the method, or you want to add headers or body, use ```HTTPRequest``` struct:
-```import HTTPClient
+## Usage guide
+
+Most common HTTP methods are supported out of the box. In case you need to have more control over the method, or you want to add headers or body, use ```HTTPRequest``` struct:
+```swift
+import HTTPClient
 
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
 defer {
@@ -58,35 +74,43 @@ var request = try HTTPRequest(url: "https://swift.org", method: .POST)
 request.headers.add(name: "User-Agent", value: "Swift HTTPClient")
 request.body = .string("some-body")
 
-let response = try httpClient.execute(request: request).wait()
-
-if response.status == .ok {
-    // handle the response
+httpClient.execute(request: request).whenComplete { result in
+    switch result {
+    case .failure(let error):
+        // process error
+    case .success(let response):
+        if let response.status == .ok {
+            // handle response
+        } else {
+            // handle remote error
+        }
+    }
 }
 ```
 
-### Redirect following
-To enable follow-redirects behaviour, enable in using client configuration:
-```
+### Redirects following
+Enable follow-redirects behavior using the client configuration:
+```swift
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
                             configuration: HTTPClientConfiguration(followRedirects: true))
 ```
 
 ### Timeouts
-Timeouts (connect and read) can be set in the client configuration:
-```
+Timeouts (connect and read) can also be set using the client configuration:
+```swift
+let timeout = Timeout(connectTimeout: .seconds(1), readTimeout: .seconds(1))
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
-                            configuration: HTTPClientConfiguration(timeout: Timeout(connectTimeout: .seconds(1),
-                                                                                    readTimeout: .seconds(1))))
+                            configuration: HTTPClientConfiguration(timeout: timeout))
 ```
 or on per-request basis:
-```
-let response = try httpClient.execute(request: request, timeout: Timeout(connectTimeout: .seconds(1), readTimeout: .seconds(1))).wait()
+```swift
+let timeout = Timeout(connectTimeout: .seconds(1), readTimeout: .seconds(1))
+let response = try httpClient.execute(request: request, timeout: timeout).wait()
 ```
 
 ### Streaming
-In case greater control over body processing is needed or you want to process HTTP Reponse body in a streaming manner, following delegate protocol could be used (example shows how to count bytes in response body without copiying it to the memory):
-```
+When dealing with larger amount of data, it's critical to steam the response body instead of aggregating it-memory. Handling a response stream is done using a delegate protocol. The following example demonstrates how to count the number of bytes in a streaming response body:
+```swift
 class CountingDelegate: HTTPResponseDelegate {
     typealias Response = Int
 
