@@ -1,4 +1,4 @@
-# swift-nio-http-client
+# SwiftNIOHTTPClient
 This package provides simple HTTP Client library built on top of SwiftNIO.
 
 This library provides the following:
@@ -10,7 +10,7 @@ This library provides the following:
 
 ---
 
-**NOTE**: You will need [Xcode 10.2](https://itunes.apple.com/us/app/xcode/id497799835) or [Swift 5.0](https://swift.org/download/#swift-50) to try out `swift-nio-htt-client`.
+**NOTE**: You will need [Xcode 10.2](https://itunes.apple.com/us/app/xcode/id497799835) or [Swift 5.0](https://swift.org/download/#swift-50) to try out `SwiftNIOHTTPClient`.
 
 ---
 
@@ -25,7 +25,7 @@ Add the following entry in your <code>Package.swift</code> to start using <code>
 ```
 and  ```SwiftNIOHTTP``` dependency to your target:
 ```swift
-.target(name: "MyApp", dependencies: ["SwiftNIOHTTP"]),
+.target(name: "MyApp", dependencies: ["NIOHTTPClient"]),
 ```
 
 #### Request-Response API
@@ -105,11 +105,11 @@ let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
 or on per-request basis:
 ```swift
 let timeout = Timeout(connectTimeout: .seconds(1), readTimeout: .seconds(1))
-let response = try httpClient.execute(request: request, timeout: timeout).wait()
+httpClient.execute(request: request, timeout: timeout)
 ```
 
 ### Streaming
-When dealing with larger amount of data, it's critical to steam the response body instead of aggregating it-memory. Handling a response stream is done using a delegate protocol. The following example demonstrates how to count the number of bytes in a streaming response body:
+When dealing with larger amount of data, it's critical to stream the response body instead of aggregating in-memory. Handling a response stream is done using a delegate protocol. The following example demonstrates how to count the number of bytes in a streaming response body:
 ```swift
 class CountingDelegate: HTTPResponseDelegate {
     typealias Response = Int
@@ -142,5 +142,7 @@ class CountingDelegate: HTTPResponseDelegate {
 let request = try HTTPRequest(url: "https://swift.org")
 let delegate = CountingDelegate()
 
-let count = try httpClient.execute(request: request, delegate: delegate).wait()
+try httpClient.execute(request: request, delegate: delegate).future.whenSuccess { count in
+    print(count)
+}
 ```
