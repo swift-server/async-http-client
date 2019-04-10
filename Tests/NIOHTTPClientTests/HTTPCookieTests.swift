@@ -14,7 +14,7 @@
 
 import Foundation
 import XCTest
-@testable import SwiftNIOHTTP
+@testable import NIOHTTPClient
 
 class HTTPCookieTests: XCTestCase {
 

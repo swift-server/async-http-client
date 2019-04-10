@@ -17,7 +17,7 @@ import NIO
 import NIOSSL
 import XCTest
 @testable import NIOHTTP1
-@testable import SwiftNIOHTTP
+@testable import NIOHTTPClient
 
 class SwiftHTTPTests: XCTestCase {
 
