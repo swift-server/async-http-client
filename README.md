@@ -23,7 +23,7 @@ Add the following entry in your <code>Package.swift</code> to start using <code>
 // it's early days here so we haven't tagged a version yet, but will soon
 .package(url: "https://github.com/swift-server/swift-nio-http-client.git", .branch("master"))
 ```
-and  ```SwiftNIOHTTP``` dependency to your target:
+and  ```NIOHTTPClient``` dependency to your target:
 ```swift
 .target(name: "MyApp", dependencies: ["NIOHTTPClient"]),
 ```
@@ -32,7 +32,7 @@ and  ```SwiftNIOHTTP``` dependency to your target:
 The code snippet below illustrates how to make a simple GET request to a remote server:
 
 ```swift
-import HTTPClient
+import NIOHTTPClient
 
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
 httpClient.get(url: "https://swift.org").whenComplete { result in
@@ -63,7 +63,7 @@ In this case shutdown of the client is not neccecary.
 
 Most common HTTP methods are supported out of the box. In case you need to have more control over the method, or you want to add headers or body, use ```HTTPRequest``` struct:
 ```swift
-import HTTPClient
+import NIOHTTPClient
 
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
 defer {
