@@ -16,7 +16,7 @@ import Foundation
 import NIO
 import NIOHTTP1
 import NIOSSL
-@testable import SwiftNIOHTTP
+@testable import NIOHTTPClient
 
 class TestHTTPDelegate : HTTPResponseDelegate {
     typealias Response = Void

@@ -16,9 +16,9 @@
 import PackageDescription
 
 let package = Package(
-    name: "SwiftNIOHTTP",
+    name: "NIOHTTPClient",
     products: [
-        .library(name: "SwiftNIOHTTP", targets: ["SwiftNIOHTTP"]),
+        .library(name: "NIOHTTPClient", targets: ["NIOHTTPClient"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
@@ -26,10 +26,10 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "SwiftNIOHTTP",
+            name: "NIOHTTPClient",
             dependencies: ["NIO", "NIOHTTP1", "NIOSSL", "NIOConcurrencyHelpers"]),
         .testTarget(
-            name: "SwiftNIOHTTPTests",
-            dependencies: ["SwiftNIOHTTP"]),
+            name: "NIOHTTPClientTests",
+            dependencies: ["NIOHTTPClient"]),
     ]
 )
