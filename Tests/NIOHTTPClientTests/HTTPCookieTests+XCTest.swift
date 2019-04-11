@@ -23,12 +23,10 @@ import XCTest
 ///
 
 extension HTTPCookieTests {
-
-   static var allTests : [(String, (HTTPCookieTests) -> () throws -> Void)] {
-      return [
-                ("testCookie", testCookie),
-                ("testCookieDefaults", testCookieDefaults),
-           ]
-   }
+    static var allTests: [(String, (HTTPCookieTests) -> () throws -> Void)] {
+        return [
+            ("testCookie", testCookie),
+            ("testCookieDefaults", testCookieDefaults),
+        ]
+    }
 }
-

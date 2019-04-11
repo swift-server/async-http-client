@@ -23,10 +23,10 @@ import XCTest
 ///
 
 #if os(Linux) || os(FreeBSD)
-   @testable import NIOHTTPClientTests
+    @testable import NIOHTTPClientTests
 
-   XCTMain([
-         testCase(HTTPCookieTests.allTests),
-         testCase(SwiftHTTPTests.allTests),
+    XCTMain([
+        testCase(HTTPCookieTests.allTests),
+        testCase(SwiftHTTPTests.allTests),
     ])
 #endif

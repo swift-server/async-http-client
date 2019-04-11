@@ -14,9 +14,9 @@
 
 import Foundation
 import NIO
+import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOSSL
-import NIOConcurrencyHelpers
 
 public enum EventLoopGroupProvider {
     case shared(EventLoopGroup)
@@ -52,7 +52,6 @@ public struct HTTPClientConfiguration {
 }
 
 public class HTTPClient {
-
     let eventLoopGroupProvider: EventLoopGroupProvider
     let group: EventLoopGroup
     let configuration: HTTPClientConfiguration
@@ -82,11 +81,11 @@ public class HTTPClient {
     public func syncShutdown() throws {
         switch self.eventLoopGroupProvider {
         case .shared:
-            isShutdown.store(true)
+            self.isShutdown.store(true)
             return
         case .createNew:
-            if isShutdown.compareAndExchange(expected: false, desired: true) {
-                try group.syncShutdownGracefully()
+            if self.isShutdown.compareAndExchange(expected: false, desired: true) {
+                try self.group.syncShutdownGracefully()
             } else {
                 throw HTTPClientErrors.AlreadyShutdown()
             }
@@ -96,42 +95,42 @@ public class HTTPClient {
     public func get(url: String, timeout: Timeout? = nil) -> EventLoopFuture<HTTPResponse> {
         do {
             let request = try HTTPRequest(url: url, method: .GET)
-            return execute(request: request)
+            return self.execute(request: request)
         } catch {
-            return group.next().makeFailedFuture(error)
+            return self.group.next().makeFailedFuture(error)
         }
     }
 
     public func post(url: String, body: HTTPBody? = nil, timeout: Timeout? = nil) -> EventLoopFuture<HTTPResponse> {
         do {
             let request = try HTTPRequest(url: url, method: .POST, body: body)
-            return execute(request: request)
+            return self.execute(request: request)
         } catch {
-            return group.next().makeFailedFuture(error)
+            return self.group.next().makeFailedFuture(error)
         }
     }
 
     public func put(url: String, body: HTTPBody? = nil, timeout: Timeout? = nil) -> EventLoopFuture<HTTPResponse> {
         do {
             let request = try HTTPRequest(url: url, method: .PUT, body: body)
-            return execute(request: request)
+            return self.execute(request: request)
         } catch {
-            return group.next().makeFailedFuture(error)
+            return self.group.next().makeFailedFuture(error)
         }
     }
 
     public func delete(url: String, timeout: Timeout? = nil) -> EventLoopFuture<HTTPResponse> {
         do {
             let request = try HTTPRequest(url: url, method: .DELETE)
-            return execute(request: request)
+            return self.execute(request: request)
         } catch {
-            return group.next().makeFailedFuture(error)
+            return self.group.next().makeFailedFuture(error)
         }
     }
 
     public func execute(request: HTTPRequest, timeout: Timeout? = nil) -> EventLoopFuture<HTTPResponse> {
         let accumulator = HTTPResponseAccumulator(request: request)
-        return execute(request: request, delegate: accumulator, timeout: timeout).future
+        return self.execute(request: request, delegate: accumulator, timeout: timeout).future
     }
 
     public func execute<T: HTTPResponseDelegate>(request: HTTPRequest, delegate: T, timeout: Timeout? = nil) -> HTTPTask<T.Response> {
@@ -140,7 +139,7 @@ public class HTTPClient {
         let promise: EventLoopPromise<T.Response> = group.next().makePromise()
 
         let redirectHandler: RedirectHandler<T.Response>?
-        if configuration.followRedirects {
+        if self.configuration.followRedirects {
             redirectHandler = RedirectHandler<T.Response>(request: request) { newRequest in
                 self.execute(request: newRequest, delegate: delegate, timeout: timeout)
             }
@@ -151,18 +150,18 @@ public class HTTPClient {
         var bootstrap = ClientBootstrap(group: group)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
             .channelInitializer { channel in
-                channel.pipeline.addHTTPClientHandlers().flatMap {
-                    self.configureSSL(channel: channel, useTLS: request.useTLS, hostname: request.host)
-                }.flatMap {
-                    if let readTimeout = timeout.read {
-                        return channel.pipeline.addHandler(IdleStateHandler(readTimeout: readTimeout))
-                    } else {
-                        return channel.eventLoop.makeSucceededFuture(())
-                    }
-                }.flatMap {
-                    channel.pipeline.addHandler(HTTPTaskHandler(delegate: delegate, promise: promise, redirectHandler: redirectHandler))
+            channel.pipeline.addHTTPClientHandlers().flatMap {
+                self.configureSSL(channel: channel, useTLS: request.useTLS, hostname: request.host)
+            }.flatMap {
+                if let readTimeout = timeout.read {
+                    return channel.pipeline.addHandler(IdleStateHandler(readTimeout: readTimeout))
+                } else {
+                    return channel.eventLoop.makeSucceededFuture(())
                 }
+            }.flatMap {
+                channel.pipeline.addHandler(HTTPTaskHandler(delegate: delegate, promise: promise, redirectHandler: redirectHandler))
             }
+        }
 
         if let connectTimeout = timeout.connect {
             bootstrap = bootstrap.connectTimeout(connectTimeout)
@@ -198,5 +197,4 @@ public class HTTPClient {
             return channel.eventLoop.makeSucceededFuture(())
         }
     }
-
 }

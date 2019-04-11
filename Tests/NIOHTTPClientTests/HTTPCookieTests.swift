@@ -13,11 +13,10 @@
 //===----------------------------------------------------------------------===//
 
 import Foundation
-import XCTest
 @testable import NIOHTTPClient
+import XCTest
 
 class HTTPCookieTests: XCTestCase {
-
     func testCookie() {
         let v = "key=value; Path=/path; Domain=example.com; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Max-Age=42; Secure; HttpOnly"
         let c = HTTPCookie(from: v, defaultDomain: "exampe.org")!
@@ -25,7 +24,7 @@ class HTTPCookieTests: XCTestCase {
         XCTAssertEqual("value", c.value)
         XCTAssertEqual("/path", c.path)
         XCTAssertEqual("example.com", c.domain)
-        XCTAssertEqual(Date(timeIntervalSince1970: 1445412480), c.expires)
+        XCTAssertEqual(Date(timeIntervalSince1970: 1_445_412_480), c.expires)
         XCTAssertEqual(42, c.maxAge)
         XCTAssertTrue(c.httpOnly)
         XCTAssertTrue(c.secure)
