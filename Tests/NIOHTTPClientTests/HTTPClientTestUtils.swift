@@ -15,22 +15,22 @@
 import Foundation
 import NIO
 import NIOHTTP1
-import NIOSSL
 @testable import NIOHTTPClient
+import NIOSSL
 
-class TestHTTPDelegate : HTTPResponseDelegate {
+class TestHTTPDelegate: HTTPResponseDelegate {
     typealias Response = Void
 
     var state = HTTPResponseAccumulator.State.idle
 
     func didReceiveHead(_ head: HTTPResponseHead) {
-        state = .head(head)
+        self.state = .head(head)
     }
 
     func didReceivePart(_ buffer: ByteBuffer) {
-        switch state {
+        switch self.state {
         case .head(let head):
-            state = .body(head, buffer)
+            self.state = .body(head, buffer)
         case .body(let head, var body):
             var buffer = buffer
             body.writeBuffer(&buffer)
@@ -40,8 +40,7 @@ class TestHTTPDelegate : HTTPResponseDelegate {
         }
     }
 
-    func didFinishRequest() throws -> Void {
-    }
+    func didFinishRequest() throws {}
 }
 
 class CountingDelegate: HTTPResponseDelegate {
@@ -53,12 +52,12 @@ class CountingDelegate: HTTPResponseDelegate {
         var buffer = buffer
         let str = buffer.readString(length: buffer.readableBytes)
         if str?.starts(with: "id:") ?? false {
-            count += 1
+            self.count += 1
         }
     }
 
     func didFinishRequest() throws -> Int {
-        return count
+        return self.count
     }
 }
 
@@ -88,7 +87,7 @@ internal class HttpBin {
     }
 
     init(ssl: Bool = false) {
-        self.serverChannel = try! ServerBootstrap(group: group)
+        self.serverChannel = try! ServerBootstrap(group: self.group)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
             .childChannelInitializer { channel in
@@ -104,13 +103,12 @@ internal class HttpBin {
                         return channel.pipeline.addHandler(HttpBinHandler())
                     }
                 }
-        }.bind(host: "127.0.0.1", port: 0).wait()
+            }.bind(host: "127.0.0.1", port: 0).wait()
     }
 
     func shutdown() {
-        try! group.syncShutdownGracefully()
+        try! self.group.syncShutdownGracefully()
     }
-
 }
 
 internal struct HTTPResponseBuilder {
@@ -126,12 +124,12 @@ internal struct HTTPResponseBuilder {
             var part = part
             body.writeBuffer(&part)
         } else {
-            body = part
+            self.body = part
         }
     }
 }
 
-internal struct RequestInfo : Codable {
+internal struct RequestInfo: Codable {
     let data: String
 }
 
@@ -143,64 +141,64 @@ internal final class HttpBinHandler: ChannelInboundHandler {
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         switch self.unwrapInboundIn(data) {
-            case .head(let req):
-                let url = URL(string: req.uri)!
-                switch url.path {
-                case "/ok":
-                    resps.append(HTTPResponseBuilder(status: .ok))
-                    return
-                case "/get":
-                    if req.method != .GET {
-                        resps.append(HTTPResponseBuilder(status: .methodNotAllowed))
-                        return
-                    }
-                    resps.append(HTTPResponseBuilder(status: .ok))
-                    return
-                case "/post":
-                    if req.method != .POST {
-                        resps.append(HTTPResponseBuilder(status: .methodNotAllowed))
-                        return
-                    }
-                    resps.append(HTTPResponseBuilder(status: .ok))
-                    return
-                case "/redirect/302":
-                    var headers = HTTPHeaders()
-                    headers.add(name: "Location", value: "/ok")
-                    resps.append(HTTPResponseBuilder(status: .found, headers: headers))
-                    return
-                case "/redirect/https":
-                    let port = value(for: "port", from: url.query!)
-                    var headers = HTTPHeaders()
-                    headers.add(name: "Location", value: "https://localhost:\(port)/ok")
-                    resps.append(HTTPResponseBuilder(status: .found, headers: headers))
-                    return
-                case "/wait":
-                    return
-                case "/close":
-                    context.close(promise: nil)
-                    return
-                case "/events/10/1": // TODO: parse path
-                    context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
-                    for i in 0 ..< 10 {
-                        let msg = "id: \(i)"
-                        var buf = context.channel.allocator.buffer(capacity: msg.count)
-                        buf.writeString(msg)
-                        context.writeAndFlush(wrapOutboundOut(.body(.byteBuffer(buf))), promise: nil)
-                        Thread.sleep(forTimeInterval: 0.05)
-                    }
-                    context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
-                    return
-                default:
-                    context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .notFound))), promise: nil)
-                    context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+        case .head(let req):
+            let url = URL(string: req.uri)!
+            switch url.path {
+            case "/ok":
+                self.resps.append(HTTPResponseBuilder(status: .ok))
+                return
+            case "/get":
+                if req.method != .GET {
+                    self.resps.append(HTTPResponseBuilder(status: .methodNotAllowed))
                     return
                 }
+                self.resps.append(HTTPResponseBuilder(status: .ok))
+                return
+            case "/post":
+                if req.method != .POST {
+                    self.resps.append(HTTPResponseBuilder(status: .methodNotAllowed))
+                    return
+                }
+                self.resps.append(HTTPResponseBuilder(status: .ok))
+                return
+            case "/redirect/302":
+                var headers = HTTPHeaders()
+                headers.add(name: "Location", value: "/ok")
+                resps.append(HTTPResponseBuilder(status: .found, headers: headers))
+                return
+            case "/redirect/https":
+                let port = value(for: "port", from: url.query!)
+                var headers = HTTPHeaders()
+                headers.add(name: "Location", value: "https://localhost:\(port)/ok")
+                resps.append(HTTPResponseBuilder(status: .found, headers: headers))
+                return
+            case "/wait":
+                return
+            case "/close":
+                context.close(promise: nil)
+                return
+            case "/events/10/1": // TODO: parse path
+                context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
+                for i in 0 ..< 10 {
+                    let msg = "id: \(i)"
+                    var buf = context.channel.allocator.buffer(capacity: msg.count)
+                    buf.writeString(msg)
+                    context.writeAndFlush(wrapOutboundOut(.body(.byteBuffer(buf))), promise: nil)
+                    Thread.sleep(forTimeInterval: 0.05)
+                }
+                context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+                return
+            default:
+                context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .notFound))), promise: nil)
+                context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+                return
+            }
         case .body(let body):
             var response = resps.removeFirst()
             response.add(body)
             resps.prepend(response)
         case .end:
-            if resps.isEmpty {
+            if self.resps.isEmpty {
                 return
             }
             let response = resps.removeFirst()

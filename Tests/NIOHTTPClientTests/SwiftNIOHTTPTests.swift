@@ -14,13 +14,12 @@
 
 import Foundation
 import NIO
-import NIOSSL
-import XCTest
 @testable import NIOHTTP1
 @testable import NIOHTTPClient
+import NIOSSL
+import XCTest
 
 class SwiftHTTPTests: XCTestCase {
-
     func testRequestURI() throws {
         let request1 = try HTTPRequest(url: "https://someserver.com:8888/some/path?foo=bar")
         XCTAssertEqual(request1.host, "someserver.com")

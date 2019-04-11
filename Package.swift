@@ -27,9 +27,11 @@ let package = Package(
     targets: [
         .target(
             name: "NIOHTTPClient",
-            dependencies: ["NIO", "NIOHTTP1", "NIOSSL", "NIOConcurrencyHelpers"]),
+            dependencies: ["NIO", "NIOHTTP1", "NIOSSL", "NIOConcurrencyHelpers"]
+        ),
         .testTarget(
             name: "NIOHTTPClientTests",
-            dependencies: ["NIOHTTPClient"]),
+            dependencies: ["NIOHTTPClient"]
+        ),
     ]
 )

@@ -15,10 +15,8 @@
 import NIO
 import NIOHTTP1
 
-public class HandlingHTTPResponseDelegate<T> : HTTPResponseDelegate {
-
-    struct EmptyEndHandlerError : Error {
-    }
+public class HandlingHTTPResponseDelegate<T>: HTTPResponseDelegate {
+    struct EmptyEndHandlerError: Error {}
 
     public typealias Result = T
 
@@ -27,8 +25,7 @@ public class HandlingHTTPResponseDelegate<T> : HTTPResponseDelegate {
     var handleError: ((Error) -> Void)?
     var handleEnd: (() throws -> T)?
 
-    public func didTransmitRequestBody() {
-    }
+    public func didTransmitRequestBody() {}
 
     public func didReceiveHead(_ head: HTTPResponseHead) {
         if let handler = handleHead {

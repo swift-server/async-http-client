@@ -14,41 +14,33 @@
 
 import Foundation
 import NIO
+import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOSSL
-import NIOConcurrencyHelpers
 
-protocol HTTPClientError : Error { }
+protocol HTTPClientError: Error {}
 
 public struct HTTPClientErrors {
+    public struct InvalidURLError: HTTPClientError {}
 
-    public struct InvalidURLError : HTTPClientError {
-    }
+    public struct EmptyHostError: HTTPClientError {}
 
-    public struct EmptyHostError : HTTPClientError {
-    }
+    public struct AlreadyShutdown: HTTPClientError {}
 
-    public struct AlreadyShutdown : HTTPClientError {
-    }
+    public struct EmptySchemeError: HTTPClientError {}
 
-    public struct EmptySchemeError : HTTPClientError {
-    }
-
-    public struct UnsupportedSchemeError : HTTPClientError {
+    public struct UnsupportedSchemeError: HTTPClientError {
         var scheme: String
     }
 
-    public struct ReadTimeoutError : HTTPClientError {
-    }
+    public struct ReadTimeoutError: HTTPClientError {}
 
-    public struct RemoteConnectionClosedError : HTTPClientError {
-    }
+    public struct RemoteConnectionClosedError: HTTPClientError {}
 
-    public struct CancelledError : HTTPClientError {
-    }
+    public struct CancelledError: HTTPClientError {}
 }
 
-public enum HTTPBody : Equatable {
+public enum HTTPBody: Equatable {
     case byteBuffer(ByteBuffer)
     case data(Data)
     case string(String)
@@ -65,8 +57,7 @@ public enum HTTPBody : Equatable {
     }
 }
 
-public struct HTTPRequest : Equatable {
-
+public struct HTTPRequest: Equatable {
     public var version: HTTPVersion
     public var method: HTTPMethod
     public var url: URL
@@ -106,11 +97,11 @@ public struct HTTPRequest : Equatable {
     }
 
     public var useTLS: Bool {
-        return url.scheme == "https"
+        return self.url.scheme == "https"
     }
 
     public var port: Int {
-        return url.port ?? (useTLS ? 443 : 80)
+        return self.url.port ?? (self.useTLS ? 443 : 80)
     }
 
     static func isSchemeSupported(scheme: String?) -> Bool {
@@ -118,7 +109,7 @@ public struct HTTPRequest : Equatable {
     }
 }
 
-public struct HTTPResponse : Equatable {
+public struct HTTPResponse: Equatable {
     public var host: String
     public var status: HTTPResponseStatus
     public var headers: HTTPHeaders
@@ -128,7 +119,7 @@ public struct HTTPResponse : Equatable {
 /// This delegate is strongly held by the HTTPTaskHandler
 /// for the duration of the HTTPRequest processing and will be
 /// released together with the HTTPTaskHandler when channel is closed
-public protocol HTTPResponseDelegate : class {
+public protocol HTTPResponseDelegate: class {
     associatedtype Response
 
     func didTransmitRequestBody()
@@ -143,21 +134,16 @@ public protocol HTTPResponseDelegate : class {
 }
 
 extension HTTPResponseDelegate {
+    func didTransmitRequestBody() {}
 
-    func didTransmitRequestBody() {
-    }
+    func didReceiveHead(_: HTTPResponseHead) {}
 
-    func didReceiveHead(_ head: HTTPResponseHead) {
-    }
+    func didReceivePart(_: ByteBuffer) {}
 
-    func didReceivePart(_ buffer: ByteBuffer) {
-    }
-
-    func didReceiveError(_ error: Error) {
-    }
+    func didReceiveError(_: Error) {}
 }
 
-class HTTPResponseAccumulator : HTTPResponseDelegate {
+class HTTPResponseAccumulator: HTTPResponseDelegate {
     typealias Response = HTTPResponse
 
     enum State {
@@ -175,13 +161,12 @@ class HTTPResponseAccumulator : HTTPResponseDelegate {
         self.request = request
     }
 
-    func didTransmitRequestBody() {
-    }
+    func didTransmitRequestBody() {}
 
     func didReceiveHead(_ head: HTTPResponseHead) {
-        switch state {
+        switch self.state {
         case .idle:
-            state = .head(head)
+            self.state = .head(head)
         case .head:
             preconditionFailure("head already set")
         case .body:
@@ -194,11 +179,11 @@ class HTTPResponseAccumulator : HTTPResponseDelegate {
     }
 
     func didReceivePart(_ part: ByteBuffer) {
-        switch state {
+        switch self.state {
         case .idle:
             preconditionFailure("no head received before body")
         case .head(let head):
-            state = .body(head, part)
+            self.state = .body(head, part)
         case .body(let head, var body):
             var part = part
             body.writeBuffer(&part)
@@ -211,17 +196,17 @@ class HTTPResponseAccumulator : HTTPResponseDelegate {
     }
 
     func didReceiveError(_ error: Error) {
-        state = .error(error)
+        self.state = .error(error)
     }
 
     func didFinishRequest() throws -> HTTPResponse {
-        switch state {
+        switch self.state {
         case .idle:
             preconditionFailure("no head received before end")
         case .head(let head):
-            return HTTPResponse(host: request.host, status: head.status, headers: head.headers, body: nil)
+            return HTTPResponse(host: self.request.host, status: head.status, headers: head.headers, body: nil)
         case .body(let head, let body):
-            return HTTPResponse(host: request.host, status: head.status, headers: head.headers, body: body)
+            return HTTPResponse(host: self.request.host, status: head.status, headers: head.headers, body: body)
         case .end:
             preconditionFailure("request already processed")
         case .error(let error):
@@ -240,11 +225,9 @@ internal extension URL {
     }
 }
 
-struct CancelEvent {
-}
+struct CancelEvent {}
 
 public final class HTTPTask<Response> {
-
     let future: EventLoopFuture<Response>
 
     private var channel: Channel?
@@ -258,18 +241,18 @@ public final class HTTPTask<Response> {
     }
 
     func setChannel(_ channel: Channel) -> Channel {
-        return lock.withLock {
+        return self.lock.withLock {
             self.channel = channel
             return channel
         }
     }
 
     public func wait() throws -> Response {
-        return try future.wait()
+        return try self.future.wait()
     }
 
     public func cancel() {
-        lock.withLock {
+        self.lock.withLock {
             if !cancelled {
                 cancelled = true
                 channel?.pipeline.fireUserInboundEventTriggered(CancelEvent())
@@ -278,12 +261,11 @@ public final class HTTPTask<Response> {
     }
 
     public func cascade(promise: EventLoopPromise<Response>) {
-        future.cascade(to: promise)
+        self.future.cascade(to: promise)
     }
-
 }
 
-class HTTPTaskHandler<T: HTTPResponseDelegate> : ChannelInboundHandler, ChannelOutboundHandler {
+class HTTPTaskHandler<T: HTTPResponseDelegate>: ChannelInboundHandler, ChannelOutboundHandler {
     typealias OutboundIn = HTTPRequest
     typealias InboundIn = HTTPClientResponsePart
     typealias OutboundOut = HTTPClientRequestPart
@@ -310,13 +292,13 @@ class HTTPTaskHandler<T: HTTPResponseDelegate> : ChannelInboundHandler, ChannelO
     }
 
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
-        state = .idle
+        self.state = .idle
         let request = unwrapOutboundIn(data)
 
         var head = HTTPRequestHead(version: request.version, method: request.method, uri: request.url.uri)
         var headers = request.headers
 
-        if request.version.major == 1 && request.version.minor == 1 && !request.headers.contains(name: "Host") {
+        if request.version.major == 1, request.version.minor == 1, !request.headers.contains(name: "Host") {
             headers.add(name: "Host", value: request.host)
         }
 
@@ -324,7 +306,7 @@ class HTTPTaskHandler<T: HTTPResponseDelegate> : ChannelInboundHandler, ChannelO
             try headers.validate(body: request.body)
         } catch {
             context.fireErrorCaught(error)
-            state = .end
+            self.state = .end
             return
         }
 
@@ -353,8 +335,8 @@ class HTTPTaskHandler<T: HTTPResponseDelegate> : ChannelInboundHandler, ChannelO
         context.write(wrapOutboundOut(.end(nil)), promise: promise)
         context.flush()
 
-        state = .sent
-        delegate.didTransmitRequestBody()
+        self.state = .sent
+        self.delegate.didTransmitRequestBody()
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -362,30 +344,30 @@ class HTTPTaskHandler<T: HTTPResponseDelegate> : ChannelInboundHandler, ChannelO
         switch response {
         case .head(let head):
             if let redirectURL = redirectHandler?.redirectTarget(status: head.status, headers: head.headers) {
-                state = .redirected(head, redirectURL)
+                self.state = .redirected(head, redirectURL)
             } else {
-                state = .head
-                delegate.didReceiveHead(head)
+                self.state = .head
+                self.delegate.didReceiveHead(head)
             }
         case .body(let body):
-            switch state {
+            switch self.state {
             case .redirected:
                 break
             default:
-                state = .body
-                delegate.didReceivePart(body)
+                self.state = .body
+                self.delegate.didReceivePart(body)
             }
         case .end:
-            switch state {
+            switch self.state {
             case .redirected(let head, let redirectURL):
-                state = .end
-                redirectHandler?.redirect(status: head.status, to: redirectURL, promise: promise)
+                self.state = .end
+                self.redirectHandler?.redirect(status: head.status, to: redirectURL, promise: self.promise)
             default:
-                state = .end
+                self.state = .end
                 do {
-                    promise.succeed(try delegate.didFinishRequest())
+                    self.promise.succeed(try self.delegate.didFinishRequest())
                 } catch {
-                    promise.fail(error)
+                    self.promise.fail(error)
                 }
             }
         }
@@ -393,12 +375,12 @@ class HTTPTaskHandler<T: HTTPResponseDelegate> : ChannelInboundHandler, ChannelO
 
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
         if (event as? IdleStateHandler.IdleStateEvent) == .read {
-            state = .end
+            self.state = .end
             let error = HTTPClientErrors.ReadTimeoutError()
             delegate.didReceiveError(error)
             promise.fail(error)
         } else if (event as? CancelEvent) != nil {
-            state = .end
+            self.state = .end
             let error = HTTPClientErrors.CancelledError()
             delegate.didReceiveError(error)
             promise.fail(error)
@@ -408,11 +390,11 @@ class HTTPTaskHandler<T: HTTPResponseDelegate> : ChannelInboundHandler, ChannelO
     }
 
     func channelInactive(context: ChannelHandlerContext) {
-        switch state {
+        switch self.state {
         case .end:
             break
         default:
-            state = .end
+            self.state = .end
             let error = HTTPClientErrors.RemoteConnectionClosedError()
             delegate.didReceiveError(error)
             promise.fail(error)
@@ -422,26 +404,25 @@ class HTTPTaskHandler<T: HTTPResponseDelegate> : ChannelInboundHandler, ChannelO
     func errorCaught(context: ChannelHandlerContext, error: Error) {
         switch error {
         case NIOSSLError.uncleanShutdown:
-            switch state {
+            switch self.state {
             case .end:
                 /// Some HTTP Servers can 'forget' to respond with CloseNotify when client is closing connection,
                 /// this could lead to incomplete SSL shutdown. But since request is already processed, we can ignore this error.
                 break
             default:
-                state = .end
-                delegate.didReceiveError(error)
-                promise.fail(error)
+                self.state = .end
+                self.delegate.didReceiveError(error)
+                self.promise.fail(error)
             }
         default:
-            state = .end
-            delegate.didReceiveError(error)
-            promise.fail(error)
+            self.state = .end
+            self.delegate.didReceiveError(error)
+            self.promise.fail(error)
         }
     }
 }
 
 struct RedirectHandler<T> {
-
     let request: HTTPRequest
     let execute: ((HTTPRequest) -> HTTPTask<T>)
 
@@ -479,9 +460,9 @@ struct RedirectHandler<T> {
         request.url = redirectURL
 
         var convertToGet = false
-        if status == .seeOther && request.method != .HEAD {
+        if status == .seeOther, request.method != .HEAD {
             convertToGet = true
-        } else if (status == .movedPermanently || status == .found) && request.method == .POST {
+        } else if status == .movedPermanently || status == .found, request.method == .POST {
             convertToGet = true
         }
 
@@ -499,6 +480,6 @@ struct RedirectHandler<T> {
             request.headers.remove(name: "Proxy-Authorization")
         }
 
-        return execute(request).cascade(promise: promise)
+        return self.execute(request).cascade(promise: promise)
     }
 }

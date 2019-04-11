@@ -16,7 +16,6 @@ import Foundation
 import NIOHTTP1
 
 public struct HTTPCookie {
-
     public var name: String
     public var value: String
     public var path: String
@@ -112,13 +111,11 @@ public struct HTTPCookie {
 }
 
 public extension HTTPResponse {
-
     internal var cookieHeaders: [HTTPHeaders.Element] {
         return headers.filter { $0.name.lowercased() == "set-cookie" }
     }
 
     var cookies: [HTTPCookie] {
-        return cookieHeaders.compactMap { HTTPCookie(from: $0.value, defaultDomain: self.host) }
+        return self.cookieHeaders.compactMap { HTTPCookie(from: $0.value, defaultDomain: self.host) }
     }
-
 }
