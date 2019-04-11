@@ -52,7 +52,7 @@ public enum HTTPBody: Equatable {
         case .data(let data):
             return data.count
         case .string(let string):
-            return string.count
+            return string.utf8.count
         }
     }
 }
@@ -324,7 +324,7 @@ class HTTPTaskHandler<T: HTTPResponseDelegate>: ChannelInboundHandler, ChannelOu
                 buffer.writeBytes(data)
                 part = HTTPClientRequestPart.body(.byteBuffer(buffer))
             case .string(let string):
-                var buffer = context.channel.allocator.buffer(capacity: string.count)
+                var buffer = context.channel.allocator.buffer(capacity: string.utf8.count)
                 buffer.writeString(string)
                 part = HTTPClientRequestPart.body(.byteBuffer(buffer))
             }
