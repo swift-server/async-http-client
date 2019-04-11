@@ -18,28 +18,6 @@ import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOSSL
 
-protocol HTTPClientError: Error {}
-
-public struct HTTPClientErrors {
-    public struct InvalidURLError: HTTPClientError {}
-
-    public struct EmptyHostError: HTTPClientError {}
-
-    public struct AlreadyShutdown: HTTPClientError {}
-
-    public struct EmptySchemeError: HTTPClientError {}
-
-    public struct UnsupportedSchemeError: HTTPClientError {
-        var scheme: String
-    }
-
-    public struct ReadTimeoutError: HTTPClientError {}
-
-    public struct RemoteConnectionClosedError: HTTPClientError {}
-
-    public struct CancelledError: HTTPClientError {}
-}
-
 public enum HTTPBody: Equatable {
     case byteBuffer(ByteBuffer)
     case data(Data)
@@ -68,7 +46,7 @@ public struct HTTPRequest: Equatable {
 
     public init(url: String, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: HTTPBody? = nil) throws {
         guard let url = URL(string: url) else {
-            throw HTTPClientErrors.InvalidURLError()
+            throw HTTPClientError.invalidURL
         }
 
         try self.init(url: url, version: version, method: method, headers: headers, body: body)
@@ -76,15 +54,15 @@ public struct HTTPRequest: Equatable {
 
     public init(url: URL, version: HTTPVersion, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: HTTPBody? = nil) throws {
         guard let scheme = url.scheme else {
-            throw HTTPClientErrors.EmptySchemeError()
+            throw HTTPClientError.emptyScheme
         }
 
         guard HTTPRequest.isSchemeSupported(scheme: scheme) else {
-            throw HTTPClientErrors.UnsupportedSchemeError(scheme: scheme)
+            throw HTTPClientError.unsupportedScheme(scheme)
         }
 
         guard let host = url.host else {
-            throw HTTPClientErrors.EmptyHostError()
+            throw HTTPClientError.emptyHost
         }
 
         self.version = version
@@ -378,12 +356,12 @@ class HTTPTaskHandler<T: HTTPResponseDelegate>: ChannelInboundHandler, ChannelOu
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
         if (event as? IdleStateHandler.IdleStateEvent) == .read {
             self.state = .end
-            let error = HTTPClientErrors.ReadTimeoutError()
+            let error = HTTPClientError.readTimeout
             delegate.didReceiveError(task: self.task, error)
             promise.fail(error)
         } else if (event as? CancelEvent) != nil {
             self.state = .end
-            let error = HTTPClientErrors.CancelledError()
+            let error = HTTPClientError.cancelled
             delegate.didReceiveError(task: self.task, error)
             promise.fail(error)
         } else {
@@ -397,7 +375,7 @@ class HTTPTaskHandler<T: HTTPResponseDelegate>: ChannelInboundHandler, ChannelOu
             break
         default:
             self.state = .end
-            let error = HTTPClientErrors.RemoteConnectionClosedError()
+            let error = HTTPClientError.remoteConnectionClosed
             delegate.didReceiveError(task: self.task, error)
             promise.fail(error)
         }

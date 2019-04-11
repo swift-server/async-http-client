@@ -117,7 +117,7 @@ class SwiftHTTPTests: XCTestCase {
     func testGetHttps() throws {
         let httpBin = HttpBin(ssl: true)
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
-                                    configuration: HTTPClientConfiguration(certificateVerification: .none))
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none))
         defer {
             try! httpClient.syncShutdown()
             httpBin.shutdown()
@@ -130,7 +130,7 @@ class SwiftHTTPTests: XCTestCase {
     func testPostHttps() throws {
         let httpBin = HttpBin(ssl: true)
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
-                                    configuration: HTTPClientConfiguration(certificateVerification: .none))
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none))
         defer {
             try! httpClient.syncShutdown()
             httpBin.shutdown()
@@ -152,7 +152,7 @@ class SwiftHTTPTests: XCTestCase {
         let httpBin = HttpBin(ssl: false)
         let httpsBin = HttpBin(ssl: true)
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
-                                    configuration: HTTPClientConfiguration(certificateVerification: .none, followRedirects: true))
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none, followRedirects: true))
 
         defer {
             try! httpClient.syncShutdown()
@@ -215,32 +215,26 @@ class SwiftHTTPTests: XCTestCase {
             httpBin.shutdown()
         }
 
-        do {
-            _ = try httpClient.get(url: "http://localhost:\(httpBin.port)/close").wait()
-            XCTFail("Should fail with RemoteConnectionClosedError")
-        } catch _ as HTTPClientErrors.RemoteConnectionClosedError {
-            // ok
-        } catch {
-            XCTFail("Unexpected error: \(error)")
+        XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(httpBin.port)/close").wait(), "Should fail") { error in
+            guard case HTTPClientError.remoteConnectionClosed = error else {
+                return XCTFail("Should fail with remoteConnectionClosed")
+            }
         }
     }
 
     func testReadTimeout() throws {
         let httpBin = HttpBin()
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: HTTPClientConfiguration(timeout: Timeout(readTimeout: .milliseconds(150))))
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: HTTPClient.Configuration(timeout: HTTPClient.Timeout(read: .milliseconds(150))))
 
         defer {
             try! httpClient.syncShutdown()
             httpBin.shutdown()
         }
 
-        do {
-            _ = try httpClient.get(url: "http://localhost:\(httpBin.port)/wait").wait()
-            XCTFail("Should fail with: ReadTimeoutError")
-        } catch _ as HTTPClientErrors.ReadTimeoutError {
-            // ok
-        } catch {
-            XCTFail("Unexpected error: \(error)")
+        XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(httpBin.port)/wait").wait(), "Should fail") { error in
+            guard case HTTPClientError.readTimeout = error else {
+                return XCTFail("Should fail with readTimeout")
+            }
         }
     }
 
@@ -261,13 +255,10 @@ class SwiftHTTPTests: XCTestCase {
             task.cancel()
         }
 
-        do {
-            _ = try task.wait()
-            XCTFail("Should fail with: CancelledError")
-        } catch _ as HTTPClientErrors.CancelledError {
-            // ok
-        } catch {
-            XCTFail("Unexpected error: \(error)")
+        XCTAssertThrowsError(try task.wait(), "Should fail") { error in
+            guard case HTTPClientError.cancelled = error else {
+                return XCTFail("Should fail with cancelled")
+            }
         }
     }
 }

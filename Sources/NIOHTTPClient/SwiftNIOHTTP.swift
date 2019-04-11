@@ -23,42 +23,14 @@ public enum EventLoopGroupProvider {
     case createNew
 }
 
-public struct Timeout {
-    public var connect: TimeAmount?
-    public var read: TimeAmount?
-
-    public init(connectTimeout: TimeAmount? = nil, readTimeout: TimeAmount? = nil) {
-        self.connect = connectTimeout
-        self.read = readTimeout
-    }
-}
-
-public struct HTTPClientConfiguration {
-    public var tlsConfiguration: TLSConfiguration?
-    public var followRedirects: Bool
-    public var timeout: Timeout
-
-    public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: Bool = false, timeout: Timeout = Timeout()) {
-        self.tlsConfiguration = tlsConfiguration
-        self.followRedirects = followRedirects
-        self.timeout = timeout
-    }
-
-    public init(certificateVerification: CertificateVerification, followRedirects: Bool = false, timeout: Timeout = Timeout()) {
-        self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
-        self.followRedirects = followRedirects
-        self.timeout = timeout
-    }
-}
-
 public class HTTPClient {
     let eventLoopGroupProvider: EventLoopGroupProvider
     let group: EventLoopGroup
-    let configuration: HTTPClientConfiguration
+    let configuration: Configuration
 
     let isShutdown = Atomic<Bool>(value: false)
 
-    public init(eventLoopGroupProvider: EventLoopGroupProvider, configuration: HTTPClientConfiguration = HTTPClientConfiguration()) {
+    public init(eventLoopGroupProvider: EventLoopGroupProvider, configuration: Configuration = Configuration()) {
         self.eventLoopGroupProvider = eventLoopGroupProvider
         switch self.eventLoopGroupProvider {
         case .shared(let group):
@@ -87,7 +59,7 @@ public class HTTPClient {
             if self.isShutdown.compareAndExchange(expected: false, desired: true) {
                 try self.group.syncShutdownGracefully()
             } else {
-                throw HTTPClientErrors.AlreadyShutdown()
+                throw HTTPClientError.alreadyShutdown
             }
         }
     }
@@ -197,4 +169,45 @@ public class HTTPClient {
             return channel.eventLoop.makeSucceededFuture(())
         }
     }
+
+    public struct Configuration {
+        public var tlsConfiguration: TLSConfiguration?
+        public var followRedirects: Bool
+        public var timeout: Timeout
+
+        public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: Bool = false, timeout: Timeout = Timeout()) {
+            self.tlsConfiguration = tlsConfiguration
+            self.followRedirects = followRedirects
+            self.timeout = timeout
+        }
+
+        public init(certificateVerification: CertificateVerification, followRedirects: Bool = false, timeout: Timeout = Timeout()) {
+            self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
+            self.followRedirects = followRedirects
+            self.timeout = timeout
+        }
+    }
+
+    public struct Timeout {
+        public var connect: TimeAmount?
+        public var read: TimeAmount?
+
+        public init(connect: TimeAmount? = nil, read: TimeAmount? = nil) {
+            self.connect = connect
+            self.read = read
+        }
+    }
+}
+
+public enum HTTPClientError: Error {
+    case invalidURL
+    case emptyHost
+    case alreadyShutdown
+    case emptyScheme
+    case unsupportedScheme(String)
+    case readTimeout
+    case remoteConnectionClosed
+    case cancelled
+    case identityCodingIncorrectlyPresent
+    case chunkedSpecifiedMultipleTimes
 }

@@ -15,12 +15,6 @@
 import NIO
 import NIOHTTP1
 
-extension HTTPClientErrors {
-    public struct IdentityCodingIncorrectlyPresentError: HTTPClientError {}
-
-    public struct ChunkedSpecifiedMultipleTimesError: HTTPClientError {}
-}
-
 extension HTTPHeaders {
     mutating func validate(body: HTTPBody?) throws {
         // validate transfer encoding and content length (https://tools.ietf.org/html/rfc7230#section-3.3.1)
@@ -29,7 +23,7 @@ extension HTTPHeaders {
         let encodings = self[canonicalForm: "Transfer-Encoding"].map { $0.lowercased() }
 
         guard !encodings.contains("identity") else {
-            throw HTTPClientErrors.IdentityCodingIncorrectlyPresentError()
+            throw HTTPClientError.identityCodingIncorrectlyPresent
         }
 
         self.remove(name: "Transfer-Encoding")
@@ -37,7 +31,7 @@ extension HTTPHeaders {
 
         if let body = body {
             guard (encodings.filter { $0 == "chunked" }.count <= 1) else {
-                throw HTTPClientErrors.ChunkedSpecifiedMultipleTimesError()
+                throw HTTPClientError.chunkedSpecifiedMultipleTimes
             }
 
             if encodings.isEmpty {
