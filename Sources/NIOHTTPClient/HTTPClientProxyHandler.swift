@@ -33,6 +33,7 @@ internal final class HTTPClientProxyHandler: ChannelDuplexHandler, RemovableChan
     enum ReadState {
         case awaitingResponse
         case connecting
+        case connected
     }
 
     private let host: String
@@ -77,6 +78,8 @@ internal final class HTTPClientProxyHandler: ChannelDuplexHandler, RemovableChan
             }
         case .connecting:
             self.readBuffer.append(data)
+        case .connected:
+            context.fireChannelRead(data)
         }
     }
 
@@ -97,6 +100,8 @@ internal final class HTTPClientProxyHandler: ChannelDuplexHandler, RemovableChan
 
     private func handleConnect(context: ChannelHandlerContext) -> EventLoopFuture<Void> {
         return self.onConnect(context.channel).flatMap {
+            self.readState = .connected
+            
             // forward any buffered reads
             while !self.readBuffer.isEmpty {
                 context.fireChannelRead(self.readBuffer.removeFirst())
