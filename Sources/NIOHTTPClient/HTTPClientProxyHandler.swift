@@ -70,6 +70,7 @@ internal final class HTTPClientProxyHandler: ChannelDuplexHandler, RemovableChan
                     context.fireErrorCaught(HTTPClientErrors.InvalidProxyResponseError())
                 }
             case .end:
+                self.readState = .connecting
                 _ = self.handleConnect(context: context)
             case .body:
                 break
