@@ -25,52 +25,66 @@ internal final class HTTPClientProxyHandler: ChannelDuplexHandler, RemovableChan
     typealias OutboundIn = HTTPClientRequestPart
     typealias OutboundOut = HTTPClientRequestPart
 
-    enum BufferItem {
+    enum WriteItem {
         case write(NIOAny, EventLoopPromise<Void>?)
         case flush
+    }
+
+    enum ReadState {
+        case awaitingResponse
+        case connecting
     }
 
     private let host: String
     private let port: Int
     private var onConnect: (Channel) -> EventLoopFuture<Void>
-    private var buffer: [BufferItem]
+    private var writeBuffer: CircularBuffer<WriteItem>
+    private var readBuffer: CircularBuffer<NIOAny>
+    private var readState: ReadState
 
     init(host: String, port: Int, onConnect: @escaping (Channel) -> EventLoopFuture<Void>) {
         self.host = host
         self.port = port
         self.onConnect = onConnect
-        self.buffer = []
+        self.writeBuffer = .init()
+        self.readBuffer = .init()
+        self.readState = .awaitingResponse
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-        let res = self.unwrapInboundIn(data)
-        switch res {
-        case .head(let head):
-            switch head.status.code {
-            case 200..<300:
-                // Any 2xx (Successful) response indicates that the sender (and all
-                // inbound proxies) will switch to tunnel mode immediately after the
-                // blank line that concludes the successful response's header section
+        switch self.readState {
+        case .awaitingResponse:
+            let res = self.unwrapInboundIn(data)
+            switch res {
+            case .head(let head):
+                switch head.status.code {
+                case 200..<300:
+                    // Any 2xx (Successful) response indicates that the sender (and all
+                    // inbound proxies) will switch to tunnel mode immediately after the
+                    // blank line that concludes the successful response's header section
+                    break
+                default:
+                    // Any response other than a successful response
+                    // indicates that the tunnel has not yet been formed and that the
+                    // connection remains governed by HTTP.
+                    context.fireErrorCaught(HTTPClientErrors.InvalidProxyResponseError())
+                }
+            case .end:
+                _ = self.handleConnect(context: context)
+            case .body:
                 break
-            default:
-                // Any response other than a successful response
-                // indicates that the tunnel has not yet been formed and that the
-                // connection remains governed by HTTP.
-                context.fireErrorCaught(HTTPClientErrors.InvalidProxyResponseError())
             }
-        case .end:
-            _ = self.handleConnect(context: context)
-        case .body:
-            break
+        case .connecting:
+            self.readBuffer.append(data)
         }
     }
 
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
-        self.buffer.append(.write(data, promise))
+        self.writeBuffer.append(.write(data, promise))
     }
 
     func flush(context: ChannelHandlerContext) {
-        self.buffer.append(.flush)
+        self.writeBuffer.append(.flush)
     }
 
     func channelActive(context: ChannelHandlerContext) {
@@ -82,18 +96,18 @@ internal final class HTTPClientProxyHandler: ChannelDuplexHandler, RemovableChan
 
     private func handleConnect(context: ChannelHandlerContext) -> EventLoopFuture<Void> {
         return self.onConnect(context.channel).flatMap {
-            while self.buffer.count > 0 {
-                // make a copy of the current buffer and clear it in case any
-                // calls to context.write cause more requests to be buffered
-                let buffer = self.buffer
-                self.buffer = []
-                buffer.forEach { item in
-                    switch item {
-                    case .flush:
-                        context.flush()
-                    case .write(let data, let promise):
-                        context.write(data, promise: promise)
-                    }
+            // forward any buffered reads
+            while !self.readBuffer.isEmpty {
+                context.fireChannelRead(self.readBuffer.removeFirst())
+            }
+
+            // calls to context.write may be re-entrant
+            while !self.writeBuffer.isEmpty {
+                switch self.writeBuffer.removeFirst() {
+                case .flush:
+                    context.flush()
+                case .write(let data, let promise):
+                    context.write(data, promise: promise)
                 }
             }
             return context.pipeline.removeHandler(self)
