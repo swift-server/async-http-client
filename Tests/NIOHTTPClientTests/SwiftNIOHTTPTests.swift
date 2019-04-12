@@ -216,7 +216,7 @@ class SwiftHTTPTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(httpBin.port)/close").wait(), "Should fail") { error in
-            guard case HTTPClientError.remoteConnectionClosed = error else {
+            guard case let error = error as? HTTPClientError, error == .remoteConnectionClosed else {
                 return XCTFail("Should fail with remoteConnectionClosed")
             }
         }
@@ -232,7 +232,7 @@ class SwiftHTTPTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(httpBin.port)/wait").wait(), "Should fail") { error in
-            guard case HTTPClientError.readTimeout = error else {
+            guard case let error = error as? HTTPClientError, error == .readTimeout else {
                 return XCTFail("Should fail with readTimeout")
             }
         }
@@ -256,7 +256,7 @@ class SwiftHTTPTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try task.wait(), "Should fail") { error in
-            guard case HTTPClientError.cancelled = error else {
+            guard case let error = error as? HTTPClientError, error == .cancelled else {
                 return XCTFail("Should fail with cancelled")
             }
         }

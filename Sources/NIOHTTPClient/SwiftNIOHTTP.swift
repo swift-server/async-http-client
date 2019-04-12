@@ -199,15 +199,38 @@ public class HTTPClient {
     }
 }
 
-public enum HTTPClientError: Error {
-    case invalidURL
-    case emptyHost
-    case alreadyShutdown
-    case emptyScheme
-    case unsupportedScheme(String)
-    case readTimeout
-    case remoteConnectionClosed
-    case cancelled
-    case identityCodingIncorrectlyPresent
-    case chunkedSpecifiedMultipleTimes
+public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
+    private enum Code: Equatable {
+        case invalidURL
+        case emptyHost
+        case alreadyShutdown
+        case emptyScheme
+        case unsupportedScheme(String)
+        case readTimeout
+        case remoteConnectionClosed
+        case cancelled
+        case identityCodingIncorrectlyPresent
+        case chunkedSpecifiedMultipleTimes
+    }
+
+    private var code: Code
+
+    private init(code: Code) {
+        self.code = code
+    }
+
+    public var description: String {
+        return "SandwichError.\(String(describing: self.code))"
+    }
+
+    public static let invalidURL = HTTPClientError(code: .invalidURL)
+    public static let emptyHost = HTTPClientError(code: .emptyHost)
+    public static let alreadyShutdown = HTTPClientError(code: .alreadyShutdown)
+    public static let emptyScheme = HTTPClientError(code: .emptyScheme)
+    public static func unsupportedScheme(_ scheme: String) -> HTTPClientError { return HTTPClientError(code: .unsupportedScheme(scheme)) }
+    public static let readTimeout = HTTPClientError(code: .readTimeout)
+    public static let remoteConnectionClosed = HTTPClientError(code: .remoteConnectionClosed)
+    public static let cancelled = HTTPClientError(code: .cancelled)
+    public static let identityCodingIncorrectlyPresent = HTTPClientError(code: .identityCodingIncorrectlyPresent)
+    public static let chunkedSpecifiedMultipleTimes = HTTPClientError(code: .chunkedSpecifiedMultipleTimes)
 }
