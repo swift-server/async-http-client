@@ -20,14 +20,18 @@ import NIOSSL
 import XCTest
 
 class SwiftHTTPTests: XCTestCase {
+    typealias Request = HTTPClient.Request
+    typealias Response = HTTPClient.Response
+    typealias Task = HTTPClient.Task
+
     func testRequestURI() throws {
-        let request1 = try HTTPRequest(url: "https://someserver.com:8888/some/path?foo=bar")
+        let request1 = try Request(url: "https://someserver.com:8888/some/path?foo=bar")
         XCTAssertEqual(request1.host, "someserver.com")
         XCTAssertEqual(request1.url.uri, "/some/path?foo=bar")
         XCTAssertEqual(request1.port, 8888)
         XCTAssertTrue(request1.useTLS)
 
-        let request2 = try HTTPRequest(url: "https://someserver.com")
+        let request2 = try Request(url: "https://someserver.com")
         XCTAssertEqual(request2.url.uri, "/")
     }
 
@@ -35,12 +39,12 @@ class SwiftHTTPTests: XCTestCase {
         let channel = EmbeddedChannel()
         let recorder = RecordingHandler<HTTPClientResponsePart, HTTPClientRequestPart>()
         let promise: EventLoopPromise<Void> = channel.eventLoop.makePromise()
-        let task = HTTPTask(future: promise.futureResult)
+        let task = Task(future: promise.futureResult)
 
         try channel.pipeline.addHandler(recorder).wait()
-        try channel.pipeline.addHandler(HTTPTaskHandler(task: task, delegate: TestHTTPDelegate(), promise: promise, redirectHandler: nil)).wait()
+        try channel.pipeline.addHandler(TaskHandler(task: task, delegate: TestHTTPDelegate(), promise: promise, redirectHandler: nil)).wait()
 
-        var request = try HTTPRequest(url: "http://localhost/get")
+        var request = try Request(url: "http://localhost/get")
         request.headers.add(name: "X-Test-Header", value: "X-Test-Value")
         request.body = .string("1234")
 
@@ -63,8 +67,8 @@ class SwiftHTTPTests: XCTestCase {
         let channel = EmbeddedChannel()
         let delegate = TestHTTPDelegate()
         let promise: EventLoopPromise<Void> = channel.eventLoop.makePromise()
-        let task = HTTPTask(future: promise.futureResult)
-        let handler = HTTPTaskHandler(task: task, delegate: delegate, promise: promise, redirectHandler: nil)
+        let task = Task(future: promise.futureResult)
+        let handler = TaskHandler(task: task, delegate: delegate, promise: promise, redirectHandler: nil)
 
         try channel.pipeline.addHandler(handler).wait()
 
@@ -136,7 +140,7 @@ class SwiftHTTPTests: XCTestCase {
             httpBin.shutdown()
         }
 
-        let request = try HTTPRequest(url: "https://localhost:\(httpBin.port)/post", method: .POST, body: .string("1234"))
+        let request = try Request(url: "https://localhost:\(httpBin.port)/post", method: .POST, body: .string("1234"))
 
         let response = try httpClient.execute(request: request).wait()
         let bytes = response.body!.withUnsafeReadableBytes {
@@ -183,7 +187,7 @@ class SwiftHTTPTests: XCTestCase {
 
         var headers = HTTPHeaders()
         headers.add(name: "Content-Length", value: "12")
-        let request = try HTTPRequest(url: "http://localhost:\(httpBin.port)/post", method: .POST, headers: headers, body: .byteBuffer(body))
+        let request = try Request(url: "http://localhost:\(httpBin.port)/post", method: .POST, headers: headers, body: .byteBuffer(body))
         let response = try httpClient.execute(request: request).wait()
         // if the library adds another content length header we'll get a bad request error.
         XCTAssertEqual(.ok, response.status)
@@ -197,7 +201,7 @@ class SwiftHTTPTests: XCTestCase {
             httpBin.shutdown()
         }
 
-        var request = try HTTPRequest(url: "http://localhost:\(httpBin.port)/events/10/1")
+        var request = try Request(url: "http://localhost:\(httpBin.port)/events/10/1")
         request.headers.add(name: "Accept", value: "text/event-stream")
 
         let delegate = CountingDelegate()
@@ -248,7 +252,7 @@ class SwiftHTTPTests: XCTestCase {
         }
 
         let queue = DispatchQueue(label: "nio-test")
-        let request = try HTTPRequest(url: "http://localhost:\(httpBin.port)/wait")
+        let request = try Request(url: "http://localhost:\(httpBin.port)/wait")
         let task = httpClient.execute(request: request, delegate: TestHTTPDelegate())
 
         queue.asyncAfter(deadline: .now() + .milliseconds(100)) {

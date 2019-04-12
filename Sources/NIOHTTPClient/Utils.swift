@@ -15,7 +15,7 @@
 import NIO
 import NIOHTTP1
 
-public class HandlingHTTPResponseDelegate<T>: HTTPResponseDelegate {
+public class HandlingHTTPResponseDelegate<T>: HTTPClientResponseDelegate {
     struct EmptyEndHandlerError: Error {}
 
     public typealias Result = T
@@ -25,27 +25,27 @@ public class HandlingHTTPResponseDelegate<T>: HTTPResponseDelegate {
     var handleError: ((Error) -> Void)?
     var handleEnd: (() throws -> T)?
 
-    public func didTransmitRequestBody(task: HTTPTask<T>) {}
+    public func didTransmitRequestBody(task: HTTPClient.Task<T>) {}
 
-    public func didReceiveHead(task: HTTPTask<T>, _ head: HTTPResponseHead) {
+    public func didReceiveHead(task: HTTPClient.Task<T>, _ head: HTTPResponseHead) {
         if let handler = handleHead {
             handler(head)
         }
     }
 
-    public func didReceivePart(task: HTTPTask<T>, _ buffer: ByteBuffer) {
+    public func didReceivePart(task: HTTPClient.Task<T>, _ buffer: ByteBuffer) {
         if let handler = handleBody {
             handler(buffer)
         }
     }
 
-    public func didReceiveError(task: HTTPTask<T>, _ error: Error) {
+    public func didReceiveError(task: HTTPClient.Task<T>, _ error: Error) {
         if let handler = handleError {
             handler(error)
         }
     }
 
-    public func didFinishRequest(task: HTTPTask<T>) throws -> T {
+    public func didFinishRequest(task: HTTPClient.Task<T>) throws -> T {
         if let handler = handleEnd {
             return try handler()
         }

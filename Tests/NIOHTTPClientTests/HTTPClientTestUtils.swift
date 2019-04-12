@@ -18,16 +18,16 @@ import NIOHTTP1
 @testable import NIOHTTPClient
 import NIOSSL
 
-class TestHTTPDelegate: HTTPResponseDelegate {
+class TestHTTPDelegate: HTTPClientResponseDelegate {
     typealias Response = Void
 
-    var state = HTTPResponseAccumulator.State.idle
+    var state = ResponseAccumulator.State.idle
 
-    func didReceiveHead(task: HTTPTask<Response>, _ head: HTTPResponseHead) {
+    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) {
         self.state = .head(head)
     }
 
-    func didReceivePart(task: HTTPTask<Response>, _ buffer: ByteBuffer) {
+    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) {
         switch self.state {
         case .head(let head):
             self.state = .body(head, buffer)
@@ -40,15 +40,15 @@ class TestHTTPDelegate: HTTPResponseDelegate {
         }
     }
 
-    func didFinishRequest(task: HTTPTask<Response>) throws {}
+    func didFinishRequest(task: HTTPClient.Task<Response>) throws {}
 }
 
-class CountingDelegate: HTTPResponseDelegate {
+class CountingDelegate: HTTPClientResponseDelegate {
     typealias Response = Int
 
     var count = 0
 
-    func didReceivePart(task: HTTPTask<Response>, _ buffer: ByteBuffer) {
+    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) {
         var buffer = buffer
         let str = buffer.readString(length: buffer.readableBytes)
         if str?.starts(with: "id:") ?? false {
@@ -56,7 +56,7 @@ class CountingDelegate: HTTPResponseDelegate {
         }
     }
 
-    func didFinishRequest(task: HTTPTask<Response>) throws -> Int {
+    func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Int {
         return self.count
     }
 }

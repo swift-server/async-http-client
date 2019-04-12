@@ -18,111 +18,86 @@ import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOSSL
 
-public enum HTTPBody: Equatable {
-    case byteBuffer(ByteBuffer)
-    case data(Data)
-    case string(String)
+public extension HTTPClient {
+    enum Body: Equatable {
+        case byteBuffer(ByteBuffer)
+        case data(Data)
+        case string(String)
 
-    var length: Int {
-        switch self {
-        case .byteBuffer(let buffer):
-            return buffer.readableBytes
-        case .data(let data):
-            return data.count
-        case .string(let string):
-            return string.utf8.count
+        var length: Int {
+            switch self {
+            case .byteBuffer(let buffer):
+                return buffer.readableBytes
+            case .data(let data):
+                return data.count
+            case .string(let string):
+                return string.utf8.count
+            }
         }
+    }
+
+    struct Request: Equatable {
+        public var version: HTTPVersion
+        public var method: HTTPMethod
+        public var url: URL
+        public var scheme: String
+        public var host: String
+        public var headers: HTTPHeaders
+        public var body: Body?
+
+        public init(url: String, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+            guard let url = URL(string: url) else {
+                throw HTTPClientError.invalidURL
+            }
+
+            try self.init(url: url, version: version, method: method, headers: headers, body: body)
+        }
+
+        public init(url: URL, version: HTTPVersion, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+            guard let scheme = url.scheme else {
+                throw HTTPClientError.emptyScheme
+            }
+
+            guard Request.isSchemeSupported(scheme: scheme) else {
+                throw HTTPClientError.unsupportedScheme(scheme)
+            }
+
+            guard let host = url.host else {
+                throw HTTPClientError.emptyHost
+            }
+
+            self.version = version
+            self.method = method
+            self.url = url
+            self.scheme = scheme
+            self.host = host
+            self.headers = headers
+            self.body = body
+        }
+
+        public var useTLS: Bool {
+            return self.url.scheme == "https"
+        }
+
+        public var port: Int {
+            return self.url.port ?? (self.useTLS ? 443 : 80)
+        }
+
+        static func isSchemeSupported(scheme: String?) -> Bool {
+            return scheme == "http" || scheme == "https"
+        }
+    }
+
+    struct Response: Equatable {
+        public var host: String
+        public var status: HTTPResponseStatus
+        public var headers: HTTPHeaders
+        public var body: ByteBuffer?
     }
 }
 
-public struct HTTPRequest: Equatable {
-    public var version: HTTPVersion
-    public var method: HTTPMethod
-    public var url: URL
-    public var scheme: String
-    public var host: String
-    public var headers: HTTPHeaders
-    public var body: HTTPBody?
-
-    public init(url: String, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: HTTPBody? = nil) throws {
-        guard let url = URL(string: url) else {
-            throw HTTPClientError.invalidURL
-        }
-
-        try self.init(url: url, version: version, method: method, headers: headers, body: body)
-    }
-
-    public init(url: URL, version: HTTPVersion, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: HTTPBody? = nil) throws {
-        guard let scheme = url.scheme else {
-            throw HTTPClientError.emptyScheme
-        }
-
-        guard HTTPRequest.isSchemeSupported(scheme: scheme) else {
-            throw HTTPClientError.unsupportedScheme(scheme)
-        }
-
-        guard let host = url.host else {
-            throw HTTPClientError.emptyHost
-        }
-
-        self.version = version
-        self.method = method
-        self.url = url
-        self.scheme = scheme
-        self.host = host
-        self.headers = headers
-        self.body = body
-    }
-
-    public var useTLS: Bool {
-        return self.url.scheme == "https"
-    }
-
-    public var port: Int {
-        return self.url.port ?? (self.useTLS ? 443 : 80)
-    }
-
-    static func isSchemeSupported(scheme: String?) -> Bool {
-        return scheme == "http" || scheme == "https"
-    }
-}
-
-public struct HTTPResponse: Equatable {
-    public var host: String
-    public var status: HTTPResponseStatus
-    public var headers: HTTPHeaders
-    public var body: ByteBuffer?
-}
-
-/// This delegate is strongly held by the HTTPTaskHandler
-/// for the duration of the HTTPRequest processing and will be
-/// released together with the HTTPTaskHandler when channel is closed
-public protocol HTTPResponseDelegate: class {
-    associatedtype Response
-
-    func didTransmitRequestBody(task: HTTPTask<Response>)
-
-    func didReceiveHead(task: HTTPTask<Response>, _ head: HTTPResponseHead)
-
-    func didReceivePart(task: HTTPTask<Response>, _ buffer: ByteBuffer)
-
-    func didReceiveError(task: HTTPTask<Response>, _ error: Error)
-
-    func didFinishRequest(task: HTTPTask<Response>) throws -> Response
-}
-
-extension HTTPResponseDelegate {
-    func didTransmitRequestBody(task: HTTPTask<Response>) {}
-
-    func didReceiveHead(task: HTTPTask<Response>, _: HTTPResponseHead) {}
-
-    func didReceivePart(task: HTTPTask<Response>, _: ByteBuffer) {}
-
-    func didReceiveError(task: HTTPTask<Response>, _: Error) {}
-}
-
-class HTTPResponseAccumulator: HTTPResponseDelegate {
-    typealias Response = HTTPResponse
+internal class ResponseAccumulator: HTTPClientResponseDelegate {
+    public typealias Response = HTTPClient.Response
 
     enum State {
         case idle
@@ -133,15 +108,15 @@ class HTTPResponseAccumulator: HTTPResponseDelegate {
     }
 
     var state = State.idle
-    let request: HTTPRequest
+    let request: HTTPClient.Request
 
-    init(request: HTTPRequest) {
+    init(request: HTTPClient.Request) {
         self.request = request
     }
 
-    func didTransmitRequestBody(task: HTTPTask<Response>) {}
+    func didTransmitRequestBody(task: HTTPClient.Task<Response>) {}
 
-    func didReceiveHead(task: HTTPTask<Response>, _ head: HTTPResponseHead) {
+    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) {
         switch self.state {
         case .idle:
             self.state = .head(head)
@@ -156,7 +131,7 @@ class HTTPResponseAccumulator: HTTPResponseDelegate {
         }
     }
 
-    func didReceivePart(task: HTTPTask<Response>, _ part: ByteBuffer) {
+    func didReceivePart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) {
         switch self.state {
         case .idle:
             preconditionFailure("no head received before body")
@@ -173,24 +148,51 @@ class HTTPResponseAccumulator: HTTPResponseDelegate {
         }
     }
 
-    func didReceiveError(task: HTTPTask<Response>, _ error: Error) {
+    func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
         self.state = .error(error)
     }
 
-    func didFinishRequest(task: HTTPTask<Response>) throws -> HTTPResponse {
+    func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
         switch self.state {
         case .idle:
             preconditionFailure("no head received before end")
         case .head(let head):
-            return HTTPResponse(host: self.request.host, status: head.status, headers: head.headers, body: nil)
+            return Response(host: self.request.host, status: head.status, headers: head.headers, body: nil)
         case .body(let head, let body):
-            return HTTPResponse(host: self.request.host, status: head.status, headers: head.headers, body: body)
+            return Response(host: self.request.host, status: head.status, headers: head.headers, body: body)
         case .end:
             preconditionFailure("request already processed")
         case .error(let error):
             throw error
         }
     }
+}
+
+/// This delegate is strongly held by the HTTPTaskHandler
+/// for the duration of the HTTPRequest processing and will be
+/// released together with the HTTPTaskHandler when channel is closed
+public protocol HTTPClientResponseDelegate: class {
+    associatedtype Response
+
+    func didTransmitRequestBody(task: HTTPClient.Task<Response>)
+
+    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead)
+
+    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer)
+
+    func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error)
+
+    func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response
+}
+
+extension HTTPClientResponseDelegate {
+    func didTransmitRequestBody(task: HTTPClient.Task<Response>) {}
+
+    func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) {}
+
+    func didReceivePart(task: HTTPClient.Task<Response>, _: ByteBuffer) {}
+
+    func didReceiveError(task: HTTPClient.Task<Response>, _: Error) {}
 }
 
 internal extension URL {
@@ -203,48 +205,50 @@ internal extension URL {
     }
 }
 
-struct CancelEvent {}
+public extension HTTPClient {
+    final class Task<Response> {
+        let future: EventLoopFuture<Response>
 
-public final class HTTPTask<Response> {
-    let future: EventLoopFuture<Response>
+        private var channel: Channel?
+        private var cancelled: Bool
+        private let lock: Lock
 
-    private var channel: Channel?
-    private var cancelled: Bool
-    private let lock: Lock
-
-    init(future: EventLoopFuture<Response>) {
-        self.future = future
-        self.cancelled = false
-        self.lock = Lock()
-    }
-
-    func setChannel(_ channel: Channel) -> Channel {
-        return self.lock.withLock {
-            self.channel = channel
-            return channel
+        init(future: EventLoopFuture<Response>) {
+            self.future = future
+            self.cancelled = false
+            self.lock = Lock()
         }
-    }
 
-    public func wait() throws -> Response {
-        return try self.future.wait()
-    }
-
-    public func cancel() {
-        self.lock.withLock {
-            if !cancelled {
-                cancelled = true
-                channel?.pipeline.fireUserInboundEventTriggered(CancelEvent())
+        func setChannel(_ channel: Channel) -> Channel {
+            return self.lock.withLock {
+                self.channel = channel
+                return channel
             }
         }
-    }
 
-    public func cascade(promise: EventLoopPromise<Response>) {
-        self.future.cascade(to: promise)
+        public func wait() throws -> Response {
+            return try self.future.wait()
+        }
+
+        public func cancel() {
+            self.lock.withLock {
+                if !cancelled {
+                    cancelled = true
+                    channel?.pipeline.fireUserInboundEventTriggered(TaskCancelEvent())
+                }
+            }
+        }
+
+        public func cascade(promise: EventLoopPromise<Response>) {
+            self.future.cascade(to: promise)
+        }
     }
 }
 
-class HTTPTaskHandler<T: HTTPResponseDelegate>: ChannelInboundHandler, ChannelOutboundHandler {
-    typealias OutboundIn = HTTPRequest
+internal struct TaskCancelEvent {}
+
+internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler, ChannelOutboundHandler {
+    typealias OutboundIn = HTTPClient.Request
     typealias InboundIn = HTTPClientResponsePart
     typealias OutboundOut = HTTPClientRequestPart
 
@@ -257,14 +261,14 @@ class HTTPTaskHandler<T: HTTPResponseDelegate>: ChannelInboundHandler, ChannelOu
         case end
     }
 
-    let task: HTTPTask<T.Response>
+    let task: HTTPClient.Task<T.Response>
     let delegate: T
     let promise: EventLoopPromise<T.Response>
     let redirectHandler: RedirectHandler<T.Response>?
 
     var state: State = .idle
 
-    init(task: HTTPTask<T.Response>, delegate: T, promise: EventLoopPromise<T.Response>, redirectHandler: RedirectHandler<T.Response>?) {
+    init(task: HTTPClient.Task<T.Response>, delegate: T, promise: EventLoopPromise<T.Response>, redirectHandler: RedirectHandler<T.Response>?) {
         self.task = task
         self.delegate = delegate
         self.promise = promise
@@ -359,7 +363,7 @@ class HTTPTaskHandler<T: HTTPResponseDelegate>: ChannelInboundHandler, ChannelOu
             let error = HTTPClientError.readTimeout
             delegate.didReceiveError(task: self.task, error)
             promise.fail(error)
-        } else if (event as? CancelEvent) != nil {
+        } else if (event as? TaskCancelEvent) != nil {
             self.state = .end
             let error = HTTPClientError.cancelled
             delegate.didReceiveError(task: self.task, error)
@@ -402,9 +406,9 @@ class HTTPTaskHandler<T: HTTPResponseDelegate>: ChannelInboundHandler, ChannelOu
     }
 }
 
-struct RedirectHandler<T> {
-    let request: HTTPRequest
-    let execute: ((HTTPRequest) -> HTTPTask<T>)
+internal struct RedirectHandler<T> {
+    let request: HTTPClient.Request
+    let execute: ((HTTPClient.Request) -> HTTPClient.Task<T>)
 
     func redirectTarget(status: HTTPResponseStatus, headers: HTTPHeaders) -> URL? {
         switch status {
@@ -422,7 +426,7 @@ struct RedirectHandler<T> {
             return nil
         }
 
-        guard HTTPRequest.isSchemeSupported(scheme: url.scheme) else {
+        guard HTTPClient.Request.isSchemeSupported(scheme: url.scheme) else {
             return nil
         }
 

@@ -16,7 +16,7 @@ import NIO
 import NIOHTTP1
 
 extension HTTPHeaders {
-    mutating func validate(body: HTTPBody?) throws {
+    mutating func validate(body: HTTPClient.Body?) throws {
         // validate transfer encoding and content length (https://tools.ietf.org/html/rfc7230#section-3.3.1)
         var transferEncoding: String?
         var contentLength: Int?

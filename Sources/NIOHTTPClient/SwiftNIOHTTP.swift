@@ -64,48 +64,48 @@ public class HTTPClient {
         }
     }
 
-    public func get(url: String, timeout: Timeout? = nil) -> EventLoopFuture<HTTPResponse> {
+    public func get(url: String, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
         do {
-            let request = try HTTPRequest(url: url, method: .GET)
+            let request = try Request(url: url, method: .GET)
             return self.execute(request: request)
         } catch {
             return self.group.next().makeFailedFuture(error)
         }
     }
 
-    public func post(url: String, body: HTTPBody? = nil, timeout: Timeout? = nil) -> EventLoopFuture<HTTPResponse> {
+    public func post(url: String, body: Body? = nil, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
         do {
-            let request = try HTTPRequest(url: url, method: .POST, body: body)
+            let request = try HTTPClient.Request(url: url, method: .POST, body: body)
             return self.execute(request: request)
         } catch {
             return self.group.next().makeFailedFuture(error)
         }
     }
 
-    public func put(url: String, body: HTTPBody? = nil, timeout: Timeout? = nil) -> EventLoopFuture<HTTPResponse> {
+    public func put(url: String, body: Body? = nil, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
         do {
-            let request = try HTTPRequest(url: url, method: .PUT, body: body)
+            let request = try HTTPClient.Request(url: url, method: .PUT, body: body)
             return self.execute(request: request)
         } catch {
             return self.group.next().makeFailedFuture(error)
         }
     }
 
-    public func delete(url: String, timeout: Timeout? = nil) -> EventLoopFuture<HTTPResponse> {
+    public func delete(url: String, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
         do {
-            let request = try HTTPRequest(url: url, method: .DELETE)
+            let request = try Request(url: url, method: .DELETE)
             return self.execute(request: request)
         } catch {
             return self.group.next().makeFailedFuture(error)
         }
     }
 
-    public func execute(request: HTTPRequest, timeout: Timeout? = nil) -> EventLoopFuture<HTTPResponse> {
-        let accumulator = HTTPResponseAccumulator(request: request)
+    public func execute(request: Request, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
+        let accumulator = ResponseAccumulator(request: request)
         return self.execute(request: request, delegate: accumulator, timeout: timeout).future
     }
 
-    public func execute<T: HTTPResponseDelegate>(request: HTTPRequest, delegate: T, timeout: Timeout? = nil) -> HTTPTask<T.Response> {
+    public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, timeout: Timeout? = nil) -> Task<T.Response> {
         let timeout = timeout ?? configuration.timeout
 
         let promise: EventLoopPromise<T.Response> = group.next().makePromise()
@@ -119,7 +119,7 @@ public class HTTPClient {
             redirectHandler = nil
         }
 
-        let task = HTTPTask(future: promise.futureResult)
+        let task = Task(future: promise.futureResult)
 
         var bootstrap = ClientBootstrap(group: group)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
@@ -133,7 +133,7 @@ public class HTTPClient {
                     return channel.eventLoop.makeSucceededFuture(())
                 }
             }.flatMap {
-                channel.pipeline.addHandler(HTTPTaskHandler(task: task, delegate: delegate, promise: promise, redirectHandler: redirectHandler))
+                channel.pipeline.addHandler(TaskHandler(task: task, delegate: delegate, promise: promise, redirectHandler: redirectHandler))
             }
         }
 
