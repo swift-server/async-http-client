@@ -25,27 +25,27 @@ public class HandlingHTTPResponseDelegate<T>: HTTPResponseDelegate {
     var handleError: ((Error) -> Void)?
     var handleEnd: (() throws -> T)?
 
-    public func didTransmitRequestBody() {}
+    public func didTransmitRequestBody(task: HTTPTask<T>) {}
 
-    public func didReceiveHead(_ head: HTTPResponseHead) {
+    public func didReceiveHead(task: HTTPTask<T>, _ head: HTTPResponseHead) {
         if let handler = handleHead {
             handler(head)
         }
     }
 
-    public func didReceivePart(_ buffer: ByteBuffer) {
+    public func didReceivePart(task: HTTPTask<T>, _ buffer: ByteBuffer) {
         if let handler = handleBody {
             handler(buffer)
         }
     }
 
-    public func didReceiveError(_ error: Error) {
+    public func didReceiveError(task: HTTPTask<T>, _ error: Error) {
         if let handler = handleError {
             handler(error)
         }
     }
 
-    public func didFinishRequest() throws -> T {
+    public func didFinishRequest(task: HTTPTask<T>) throws -> T {
         if let handler = handleEnd {
             return try handler()
         }

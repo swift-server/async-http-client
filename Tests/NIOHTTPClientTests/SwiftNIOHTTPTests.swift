@@ -34,9 +34,11 @@ class SwiftHTTPTests: XCTestCase {
     func testHTTPPartsHandler() throws {
         let channel = EmbeddedChannel()
         let recorder = RecordingHandler<HTTPClientResponsePart, HTTPClientRequestPart>()
+        let promise: EventLoopPromise<Void> = channel.eventLoop.makePromise()
+        let task = HTTPTask(future: promise.futureResult)
 
         try channel.pipeline.addHandler(recorder).wait()
-        try channel.pipeline.addHandler(HTTPTaskHandler(delegate: TestHTTPDelegate(), promise: channel.eventLoop.makePromise(), redirectHandler: nil)).wait()
+        try channel.pipeline.addHandler(HTTPTaskHandler(task: task, delegate: TestHTTPDelegate(), promise: promise, redirectHandler: nil)).wait()
 
         var request = try HTTPRequest(url: "http://localhost/get")
         request.headers.add(name: "X-Test-Header", value: "X-Test-Value")
@@ -60,7 +62,9 @@ class SwiftHTTPTests: XCTestCase {
     func testHTTPPartsHandlerMultiBody() throws {
         let channel = EmbeddedChannel()
         let delegate = TestHTTPDelegate()
-        let handler = HTTPTaskHandler(delegate: delegate, promise: channel.eventLoop.makePromise(), redirectHandler: nil)
+        let promise: EventLoopPromise<Void> = channel.eventLoop.makePromise()
+        let task = HTTPTask(future: promise.futureResult)
+        let handler = HTTPTaskHandler(task: task, delegate: delegate, promise: promise, redirectHandler: nil)
 
         try channel.pipeline.addHandler(handler).wait()
 

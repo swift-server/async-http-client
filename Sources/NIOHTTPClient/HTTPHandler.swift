@@ -122,25 +122,25 @@ public struct HTTPResponse: Equatable {
 public protocol HTTPResponseDelegate: class {
     associatedtype Response
 
-    func didTransmitRequestBody()
+    func didTransmitRequestBody(task: HTTPTask<Response>)
 
-    func didReceiveHead(_ head: HTTPResponseHead)
+    func didReceiveHead(task: HTTPTask<Response>, _ head: HTTPResponseHead)
 
-    func didReceivePart(_ buffer: ByteBuffer)
+    func didReceivePart(task: HTTPTask<Response>, _ buffer: ByteBuffer)
 
-    func didReceiveError(_ error: Error)
+    func didReceiveError(task: HTTPTask<Response>, _ error: Error)
 
-    func didFinishRequest() throws -> Response
+    func didFinishRequest(task: HTTPTask<Response>) throws -> Response
 }
 
 extension HTTPResponseDelegate {
-    func didTransmitRequestBody() {}
+    func didTransmitRequestBody(task: HTTPTask<Response>) {}
 
-    func didReceiveHead(_: HTTPResponseHead) {}
+    func didReceiveHead(task: HTTPTask<Response>, _: HTTPResponseHead) {}
 
-    func didReceivePart(_: ByteBuffer) {}
+    func didReceivePart(task: HTTPTask<Response>, _: ByteBuffer) {}
 
-    func didReceiveError(_: Error) {}
+    func didReceiveError(task: HTTPTask<Response>, _: Error) {}
 }
 
 class HTTPResponseAccumulator: HTTPResponseDelegate {
@@ -161,9 +161,9 @@ class HTTPResponseAccumulator: HTTPResponseDelegate {
         self.request = request
     }
 
-    func didTransmitRequestBody() {}
+    func didTransmitRequestBody(task: HTTPTask<Response>) {}
 
-    func didReceiveHead(_ head: HTTPResponseHead) {
+    func didReceiveHead(task: HTTPTask<Response>, _ head: HTTPResponseHead) {
         switch self.state {
         case .idle:
             self.state = .head(head)
@@ -178,7 +178,7 @@ class HTTPResponseAccumulator: HTTPResponseDelegate {
         }
     }
 
-    func didReceivePart(_ part: ByteBuffer) {
+    func didReceivePart(task: HTTPTask<Response>, _ part: ByteBuffer) {
         switch self.state {
         case .idle:
             preconditionFailure("no head received before body")
@@ -195,11 +195,11 @@ class HTTPResponseAccumulator: HTTPResponseDelegate {
         }
     }
 
-    func didReceiveError(_ error: Error) {
+    func didReceiveError(task: HTTPTask<Response>, _ error: Error) {
         self.state = .error(error)
     }
 
-    func didFinishRequest() throws -> HTTPResponse {
+    func didFinishRequest(task: HTTPTask<Response>) throws -> HTTPResponse {
         switch self.state {
         case .idle:
             preconditionFailure("no head received before end")
@@ -279,13 +279,15 @@ class HTTPTaskHandler<T: HTTPResponseDelegate>: ChannelInboundHandler, ChannelOu
         case end
     }
 
+    let task: HTTPTask<T.Response>
     let delegate: T
     let promise: EventLoopPromise<T.Response>
     let redirectHandler: RedirectHandler<T.Response>?
 
     var state: State = .idle
 
-    init(delegate: T, promise: EventLoopPromise<T.Response>, redirectHandler: RedirectHandler<T.Response>?) {
+    init(task: HTTPTask<T.Response>, delegate: T, promise: EventLoopPromise<T.Response>, redirectHandler: RedirectHandler<T.Response>?) {
+        self.task = task
         self.delegate = delegate
         self.promise = promise
         self.redirectHandler = redirectHandler
@@ -336,7 +338,7 @@ class HTTPTaskHandler<T: HTTPResponseDelegate>: ChannelInboundHandler, ChannelOu
         context.flush()
 
         self.state = .sent
-        self.delegate.didTransmitRequestBody()
+        self.delegate.didTransmitRequestBody(task: self.task)
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -347,7 +349,7 @@ class HTTPTaskHandler<T: HTTPResponseDelegate>: ChannelInboundHandler, ChannelOu
                 self.state = .redirected(head, redirectURL)
             } else {
                 self.state = .head
-                self.delegate.didReceiveHead(head)
+                self.delegate.didReceiveHead(task: self.task, head)
             }
         case .body(let body):
             switch self.state {
@@ -355,7 +357,7 @@ class HTTPTaskHandler<T: HTTPResponseDelegate>: ChannelInboundHandler, ChannelOu
                 break
             default:
                 self.state = .body
-                self.delegate.didReceivePart(body)
+                self.delegate.didReceivePart(task: self.task, body)
             }
         case .end:
             switch self.state {
@@ -365,7 +367,7 @@ class HTTPTaskHandler<T: HTTPResponseDelegate>: ChannelInboundHandler, ChannelOu
             default:
                 self.state = .end
                 do {
-                    self.promise.succeed(try self.delegate.didFinishRequest())
+                    self.promise.succeed(try self.delegate.didFinishRequest(task: self.task))
                 } catch {
                     self.promise.fail(error)
                 }
@@ -377,12 +379,12 @@ class HTTPTaskHandler<T: HTTPResponseDelegate>: ChannelInboundHandler, ChannelOu
         if (event as? IdleStateHandler.IdleStateEvent) == .read {
             self.state = .end
             let error = HTTPClientErrors.ReadTimeoutError()
-            delegate.didReceiveError(error)
+            delegate.didReceiveError(task: self.task, error)
             promise.fail(error)
         } else if (event as? CancelEvent) != nil {
             self.state = .end
             let error = HTTPClientErrors.CancelledError()
-            delegate.didReceiveError(error)
+            delegate.didReceiveError(task: self.task, error)
             promise.fail(error)
         } else {
             context.fireUserInboundEventTriggered(event)
@@ -396,7 +398,7 @@ class HTTPTaskHandler<T: HTTPResponseDelegate>: ChannelInboundHandler, ChannelOu
         default:
             self.state = .end
             let error = HTTPClientErrors.RemoteConnectionClosedError()
-            delegate.didReceiveError(error)
+            delegate.didReceiveError(task: self.task, error)
             promise.fail(error)
         }
     }
@@ -411,12 +413,12 @@ class HTTPTaskHandler<T: HTTPResponseDelegate>: ChannelInboundHandler, ChannelOu
                 break
             default:
                 self.state = .end
-                self.delegate.didReceiveError(error)
+                self.delegate.didReceiveError(task: self.task, error)
                 self.promise.fail(error)
             }
         default:
             self.state = .end
-            self.delegate.didReceiveError(error)
+            self.delegate.didReceiveError(task: self.task, error)
             self.promise.fail(error)
         }
     }
