@@ -181,7 +181,7 @@ public class HTTPClient {
         }
         
         let address = self.resolveAddress(request: request, proxy: self.configuration.proxy)
-        bootstrap.connect(host: address.0, port: address.1)
+        bootstrap.connect(host: address.host, port: address.port)
             .map { channel in
                 task.setChannel(channel)
             }
@@ -195,7 +195,7 @@ public class HTTPClient {
         return task
     }
 
-    private func resolveAddress(request: HTTPRequest, proxy:HTTPClientProxy?) -> (String, Int)  {
+    private func resolveAddress(request: HTTPRequest, proxy: HTTPClientProxy?) -> (host: String, port: Int)  {
         switch self.configuration.proxy {
         case .none:
             return (request.host, request.port)
