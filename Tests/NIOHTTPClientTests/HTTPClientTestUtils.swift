@@ -23,11 +23,11 @@ class TestHTTPDelegate: HTTPResponseDelegate {
 
     var state = HTTPResponseAccumulator.State.idle
 
-    func didReceiveHead(_ head: HTTPResponseHead) {
+    func didReceiveHead(task: HTTPTask<Response>, _ head: HTTPResponseHead) {
         self.state = .head(head)
     }
 
-    func didReceivePart(_ buffer: ByteBuffer) {
+    func didReceivePart(task: HTTPTask<Response>, _ buffer: ByteBuffer) {
         switch self.state {
         case .head(let head):
             self.state = .body(head, buffer)
@@ -40,7 +40,7 @@ class TestHTTPDelegate: HTTPResponseDelegate {
         }
     }
 
-    func didFinishRequest() throws {}
+    func didFinishRequest(task: HTTPTask<Response>) throws {}
 }
 
 class CountingDelegate: HTTPResponseDelegate {
@@ -48,7 +48,7 @@ class CountingDelegate: HTTPResponseDelegate {
 
     var count = 0
 
-    func didReceivePart(_ buffer: ByteBuffer) {
+    func didReceivePart(task: HTTPTask<Response>, _ buffer: ByteBuffer) {
         var buffer = buffer
         let str = buffer.readString(length: buffer.readableBytes)
         if str?.starts(with: "id:") ?? false {
@@ -56,7 +56,7 @@ class CountingDelegate: HTTPResponseDelegate {
         }
     }
 
-    func didFinishRequest() throws -> Int {
+    func didFinishRequest(task: HTTPTask<Response>) throws -> Int {
         return self.count
     }
 }

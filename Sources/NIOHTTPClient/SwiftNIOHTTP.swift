@@ -147,6 +147,8 @@ public class HTTPClient {
             redirectHandler = nil
         }
 
+        let task = HTTPTask(future: promise.futureResult)
+
         var bootstrap = ClientBootstrap(group: group)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
             .channelInitializer { channel in
@@ -159,15 +161,13 @@ public class HTTPClient {
                     return channel.eventLoop.makeSucceededFuture(())
                 }
             }.flatMap {
-                channel.pipeline.addHandler(HTTPTaskHandler(delegate: delegate, promise: promise, redirectHandler: redirectHandler))
+                channel.pipeline.addHandler(HTTPTaskHandler(task: task, delegate: delegate, promise: promise, redirectHandler: redirectHandler))
             }
         }
 
         if let connectTimeout = timeout.connect {
             bootstrap = bootstrap.connectTimeout(connectTimeout)
         }
-
-        let task = HTTPTask(future: promise.futureResult)
 
         bootstrap.connect(host: request.host, port: request.port)
             .map { channel in
