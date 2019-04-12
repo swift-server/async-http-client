@@ -86,10 +86,6 @@ internal class HttpBin {
         return self.serverChannel.localAddress!
     }
 
-<<<<<<< HEAD
-    init(ssl: Bool = false) {
-        self.serverChannel = try! ServerBootstrap(group: self.group)
-=======
     static func configureTLS(channel: Channel) -> EventLoopFuture<Void> {
         let configuration = TLSConfiguration.forServer(certificateChain: [.certificate(try! NIOSSLCertificate(buffer: cert.utf8.map(Int8.init), format: .pem))],
                                                        privateKey: .privateKey(try! NIOSSLPrivateKey(buffer: key.utf8.map(Int8.init), format: .pem)))
@@ -99,7 +95,6 @@ internal class HttpBin {
 
     init(ssl: Bool = false, simulateProxy: HTTPProxySimulator.Option? = nil) {
         self.serverChannel = try! ServerBootstrap(group: group)
->>>>>>> add proxy support
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
             .childChannelInitializer { channel in
