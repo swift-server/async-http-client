@@ -38,6 +38,7 @@ extension SwiftHTTPTests {
             ("testRemoteClose", testRemoteClose),
             ("testReadTimeout", testReadTimeout),
             ("testCancel", testCancel),
+            ("testDownload", testDownload),
         ]
     }
 }
