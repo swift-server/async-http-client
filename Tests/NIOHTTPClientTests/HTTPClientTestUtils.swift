@@ -177,6 +177,17 @@ internal final class HttpBinHandler: ChannelInboundHandler {
             case "/close":
                 context.close(promise: nil)
                 return
+            case "/download":
+                let part = value(for: "part", from: url.query!)
+                context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
+                for _ in 0..<100 {
+                    var buf = context.channel.allocator.buffer(capacity: part.count)
+                    buf.writeString(part)
+                    buf.writeString("\n")
+                    context.writeAndFlush(wrapOutboundOut(.body(.byteBuffer(buf))), promise: nil)
+                }
+                context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+                return
             case "/events/10/1": // TODO: parse path
                 context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
                 for i in 0 ..< 10 {

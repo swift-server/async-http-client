@@ -211,6 +211,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case cancelled
         case identityCodingIncorrectlyPresent
         case chunkedSpecifiedMultipleTimes
+        case non200Reponse
+        case emptyBody
     }
 
     private var code: Code
@@ -233,4 +235,6 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let cancelled = HTTPClientError(code: .cancelled)
     public static let identityCodingIncorrectlyPresent = HTTPClientError(code: .identityCodingIncorrectlyPresent)
     public static let chunkedSpecifiedMultipleTimes = HTTPClientError(code: .chunkedSpecifiedMultipleTimes)
+    public static let non200Reponse = HTTPClientError(code: .non200Reponse)
+    public static let emptyBody = HTTPClientError(code: .emptyBody)
 }

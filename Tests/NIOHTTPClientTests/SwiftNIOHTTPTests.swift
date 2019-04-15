@@ -265,4 +265,29 @@ class SwiftHTTPTests: XCTestCase {
             }
         }
     }
+
+    func testDownload() throws {
+        let httpBin = HttpBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+
+        let part = UUID().uuidString
+        let file = "/tmp/\(UUID().uuidString)"
+
+        if FileManager.default.fileExists(atPath: file) {
+            try FileManager.default.removeItem(atPath: file)
+        }
+        defer {
+            try? FileManager.default.removeItem(atPath: file)
+        }
+
+        try httpClient.download(url: "http://localhost:\(httpBin.port)/download?part=\(part)", to: file).wait()
+
+        let parts = String(data: FileManager.default.contents(atPath: file)!, encoding: .utf8)!.split(separator: "\n")
+        XCTAssertEqual(parts.count, 100)
+        XCTAssertTrue(parts.allSatisfy { $0 == part })
+    }
 }
