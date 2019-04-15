@@ -110,7 +110,7 @@ public struct HTTPCookie {
     }
 }
 
-public extension HTTPResponse {
+public extension HTTPClient.Response {
     internal var cookieHeaders: [HTTPHeaders.Element] {
         return headers.filter { $0.name.lowercased() == "set-cookie" }
     }
