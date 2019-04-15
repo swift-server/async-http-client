@@ -220,7 +220,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     }
 
     public var description: String {
-        return "SandwichError.\(String(describing: self.code))"
+        return "HTTPClientError.\(String(describing: self.code))"
     }
 
     public static let invalidURL = HTTPClientError(code: .invalidURL)
