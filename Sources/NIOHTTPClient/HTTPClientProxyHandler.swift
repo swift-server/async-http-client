@@ -24,12 +24,14 @@ import NIOHTTP1
 /// If a `TLSConfiguration` is used in conjunction with `HTTPClientProxy`,
 /// TLS will be established _after_ successful proxy, between your client
 /// and the destination server.
-public struct HTTPClientProxy {
-    internal let host: String
-    internal let port: Int
+public extension HTTPClient {
+    struct Proxy {
+        internal let host: String
+        internal let port: Int
 
-    public static func server(host: String, port: Int) -> HTTPClientProxy {
-        return .init(host: host, port: port)
+        public static func server(host: String, port: Int) -> Proxy {
+            return .init(host: host, port: port)
+        }
     }
 }
 
@@ -81,7 +83,7 @@ internal final class HTTPClientProxyHandler: ChannelDuplexHandler, RemovableChan
                     // Any response other than a successful response
                     // indicates that the tunnel has not yet been formed and that the
                     // connection remains governed by HTTP.
-                    context.fireErrorCaught(HTTPClientErrors.InvalidProxyResponseError())
+                    context.fireErrorCaught(HTTPClientError.invalidProxyResponse)
                 }
             case .end:
                 self.readState = .connecting

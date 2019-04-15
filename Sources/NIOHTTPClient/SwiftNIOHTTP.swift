@@ -23,45 +23,14 @@ public enum EventLoopGroupProvider {
     case createNew
 }
 
-public struct Timeout {
-    public var connect: TimeAmount?
-    public var read: TimeAmount?
-
-    public init(connectTimeout: TimeAmount? = nil, readTimeout: TimeAmount? = nil) {
-        self.connect = connectTimeout
-        self.read = readTimeout
-    }
-}
-
-public struct HTTPClientConfiguration {
-    public var tlsConfiguration: TLSConfiguration?
-    public var followRedirects: Bool
-    public var timeout: Timeout
-    public var proxy: HTTPClientProxy?
-
-    public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: HTTPClientProxy? = nil) {
-        self.tlsConfiguration = tlsConfiguration
-        self.followRedirects = followRedirects
-        self.timeout = timeout
-        self.proxy = proxy
-    }
-
-    public init(certificateVerification: CertificateVerification, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: HTTPClientProxy? = nil) {
-        self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
-        self.followRedirects = followRedirects
-        self.timeout = timeout
-        self.proxy = proxy
-    }
-}
-
 public class HTTPClient {
     let eventLoopGroupProvider: EventLoopGroupProvider
     let group: EventLoopGroup
-    let configuration: HTTPClientConfiguration
+    let configuration: Configuration
 
     let isShutdown = Atomic<Bool>(value: false)
 
-    public init(eventLoopGroupProvider: EventLoopGroupProvider, configuration: HTTPClientConfiguration = HTTPClientConfiguration()) {
+    public init(eventLoopGroupProvider: EventLoopGroupProvider, configuration: Configuration = Configuration()) {
         self.eventLoopGroupProvider = eventLoopGroupProvider
         switch self.eventLoopGroupProvider {
         case .shared(let group):
@@ -90,53 +59,53 @@ public class HTTPClient {
             if self.isShutdown.compareAndExchange(expected: false, desired: true) {
                 try self.group.syncShutdownGracefully()
             } else {
-                throw HTTPClientErrors.AlreadyShutdown()
+                throw HTTPClientError.alreadyShutdown
             }
         }
     }
 
-    public func get(url: String, timeout: Timeout? = nil) -> EventLoopFuture<HTTPResponse> {
+    public func get(url: String, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
         do {
-            let request = try HTTPRequest(url: url, method: .GET)
+            let request = try Request(url: url, method: .GET)
             return self.execute(request: request)
         } catch {
             return self.group.next().makeFailedFuture(error)
         }
     }
 
-    public func post(url: String, body: HTTPBody? = nil, timeout: Timeout? = nil) -> EventLoopFuture<HTTPResponse> {
+    public func post(url: String, body: Body? = nil, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
         do {
-            let request = try HTTPRequest(url: url, method: .POST, body: body)
+            let request = try HTTPClient.Request(url: url, method: .POST, body: body)
             return self.execute(request: request)
         } catch {
             return self.group.next().makeFailedFuture(error)
         }
     }
 
-    public func put(url: String, body: HTTPBody? = nil, timeout: Timeout? = nil) -> EventLoopFuture<HTTPResponse> {
+    public func put(url: String, body: Body? = nil, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
         do {
-            let request = try HTTPRequest(url: url, method: .PUT, body: body)
+            let request = try HTTPClient.Request(url: url, method: .PUT, body: body)
             return self.execute(request: request)
         } catch {
             return self.group.next().makeFailedFuture(error)
         }
     }
 
-    public func delete(url: String, timeout: Timeout? = nil) -> EventLoopFuture<HTTPResponse> {
+    public func delete(url: String, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
         do {
-            let request = try HTTPRequest(url: url, method: .DELETE)
+            let request = try Request(url: url, method: .DELETE)
             return self.execute(request: request)
         } catch {
             return self.group.next().makeFailedFuture(error)
         }
     }
 
-    public func execute(request: HTTPRequest, timeout: Timeout? = nil) -> EventLoopFuture<HTTPResponse> {
-        let accumulator = HTTPResponseAccumulator(request: request)
+    public func execute(request: Request, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
+        let accumulator = ResponseAccumulator(request: request)
         return self.execute(request: request, delegate: accumulator, timeout: timeout).future
     }
 
-    public func execute<T: HTTPResponseDelegate>(request: HTTPRequest, delegate: T, timeout: Timeout? = nil) -> HTTPTask<T.Response> {
+    public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, timeout: Timeout? = nil) -> Task<T.Response> {
         let timeout = timeout ?? configuration.timeout
 
         let promise: EventLoopPromise<T.Response> = group.next().makePromise()
@@ -150,7 +119,7 @@ public class HTTPClient {
             redirectHandler = nil
         }
 
-        let task = HTTPTask(future: promise.futureResult)
+        let task = Task(future: promise.futureResult)
 
         var bootstrap = ClientBootstrap(group: group)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
@@ -171,10 +140,10 @@ public class HTTPClient {
                         return channel.eventLoop.makeSucceededFuture(())
                     }
                 }.flatMap {
-                    let taskHandler = HTTPTaskHandler(task: task, delegate: delegate, promise: promise, redirectHandler: redirectHandler)
+                    let taskHandler = TaskHandler(task: task, delegate: delegate, promise: promise, redirectHandler: redirectHandler)
                     return channel.pipeline.addHandler(taskHandler)
                 }
-            }
+        }
 
         if let connectTimeout = timeout.connect {
             bootstrap = bootstrap.connectTimeout(connectTimeout)
@@ -195,7 +164,7 @@ public class HTTPClient {
         return task
     }
 
-    private func resolveAddress(request: HTTPRequest, proxy: HTTPClientProxy?) -> (host: String, port: Int)  {
+    private func resolveAddress(request: Request, proxy: Proxy?) -> (host: String, port: Int)  {
         switch self.configuration.proxy {
         case .none:
             return (request.host, request.port)
@@ -203,10 +172,41 @@ public class HTTPClient {
             return (proxy.host, proxy.port)
         }
     }
+
+    public struct Configuration {
+        public var tlsConfiguration: TLSConfiguration?
+        public var followRedirects: Bool
+        public var timeout: Timeout
+        public var proxy: Proxy?
+
+        public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
+            self.tlsConfiguration = tlsConfiguration
+            self.followRedirects = followRedirects
+            self.timeout = timeout
+            self.proxy = proxy
+        }
+
+        public init(certificateVerification: CertificateVerification, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
+            self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
+            self.followRedirects = followRedirects
+            self.timeout = timeout
+            self.proxy = proxy
+        }
+    }
+
+    public struct Timeout {
+        public var connect: TimeAmount?
+        public var read: TimeAmount?
+
+        public init(connect: TimeAmount? = nil, read: TimeAmount? = nil) {
+            self.connect = connect
+            self.read = read
+        }
+    }
 }
 
 private extension ChannelPipeline {
-    func addProxyHandler(for request: HTTPRequest, decoder: ByteToMessageHandler<HTTPResponseDecoder>, encoder: HTTPRequestEncoder, tlsConfiguration: TLSConfiguration?) -> EventLoopFuture<Void> {
+    func addProxyHandler(for request: HTTPClient.Request, decoder: ByteToMessageHandler<HTTPResponseDecoder>, encoder: HTTPRequestEncoder, tlsConfiguration: TLSConfiguration?) -> EventLoopFuture<Void> {
         let handler = HTTPClientProxyHandler(host: request.host, port: request.port, onConnect: { channel in
             return channel.pipeline.removeHandler(decoder).flatMap {
                 return channel.pipeline.addHandler(
@@ -220,7 +220,7 @@ private extension ChannelPipeline {
         return self.addHandler(handler)
     }
 
-    func addSSLHandlerIfNeeded(for request: HTTPRequest, tlsConfiguration: TLSConfiguration?) -> EventLoopFuture<Void> {
+    func addSSLHandlerIfNeeded(for request: HTTPClient.Request, tlsConfiguration: TLSConfiguration?) -> EventLoopFuture<Void> {
         guard request.useTLS else {
             return self.eventLoop.makeSucceededFuture(())
         }
@@ -234,4 +234,42 @@ private extension ChannelPipeline {
             return self.eventLoop.makeFailedFuture(error)
         }
     }
+}
+
+public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
+    private enum Code: Equatable {
+        case invalidURL
+        case emptyHost
+        case alreadyShutdown
+        case emptyScheme
+        case unsupportedScheme(String)
+        case readTimeout
+        case remoteConnectionClosed
+        case cancelled
+        case identityCodingIncorrectlyPresent
+        case chunkedSpecifiedMultipleTimes
+        case invalidProxyResponse
+    }
+
+    private var code: Code
+
+    private init(code: Code) {
+        self.code = code
+    }
+
+    public var description: String {
+        return "HTTPClientError.\(String(describing: self.code))"
+    }
+
+    public static let invalidURL = HTTPClientError(code: .invalidURL)
+    public static let emptyHost = HTTPClientError(code: .emptyHost)
+    public static let alreadyShutdown = HTTPClientError(code: .alreadyShutdown)
+    public static let emptyScheme = HTTPClientError(code: .emptyScheme)
+    public static func unsupportedScheme(_ scheme: String) -> HTTPClientError { return HTTPClientError(code: .unsupportedScheme(scheme)) }
+    public static let readTimeout = HTTPClientError(code: .readTimeout)
+    public static let remoteConnectionClosed = HTTPClientError(code: .remoteConnectionClosed)
+    public static let cancelled = HTTPClientError(code: .cancelled)
+    public static let identityCodingIncorrectlyPresent = HTTPClientError(code: .identityCodingIncorrectlyPresent)
+    public static let chunkedSpecifiedMultipleTimes = HTTPClientError(code: .chunkedSpecifiedMultipleTimes)
+    public static let invalidProxyResponse = HTTPClientError(code: .invalidProxyResponse)
 }
