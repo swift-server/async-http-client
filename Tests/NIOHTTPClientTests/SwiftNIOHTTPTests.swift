@@ -265,4 +265,35 @@ class SwiftHTTPTests: XCTestCase {
             }
         }
     }
+
+    func testProxyPlaintext() throws {
+        let httpBin = HttpBin(simulateProxy: .plaintext)
+        let httpClient = HTTPClient(
+            eventLoopGroupProvider: .createNew,
+            configuration: .init(proxy: .server(host: "localhost", port: httpBin.port))
+        )
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+        let res = try httpClient.get(url: "http://test/ok").wait()
+        XCTAssertEqual(res.status, .ok)
+    }
+
+    func testProxyTLS() throws {
+        let httpBin = HttpBin(simulateProxy: .tls)
+        let httpClient = HTTPClient(
+            eventLoopGroupProvider: .createNew,
+            configuration: .init(
+                certificateVerification: .none,
+                proxy: .server(host: "localhost", port: httpBin.port)
+            )
+        )
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+        let res = try httpClient.get(url: "https://test/ok").wait()
+        XCTAssertEqual(res.status, .ok)
+    }
 }
