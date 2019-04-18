@@ -82,6 +82,15 @@ public class HTTPClient {
         }
     }
 
+    public func patch(url: String, body: Body? = nil, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
+        do {
+            let request = try HTTPClient.Request(url: url, method: .PATCH, body: body)
+            return self.execute(request: request)
+        } catch {
+            return self.group.next().makeFailedFuture(error)
+        }
+    }
+
     public func put(url: String, body: Body? = nil, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .PUT, body: body)
