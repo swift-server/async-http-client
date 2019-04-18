@@ -12,6 +12,9 @@ needs to be listed here.
 ### Contributors
 
 - Artem Redkin <aredkin@apple.com>
+- Ian Partridge <i.partridge@uk.ibm.com>
+- Tanner <me@tanner.xyz>
+- tomer doron <tomer@apple.com>
 
 **Updating this list**
 
