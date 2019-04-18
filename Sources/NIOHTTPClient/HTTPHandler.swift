@@ -19,10 +19,13 @@ import NIOHTTP1
 import NIOSSL
 
 public extension HTTPClient {
-    enum Body: Equatable {
+    typealias ChunkProvider = (@escaping (ByteBuffer) -> EventLoopFuture<Void>) -> EventLoopFuture<Void>
+
+    enum Body {
         case byteBuffer(ByteBuffer)
         case data(Data)
         case string(String)
+        case stream(Int, ChunkProvider)
 
         var length: Int {
             switch self {
@@ -32,11 +35,13 @@ public extension HTTPClient {
                 return data.count
             case .string(let string):
                 return string.utf8.count
+            case .stream(let size, _):
+                return size
             }
         }
     }
 
-    struct Request: Equatable {
+    struct Request {
         public var version: HTTPVersion
         public var method: HTTPMethod
         public var url: URL
@@ -53,7 +58,7 @@ public extension HTTPClient {
             try self.init(url: url, version: version, method: method, headers: headers, body: body)
         }
 
-        public init(url: URL, version: HTTPVersion, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+        public init(url: URL, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
             guard let scheme = url.scheme else {
                 throw HTTPClientError.emptyScheme
             }
@@ -88,7 +93,7 @@ public extension HTTPClient {
         }
     }
 
-    struct Response: Equatable {
+    struct Response {
         public var host: String
         public var status: HTTPResponseStatus
         public var headers: HTTPHeaders
@@ -298,29 +303,53 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
 
         context.write(wrapOutboundOut(.head(head)), promise: nil)
 
+        let bodyFuture = writeBody(request: request, context: context)
+
+        bodyFuture.whenSuccess {
+            context.write(self.wrapOutboundOut(.end(nil)), promise: promise)
+            context.flush()
+
+            self.state = .sent
+            self.delegate.didTransmitRequestBody(task: self.task)
+        }
+
+        bodyFuture.whenFailure { error in
+            self.state = .end
+            self.delegate.didReceiveError(task: self.task, error)
+            self.promise.fail(error)
+            context.close(promise: nil)
+        }
+    }
+
+    private func writeBody(request: HTTPClient.Request, context: ChannelHandlerContext) -> EventLoopFuture<Void> {
         if let body = request.body {
-            let part: HTTPClientRequestPart
             switch body {
             case .byteBuffer(let buffer):
-                part = HTTPClientRequestPart.body(.byteBuffer(buffer))
+                let part = HTTPClientRequestPart.body(.byteBuffer(buffer))
+                context.write(wrapOutboundOut(part), promise: nil)
+                return context.eventLoop.makeSucceededFuture(())
             case .data(let data):
                 var buffer = context.channel.allocator.buffer(capacity: data.count)
                 buffer.writeBytes(data)
-                part = HTTPClientRequestPart.body(.byteBuffer(buffer))
+                let part = HTTPClientRequestPart.body(.byteBuffer(buffer))
+                context.write(wrapOutboundOut(part), promise: nil)
+                return context.eventLoop.makeSucceededFuture(())
             case .string(let string):
-                var buffer = context.channel.allocator.buffer(capacity: string.utf8.count)
+                var buffer = context.channel.allocator.buffer(capacity: string.count)
                 buffer.writeString(string)
-                part = HTTPClientRequestPart.body(.byteBuffer(buffer))
+                let part = HTTPClientRequestPart.body(.byteBuffer(buffer))
+                context.write(wrapOutboundOut(part), promise: nil)
+                return context.eventLoop.makeSucceededFuture(())
+            case .stream(_, let stream):
+                return stream { part in
+                    let part = HTTPClientRequestPart.body(.byteBuffer(part))
+                    context.write(self.wrapOutboundOut(part), promise: nil)
+                    return context.eventLoop.makeSucceededFuture(())
+                }
             }
-
-            context.write(wrapOutboundOut(part), promise: nil)
+        } else {
+            return context.eventLoop.makeSucceededFuture(())
         }
-
-        context.write(wrapOutboundOut(.end(nil)), promise: promise)
-        context.flush()
-
-        self.state = .sent
-        self.delegate.didTransmitRequestBody(task: self.task)
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {

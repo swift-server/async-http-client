@@ -296,4 +296,32 @@ class SwiftHTTPTests: XCTestCase {
         let res = try httpClient.get(url: "https://test/ok").wait()
         XCTAssertEqual(res.status, .ok)
     }
+
+    func testUploadStreaming() throws {
+        let httpBin = HttpBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+
+        let allocator = ByteBufferAllocator()
+        let body: HTTPClient.Body = .stream(8) { writer in
+            for _ in 0..<2 {
+                var buffer = allocator.buffer(capacity: 4)
+                buffer.writeString("1234")
+                _ = writer(buffer)
+            }
+            return httpClient.group.next().makeSucceededFuture(())
+        }
+
+        let response = try httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait()
+        let bytes = response.body!.withUnsafeReadableBytes {
+            Data(bytes: $0.baseAddress!, count: $0.count)
+        }
+        let data = try JSONDecoder().decode(RequestInfo.self, from: bytes)
+
+        XCTAssertEqual(.ok, response.status)
+        XCTAssertEqual("12341234", data.data)
+    }
 }
