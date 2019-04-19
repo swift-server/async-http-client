@@ -7,7 +7,7 @@ needs to be listed here.
 
 ## COPYRIGHT HOLDERS
 
-- Swift Server Working Group (all contributors with '@apple.com')
+- Swift Server Working Group
 
 ### Contributors
 
