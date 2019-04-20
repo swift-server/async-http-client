@@ -310,7 +310,7 @@ class SwiftHTTPTests: XCTestCase {
             for _ in 0..<2 {
                 var buffer = allocator.buffer(capacity: 4)
                 buffer.writeString("1234")
-                _ = writer(buffer)
+                _ = writer(.byteBuffer(buffer))
             }
             return httpClient.group.next().makeSucceededFuture(())
         }

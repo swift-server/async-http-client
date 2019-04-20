@@ -19,7 +19,7 @@ import NIOHTTP1
 import NIOSSL
 
 public extension HTTPClient {
-    typealias ChunkProvider = (@escaping (ByteBuffer) -> EventLoopFuture<Void>) -> EventLoopFuture<Void>
+    typealias ChunkProvider = (@escaping (IOData) -> EventLoopFuture<Void>) -> EventLoopFuture<Void>
 
     enum Body {
         case byteBuffer(ByteBuffer)
@@ -342,7 +342,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                 return context.eventLoop.makeSucceededFuture(())
             case .stream(_, let stream):
                 return stream { part in
-                    let part = HTTPClientRequestPart.body(.byteBuffer(part))
+                    let part = HTTPClientRequestPart.body(part)
                     context.write(self.wrapOutboundOut(part), promise: nil)
                     return context.eventLoop.makeSucceededFuture(())
                 }
