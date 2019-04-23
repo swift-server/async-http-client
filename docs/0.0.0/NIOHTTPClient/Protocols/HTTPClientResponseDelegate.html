@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>HTTPClientResponseDelegate Protocol Reference</title>
+    <link rel="stylesheet" type="text/css" href="../css/jazzy.css" />
+    <link rel="stylesheet" type="text/css" href="../css/highlight.css" />
+    <meta charset="utf-8">
+    <script src="../js/jquery.min.js" defer></script>
+    <script src="../js/jazzy.js" defer></script>
+    
+    <script src="../js/lunr.min.js" defer></script>
+    <script src="../js/typeahead.jquery.js" defer></script>
+    <script src="../js/jazzy.search.js" defer></script>
+  </head>
+  <body>
+
+    <a name="//apple_ref/swift/Protocol/HTTPClientResponseDelegate" class="dashAnchor"></a>
+
+    <a title="HTTPClientResponseDelegate Protocol Reference"></a>
+
+    <header class="header">
+      <p class="header-col header-col--primary">
+        <a class="header-link" href="../index.html">
+          NIOHTTPClient Docs
+        </a>
+         (2% documented)
+      </p>
+    
+      <p class="header-col--secondary">
+        <form role="search" action="../search.json">
+          <input type="text" placeholder="Search documentation" data-typeahead>
+        </form>
+      </p>
+    
+        <p class="header-col header-col--secondary">
+          <a class="header-link" href="https://github.com/swift-server/swift-nio-http-client">
+            <img class="header-icon" src="../img/gh.png"/>
+            View on GitHub
+          </a>
+        </p>
+    
+    </header>
+
+    <p class="breadcrumbs">
+      <a class="breadcrumb" href="../index.html">NIOHTTPClient Reference</a>
+      <img class="carat" src="../img/carat.png" />
+      HTTPClientResponseDelegate Protocol Reference
+    </p>
+
+    <div class="content-wrapper">
+      <nav class="navigation">
+        <ul class="nav-groups">
+          <li class="nav-group-name">
+            <a class="nav-group-name-link" href="../Classes.html">Classes</a>
+            <ul class="nav-group-tasks">
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient.html">HTTPClient</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient/Configuration.html">– Configuration</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient/Timeout.html">– Timeout</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient/Proxy.html">– Proxy</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient/Response.html">– Response</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient/Body.html">– Body</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient/Request.html">– Request</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient/Task.html">– Task</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HandlingHTTPResponseDelegate.html">HandlingHTTPResponseDelegate</a>
+              </li>
+            </ul>
+          </li>
+          <li class="nav-group-name">
+            <a class="nav-group-name-link" href="../Enums.html">Enumerations</a>
+            <ul class="nav-group-tasks">
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Enums/EventLoopGroupProvider.html">EventLoopGroupProvider</a>
+              </li>
+            </ul>
+          </li>
+          <li class="nav-group-name">
+            <a class="nav-group-name-link" href="../Protocols.html">Protocols</a>
+            <ul class="nav-group-tasks">
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Protocols/HTTPClientResponseDelegate.html">HTTPClientResponseDelegate</a>
+              </li>
+            </ul>
+          </li>
+          <li class="nav-group-name">
+            <a class="nav-group-name-link" href="../Structs.html">Structures</a>
+            <ul class="nav-group-tasks">
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Structs/HTTPClientError.html">HTTPClientError</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Structs/HTTPCookie.html">HTTPCookie</a>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </nav>
+      <article class="main-content">
+
+        <section class="section">
+          <div class="section-content">
+            <h1>HTTPClientResponseDelegate</h1>
+              <div class="declaration">
+                <div class="language">
+                  <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">protocol</span> <span class="kt">HTTPClientResponseDelegate</span> <span class="p">:</span> <span class="kt">AnyObject</span></code></pre>
+
+                </div>
+              </div>
+            <p>This delegate is strongly held by the HTTPTaskHandler
+for the duration of the HTTPRequest processing and will be
+released together with the HTTPTaskHandler when channel is closed</p>
+
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-content">
+            <div class="task-group">
+              <ul class="item-container">
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:13NIOHTTPClient26HTTPClientResponseDelegateP0C0Qa"></a>
+                    <a name="//apple_ref/swift/Alias/Response" class="dashAnchor"></a>
+                    <a class="token" href="#/s:13NIOHTTPClient26HTTPClientResponseDelegateP0C0Qa">Response</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        <p>Undocumented</p>
+
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">associatedtype</span> <span class="kt">Response</span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/swift-nio-http-client/tree/0.0.0/Sources/NIOHTTPClient/HTTPHandler.swift#L">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:13NIOHTTPClient26HTTPClientResponseDelegateP22didTransmitRequestBody4taskyAA0B0C4TaskCy_0C0QzG_tF"></a>
+                    <a name="//apple_ref/swift/Method/didTransmitRequestBody(task:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:13NIOHTTPClient26HTTPClientResponseDelegateP22didTransmitRequestBody4taskyAA0B0C4TaskCy_0C0QzG_tF">didTransmitRequestBody(task:)</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        <p>Undocumented</p>
+
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">func</span> <span class="nf">didTransmitRequestBody</span><span class="p">(</span><span class="nv">task</span><span class="p">:</span> <span class="kt"><a href="../Classes/HTTPClient.html">HTTPClient</a></span><span class="o">.</span><span class="kt">Task</span><span class="o">&lt;</span><span class="kt"><a href="../Protocols/HTTPClientResponseDelegate.html#/s:13NIOHTTPClient26HTTPClientResponseDelegateP0C0Qa">Response</a></span><span class="o">&gt;</span><span class="p">)</span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/swift-nio-http-client/tree/0.0.0/Sources/NIOHTTPClient/HTTPHandler.swift#L">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:13NIOHTTPClient26HTTPClientResponseDelegateP14didReceiveHead4task_yAA0B0C4TaskCy_0C0QzG_8NIOHTTP1012HTTPResponseG0VtF"></a>
+                    <a name="//apple_ref/swift/Method/didReceiveHead(task:_:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:13NIOHTTPClient26HTTPClientResponseDelegateP14didReceiveHead4task_yAA0B0C4TaskCy_0C0QzG_8NIOHTTP1012HTTPResponseG0VtF">didReceiveHead(task:_:)</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        <p>Undocumented</p>
+
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">func</span> <span class="nf">didReceiveHead</span><span class="p">(</span><span class="nv">task</span><span class="p">:</span> <span class="kt"><a href="../Classes/HTTPClient.html">HTTPClient</a></span><span class="o">.</span><span class="kt">Task</span><span class="o">&lt;</span><span class="kt"><a href="../Protocols/HTTPClientResponseDelegate.html#/s:13NIOHTTPClient26HTTPClientResponseDelegateP0C0Qa">Response</a></span><span class="o">&gt;</span><span class="p">,</span> <span class="n">_</span> <span class="nv">head</span><span class="p">:</span> <span class="kt">HTTPResponseHead</span><span class="p">)</span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/swift-nio-http-client/tree/0.0.0/Sources/NIOHTTPClient/HTTPHandler.swift#L">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:13NIOHTTPClient26HTTPClientResponseDelegateP14didReceivePart4task_yAA0B0C4TaskCy_0C0QzG_3NIO10ByteBufferVtF"></a>
+                    <a name="//apple_ref/swift/Method/didReceivePart(task:_:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:13NIOHTTPClient26HTTPClientResponseDelegateP14didReceivePart4task_yAA0B0C4TaskCy_0C0QzG_3NIO10ByteBufferVtF">didReceivePart(task:_:)</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        <p>Undocumented</p>
+
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">func</span> <span class="nf">didReceivePart</span><span class="p">(</span><span class="nv">task</span><span class="p">:</span> <span class="kt"><a href="../Classes/HTTPClient.html">HTTPClient</a></span><span class="o">.</span><span class="kt">Task</span><span class="o">&lt;</span><span class="kt"><a href="../Protocols/HTTPClientResponseDelegate.html#/s:13NIOHTTPClient26HTTPClientResponseDelegateP0C0Qa">Response</a></span><span class="o">&gt;</span><span class="p">,</span> <span class="n">_</span> <span class="nv">buffer</span><span class="p">:</span> <span class="kt">ByteBuffer</span><span class="p">)</span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/swift-nio-http-client/tree/0.0.0/Sources/NIOHTTPClient/HTTPHandler.swift#L">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:13NIOHTTPClient26HTTPClientResponseDelegateP15didReceiveError4task_yAA0B0C4TaskCy_0C0QzG_s0G0_ptF"></a>
+                    <a name="//apple_ref/swift/Method/didReceiveError(task:_:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:13NIOHTTPClient26HTTPClientResponseDelegateP15didReceiveError4task_yAA0B0C4TaskCy_0C0QzG_s0G0_ptF">didReceiveError(task:_:)</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        <p>Undocumented</p>
+
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">func</span> <span class="nf">didReceiveError</span><span class="p">(</span><span class="nv">task</span><span class="p">:</span> <span class="kt"><a href="../Classes/HTTPClient.html">HTTPClient</a></span><span class="o">.</span><span class="kt">Task</span><span class="o">&lt;</span><span class="kt"><a href="../Protocols/HTTPClientResponseDelegate.html#/s:13NIOHTTPClient26HTTPClientResponseDelegateP0C0Qa">Response</a></span><span class="o">&gt;</span><span class="p">,</span> <span class="n">_</span> <span class="nv">error</span><span class="p">:</span> <span class="kt">Error</span><span class="p">)</span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/swift-nio-http-client/tree/0.0.0/Sources/NIOHTTPClient/HTTPHandler.swift#L">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:13NIOHTTPClient26HTTPClientResponseDelegateP16didFinishRequest4task0C0QzAA0B0C4TaskCy_AGG_tKF"></a>
+                    <a name="//apple_ref/swift/Method/didFinishRequest(task:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:13NIOHTTPClient26HTTPClientResponseDelegateP16didFinishRequest4task0C0QzAA0B0C4TaskCy_AGG_tKF">didFinishRequest(task:)</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        <p>Undocumented</p>
+
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">func</span> <span class="nf">didFinishRequest</span><span class="p">(</span><span class="nv">task</span><span class="p">:</span> <span class="kt"><a href="../Classes/HTTPClient.html">HTTPClient</a></span><span class="o">.</span><span class="kt">Task</span><span class="o">&lt;</span><span class="kt"><a href="../Protocols/HTTPClientResponseDelegate.html#/s:13NIOHTTPClient26HTTPClientResponseDelegateP0C0Qa">Response</a></span><span class="o">&gt;</span><span class="p">)</span> <span class="k">throws</span> <span class="o">-&gt;</span> <span class="kt"><a href="../Protocols/HTTPClientResponseDelegate.html#/s:13NIOHTTPClient26HTTPClientResponseDelegateP0C0Qa">Response</a></span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/swift-nio-http-client/tree/0.0.0/Sources/NIOHTTPClient/HTTPHandler.swift#L">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+      </article>
+    </div>
+    <section class="footer">
+      <p>&copy; 2019 <a class="link" href="https://github.com/swift-server/swift-nio-http-client" target="_blank" rel="external">SwiftNIOHTTPClient team</a>. All rights reserved. (Last updated: 2019-04-23)</p>
+      <p>Generated by <a class="link" href="https://github.com/realm/jazzy" target="_blank" rel="external">jazzy ♪♫ v0.9.5</a>, a <a class="link" href="https://realm.io" target="_blank" rel="external">Realm</a> project.</p>
+    </section>
+  </body>
+</div>
+</html>
