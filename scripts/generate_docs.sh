@@ -57,6 +57,7 @@ jazzy_args=(--clean
             --readme "$module_switcher"
             --author_url https://github.com/swift-server/swift-nio-http-client
             --github_url https://github.com/swift-server/swift-nio-http-client
+            --github-file-prefix https://github.com/swift-server/swift-nio-http-client/tree/$version
             --theme fullwidth
             --xcodebuild-arguments -scheme,swift-nio-http-client-Package)
 cat > "$module_switcher" <<"EOF"
