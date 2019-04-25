@@ -92,7 +92,7 @@ httpClient.execute(request: request).whenComplete { result in
 Enable follow-redirects behavior using the client configuration:
 ```swift
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
-                            configuration: HTTPClientConfiguration(followRedirects: true))
+                            configuration: HTTPClient.Configuration(followRedirects: true))
 ```
 
 ### Timeouts
@@ -100,7 +100,7 @@ Timeouts (connect and read) can also be set using the client configuration:
 ```swift
 let timeout = Timeout(connectTimeout: .seconds(1), readTimeout: .seconds(1))
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
-                            configuration: HTTPClientConfiguration(timeout: timeout))
+                            configuration: HTTPClient.Configuration(timeout: timeout))
 ```
 or on per-request basis:
 ```swift
