@@ -442,6 +442,8 @@ internal struct RedirectHandler<T> {
 
         var request = self.request
         request.url = redirectURL
+        request.host = redirectURL.host!
+        request.scheme = redirectURL.scheme!
 
         var convertToGet = false
         if status == .seeOther, request.method != .HEAD {
