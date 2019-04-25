@@ -17,7 +17,7 @@ import NIOHTTP1
 
 /// Specifies the remote address of an HTTP proxy.
 ///
-/// Adding an `HTTPClientProxy` to your client's `HTTPClientConfiguration`
+/// Adding an `HTTPClientProxy` to your client's `HTTPClient.Configuration`
 /// will cause requests to be passed through the specified proxy using the
 /// HTTP `CONNECT` method.
 ///
