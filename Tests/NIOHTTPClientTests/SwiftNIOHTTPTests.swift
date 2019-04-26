@@ -17,6 +17,7 @@ import NIO
 @testable import NIOHTTP1
 @testable import NIOHTTPClient
 import NIOSSL
+import NIOFoundationCompat
 import XCTest
 
 class SwiftHTTPTests: XCTestCase {
@@ -180,12 +181,13 @@ class SwiftHTTPTests: XCTestCase {
         }
 
         let response = try httpClient.get(url: "https://httpbin.org/redirect-to?url=https%3A%2F%2Fwww.httpbin.org%2Fheaders").wait()
-        guard let body = response.body else {
+        guard var body = response.body else {
             XCTFail("The target page should have a body containing request headers")
             return
         }
-        let data = body.withUnsafeReadableBytes {
-            Data(bytes: $0.baseAddress!, count: $0.count)
+        guard let data = body.readData(length: body.readableBytes) else {
+            XCTFail("Read data shouldn't return nil as it has been passed readableBytes")
+            return
         }
 
         let decoder = JSONDecoder()

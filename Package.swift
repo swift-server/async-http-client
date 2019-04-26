@@ -31,7 +31,7 @@ let package = Package(
         ),
         .testTarget(
             name: "NIOHTTPClientTests",
-            dependencies: ["NIOHTTPClient"]
+            dependencies: ["NIOHTTPClient", "NIOFoundationCompat"]
         ),
     ]
 )
