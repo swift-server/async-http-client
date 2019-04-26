@@ -169,6 +169,17 @@ class SwiftHTTPTests: XCTestCase {
 
         response = try httpClient.get(url: "http://localhost:\(httpBin.port)/redirect/https?port=\(httpsBin.port)").wait()
         XCTAssertEqual(response.status, .ok)
+        
+        response = try httpClient.get(url: "https://httpbin.org/redirect-to?url=https%3A%2F%2Fwww.httpbin.org%2Fheaders").wait()
+        guard let body = response.body else {
+            XCTFail("The target page should have a body containing request headers")
+            return
+        }
+        let data = body.withUnsafeReadableBytes {
+            Data(bytes: $0.baseAddress!, count: $0.count)
+        }
+        let jsonData = try JSONSerialization.jsonObject(with: data, options: [])
+        XCTAssert((jsonData as? [String:[String:String]])?["headers"]?["Host"] == "www.httpbin.org")
     }
 
     func testMultipleContentLengthHeaders() throws {
