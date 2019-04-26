@@ -24,19 +24,18 @@ public enum EventLoopGroupProvider {
 }
 
 public class HTTPClient {
+    public let eventLoopGroup: EventLoopGroup
     let eventLoopGroupProvider: EventLoopGroupProvider
-    let group: EventLoopGroup
     let configuration: Configuration
-
     let isShutdown = Atomic<Bool>(value: false)
 
     public init(eventLoopGroupProvider: EventLoopGroupProvider, configuration: Configuration = Configuration()) {
         self.eventLoopGroupProvider = eventLoopGroupProvider
         switch self.eventLoopGroupProvider {
         case .shared(let group):
-            self.group = group
+            self.eventLoopGroup = group
         case .createNew:
-            self.group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+            self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         }
         self.configuration = configuration
     }
@@ -57,7 +56,7 @@ public class HTTPClient {
             return
         case .createNew:
             if self.isShutdown.compareAndExchange(expected: false, desired: true) {
-                try self.group.syncShutdownGracefully()
+                try self.eventLoopGroup.syncShutdownGracefully()
             } else {
                 throw HTTPClientError.alreadyShutdown
             }
@@ -69,7 +68,7 @@ public class HTTPClient {
             let request = try Request(url: url, method: .GET)
             return self.execute(request: request)
         } catch {
-            return self.group.next().makeFailedFuture(error)
+            return self.eventLoopGroup.next().makeFailedFuture(error)
         }
     }
 
@@ -78,7 +77,7 @@ public class HTTPClient {
             let request = try HTTPClient.Request(url: url, method: .POST, body: body)
             return self.execute(request: request)
         } catch {
-            return self.group.next().makeFailedFuture(error)
+            return self.eventLoopGroup.next().makeFailedFuture(error)
         }
     }
 
@@ -87,7 +86,7 @@ public class HTTPClient {
             let request = try HTTPClient.Request(url: url, method: .PATCH, body: body)
             return self.execute(request: request)
         } catch {
-            return self.group.next().makeFailedFuture(error)
+            return self.eventLoopGroup.next().makeFailedFuture(error)
         }
     }
 
@@ -96,7 +95,7 @@ public class HTTPClient {
             let request = try HTTPClient.Request(url: url, method: .PUT, body: body)
             return self.execute(request: request)
         } catch {
-            return self.group.next().makeFailedFuture(error)
+            return self.eventLoopGroup.next().makeFailedFuture(error)
         }
     }
 
@@ -105,7 +104,7 @@ public class HTTPClient {
             let request = try Request(url: url, method: .DELETE)
             return self.execute(request: request)
         } catch {
-            return self.group.next().makeFailedFuture(error)
+            return self.eventLoopGroup.next().makeFailedFuture(error)
         }
     }
 
@@ -116,9 +115,8 @@ public class HTTPClient {
 
     public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, timeout: Timeout? = nil) -> Task<T.Response> {
         let timeout = timeout ?? configuration.timeout
-
-        let promise: EventLoopPromise<T.Response> = self.group.next().makePromise()
-
+        let promise: EventLoopPromise<T.Response> = self.eventLoopGroup.next().makePromise()
+        
         let redirectHandler: RedirectHandler<T.Response>?
         if self.configuration.followRedirects {
             redirectHandler = RedirectHandler<T.Response>(request: request) { newRequest in
@@ -130,7 +128,7 @@ public class HTTPClient {
 
         let task = Task(future: promise.futureResult)
 
-        var bootstrap = ClientBootstrap(group: group)
+        var bootstrap = ClientBootstrap(group: self.eventLoopGroup)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
             .channelInitializer { channel in
                 let encoder = HTTPRequestEncoder()
