@@ -224,6 +224,20 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 headers.add(name: "Location", value: "https://localhost:\(port)/ok")
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
                 return
+            case "/redirect/loopback":
+                let port = self.value(for: "port", from: url.query!)
+                var headers = HTTPHeaders()
+                headers.add(name: "Location", value: "http://127.0.0.1:\(port)/echohostheader")
+                self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
+                return
+            case "/echohostheader":
+                var builder = HTTPResponseBuilder(status: .ok)
+                let hostValue = req.headers["Host"].first ?? ""
+                var buff = context.channel.allocator.buffer(capacity: hostValue.utf8.count)
+                buff.writeString(hostValue)
+                builder.add(buff)
+                self.resps.append(builder)
+                return
             case "/wait":
                 return
             case "/close":

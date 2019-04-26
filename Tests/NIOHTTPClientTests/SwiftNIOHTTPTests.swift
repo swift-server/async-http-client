@@ -14,10 +14,10 @@
 
 import Foundation
 import NIO
+import NIOFoundationCompat
 @testable import NIOHTTP1
 @testable import NIOHTTPClient
 import NIOSSL
-import NIOFoundationCompat
 import XCTest
 
 class SwiftHTTPTests: XCTestCase {
@@ -173,30 +173,27 @@ class SwiftHTTPTests: XCTestCase {
     }
 
     func testHttpHostRedirect() throws {
+        let httpBin = HttpBin(ssl: false)
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
                                     configuration: HTTPClient.Configuration(certificateVerification: .none, followRedirects: true))
 
         defer {
             try! httpClient.syncShutdown()
+            httpBin.shutdown()
         }
 
-        let response = try httpClient.get(url: "https://httpbin.org/redirect-to?url=https%3A%2F%2Fwww.httpbin.org%2Fheaders").wait()
+        let response = try httpClient.get(url: "http://localhost:\(httpBin.port)/redirect/loopback?port=\(httpBin.port)").wait()
         guard var body = response.body else {
-            XCTFail("The target page should have a body containing request headers")
+            XCTFail("The target page should have a body containing the value of the Host header")
             return
         }
-        guard let data = body.readData(length: body.readableBytes) else {
-            XCTFail("Read data shouldn't return nil as it has been passed readableBytes")
+        guard let responseData = body.readData(length: body.readableBytes) else {
+            XCTFail("Read data shouldn't be nil since we passed body.readableBytes to body.readData")
             return
         }
-
         let decoder = JSONDecoder()
-        struct HeadersContainer: Decodable {
-            var headers: [String: String]
-        }
-        let host = try decoder.decode(HeadersContainer.self, from: data).headers["Host"]
-
-        XCTAssert(host == "www.httpbin.org")
+        let hostName = try decoder.decode([String: String].self, from: responseData)["data"]
+        XCTAssert(hostName == "127.0.0.1")
     }
 
     func testMultipleContentLengthHeaders() throws {
