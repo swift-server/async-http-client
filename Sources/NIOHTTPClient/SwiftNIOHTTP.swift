@@ -116,7 +116,7 @@ public class HTTPClient {
     public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, timeout: Timeout? = nil) -> Task<T.Response> {
         let timeout = timeout ?? configuration.timeout
         let promise: EventLoopPromise<T.Response> = self.eventLoopGroup.next().makePromise()
-        
+
         let redirectHandler: RedirectHandler<T.Response>?
         if self.configuration.followRedirects {
             redirectHandler = RedirectHandler<T.Response>(request: request) { newRequest in
