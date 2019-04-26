@@ -169,8 +169,17 @@ class SwiftHTTPTests: XCTestCase {
 
         response = try httpClient.get(url: "http://localhost:\(httpBin.port)/redirect/https?port=\(httpsBin.port)").wait()
         XCTAssertEqual(response.status, .ok)
+    }
+    
+    func testHttpHostRedirect() throws {
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none, followRedirects: true))
         
-        response = try httpClient.get(url: "https://httpbin.org/redirect-to?url=https%3A%2F%2Fwww.httpbin.org%2Fheaders").wait()
+        defer {
+            try! httpClient.syncShutdown()
+        }
+        
+        let response = try httpClient.get(url: "https://httpbin.org/redirect-to?url=https%3A%2F%2Fwww.httpbin.org%2Fheaders").wait()
         guard let body = response.body else {
             XCTFail("The target page should have a body containing request headers")
             return
@@ -178,8 +187,14 @@ class SwiftHTTPTests: XCTestCase {
         let data = body.withUnsafeReadableBytes {
             Data(bytes: $0.baseAddress!, count: $0.count)
         }
-        let jsonData = try JSONSerialization.jsonObject(with: data, options: [])
-        XCTAssert((jsonData as? [String:[String:String]])?["headers"]?["Host"] == "www.httpbin.org")
+        
+        let decoder = JSONDecoder()
+        struct HeadersContainer: Decodable {
+            var headers: [String:String]
+        }
+        let host = try decoder.decode(HeadersContainer.self, from: data).headers["Host"]
+        
+        XCTAssert(host == "www.httpbin.org")
     }
 
     func testMultipleContentLengthHeaders() throws {

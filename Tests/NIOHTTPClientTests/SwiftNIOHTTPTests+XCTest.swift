@@ -33,6 +33,7 @@ extension SwiftHTTPTests {
             ("testGetHttps", testGetHttps),
             ("testPostHttps", testPostHttps),
             ("testHttpRedirect", testHttpRedirect),
+            ("testHttpHostRedirect", testHttpHostRedirect),
             ("testMultipleContentLengthHeaders", testMultipleContentLengthHeaders),
             ("testStreaming", testStreaming),
             ("testRemoteClose", testRemoteClose),
