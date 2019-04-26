@@ -34,7 +34,7 @@ class TestHTTPDelegate: HTTPClientResponseDelegate {
         case .body(let head, var body):
             var buffer = buffer
             body.writeBuffer(&buffer)
-            state = .body(head, body)
+            self.state = .body(head, body)
         default:
             preconditionFailure("expecting head or body")
         }
@@ -94,11 +94,11 @@ internal class HttpBin {
     }
 
     init(ssl: Bool = false, simulateProxy: HTTPProxySimulator.Option? = nil) {
-        self.serverChannel = try! ServerBootstrap(group: group)
+        self.serverChannel = try! ServerBootstrap(group: self.group)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
             .childChannelInitializer { channel in
-                return channel.pipeline.configureHTTPServerPipeline(withPipeliningAssistance: true, withErrorHandling: true).flatMap {
+                channel.pipeline.configureHTTPServerPipeline(withPipeliningAssistance: true, withErrorHandling: true).flatMap {
                     if let simulateProxy = simulateProxy {
                         return channel.pipeline.addHandler(HTTPProxySimulator(option: simulateProxy), position: .first)
                     } else {
@@ -216,13 +216,13 @@ internal final class HttpBinHandler: ChannelInboundHandler {
             case "/redirect/302":
                 var headers = HTTPHeaders()
                 headers.add(name: "Location", value: "/ok")
-                resps.append(HTTPResponseBuilder(status: .found, headers: headers))
+                self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
                 return
             case "/redirect/https":
-                let port = value(for: "port", from: url.query!)
+                let port = self.value(for: "port", from: url.query!)
                 var headers = HTTPHeaders()
                 headers.add(name: "Location", value: "https://localhost:\(port)/ok")
-                resps.append(HTTPResponseBuilder(status: .found, headers: headers))
+                self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
                 return
             case "/wait":
                 return
@@ -246,14 +246,14 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 return
             }
         case .body(let body):
-            var response = resps.removeFirst()
+            var response = self.resps.removeFirst()
             response.add(body)
-            resps.prepend(response)
+            self.resps.prepend(response)
         case .end:
             if self.resps.isEmpty {
                 return
             }
-            let response = resps.removeFirst()
+            let response = self.resps.removeFirst()
             context.write(wrapOutboundOut(.head(response.head)), promise: nil)
             if let body = response.body {
                 let data = body.withUnsafeReadableBytes {
@@ -288,7 +288,7 @@ internal final class HttpBinHandler: ChannelInboundHandler {
     }
 }
 
-fileprivate let cert = """
+private let cert = """
 -----BEGIN CERTIFICATE-----
 MIICmDCCAYACCQCPC8JDqMh1zzANBgkqhkiG9w0BAQsFADANMQswCQYDVQQGEwJ1
 czAgFw0xODEwMzExNTU1MjJaGA8yMTE4MTAwNzE1NTUyMlowDTELMAkGA1UEBhMC
@@ -307,7 +307,7 @@ Au4LoEYwT730QKC/VQxxEVZobjn9/sTrq9CZlbPYHxX4fz6e00sX7H9i49vk9zQ5
 -----END CERTIFICATE-----
 """
 
-fileprivate let key = """
+private let key = """
 -----BEGIN PRIVATE KEY-----
 MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDiC+TGmbSP/nWW
 N1tjyNfnWCU5ATjtIOfdtP6ycx8JSeqkvyNXG21kNUn14jTTU8BglGL2hfVpCbMi

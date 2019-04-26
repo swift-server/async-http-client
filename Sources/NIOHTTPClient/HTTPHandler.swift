@@ -140,7 +140,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         case .body(let head, var body):
             var part = part
             body.writeBuffer(&part)
-            state = .body(head, body)
+            self.state = .body(head, body)
         case .end:
             preconditionFailure("request already processed")
         case .error:
@@ -171,7 +171,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
 /// This delegate is strongly held by the HTTPTaskHandler
 /// for the duration of the HTTPRequest processing and will be
 /// released together with the HTTPTaskHandler when channel is closed
-public protocol HTTPClientResponseDelegate: class {
+public protocol HTTPClientResponseDelegate: AnyObject {
     associatedtype Response
 
     func didTransmitRequestBody(task: HTTPClient.Task<Response>)
@@ -361,13 +361,13 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
         if (event as? IdleStateHandler.IdleStateEvent) == .read {
             self.state = .end
             let error = HTTPClientError.readTimeout
-            delegate.didReceiveError(task: self.task, error)
-            promise.fail(error)
+            self.delegate.didReceiveError(task: self.task, error)
+            self.promise.fail(error)
         } else if (event as? TaskCancelEvent) != nil {
             self.state = .end
             let error = HTTPClientError.cancelled
-            delegate.didReceiveError(task: self.task, error)
-            promise.fail(error)
+            self.delegate.didReceiveError(task: self.task, error)
+            self.promise.fail(error)
         } else {
             context.fireUserInboundEventTriggered(event)
         }
@@ -380,8 +380,8 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
         default:
             self.state = .end
             let error = HTTPClientError.remoteConnectionClosed
-            delegate.didReceiveError(task: self.task, error)
-            promise.fail(error)
+            self.delegate.didReceiveError(task: self.task, error)
+            self.promise.fail(error)
         }
     }
 
@@ -408,7 +408,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
 
 internal struct RedirectHandler<T> {
     let request: HTTPClient.Request
-    let execute: ((HTTPClient.Request) -> HTTPClient.Task<T>)
+    let execute: (HTTPClient.Request) -> HTTPClient.Task<T>
 
     func redirectTarget(status: HTTPResponseStatus, headers: HTTPHeaders) -> URL? {
         switch status {
