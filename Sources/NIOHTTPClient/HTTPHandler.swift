@@ -442,19 +442,18 @@ internal struct RedirectHandler<T> {
 
         var request = self.request
         request.url = redirectURL
-        
+
         if let redirectHost = redirectURL.host {
             request.host = redirectHost
         } else {
             assertionFailure("redirectURL doesn't contain a host")
         }
-        
+
         if let redirectScheme = redirectURL.scheme {
             request.scheme = redirectScheme
         } else {
             assertionFailure("redirectURL doesn't contain a scheme")
         }
-
 
         var convertToGet = false
         if status == .seeOther, request.method != .HEAD {
