@@ -68,7 +68,7 @@ public struct HTTPCookie {
                 formatter.locale = Locale(identifier: "en_US")
                 formatter.timeZone = TimeZone(identifier: "GMT")
                 formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss z"
-                self.expires = parseComponentValue(component).flatMap { formatter.date(from: $0) }
+                self.expires = self.parseComponentValue(component).flatMap { formatter.date(from: $0) }
                 continue
             }
 

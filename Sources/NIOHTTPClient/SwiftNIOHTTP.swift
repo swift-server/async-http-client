@@ -115,7 +115,6 @@ public class HTTPClient {
 
     public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, timeout: Timeout? = nil) -> Task<T.Response> {
         let timeout = timeout ?? configuration.timeout
-
         let promise: EventLoopPromise<T.Response> = self.eventLoopGroup.next().makePromise()
 
         let redirectHandler: RedirectHandler<T.Response>?
@@ -151,12 +150,12 @@ public class HTTPClient {
                     let taskHandler = TaskHandler(task: task, delegate: delegate, promise: promise, redirectHandler: redirectHandler)
                     return channel.pipeline.addHandler(taskHandler)
                 }
-        }
+            }
 
         if let connectTimeout = timeout.connect {
             bootstrap = bootstrap.connectTimeout(connectTimeout)
         }
-        
+
         let address = self.resolveAddress(request: request, proxy: self.configuration.proxy)
         bootstrap.connect(host: address.host, port: address.port)
             .map { channel in
@@ -172,7 +171,7 @@ public class HTTPClient {
         return task
     }
 
-    private func resolveAddress(request: Request, proxy: Proxy?) -> (host: String, port: Int)  {
+    private func resolveAddress(request: Request, proxy: Proxy?) -> (host: String, port: Int) {
         switch self.configuration.proxy {
         case .none:
             return (request.host, request.port)
@@ -216,7 +215,7 @@ public class HTTPClient {
 private extension ChannelPipeline {
     func addProxyHandler(for request: HTTPClient.Request, decoder: ByteToMessageHandler<HTTPResponseDecoder>, encoder: HTTPRequestEncoder, tlsConfiguration: TLSConfiguration?) -> EventLoopFuture<Void> {
         let handler = HTTPClientProxyHandler(host: request.host, port: request.port, onConnect: { channel in
-            return channel.pipeline.removeHandler(decoder).flatMap {
+            channel.pipeline.removeHandler(decoder).flatMap {
                 return channel.pipeline.addHandler(
                     ByteToMessageHandler(HTTPResponseDecoder(leftOverBytesStrategy: .forwardBytes)),
                     position: .after(encoder)

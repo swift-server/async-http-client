@@ -14,6 +14,7 @@
 
 import Foundation
 import NIO
+import NIOFoundationCompat
 @testable import NIOHTTP1
 @testable import NIOHTTPClient
 import NIOSSL
@@ -169,6 +170,30 @@ class SwiftHTTPTests: XCTestCase {
 
         response = try httpClient.get(url: "http://localhost:\(httpBin.port)/redirect/https?port=\(httpsBin.port)").wait()
         XCTAssertEqual(response.status, .ok)
+    }
+
+    func testHttpHostRedirect() throws {
+        let httpBin = HttpBin(ssl: false)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none, followRedirects: true))
+
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+
+        let response = try httpClient.get(url: "http://localhost:\(httpBin.port)/redirect/loopback?port=\(httpBin.port)").wait()
+        guard var body = response.body else {
+            XCTFail("The target page should have a body containing the value of the Host header")
+            return
+        }
+        guard let responseData = body.readData(length: body.readableBytes) else {
+            XCTFail("Read data shouldn't be nil since we passed body.readableBytes to body.readData")
+            return
+        }
+        let decoder = JSONDecoder()
+        let hostName = try decoder.decode([String: String].self, from: responseData)["data"]
+        XCTAssert(hostName == "127.0.0.1")
     }
 
     func testMultipleContentLengthHeaders() throws {
