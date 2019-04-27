@@ -446,13 +446,13 @@ internal struct RedirectHandler<T> {
         if let redirectHost = redirectURL.host {
             request.host = redirectHost
         } else {
-            assertionFailure("redirectURL doesn't contain a host")
+            preconditionFailure("redirectURL doesn't contain a host")
         }
 
         if let redirectScheme = redirectURL.scheme {
             request.scheme = redirectScheme
         } else {
-            assertionFailure("redirectURL doesn't contain a scheme")
+            preconditionFailure("redirectURL doesn't contain a scheme")
         }
 
         var convertToGet = false
