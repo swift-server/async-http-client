@@ -373,231 +373,238 @@
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 33,
+      "line": 27,
+      "symbol": "HTTPClient.eventLoopGroup",
+      "symbol_kind": "source.lang.swift.decl.var.instance",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
+      "line": 32,
       "symbol": "HTTPClient.init(eventLoopGroupProvider:configuration:)",
       "symbol_kind": "source.lang.swift.decl.function.method.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 44,
+      "line": 43,
       "symbol": "HTTPClient.deinit",
       "symbol_kind": "source.lang.swift.decl.function.method.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 53,
+      "line": 52,
       "symbol": "HTTPClient.syncShutdown()",
       "symbol_kind": "source.lang.swift.decl.function.method.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 67,
+      "line": 66,
       "symbol": "HTTPClient.get(url:timeout:)",
       "symbol_kind": "source.lang.swift.decl.function.method.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 76,
+      "line": 75,
       "symbol": "HTTPClient.post(url:body:timeout:)",
       "symbol_kind": "source.lang.swift.decl.function.method.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 85,
+      "line": 84,
       "symbol": "HTTPClient.patch(url:body:timeout:)",
       "symbol_kind": "source.lang.swift.decl.function.method.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 94,
+      "line": 93,
       "symbol": "HTTPClient.put(url:body:timeout:)",
       "symbol_kind": "source.lang.swift.decl.function.method.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 103,
+      "line": 102,
       "symbol": "HTTPClient.delete(url:timeout:)",
       "symbol_kind": "source.lang.swift.decl.function.method.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 112,
+      "line": 111,
       "symbol": "HTTPClient.execute(request:timeout:)",
       "symbol_kind": "source.lang.swift.decl.function.method.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 117,
+      "line": 116,
       "symbol": "HTTPClient.execute(request:delegate:timeout:)",
       "symbol_kind": "source.lang.swift.decl.function.method.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 185,
+      "line": 183,
       "symbol": "HTTPClient.Configuration",
       "symbol_kind": "source.lang.swift.decl.struct",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 186,
+      "line": 184,
       "symbol": "HTTPClient.Configuration.tlsConfiguration",
       "symbol_kind": "source.lang.swift.decl.var.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 187,
+      "line": 185,
       "symbol": "HTTPClient.Configuration.followRedirects",
       "symbol_kind": "source.lang.swift.decl.var.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 188,
+      "line": 186,
       "symbol": "HTTPClient.Configuration.timeout",
       "symbol_kind": "source.lang.swift.decl.var.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 189,
+      "line": 187,
       "symbol": "HTTPClient.Configuration.proxy",
       "symbol_kind": "source.lang.swift.decl.var.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 191,
+      "line": 189,
       "symbol": "HTTPClient.Configuration.init(tlsConfiguration:followRedirects:timeout:proxy:)",
       "symbol_kind": "source.lang.swift.decl.function.method.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 198,
+      "line": 196,
       "symbol": "HTTPClient.Configuration.init(certificateVerification:followRedirects:timeout:proxy:)",
       "symbol_kind": "source.lang.swift.decl.function.method.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 206,
+      "line": 204,
       "symbol": "HTTPClient.Timeout",
       "symbol_kind": "source.lang.swift.decl.struct",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 207,
+      "line": 205,
       "symbol": "HTTPClient.Timeout.connect",
       "symbol_kind": "source.lang.swift.decl.var.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 208,
+      "line": 206,
       "symbol": "HTTPClient.Timeout.read",
       "symbol_kind": "source.lang.swift.decl.var.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 210,
+      "line": 208,
       "symbol": "HTTPClient.Timeout.init(connect:read:)",
       "symbol_kind": "source.lang.swift.decl.function.method.instance",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 248,
+      "line": 246,
       "symbol": "HTTPClientError",
       "symbol_kind": "source.lang.swift.decl.struct",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 273,
+      "line": 271,
       "symbol": "HTTPClientError.invalidURL",
       "symbol_kind": "source.lang.swift.decl.var.static",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 274,
+      "line": 272,
       "symbol": "HTTPClientError.emptyHost",
       "symbol_kind": "source.lang.swift.decl.var.static",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 275,
+      "line": 273,
       "symbol": "HTTPClientError.alreadyShutdown",
       "symbol_kind": "source.lang.swift.decl.var.static",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 276,
+      "line": 274,
       "symbol": "HTTPClientError.emptyScheme",
       "symbol_kind": "source.lang.swift.decl.var.static",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 277,
+      "line": 275,
       "symbol": "HTTPClientError.unsupportedScheme(_:)",
       "symbol_kind": "source.lang.swift.decl.function.method.static",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 278,
+      "line": 276,
       "symbol": "HTTPClientError.readTimeout",
       "symbol_kind": "source.lang.swift.decl.var.static",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 279,
+      "line": 277,
       "symbol": "HTTPClientError.remoteConnectionClosed",
       "symbol_kind": "source.lang.swift.decl.var.static",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 280,
+      "line": 278,
       "symbol": "HTTPClientError.cancelled",
       "symbol_kind": "source.lang.swift.decl.var.static",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 281,
+      "line": 279,
       "symbol": "HTTPClientError.identityCodingIncorrectlyPresent",
       "symbol_kind": "source.lang.swift.decl.var.static",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 282,
+      "line": 280,
       "symbol": "HTTPClientError.chunkedSpecifiedMultipleTimes",
       "symbol_kind": "source.lang.swift.decl.var.static",
       "warning": "undocumented"
     },
     {
       "file": "/code/Sources/NIOHTTPClient/SwiftNIOHTTP.swift",
-      "line": 283,
+      "line": 281,
       "symbol": "HTTPClientError.invalidProxyResponse",
       "symbol_kind": "source.lang.swift.decl.var.static",
       "warning": "undocumented"

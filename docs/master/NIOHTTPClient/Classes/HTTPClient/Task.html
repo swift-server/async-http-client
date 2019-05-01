@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <title>Timeout Structure Reference</title>
+    <title>Task Class Reference</title>
     <link rel="stylesheet" type="text/css" href="../../css/jazzy.css" />
     <link rel="stylesheet" type="text/css" href="../../css/highlight.css" />
     <meta charset="utf-8">
@@ -14,9 +14,9 @@
   </head>
   <body>
 
-    <a name="//apple_ref/swift/Struct/Timeout" class="dashAnchor"></a>
+    <a name="//apple_ref/swift/Class/Task" class="dashAnchor"></a>
 
-    <a title="Timeout Structure Reference"></a>
+    <a title="Task Class Reference"></a>
 
     <header class="header">
       <p class="header-col header-col--primary">
@@ -44,7 +44,7 @@
     <p class="breadcrumbs">
       <a class="breadcrumb" href="../../index.html">NIOHTTPClient Reference</a>
       <img class="carat" src="../../img/carat.png" />
-      Timeout Structure Reference
+      Task Class Reference
     </p>
 
     <div class="content-wrapper">
@@ -115,10 +115,10 @@
 
         <section class="section">
           <div class="section-content">
-            <h1>Timeout</h1>
+            <h1>Task</h1>
               <div class="declaration">
                 <div class="language">
-                  <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">struct</span> <span class="kt">Timeout</span></code></pre>
+                  <pre class="highlight swift"><code><span class="kd">final</span> <span class="kd">class</span> <span class="kt">Task</span><span class="o">&lt;</span><span class="kt"><a href="../../Classes/HTTPClient/Response.html">Response</a></span><span class="o">&gt;</span></code></pre>
 
                 </div>
               </div>
@@ -134,9 +134,9 @@
                 <li class="item">
                   <div>
                     <code>
-                    <a name="/s:13NIOHTTPClient10HTTPClientC7TimeoutV7connect3NIO10TimeAmountVSgvp"></a>
-                    <a name="//apple_ref/swift/Property/connect" class="dashAnchor"></a>
-                    <a class="token" href="#/s:13NIOHTTPClient10HTTPClientC7TimeoutV7connect3NIO10TimeAmountVSgvp">connect</a>
+                    <a name="/s:13NIOHTTPClient10HTTPClientC4TaskC4waitxyKF"></a>
+                    <a name="//apple_ref/swift/Method/wait()" class="dashAnchor"></a>
+                    <a class="token" href="#/s:13NIOHTTPClient10HTTPClientC4TaskC4waitxyKF">wait()</a>
                     </code>
                   </div>
                   <div class="height-container">
@@ -151,12 +151,12 @@
                         <h4>Declaration</h4>
                         <div class="language">
                           <p class="aside-title">Swift</p>
-                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="k">var</span> <span class="nv">connect</span><span class="p">:</span> <span class="kt">TimeAmount</span><span class="p">?</span></code></pre>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">func</span> <span class="nf">wait</span><span class="p">()</span> <span class="k">throws</span> <span class="o">-&gt;</span> <span class="kt"><a href="../../Classes/HTTPClient/Response.html">Response</a></span></code></pre>
 
                         </div>
                       </div>
                       <div class="slightly-smaller">
-                        <a href="https://github.com/swift-server/swift-nio-http-client/tree/0.0.0/Sources/NIOHTTPClient/SwiftNIOHTTP.swift#L">Show on GitHub</a>
+                        <a href="https://github.com/swift-server/swift-nio-http-client/tree/master/Sources/NIOHTTPClient/HTTPHandler.swift#L229-L231">Show on GitHub</a>
                       </div>
                     </section>
                   </div>
@@ -164,9 +164,9 @@
                 <li class="item">
                   <div>
                     <code>
-                    <a name="/s:13NIOHTTPClient10HTTPClientC7TimeoutV4read3NIO10TimeAmountVSgvp"></a>
-                    <a name="//apple_ref/swift/Property/read" class="dashAnchor"></a>
-                    <a class="token" href="#/s:13NIOHTTPClient10HTTPClientC7TimeoutV4read3NIO10TimeAmountVSgvp">read</a>
+                    <a name="/s:13NIOHTTPClient10HTTPClientC4TaskC6cancelyyF"></a>
+                    <a name="//apple_ref/swift/Method/cancel()" class="dashAnchor"></a>
+                    <a class="token" href="#/s:13NIOHTTPClient10HTTPClientC4TaskC6cancelyyF">cancel()</a>
                     </code>
                   </div>
                   <div class="height-container">
@@ -181,12 +181,12 @@
                         <h4>Declaration</h4>
                         <div class="language">
                           <p class="aside-title">Swift</p>
-                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="k">var</span> <span class="nv">read</span><span class="p">:</span> <span class="kt">TimeAmount</span><span class="p">?</span></code></pre>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">func</span> <span class="nf">cancel</span><span class="p">()</span></code></pre>
 
                         </div>
                       </div>
                       <div class="slightly-smaller">
-                        <a href="https://github.com/swift-server/swift-nio-http-client/tree/0.0.0/Sources/NIOHTTPClient/SwiftNIOHTTP.swift#L">Show on GitHub</a>
+                        <a href="https://github.com/swift-server/swift-nio-http-client/tree/master/Sources/NIOHTTPClient/HTTPHandler.swift#L233-L240">Show on GitHub</a>
                       </div>
                     </section>
                   </div>
@@ -194,9 +194,9 @@
                 <li class="item">
                   <div>
                     <code>
-                    <a name="/s:13NIOHTTPClient10HTTPClientC7TimeoutV7connect4readAE3NIO10TimeAmountVSg_AKtcfc"></a>
-                    <a name="//apple_ref/swift/Method/init(connect:read:)" class="dashAnchor"></a>
-                    <a class="token" href="#/s:13NIOHTTPClient10HTTPClientC7TimeoutV7connect4readAE3NIO10TimeAmountVSg_AKtcfc">init(connect:read:)</a>
+                    <a name="/s:13NIOHTTPClient10HTTPClientC4TaskC7cascade7promisey3NIO16EventLoopPromiseVyxG_tF"></a>
+                    <a name="//apple_ref/swift/Method/cascade(promise:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:13NIOHTTPClient10HTTPClientC4TaskC7cascade7promisey3NIO16EventLoopPromiseVyxG_tF">cascade(promise:)</a>
                     </code>
                   </div>
                   <div class="height-container">
@@ -211,12 +211,12 @@
                         <h4>Declaration</h4>
                         <div class="language">
                           <p class="aside-title">Swift</p>
-                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="nf">init</span><span class="p">(</span><span class="nv">connect</span><span class="p">:</span> <span class="kt">TimeAmount</span><span class="p">?</span> <span class="o">=</span> <span class="kc">nil</span><span class="p">,</span> <span class="nv">read</span><span class="p">:</span> <span class="kt">TimeAmount</span><span class="p">?</span> <span class="o">=</span> <span class="kc">nil</span><span class="p">)</span></code></pre>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">func</span> <span class="nf">cascade</span><span class="p">(</span><span class="nv">promise</span><span class="p">:</span> <span class="kt">EventLoopPromise</span><span class="o">&lt;</span><span class="kt"><a href="../../Classes/HTTPClient/Response.html">Response</a></span><span class="o">&gt;</span><span class="p">)</span></code></pre>
 
                         </div>
                       </div>
                       <div class="slightly-smaller">
-                        <a href="https://github.com/swift-server/swift-nio-http-client/tree/0.0.0/Sources/NIOHTTPClient/SwiftNIOHTTP.swift#L210-L213">Show on GitHub</a>
+                        <a href="https://github.com/swift-server/swift-nio-http-client/tree/master/Sources/NIOHTTPClient/HTTPHandler.swift#L242-L244">Show on GitHub</a>
                       </div>
                     </section>
                   </div>
@@ -229,7 +229,7 @@
       </article>
     </div>
     <section class="footer">
-      <p>&copy; 2019 <a class="link" href="https://github.com/swift-server/swift-nio-http-client" target="_blank" rel="external">SwiftNIOHTTPClient team</a>. All rights reserved. (Last updated: 2019-04-23)</p>
+      <p>&copy; 2019 <a class="link" href="https://github.com/swift-server/swift-nio-http-client" target="_blank" rel="external">SwiftNIOHTTPClient team</a>. All rights reserved. (Last updated: 2019-05-01)</p>
       <p>Generated by <a class="link" href="https://github.com/realm/jazzy" target="_blank" rel="external">jazzy ♪♫ v0.9.5</a>, a <a class="link" href="https://realm.io" target="_blank" rel="external">Realm</a> project.</p>
     </section>
   </body>
