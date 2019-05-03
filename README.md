@@ -23,7 +23,7 @@ Add the following entry in your <code>Package.swift</code> to start using <code>
 // it's early days here so we haven't tagged a version yet, but will soon
 .package(url: "https://github.com/swift-server/swift-nio-http-client.git", .branch("master"))
 ```
-and  ```NIOHTTPClient``` dependency to your target:
+and  `NIOHTTPClient` dependency to your target:
 ```swift
 .target(name: "MyApp", dependencies: ["NIOHTTPClient"]),
 ```
@@ -49,11 +49,11 @@ httpClient.get(url: "https://swift.org").whenComplete { result in
 }
 ```
 
-It is important to close the client instance, either in a ```defer``` statement or class' ```deinit``` after use to cleanly shutdown underlying NIO ```EventLoopGroup```:
+It is important to close the client instance, for example in a `defer` statement, after use to cleanly shutdown the underlying NIO `EventLoopGroup`:
 ```swift
 try? httpClient.syncShutdown()
 ```
-Alternatively, you can provide shared ```EventLoopGroup```:
+Alternatively, you can provide shared `EventLoopGroup`:
 ```swift
 let httpClient = HTTPClient(eventLoopGroupProvider: .shared(userProvidedGroup))
 ```
@@ -61,7 +61,7 @@ In this case shutdown of the client is not neccecary.
 
 ## Usage guide
 
-Most common HTTP methods are supported out of the box. In case you need to have more control over the method, or you want to add headers or body, use the ```HTTPRequest``` struct:
+Most common HTTP methods are supported out of the box. In case you need to have more control over the method, or you want to add headers or body, use the `HTTPRequest` struct:
 ```swift
 import NIOHTTPClient
 
