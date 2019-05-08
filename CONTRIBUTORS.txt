@@ -7,11 +7,14 @@ needs to be listed here.
 
 ## COPYRIGHT HOLDERS
 
-- Swift Server Working Group (all contributors with '@apple.com')
+- Swift Server Working Group
 
 ### Contributors
 
 - Artem Redkin <aredkin@apple.com>
+- Ian Partridge <i.partridge@uk.ibm.com>
+- Tanner <me@tanner.xyz>
+- tomer doron <tomer@apple.com>
 
 **Updating this list**
 

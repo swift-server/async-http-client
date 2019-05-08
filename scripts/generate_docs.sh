@@ -17,7 +17,7 @@ set -e
 
 my_path="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 root_path="$my_path/.."
-version=$(git describe --abbrev=0 --tags || echo "0.0.0")
+version=$(git describe --abbrev=0 --tags || echo "master")
 modules=(NIOHTTPClient)
 
 if [[ "$(uname -s)" == "Linux" ]]; then
@@ -51,12 +51,14 @@ fi
 if ! command -v jazzy > /dev/null; then
   gem install jazzy --no-ri --no-rdoc
 fi
+
 module_switcher="docs/$version/README.md"
 jazzy_args=(--clean
             --author 'SwiftNIOHTTPClient team'
             --readme "$module_switcher"
             --author_url https://github.com/swift-server/swift-nio-http-client
             --github_url https://github.com/swift-server/swift-nio-http-client
+            --github-file-prefix "https://github.com/swift-server/swift-nio-http-client/tree/$version"
             --theme fullwidth
             --xcodebuild-arguments -scheme,swift-nio-http-client-Package)
 cat > "$module_switcher" <<"EOF"

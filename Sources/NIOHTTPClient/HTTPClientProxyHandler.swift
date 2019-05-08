@@ -17,7 +17,7 @@ import NIOHTTP1
 
 /// Specifies the remote address of an HTTP proxy.
 ///
-/// Adding an `HTTPClientProxy` to your client's `HTTPClientConfiguration`
+/// Adding an `HTTPClientProxy` to your client's `HTTPClient.Configuration`
 /// will cause requests to be passed through the specified proxy using the
 /// HTTP `CONNECT` method.
 ///
@@ -74,7 +74,7 @@ internal final class HTTPClientProxyHandler: ChannelDuplexHandler, RemovableChan
             switch res {
             case .head(let head):
                 switch head.status.code {
-                case 200..<300:
+                case 200 ..< 300:
                     // Any 2xx (Successful) response indicates that the sender (and all
                     // inbound proxies) will switch to tunnel mode immediately after the
                     // blank line that concludes the successful response's header section
@@ -116,7 +116,7 @@ internal final class HTTPClientProxyHandler: ChannelDuplexHandler, RemovableChan
     private func handleConnect(context: ChannelHandlerContext) -> EventLoopFuture<Void> {
         return self.onConnect(context.channel).flatMap {
             self.readState = .connected
-            
+
             // forward any buffered reads
             while !self.readBuffer.isEmpty {
                 context.fireChannelRead(self.readBuffer.removeFirst())
