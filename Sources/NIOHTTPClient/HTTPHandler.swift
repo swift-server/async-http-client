@@ -286,6 +286,8 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             headers.add(name: "Host", value: request.host)
         }
 
+        headers.add(name: "Connection", value: "close")
+
         do {
             try headers.validate(body: request.body)
         } catch {
@@ -321,6 +323,11 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
 
         self.state = .sent
         self.delegate.didTransmitRequestBody(task: self.task)
+
+        let channel = context.channel
+        self.promise.futureResult.whenComplete { _ in
+            channel.close(promise: nil)
+        }
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -346,6 +353,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             case .redirected(let head, let redirectURL):
                 self.state = .end
                 self.redirectHandler?.redirect(status: head.status, to: redirectURL, promise: self.promise)
+                context.close(promise: nil)
             default:
                 self.state = .end
                 do {
