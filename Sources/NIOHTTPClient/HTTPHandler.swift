@@ -219,10 +219,9 @@ public extension HTTPClient {
             self.lock = Lock()
         }
 
-        func setChannel(_ channel: Channel) -> Channel {
+        func setChannel(_ channel: Channel) {
             return self.lock.withLock {
                 self.channel = channel
-                return channel
             }
         }
 
@@ -247,7 +246,7 @@ public extension HTTPClient {
 
 internal struct TaskCancelEvent {}
 
-internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler, ChannelOutboundHandler {
+internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler, ChannelOutboundHandler, RemovableChannelHandler {
     typealias OutboundIn = HTTPClient.Request
     typealias InboundIn = HTTPClientResponsePart
     typealias OutboundOut = HTTPClientRequestPart
@@ -261,10 +260,10 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
         case end
     }
 
-    let task: HTTPClient.Task<T.Response>
-    let delegate: T
-    let promise: EventLoopPromise<T.Response>
-    let redirectHandler: RedirectHandler<T.Response>?
+    var task: HTTPClient.Task<T.Response>
+    var delegate: T
+    var promise: EventLoopPromise<T.Response>
+    var redirectHandler: RedirectHandler<T.Response>?
 
     var state: State = .idle
 

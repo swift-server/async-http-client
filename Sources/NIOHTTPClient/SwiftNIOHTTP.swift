@@ -16,6 +16,7 @@ import Foundation
 import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
+import NIOHTTP2
 import NIOSSL
 
 public enum EventLoopGroupProvider {
@@ -27,6 +28,7 @@ public class HTTPClient {
     public let eventLoopGroup: EventLoopGroup
     let eventLoopGroupProvider: EventLoopGroupProvider
     let configuration: Configuration
+    let pool: ConnectionPool
     let isShutdown = Atomic<Bool>(value: false)
 
     public init(eventLoopGroupProvider: EventLoopGroupProvider, configuration: Configuration = Configuration()) {
@@ -38,18 +40,15 @@ public class HTTPClient {
             self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         }
         self.configuration = configuration
+        self.pool = ConnectionPool(group: self.eventLoopGroup, configuration: configuration)
     }
 
     deinit {
-        switch self.eventLoopGroupProvider {
-        case .shared:
-            return
-        case .createNew:
-            assert(self.isShutdown.load(), "Client not stopped before the deinit.")
-        }
+        assert(self.isShutdown.load(), "Client not stopped before the deinit.")
     }
 
     public func syncShutdown() throws {
+        try self.pool.closeAllConnections().wait()
         switch self.eventLoopGroupProvider {
         case .shared:
             self.isShutdown.store(true)
@@ -128,56 +127,40 @@ public class HTTPClient {
 
         let task = Task(future: promise.futureResult)
 
-        var bootstrap = ClientBootstrap(group: self.eventLoopGroup)
-            .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
-            .channelInitializer { channel in
-                let encoder = HTTPRequestEncoder()
-                let decoder = ByteToMessageHandler(HTTPResponseDecoder(leftOverBytesStrategy: .forwardBytes))
-                return channel.pipeline.addHandlers([encoder, decoder], position: .first).flatMap {
-                    switch self.configuration.proxy {
-                    case .none:
-                        return channel.pipeline.addSSLHandlerIfNeeded(for: request, tlsConfiguration: self.configuration.tlsConfiguration)
-                    case .some:
-                        return channel.pipeline.addProxyHandler(for: request, decoder: decoder, encoder: encoder, tlsConfiguration: self.configuration.tlsConfiguration)
+        let connection = self.pool.getConnection(for: request)
+
+        connection.flatMap { connection -> EventLoopFuture<()> in
+            task.future.whenComplete { _ in
+                let removeResult = connection.channel.pipeline.removeHandler(name: "taskHandler")
+                removeResult.whenComplete { result in
+                    switch result {
+                    case .success:
+                        self.pool.release(connection)
+                    case .failure(let error):
+                        fatalError("Task handler removal shouldn't fail (error: \(error)")
                     }
-                }.flatMap {
-                    if let readTimeout = timeout.read {
-                        return channel.pipeline.addHandler(IdleStateHandler(readTimeout: readTimeout))
-                    } else {
-                        return channel.eventLoop.makeSucceededFuture(())
-                    }
-                }.flatMap {
-                    let taskHandler = TaskHandler(task: task, delegate: delegate, promise: promise, redirectHandler: redirectHandler)
-                    return channel.pipeline.addHandler(taskHandler)
                 }
             }
 
-        if let connectTimeout = timeout.connect {
-            bootstrap = bootstrap.connectTimeout(connectTimeout)
-        }
-
-        let address = self.resolveAddress(request: request, proxy: self.configuration.proxy)
-        bootstrap.connect(host: address.host, port: address.port)
-            .map { channel in
-                task.setChannel(channel)
+            let channel = connection.channel
+            let addedFuture: EventLoopFuture<Void>
+            if let readTimeout = timeout.read {
+                addedFuture = channel.pipeline.addHandler(IdleStateHandler(readTimeout: readTimeout))
+            } else {
+                addedFuture = channel.eventLoop.makeSucceededFuture(())
             }
-            .flatMap { channel in
+            return addedFuture.flatMap {
+                let taskHandler = TaskHandler(task: task, delegate: delegate, promise: promise, redirectHandler: redirectHandler)
+                task.setChannel(channel)
+                return channel.pipeline.addHandler(taskHandler, name: "taskHandler")
+            }.flatMap {
                 channel.writeAndFlush(request)
             }
-            .whenFailure { error in
-                promise.fail(error)
-            }
+        }.whenFailure { error in
+            promise.fail(error)
+        }
 
         return task
-    }
-
-    private func resolveAddress(request: Request, proxy: Proxy?) -> (host: String, port: Int) {
-        switch self.configuration.proxy {
-        case .none:
-            return (request.host, request.port)
-        case .some(let proxy):
-            return (proxy.host, proxy.port)
-        }
     }
 
     public struct Configuration {
@@ -210,21 +193,31 @@ public class HTTPClient {
             self.read = read
         }
     }
+
+    static func resolveAddress(host: String, port: Int, proxy: HTTPClient.Proxy?) -> (host: String, port: Int) {
+        switch proxy {
+        case .none:
+            return (host, port)
+        case .some(let proxy):
+            return (proxy.host, proxy.port)
+        }
+    }
 }
 
-private extension ChannelPipeline {
-    func addProxyHandler(for request: HTTPClient.Request, decoder: ByteToMessageHandler<HTTPResponseDecoder>, encoder: HTTPRequestEncoder, tlsConfiguration: TLSConfiguration?) -> EventLoopFuture<Void> {
-        let handler = HTTPClientProxyHandler(host: request.host, port: request.port, onConnect: { channel in
-            channel.pipeline.removeHandler(decoder).flatMap {
-                return channel.pipeline.addHandler(
-                    ByteToMessageHandler(HTTPResponseDecoder(leftOverBytesStrategy: .forwardBytes)),
-                    position: .after(encoder)
-                )
-            }.flatMap {
-                return channel.pipeline.addSSLHandlerIfNeeded(for: request, tlsConfiguration: tlsConfiguration)
+extension HTTPRequestEncoder: RemovableChannelHandler {}
+
+extension ChannelPipeline {
+    func addProxyHandler(host: String, port: Int) -> EventLoopFuture<Void> {
+        let encoder = HTTPRequestEncoder()
+        let decoder = ByteToMessageHandler(HTTPResponseDecoder(leftOverBytesStrategy: .forwardBytes))
+        let handler = HTTPClientProxyHandler(host: host, port: port) { channel in
+            let encoderRemovePromise = self.eventLoop.next().makePromise(of: Void.self)
+            channel.pipeline.removeHandler(encoder, promise: encoderRemovePromise)
+            return encoderRemovePromise.futureResult.flatMap {
+                channel.pipeline.removeHandler(decoder)
             }
-        })
-        return self.addHandler(handler)
+        }
+        return addHandlers([encoder, decoder, handler])
     }
 
     func addSSLHandlerIfNeeded(for request: HTTPClient.Request, tlsConfiguration: TLSConfiguration?) -> EventLoopFuture<Void> {
@@ -233,10 +226,9 @@ private extension ChannelPipeline {
         }
 
         do {
-            let tlsConfiguration = tlsConfiguration ?? TLSConfiguration.forClient()
+            let tlsConfiguration = tlsConfiguration ?? TLSConfiguration.forClient(applicationProtocols: NIOHTTP2SupportedALPNProtocols)
             let context = try NIOSSLContext(configuration: tlsConfiguration)
-            return self.addHandler(try NIOSSLClientHandler(context: context, serverHostname: request.host),
-                                   position: .first)
+            return self.addHandler(try NIOSSLClientHandler(context: context, serverHostname: request.host))
         } catch {
             return self.eventLoop.makeFailedFuture(error)
         }

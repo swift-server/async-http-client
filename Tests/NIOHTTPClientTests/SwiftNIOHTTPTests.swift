@@ -283,7 +283,6 @@ class SwiftHTTPTests: XCTestCase {
         queue.asyncAfter(deadline: .now() + .milliseconds(100)) {
             task.cancel()
         }
-
         XCTAssertThrowsError(try task.wait(), "Should fail") { error in
             guard case let error = error as? HTTPClientError, error == .cancelled else {
                 return XCTFail("Should fail with cancelled")
