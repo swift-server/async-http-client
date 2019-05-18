@@ -175,6 +175,7 @@ internal struct HTTPResponseBuilder {
         if var body = body {
             var part = part
             body.writeBuffer(&part)
+            self.body = body
         } else {
             self.body = part
         }

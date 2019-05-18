@@ -256,6 +256,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case identityCodingIncorrectlyPresent
         case chunkedSpecifiedMultipleTimes
         case invalidProxyResponse
+        case contentLengthMissing
     }
 
     private var code: Code
@@ -279,4 +280,5 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let identityCodingIncorrectlyPresent = HTTPClientError(code: .identityCodingIncorrectlyPresent)
     public static let chunkedSpecifiedMultipleTimes = HTTPClientError(code: .chunkedSpecifiedMultipleTimes)
     public static let invalidProxyResponse = HTTPClientError(code: .invalidProxyResponse)
+    public static let contentLengthMissing = HTTPClientError(code: .contentLengthMissing)
 }

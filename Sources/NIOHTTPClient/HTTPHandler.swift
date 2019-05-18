@@ -21,22 +21,33 @@ import NIOSSL
 public extension HTTPClient {
     typealias ChunkProvider = (@escaping (IOData) -> EventLoopFuture<Void>) -> EventLoopFuture<Void>
 
-    enum Body {
-        case byteBuffer(ByteBuffer)
-        case data(Data)
-        case string(String)
-        case stream(Int, ChunkProvider)
+    struct Body {
+        var length: Int?
+        var provider: HTTPClient.ChunkProvider
 
-        var length: Int {
-            switch self {
-            case .byteBuffer(let buffer):
-                return buffer.readableBytes
-            case .data(let data):
-                return data.count
-            case .string(let string):
-                return string.utf8.count
-            case .stream(let size, _):
-                return size
+        static func byteBuffer(_ buffer: ByteBuffer) -> Body {
+            return Body(length: buffer.readableBytes) { writer in
+                writer(.byteBuffer(buffer))
+            }
+        }
+
+        static func stream(length: Int? = nil, _ provider: @escaping HTTPClient.ChunkProvider) -> Body {
+            return Body(length: length, provider: provider)
+        }
+
+        static func data(_ data: Data) -> Body {
+            return Body(length: data.count) { writer in
+                var buffer = ByteBufferAllocator().buffer(capacity: data.count)
+                buffer.writeBytes(data)
+                return writer(.byteBuffer(buffer))
+            }
+        }
+
+        static func string(_ string: String) -> Body {
+            return Body(length: string.utf8.count) { writer in
+                var buffer = ByteBufferAllocator().buffer(capacity: string.utf8.count)
+                buffer.writeString(string)
+                return writer(.byteBuffer(buffer))
             }
         }
     }
@@ -323,29 +334,8 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
 
     private func writeBody(request: HTTPClient.Request, context: ChannelHandlerContext) -> EventLoopFuture<Void> {
         if let body = request.body {
-            switch body {
-            case .byteBuffer(let buffer):
-                let part = HTTPClientRequestPart.body(.byteBuffer(buffer))
-                context.write(wrapOutboundOut(part), promise: nil)
-                return context.eventLoop.makeSucceededFuture(())
-            case .data(let data):
-                var buffer = context.channel.allocator.buffer(capacity: data.count)
-                buffer.writeBytes(data)
-                let part = HTTPClientRequestPart.body(.byteBuffer(buffer))
-                context.write(wrapOutboundOut(part), promise: nil)
-                return context.eventLoop.makeSucceededFuture(())
-            case .string(let string):
-                var buffer = context.channel.allocator.buffer(capacity: string.count)
-                buffer.writeString(string)
-                let part = HTTPClientRequestPart.body(.byteBuffer(buffer))
-                context.write(wrapOutboundOut(part), promise: nil)
-                return context.eventLoop.makeSucceededFuture(())
-            case .stream(_, let stream):
-                return stream { part in
-                    let part = HTTPClientRequestPart.body(part)
-                    context.write(self.wrapOutboundOut(part), promise: nil)
-                    return context.eventLoop.makeSucceededFuture(())
-                }
+            return body.provider { part in
+                context.writeAndFlush(self.wrapOutboundOut(HTTPClientRequestPart.body(part)))
             }
         } else {
             return context.eventLoop.makeSucceededFuture(())

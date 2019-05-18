@@ -331,13 +331,14 @@ class SwiftHTTPTests: XCTestCase {
         }
 
         let allocator = ByteBufferAllocator()
-        let body: HTTPClient.Body = .stream(8) { writer in
-            for _ in 0..<2 {
+        let body: HTTPClient.Body = .stream(length: 8) { writer in
+            var buffer = allocator.buffer(capacity: 4)
+            buffer.writeString("1234")
+            return writer(.byteBuffer(buffer)).flatMap {
                 var buffer = allocator.buffer(capacity: 4)
-                buffer.writeString("1234")
-                _ = writer(.byteBuffer(buffer))
+                buffer.writeString("4321")
+                return writer(.byteBuffer(buffer))
             }
-            return httpClient.group.next().makeSucceededFuture(())
         }
 
         let response = try httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait()
@@ -347,6 +348,6 @@ class SwiftHTTPTests: XCTestCase {
         let data = try JSONDecoder().decode(RequestInfo.self, from: bytes)
 
         XCTAssertEqual(.ok, response.status)
-        XCTAssertEqual("12341234", data.data)
+        XCTAssertEqual("12344321", data.data)
     }
 }
