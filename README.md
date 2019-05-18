@@ -23,7 +23,7 @@ Add the following entry in your <code>Package.swift</code> to start using <code>
 // it's early days here so we haven't tagged a version yet, but will soon
 .package(url: "https://github.com/swift-server/swift-nio-http-client.git", .branch("master"))
 ```
-and  ```NIOHTTPClient``` dependency to your target:
+and  `NIOHTTPClient` dependency to your target:
 ```swift
 .target(name: "MyApp", dependencies: ["NIOHTTPClient"]),
 ```
@@ -49,11 +49,11 @@ httpClient.get(url: "https://swift.org").whenComplete { result in
 }
 ```
 
-It is important to close client instance after use to cleanly shutdown underlying NIO ```EventLoopGroup```:
-```
+It is important to close the client instance, for example in a `defer` statement, after use to cleanly shutdown the underlying NIO `EventLoopGroup`:
+```swift
 try? httpClient.syncShutdown()
 ```
-Alternatively, you can provide shared ```EventLoopGroup```:
+Alternatively, you can provide shared `EventLoopGroup`:
 ```swift
 let httpClient = HTTPClient(eventLoopGroupProvider: .shared(userProvidedGroup))
 ```
@@ -61,7 +61,7 @@ In this case shutdown of the client is not neccecary.
 
 ## Usage guide
 
-Most common HTTP methods are supported out of the box. In case you need to have more control over the method, or you want to add headers or body, use ```HTTPRequest``` struct:
+Most common HTTP methods are supported out of the box. In case you need to have more control over the method, or you want to add headers or body, use the `HTTPRequest` struct:
 ```swift
 import NIOHTTPClient
 
@@ -70,7 +70,7 @@ defer {
     try? httpClient.syncShutdown()
 }
 
-var request = try HTTPRequest(url: "https://swift.org", method: .POST)
+var request = try HTTPClient.HTTPRequest(url: "https://swift.org", method: .POST)
 request.headers.add(name: "User-Agent", value: "Swift HTTPClient")
 request.body = .string("some-body")
 
@@ -98,13 +98,13 @@ let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
 ### Timeouts
 Timeouts (connect and read) can also be set using the client configuration:
 ```swift
-let timeout = Timeout(connectTimeout: .seconds(1), readTimeout: .seconds(1))
+let timeout = HTTPClient.Timeout(connect: .seconds(1), read: .seconds(1))
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
                             configuration: HTTPClient.Configuration(timeout: timeout))
 ```
-or on per-request basis:
+or on a per-request basis:
 ```swift
-let timeout = Timeout(connectTimeout: .seconds(1), readTimeout: .seconds(1))
+let timeout = HTTPClient.Timeout(connect: .seconds(1), read: .seconds(1))
 httpClient.execute(request: request, timeout: timeout)
 ```
 
@@ -115,7 +115,7 @@ class CountingDelegate: HTTPResponseDelegate {
     typealias Response = Int
 
     var count = 0
-    
+
     func didTransmitRequestBody() {
         // this is executed when request is sent, called once
     }
@@ -130,10 +130,11 @@ class CountingDelegate: HTTPResponseDelegate {
     }
 
     func didFinishRequest() throws -> Int {
-        // this is called when request is fully read, called once, this is where you return a result or throw any errors you require to propagate to the client
+        // this is called when the request is fully read, called once
+        // this is where you return a result or throw any errors you require to propagate to the client
         return count
     }
-    
+
     func didReceiveError(_ error: Error) {
         // this is called when we receive any network-related error, called once
     }

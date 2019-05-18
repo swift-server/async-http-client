@@ -55,6 +55,7 @@ class SwiftHTTPTests: XCTestCase {
         head.headers.add(name: "X-Test-Header", value: "X-Test-Value")
         head.headers.add(name: "Host", value: "localhost")
         head.headers.add(name: "Content-Length", value: "4")
+        head.headers.add(name: "Connection", value: "close")
         XCTAssertEqual(HTTPClientRequestPart.head(head), recorder.writes[0])
         var buffer = ByteBufferAllocator().buffer(capacity: 4)
         buffer.writeString("1234")

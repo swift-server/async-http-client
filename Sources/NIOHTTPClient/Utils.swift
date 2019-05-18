@@ -53,3 +53,21 @@ public class HandlingHTTPResponseDelegate<T>: HTTPClientResponseDelegate {
         throw EmptyEndHandlerError()
     }
 }
+
+class CopyingDelegate: HTTPClientResponseDelegate {
+    public typealias Response = Void
+
+    let chunkHandler: (ByteBuffer) -> EventLoopFuture<Void>
+
+    init(chunkHandler: @escaping (ByteBuffer) -> EventLoopFuture<Void>) {
+        self.chunkHandler = chunkHandler
+    }
+
+    func didReceivePart(task: HTTPClient.Task<Void>, _ buffer: ByteBuffer) -> EventLoopFuture<Void>? {
+        return self.chunkHandler(buffer)
+    }
+
+    func didFinishRequest(task: HTTPClient.Task<Void>) throws {
+        return ()
+    }
+}
