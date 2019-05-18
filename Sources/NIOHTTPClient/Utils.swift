@@ -33,10 +33,11 @@ public class HandlingHTTPResponseDelegate<T>: HTTPClientResponseDelegate {
         }
     }
 
-    public func didReceivePart(task: HTTPClient.Task<T>, _ buffer: ByteBuffer) {
+    public func didReceivePart(task: HTTPClient.Task<T>, _ buffer: ByteBuffer) -> EventLoopFuture<Void>? {
         if let handler = handleBody {
             handler(buffer)
         }
+        return nil
     }
 
     public func didReceiveError(task: HTTPClient.Task<T>, _ error: Error) {

@@ -112,6 +112,24 @@ public extension HTTPClient {
     }
 }
 
+class CopyingDelegate: HTTPClientResponseDelegate {
+    public typealias Response = Void
+
+    let chunkHandler: (ByteBuffer) -> EventLoopFuture<Void>
+
+    init(chunkHandler: @escaping (ByteBuffer) -> EventLoopFuture<Void>) {
+        self.chunkHandler = chunkHandler
+    }
+
+    func didReceivePart(task: HTTPClient.Task<Void>, _ buffer: ByteBuffer) -> EventLoopFuture<Void>? {
+        return chunkHandler(buffer)
+    }
+
+    func didFinishRequest(task: HTTPClient.Task<Void>) throws -> Void {
+        return ()
+    }
+}
+
 internal class ResponseAccumulator: HTTPClientResponseDelegate {
     public typealias Response = HTTPClient.Response
 
@@ -147,7 +165,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         }
     }
 
-    func didReceivePart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) {
+    func didReceivePart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void>? {
         switch self.state {
         case .idle:
             preconditionFailure("no head received before body")
@@ -162,6 +180,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         case .error:
             break
         }
+        return nil
     }
 
     func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
@@ -194,7 +213,7 @@ public protocol HTTPClientResponseDelegate: AnyObject {
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead)
 
-    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer)
+    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void>?
 
     func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error)
 
@@ -283,6 +302,8 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
     let redirectHandler: RedirectHandler<T.Response>?
 
     var state: State = .idle
+    var pendingRead = false
+    var writable: Bool = true
 
     init(task: HTTPClient.Task<T.Response>, delegate: T, promise: EventLoopPromise<T.Response>, redirectHandler: RedirectHandler<T.Response>?) {
         self.task = task
@@ -314,21 +335,20 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
 
         context.write(wrapOutboundOut(.head(head)), promise: nil)
 
-        let bodyFuture = writeBody(request: request, context: context)
+        self.writeBody(request: request, context: context).whenComplete { result in
+            switch result {
+            case .success:
+                context.write(self.wrapOutboundOut(.end(nil)), promise: promise)
+                context.flush()
 
-        bodyFuture.whenSuccess {
-            context.write(self.wrapOutboundOut(.end(nil)), promise: promise)
-            context.flush()
-
-            self.state = .sent
-            self.delegate.didTransmitRequestBody(task: self.task)
-        }
-
-        bodyFuture.whenFailure { error in
-            self.state = .end
-            self.delegate.didReceiveError(task: self.task, error)
-            self.promise.fail(error)
-            context.close(promise: nil)
+                self.state = .sent
+                self.delegate.didTransmitRequestBody(task: self.task)
+            case .failure(let error):
+                self.state = .end
+                self.delegate.didReceiveError(task: self.task, error)
+                self.promise.fail(error)
+                context.close(promise: nil)
+            }
         }
     }
 
@@ -339,6 +359,21 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             }
         } else {
             return context.eventLoop.makeSucceededFuture(())
+        }
+    }
+
+    public func read(context: ChannelHandlerContext) {
+        if writable {
+            context.read()
+        } else {
+            pendingRead = true
+        }
+    }
+
+    private func mayRead(context: ChannelHandlerContext) {
+        if pendingRead {
+            pendingRead = false
+            context.read()
         }
     }
 
@@ -358,7 +393,13 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                 break
             default:
                 self.state = .body
-                self.delegate.didReceivePart(task: self.task, body)
+                if let future = self.delegate.didReceivePart(task: self.task, body) {
+                    self.writable = false
+                    future.whenComplete { _ in
+                        self.writable = true
+                        self.mayRead(context: context)
+                    }
+                }
             }
         case .end:
             switch self.state {

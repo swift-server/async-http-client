@@ -350,4 +350,36 @@ class SwiftHTTPTests: XCTestCase {
         XCTAssertEqual(.ok, response.status)
         XCTAssertEqual("12344321", data.data)
     }
+
+    func testProxyStreaming() throws {
+        let httpBin = HttpBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+
+        let body: HTTPClient.Body = .stream(length: 50) { writer in
+            do {
+                var request = try Request(url: "http://localhost:\(httpBin.port)/events/10/1")
+                request.headers.add(name: "Accept", value: "text/event-stream")
+
+                let delegate = CopyingDelegate { part in
+                    writer(.byteBuffer(part))
+                }
+                return httpClient.execute(request: request, delegate: delegate).future
+            } catch {
+                return httpClient.eventLoopGroup.next().makeFailedFuture(error)
+            }
+        }
+
+        let upload = try! httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait()
+        let bytes = upload.body!.withUnsafeReadableBytes {
+            Data(bytes: $0.baseAddress!, count: $0.count)
+        }
+        let data = try! JSONDecoder().decode(RequestInfo.self, from: bytes)
+
+        XCTAssertEqual(.ok, upload.status)
+        XCTAssertEqual("id: 0id: 1id: 2id: 3id: 4id: 5id: 6id: 7id: 8id: 9", data.data)
+    }
 }

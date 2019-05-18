@@ -27,7 +27,7 @@ class TestHTTPDelegate: HTTPClientResponseDelegate {
         self.state = .head(head)
     }
 
-    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) {
+    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void>? {
         switch self.state {
         case .head(let head):
             self.state = .body(head, buffer)
@@ -38,6 +38,7 @@ class TestHTTPDelegate: HTTPClientResponseDelegate {
         default:
             preconditionFailure("expecting head or body")
         }
+        return nil
     }
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws {}
@@ -48,12 +49,13 @@ class CountingDelegate: HTTPClientResponseDelegate {
 
     var count = 0
 
-    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) {
+    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void>? {
         var buffer = buffer
         let str = buffer.readString(length: buffer.readableBytes)
         if str?.starts(with: "id:") ?? false {
             self.count += 1
         }
+        return nil
     }
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Int {
