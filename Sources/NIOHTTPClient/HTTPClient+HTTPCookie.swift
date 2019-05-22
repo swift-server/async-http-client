@@ -16,7 +16,7 @@ import Foundation
 import NIOHTTP1
 
 extension HTTPClient {
-    public struct HTTPCookie {
+    public struct Cookie {
         public var name: String
         public var value: String
         public var path: String
@@ -117,7 +117,7 @@ public extension HTTPClient.Response {
         return headers.filter { $0.name.lowercased() == "set-cookie" }
     }
 
-    var cookies: [HTTPClient.HTTPCookie] {
-        return self.cookieHeaders.compactMap { HTTPClient.HTTPCookie(from: $0.value, defaultDomain: self.host) }
+    var cookies: [HTTPClient.Cookie] {
+        return self.cookieHeaders.compactMap { HTTPClient.Cookie(from: $0.value, defaultDomain: self.host) }
     }
 }
