@@ -111,10 +111,8 @@ class SwiftHTTPTests: XCTestCase {
         }
 
         let response = try httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: .string("1234")).wait()
-        let bytes = response.body!.withUnsafeReadableBytes {
-            Data(bytes: $0.baseAddress!, count: $0.count)
-        }
-        let data = try JSONDecoder().decode(RequestInfo.self, from: bytes)
+        let bytes = response.body.flatMap { $0.getData(at: 0, length: $0.readableBytes) }
+        let data = try JSONDecoder().decode(RequestInfo.self, from: bytes!)
 
         XCTAssertEqual(.ok, response.status)
         XCTAssertEqual("1234", data.data)
@@ -145,10 +143,8 @@ class SwiftHTTPTests: XCTestCase {
         let request = try Request(url: "https://localhost:\(httpBin.port)/post", method: .POST, body: .string("1234"))
 
         let response = try httpClient.execute(request: request).wait()
-        let bytes = response.body!.withUnsafeReadableBytes {
-            Data(bytes: $0.baseAddress!, count: $0.count)
-        }
-        let data = try JSONDecoder().decode(RequestInfo.self, from: bytes)
+        let bytes = response.body.flatMap { $0.getData(at: 0, length: $0.readableBytes) }
+        let data = try JSONDecoder().decode(RequestInfo.self, from: bytes!)
 
         XCTAssertEqual(.ok, response.status)
         XCTAssertEqual("1234", data.data)
@@ -343,10 +339,8 @@ class SwiftHTTPTests: XCTestCase {
         }
 
         let response = try httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait()
-        let bytes = response.body!.withUnsafeReadableBytes {
-            Data(bytes: $0.baseAddress!, count: $0.count)
-        }
-        let data = try JSONDecoder().decode(RequestInfo.self, from: bytes)
+        let bytes = response.body.flatMap { $0.getData(at: 0, length: $0.readableBytes) }
+        let data = try JSONDecoder().decode(RequestInfo.self, from: bytes!)
 
         XCTAssertEqual(.ok, response.status)
         XCTAssertEqual("12344321", data.data)
@@ -375,10 +369,8 @@ class SwiftHTTPTests: XCTestCase {
         }
 
         let upload = try! httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait()
-        let bytes = upload.body!.withUnsafeReadableBytes {
-            Data(bytes: $0.baseAddress!, count: $0.count)
-        }
-        let data = try! JSONDecoder().decode(RequestInfo.self, from: bytes)
+        let bytes = upload.body.flatMap { $0.getData(at: 0, length: $0.readableBytes) }
+        let data = try! JSONDecoder().decode(RequestInfo.self, from: bytes!)
 
         XCTAssertEqual(.ok, upload.status)
         XCTAssertEqual("id: 0id: 1id: 2id: 3id: 4id: 5id: 6id: 7id: 8id: 9", data.data)
