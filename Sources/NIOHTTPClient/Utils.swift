@@ -54,7 +54,7 @@ public class HandlingHTTPResponseDelegate<T>: HTTPClientResponseDelegate {
     }
 }
 
-class CopyingDelegate: HTTPClientResponseDelegate {
+final class CopyingDelegate: HTTPClientResponseDelegate {
     public typealias Response = Void
 
     let chunkHandler: (ByteBuffer) -> EventLoopFuture<Void>

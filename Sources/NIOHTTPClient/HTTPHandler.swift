@@ -285,7 +285,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
 
     var state: State = .idle
     var pendingRead = false
-    var mayRead: Bool = true
+    var mayRead = true
 
     init(task: HTTPClient.Task<T.Response>, delegate: T, promise: EventLoopPromise<T.Response>, redirectHandler: RedirectHandler<T.Response>?) {
         self.task = task
@@ -344,7 +344,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
     private func writeBody(request: HTTPClient.Request, context: ChannelHandlerContext) -> EventLoopFuture<Void> {
         if let body = request.body {
             return body.provider { part in
-                context.writeAndFlush(self.wrapOutboundOut(HTTPClientRequestPart.body(part)))
+                context.writeAndFlush(self.wrapOutboundOut(.body(part)))
             }
         } else {
             return context.eventLoop.makeSucceededFuture(())
