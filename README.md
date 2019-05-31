@@ -116,28 +116,28 @@ class CountingDelegate: HTTPResponseDelegate {
 
     var count = 0
 
-    func didTransmitRequestBody() {
+    func didTransmitRequestBody(task: HTTPClient.Task<Response>) {
         // this is executed when request is sent, called once
     }
 
-    func didReceiveHead(_ head: HTTPResponseHead) {
+    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) {
         // this is executed when we receive HTTP Reponse head part of the request (it contains response code and headers), called once
     }
 
-    func didReceivePart(_ buffer: ByteBuffer) -> EventLoopFuture<Void>? {
+    func didReceivePart(task: HTTPClient.Task<Response>, eventLoop: EventLoop, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         // this is executed when we receive parts of the response body, could be called zero or more times
         count += buffer.readableBytes
-        // in case backpressure is needed, EventLoopFuture could be returned, all reads will be paused until this future is resolved
-        return nil
+        // in case backpressure is needed, all reads will be paused until returned future is resolved
+        return eventLoop.makeSucceededFuture(())
     }
 
-    func didFinishRequest() throws -> Int {
+    func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Int {
         // this is called when the request is fully read, called once
         // this is where you return a result or throw any errors you require to propagate to the client
         return count
     }
 
-    func didReceiveError(_ error: Error) {
+    func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
         // this is called when we receive any network-related error, called once
     }
 }
