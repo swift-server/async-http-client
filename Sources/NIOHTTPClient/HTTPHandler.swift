@@ -147,7 +147,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         }
     }
 
-    func didReceivePart(task: HTTPClient.Task<Response>, eventLoop: EventLoop, _ part: ByteBuffer) -> EventLoopFuture<Void> {
+    func didReceivePart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void> {
         switch self.state {
         case .idle:
             preconditionFailure("no head received before body")
@@ -162,7 +162,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         case .error:
             break
         }
-        return eventLoop.makeSucceededFuture(())
+        return task.eventLoop.makeSucceededFuture(())
     }
 
     func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
@@ -195,7 +195,7 @@ public protocol HTTPClientResponseDelegate: AnyObject {
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead)
 
-    func didReceivePart(task: HTTPClient.Task<Response>, eventLoop: EventLoop, _ buffer: ByteBuffer) -> EventLoopFuture<Void>
+    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void>
 
     func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error)
 
@@ -207,7 +207,7 @@ extension HTTPClientResponseDelegate {
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) {}
 
-    func didReceivePart(task: HTTPClient.Task<Response>, eventLoop: EventLoop, _: ByteBuffer) -> EventLoopFuture<Void> { return eventLoop.makeSucceededFuture(()) }
+    func didReceivePart(task: HTTPClient.Task<Response>, _: ByteBuffer) -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
 
     func didReceiveError(task: HTTPClient.Task<Response>, _: Error) {}
 }
@@ -224,13 +224,15 @@ internal extension URL {
 
 public extension HTTPClient {
     final class Task<Response> {
+        let eventLoop: EventLoop
         let future: EventLoopFuture<Response>
 
         private var channel: Channel?
         private var cancelled: Bool
         private let lock: Lock
 
-        init(future: EventLoopFuture<Response>) {
+        init(eventLoop: EventLoop, future: EventLoopFuture<Response>) {
+            self.eventLoop = eventLoop
             self.future = future
             self.cancelled = false
             self.lock = Lock()
@@ -376,12 +378,19 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                 break
             default:
                 self.state = .body
-                let future = self.delegate.didReceivePart(task: self.task, eventLoop: context.eventLoop, body)
+                let future = self.delegate.didReceivePart(task: self.task, body)
                 self.mayRead = false
-                future.whenComplete { _ in
-                    self.mayRead = true
-                    if self.pendingRead {
-                        context.read()
+                future.whenComplete { result in
+                    switch result {
+                    case .success:
+                        self.mayRead = true
+                        if self.pendingRead {
+                            context.read()
+                        }
+                    case .failure(let error):
+                        self.state = .end
+                        self.delegate.didReceiveError(task: self.task, error)
+                        self.promise.fail(error)
                     }
                 }
             }

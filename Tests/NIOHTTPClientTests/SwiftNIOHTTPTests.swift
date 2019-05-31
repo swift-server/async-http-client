@@ -40,7 +40,7 @@ class SwiftHTTPTests: XCTestCase {
         let channel = EmbeddedChannel()
         let recorder = RecordingHandler<HTTPClientResponsePart, HTTPClientRequestPart>()
         let promise: EventLoopPromise<Void> = channel.eventLoop.makePromise()
-        let task = Task(future: promise.futureResult)
+        let task = Task(eventLoop: channel.eventLoop, future: promise.futureResult)
 
         try channel.pipeline.addHandler(recorder).wait()
         try channel.pipeline.addHandler(TaskHandler(task: task, delegate: TestHTTPDelegate(), promise: promise, redirectHandler: nil)).wait()
@@ -69,7 +69,7 @@ class SwiftHTTPTests: XCTestCase {
         let channel = EmbeddedChannel()
         let delegate = TestHTTPDelegate()
         let promise: EventLoopPromise<Void> = channel.eventLoop.makePromise()
-        let task = Task(future: promise.futureResult)
+        let task = Task(eventLoop: channel.eventLoop, future: promise.futureResult)
         let handler = TaskHandler(task: task, delegate: delegate, promise: promise, redirectHandler: nil)
 
         try channel.pipeline.addHandler(handler).wait()

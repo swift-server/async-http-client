@@ -115,7 +115,8 @@ public class HTTPClient {
 
     public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, timeout: Timeout? = nil) -> Task<T.Response> {
         let timeout = timeout ?? configuration.timeout
-        let promise: EventLoopPromise<T.Response> = self.eventLoopGroup.next().makePromise()
+        let eventLoop = self.eventLoopGroup.next()
+        let promise: EventLoopPromise<T.Response> = eventLoop.makePromise()
 
         let redirectHandler: RedirectHandler<T.Response>?
         if self.configuration.followRedirects {
@@ -126,7 +127,7 @@ public class HTTPClient {
             redirectHandler = nil
         }
 
-        let task = Task(future: promise.futureResult)
+        let task = Task(eventLoop: eventLoop, future: promise.futureResult)
 
         var bootstrap = ClientBootstrap(group: self.eventLoopGroup)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)

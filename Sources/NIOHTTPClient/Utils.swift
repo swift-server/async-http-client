@@ -33,11 +33,11 @@ public class HandlingHTTPResponseDelegate<T>: HTTPClientResponseDelegate {
         }
     }
 
-    public func didReceivePart(task: HTTPClient.Task<T>, eventLoop: EventLoop, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+    public func didReceivePart(task: HTTPClient.Task<T>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         if let handler = handleBody {
             handler(buffer)
         }
-        return eventLoop.makeSucceededFuture(())
+        return task.eventLoop.makeSucceededFuture(())
     }
 
     public func didReceiveError(task: HTTPClient.Task<T>, _ error: Error) {
@@ -63,7 +63,7 @@ final class CopyingDelegate: HTTPClientResponseDelegate {
         self.chunkHandler = chunkHandler
     }
 
-    func didReceivePart(task: HTTPClient.Task<Void>, eventLoop: EventLoop, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+    func didReceivePart(task: HTTPClient.Task<Void>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         return self.chunkHandler(buffer)
     }
 

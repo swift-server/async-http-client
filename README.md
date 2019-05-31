@@ -124,11 +124,11 @@ class CountingDelegate: HTTPResponseDelegate {
         // this is executed when we receive HTTP Reponse head part of the request (it contains response code and headers), called once
     }
 
-    func didReceivePart(task: HTTPClient.Task<Response>, eventLoop: EventLoop, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         // this is executed when we receive parts of the response body, could be called zero or more times
         count += buffer.readableBytes
         // in case backpressure is needed, all reads will be paused until returned future is resolved
-        return eventLoop.makeSucceededFuture(())
+        return task.eventLoop.makeSucceededFuture(())
     }
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Int {
