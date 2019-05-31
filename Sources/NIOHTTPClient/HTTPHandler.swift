@@ -147,7 +147,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         }
     }
 
-    func didReceivePart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void>? {
+    func didReceivePart(task: HTTPClient.Task<Response>, eventLoop: EventLoop, _ part: ByteBuffer) -> EventLoopFuture<Void> {
         switch self.state {
         case .idle:
             preconditionFailure("no head received before body")
@@ -162,7 +162,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         case .error:
             break
         }
-        return nil
+        return eventLoop.makeSucceededFuture(())
     }
 
     func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
@@ -195,7 +195,7 @@ public protocol HTTPClientResponseDelegate: AnyObject {
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead)
 
-    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void>?
+    func didReceivePart(task: HTTPClient.Task<Response>, eventLoop: EventLoop, _ buffer: ByteBuffer) -> EventLoopFuture<Void>
 
     func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error)
 
@@ -207,7 +207,7 @@ extension HTTPClientResponseDelegate {
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) {}
 
-    func didReceivePart(task: HTTPClient.Task<Response>, _: ByteBuffer) {}
+    func didReceivePart(task: HTTPClient.Task<Response>, eventLoop: EventLoop, _: ByteBuffer) -> EventLoopFuture<Void> { return eventLoop.makeSucceededFuture(()) }
 
     func didReceiveError(task: HTTPClient.Task<Response>, _: Error) {}
 }
@@ -376,13 +376,12 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                 break
             default:
                 self.state = .body
-                if let future = self.delegate.didReceivePart(task: self.task, body) {
-                    self.mayRead = false
-                    future.whenComplete { _ in
-                        self.mayRead = true
-                        if self.pendingRead {
-                            context.read()
-                        }
+                let future = self.delegate.didReceivePart(task: self.task, eventLoop: context.eventLoop, body)
+                self.mayRead = false
+                future.whenComplete { _ in
+                    self.mayRead = true
+                    if self.pendingRead {
+                        context.read()
                     }
                 }
             }
