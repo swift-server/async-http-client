@@ -19,11 +19,11 @@ import NIOHTTP1
 import NIOSSL
 
 public extension HTTPClient {
-    typealias ChunkProvider = (@escaping (IOData) -> EventLoopFuture<Void>) -> EventLoopFuture<Void>
-
     struct Body {
+        typealias ChunkProvider = (@escaping (IOData) -> EventLoopFuture<Void>) -> EventLoopFuture<Void>
+
         var length: Int?
-        var provider: HTTPClient.ChunkProvider
+        var provider: ChunkProvider
 
         static func byteBuffer(_ buffer: ByteBuffer) -> Body {
             return Body(length: buffer.readableBytes) { writer in
@@ -31,7 +31,7 @@ public extension HTTPClient {
             }
         }
 
-        static func stream(length: Int? = nil, _ provider: @escaping HTTPClient.ChunkProvider) -> Body {
+        static func stream(length: Int? = nil, _ provider: @escaping ChunkProvider) -> Body {
             return Body(length: length, provider: provider)
         }
 
