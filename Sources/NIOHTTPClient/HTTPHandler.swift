@@ -18,24 +18,22 @@ import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOSSL
 
-public extension HTTPClient {
-    struct Body {
-        typealias ChunkProvider = (@escaping (IOData) -> EventLoopFuture<Void>) -> EventLoopFuture<Void>
+extension HTTPClient {
+    public struct Body {
+        public var length: Int?
+        public var provider: (@escaping (IOData) -> EventLoopFuture<Void>) -> EventLoopFuture<Void>
 
-        var length: Int?
-        var provider: ChunkProvider
-
-        static func byteBuffer(_ buffer: ByteBuffer) -> Body {
+        public static func byteBuffer(_ buffer: ByteBuffer) -> Body {
             return Body(length: buffer.readableBytes) { writer in
                 writer(.byteBuffer(buffer))
             }
         }
 
-        static func stream(length: Int? = nil, _ provider: @escaping ChunkProvider) -> Body {
+        public static func stream(length: Int? = nil, _ provider: @escaping (@escaping (IOData) -> EventLoopFuture<Void>) -> EventLoopFuture<Void>) -> Body {
             return Body(length: length, provider: provider)
         }
 
-        static func data(_ data: Data) -> Body {
+        public static func data(_ data: Data) -> Body {
             return Body(length: data.count) { writer in
                 var buffer = ByteBufferAllocator().buffer(capacity: data.count)
                 buffer.writeBytes(data)
@@ -43,7 +41,7 @@ public extension HTTPClient {
             }
         }
 
-        static func string(_ string: String) -> Body {
+        public static func string(_ string: String) -> Body {
             return Body(length: string.utf8.count) { writer in
                 var buffer = ByteBufferAllocator().buffer(capacity: string.utf8.count)
                 buffer.writeString(string)
@@ -52,7 +50,7 @@ public extension HTTPClient {
         }
     }
 
-    struct Request {
+    public struct Request {
         public var version: HTTPVersion
         public var method: HTTPMethod
         public var url: URL
@@ -104,7 +102,7 @@ public extension HTTPClient {
         }
     }
 
-    struct Response {
+    public struct Response {
         public var host: String
         public var status: HTTPResponseStatus
         public var headers: HTTPHeaders
@@ -224,7 +222,7 @@ internal extension URL {
 
 public extension HTTPClient {
     final class Task<Response> {
-        let eventLoop: EventLoop
+        public let eventLoop: EventLoop
         let future: EventLoopFuture<Response>
 
         private var channel: Channel?
