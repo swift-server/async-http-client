@@ -43,6 +43,8 @@ extension SwiftHTTPTests {
             ("testProxyTLS", testProxyTLS),
             ("testUploadStreaming", testUploadStreaming),
             ("testProxyStreaming", testProxyStreaming),
+            ("testProxyStreamingFailure", testProxyStreamingFailure),
+            ("testUploadStreamingBackpressure", testUploadStreamingBackpressure),
         ]
     }
 }
