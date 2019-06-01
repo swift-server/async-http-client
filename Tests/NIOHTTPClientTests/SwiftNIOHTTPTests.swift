@@ -375,4 +375,35 @@ class SwiftHTTPTests: XCTestCase {
         XCTAssertEqual(.ok, upload.status)
         XCTAssertEqual("id: 0id: 1id: 2id: 3id: 4id: 5id: 6id: 7id: 8id: 9", data.data)
     }
+
+    func testProxyStreamingFailure() throws {
+        let httpBin = HttpBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+
+        var body: HTTPClient.Body = .stream(length: 50) { writer in
+            httpClient.eventLoopGroup.next().makeFailedFuture(HTTPClientError.invalidProxyResponse)
+        }
+
+        XCTAssertThrowsError(try httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait())
+
+        body = .stream(length: 50) { writer in
+            do {
+                var request = try Request(url: "http://localhost:\(httpBin.port)/events/10/1")
+                request.headers.add(name: "Accept", value: "text/event-stream")
+
+                let delegate = CopyingDelegate { part in
+                    httpClient.eventLoopGroup.next().makeFailedFuture(HTTPClientError.invalidProxyResponse)
+                }
+                return httpClient.execute(request: request, delegate: delegate).future
+            } catch {
+                return httpClient.eventLoopGroup.next().makeFailedFuture(error)
+            }
+        }
+
+        XCTAssertThrowsError(try httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait())
+    }
 }
