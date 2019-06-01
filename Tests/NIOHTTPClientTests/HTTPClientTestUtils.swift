@@ -94,7 +94,7 @@ internal class HttpBin {
         return channel.pipeline.addHandler(try! NIOSSLServerHandler(context: context), position: .first)
     }
 
-    init(ssl: Bool = false, simulateProxy: HTTPProxySimulator.Option? = nil) {
+    init(ssl: Bool = false, simulateProxy: HTTPProxySimulator.Option? = nil, channelPromise: EventLoopPromise<Channel>? = nil) {
         self.serverChannel = try! ServerBootstrap(group: self.group)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
@@ -108,10 +108,10 @@ internal class HttpBin {
                 }.flatMap {
                     if ssl {
                         return HttpBin.configureTLS(channel: channel).flatMap {
-                            channel.pipeline.addHandler(HttpBinHandler())
+                            channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise))
                         }
                     } else {
-                        return channel.pipeline.addHandler(HttpBinHandler())
+                        return channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise))
                     }
                 }
             }.bind(host: "127.0.0.1", port: 0).wait()
@@ -191,7 +191,12 @@ internal final class HttpBinHandler: ChannelInboundHandler {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
 
+    let channelPromise: EventLoopPromise<Channel>?
     var resps = CircularBuffer<HTTPResponseBuilder>()
+
+    init(channelPromise: EventLoopPromise<Channel>? = nil) {
+        self.channelPromise = channelPromise
+    }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         switch self.unwrapInboundIn(data) {
@@ -245,6 +250,9 @@ internal final class HttpBinHandler: ChannelInboundHandler {
             case "/close":
                 context.close(promise: nil)
                 return
+            case "/custom":
+                context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
+                return
             case "/events/10/1": // TODO: parse path
                 context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
                 for i in 0 ..< 10 {
@@ -266,6 +274,9 @@ internal final class HttpBinHandler: ChannelInboundHandler {
             response.add(body)
             self.resps.prepend(response)
         case .end:
+            if let promise = self.channelPromise {
+                promise.succeed(context.channel)
+            }
             if self.resps.isEmpty {
                 return
             }
@@ -301,6 +312,14 @@ internal final class HttpBinHandler: ChannelInboundHandler {
             }
         }
         fatalError("parameter \(key) is missing from query: \(query)")
+    }
+}
+
+extension ByteBuffer {
+    public static func of(string: String) -> ByteBuffer {
+        var buffer = ByteBufferAllocator().buffer(capacity: string.count)
+        buffer.writeString(string)
+        return buffer
     }
 }
 

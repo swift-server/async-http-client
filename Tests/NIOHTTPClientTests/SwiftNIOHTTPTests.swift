@@ -57,8 +57,7 @@ class SwiftHTTPTests: XCTestCase {
         head.headers.add(name: "Content-Length", value: "4")
         head.headers.add(name: "Connection", value: "close")
         XCTAssertEqual(HTTPClientRequestPart.head(head), recorder.writes[0])
-        var buffer = ByteBufferAllocator().buffer(capacity: 4)
-        buffer.writeString("1234")
+        let buffer = ByteBuffer.of(string: "1234")
         XCTAssertEqual(HTTPClientRequestPart.body(.byteBuffer(buffer)), recorder.writes[1])
 
         XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: HTTPResponseStatus.ok))))
@@ -203,9 +202,7 @@ class SwiftHTTPTests: XCTestCase {
             httpBin.shutdown()
         }
 
-        let allocator = ByteBufferAllocator()
-        var body = allocator.buffer(capacity: 100)
-        body.writeString("hello world!")
+        let body = ByteBuffer.of(string: "hello world!")
 
         var headers = HTTPHeaders()
         headers.add(name: "Content-Length", value: "12")
@@ -327,13 +324,10 @@ class SwiftHTTPTests: XCTestCase {
             httpBin.shutdown()
         }
 
-        let allocator = ByteBufferAllocator()
         let body: HTTPClient.Body = .stream(length: 8) { writer in
-            var buffer = allocator.buffer(capacity: 4)
-            buffer.writeString("1234")
+            let buffer = ByteBuffer.of(string: "1234")
             return writer(.byteBuffer(buffer)).flatMap {
-                var buffer = allocator.buffer(capacity: 4)
-                buffer.writeString("4321")
+                let buffer = ByteBuffer.of(string: "4321")
                 return writer(.byteBuffer(buffer))
             }
         }
@@ -384,18 +378,18 @@ class SwiftHTTPTests: XCTestCase {
             httpBin.shutdown()
         }
 
-        var body: HTTPClient.Body = .stream(length: 50) { writer in
+        var body: HTTPClient.Body = .stream(length: 50) { _ in
             httpClient.eventLoopGroup.next().makeFailedFuture(HTTPClientError.invalidProxyResponse)
         }
 
         XCTAssertThrowsError(try httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait())
 
-        body = .stream(length: 50) { writer in
+        body = .stream(length: 50) { _ in
             do {
                 var request = try Request(url: "http://localhost:\(httpBin.port)/events/10/1")
                 request.headers.add(name: "Accept", value: "text/event-stream")
 
-                let delegate = CopyingDelegate { part in
+                let delegate = CopyingDelegate { _ in
                     httpClient.eventLoopGroup.next().makeFailedFuture(HTTPClientError.invalidProxyResponse)
                 }
                 return httpClient.execute(request: request, delegate: delegate).future
@@ -405,5 +399,55 @@ class SwiftHTTPTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait())
+    }
+
+    func testUploadStreamingBackpressure() throws {
+        class BackpressureTestDelegate: HTTPClientResponseDelegate {
+            typealias Response = Void
+
+            var reads = 0
+            let promise: EventLoopPromise<Void>
+
+            init(promise: EventLoopPromise<Void>) {
+                self.promise = promise
+            }
+
+            func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+                self.reads += 1
+                return self.promise.futureResult
+            }
+
+            func didFinishRequest(task: HTTPClient.Task<Response>) throws {}
+        }
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        let promise: EventLoopPromise<Channel> = httpClient.eventLoopGroup.next().makePromise()
+        let httpBin = HttpBin(channelPromise: promise)
+
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+
+        let request = try Request(url: "http://localhost:\(httpBin.port)/custom")
+        let delegate = BackpressureTestDelegate(promise: httpClient.eventLoopGroup.next().makePromise())
+        let future = httpClient.execute(request: request, delegate: delegate).future
+
+        let channel = try promise.futureResult.wait()
+
+        // Send 3 parts, but only one should be received until the future is complete
+        let buffer = ByteBuffer.of(string: "1234")
+        try channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(buffer))).wait()
+        try channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(buffer))).wait()
+        try channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(buffer))).wait()
+
+        XCTAssertEqual(delegate.reads, 1)
+
+        delegate.promise.succeed(())
+
+        try channel.writeAndFlush(HTTPServerResponsePart.end(nil)).wait()
+        try future.wait()
+
+        XCTAssertEqual(delegate.reads, 3)
     }
 }
