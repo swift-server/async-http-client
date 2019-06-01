@@ -128,8 +128,6 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         self.request = request
     }
 
-    func didTransmitRequestBody(task: HTTPClient.Task<Response>) {}
-
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) {
         switch self.state {
         case .idle:
