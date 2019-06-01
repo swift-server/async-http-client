@@ -25,8 +25,6 @@ public class HandlingHTTPResponseDelegate<T>: HTTPClientResponseDelegate {
     var handleError: ((Error) -> Void)?
     var handleEnd: (() throws -> T)?
 
-    public func didTransmitRequestBody(task: HTTPClient.Task<T>) {}
-
     public func didReceiveHead(task: HTTPClient.Task<T>, _ head: HTTPResponseHead) {
         if let handler = handleHead {
             handler(head)

@@ -189,7 +189,9 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
 public protocol HTTPClientResponseDelegate: AnyObject {
     associatedtype Response
 
-    func didTransmitRequestBody(task: HTTPClient.Task<Response>)
+    func didTransmitRequestPart(task: HTTPClient.Task<Response>, _ part: IOData)
+
+    func didTransmitRequest(task: HTTPClient.Task<Response>)
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead)
 
@@ -201,13 +203,15 @@ public protocol HTTPClientResponseDelegate: AnyObject {
 }
 
 extension HTTPClientResponseDelegate {
-    func didTransmitRequestBody(task: HTTPClient.Task<Response>) {}
+    public func didTransmitRequestPart(task: HTTPClient.Task<Response>, _ part: IOData) {}
 
-    func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) {}
+    public func didTransmitRequest(task: HTTPClient.Task<Response>) {}
 
-    func didReceivePart(task: HTTPClient.Task<Response>, _: ByteBuffer) -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
+    public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) {}
 
-    func didReceiveError(task: HTTPClient.Task<Response>, _: Error) {}
+    public func didReceivePart(task: HTTPClient.Task<Response>, _: ByteBuffer) -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
+
+    public func didReceiveError(task: HTTPClient.Task<Response>, _: Error) {}
 }
 
 internal extension URL {
@@ -326,7 +330,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                 context.flush()
 
                 self.state = .sent
-                self.delegate.didTransmitRequestBody(task: self.task)
+                self.delegate.didTransmitRequest(task: self.task)
 
                 let channel = context.channel
                 self.promise.futureResult.whenComplete { _ in
@@ -344,7 +348,11 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
     private func writeBody(request: HTTPClient.Request, context: ChannelHandlerContext) -> EventLoopFuture<Void> {
         if let body = request.body {
             return body.provider { part in
-                context.writeAndFlush(self.wrapOutboundOut(.body(part)))
+                let future = context.writeAndFlush(self.wrapOutboundOut(.body(part)))
+                future.whenSuccess { _ in
+                    self.delegate.didTransmitRequestPart(task: self.task, part)
+                }
+                return future
             }
         } else {
             return context.eventLoop.makeSucceededFuture(())
