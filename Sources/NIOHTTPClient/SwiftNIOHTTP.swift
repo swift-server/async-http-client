@@ -18,11 +18,6 @@ import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOSSL
 
-public enum EventLoopGroupProvider {
-    case shared(EventLoopGroup)
-    case createNew
-}
-
 public class HTTPClient {
     public let eventLoopGroup: EventLoopGroup
     let eventLoopGroupProvider: EventLoopGroupProvider
@@ -201,6 +196,11 @@ public class HTTPClient {
         }
     }
 
+    public enum EventLoopGroupProvider {
+        case shared(EventLoopGroup)
+        case createNew
+    }
+    
     public struct Timeout {
         public var connect: TimeAmount?
         public var read: TimeAmount?
