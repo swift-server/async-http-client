@@ -111,36 +111,36 @@ httpClient.execute(request: request, timeout: timeout)
 ### Streaming
 When dealing with larger amount of data, it's critical to stream the response body instead of aggregating in-memory. Handling a response stream is done using a delegate protocol. The following example demonstrates how to count the number of bytes in a streaming response body:
 ```swift
-class CountingDelegate: HTTPResponseDelegate {
+class CountingDelegate: HTTPClientResponseDelegate {
     typealias Response = Int
 
     var count = 0
 
-    func didTransmitRequestBody() {
+    func didTransmitRequestBody(task: HTTPClient.Task<Int>) {
         // this is executed when request is sent, called once
     }
 
-    func didReceiveHead(_ head: HTTPResponseHead) {
+    func didReceiveHead(task: HTTPClient.Task<Int>, _ head: HTTPResponseHead) {
         // this is executed when we receive HTTP Reponse head part of the request (it contains response code and headers), called once
     }
 
-    func didReceivePart(_ buffer: ByteBuffer) {
+    func didReceivePart(task: HTTPClient.Task<Int>, _ buffer: ByteBuffer) {
         // this is executed when we receive parts of the response body, could be called zero or more times
         count += buffer.readableBytes
     }
 
-    func didFinishRequest() throws -> Int {
+    func didFinishRequest(task: HTTPClient.Task<Int>) throws -> Int {
         // this is called when the request is fully read, called once
         // this is where you return a result or throw any errors you require to propagate to the client
         return count
     }
 
-    func didReceiveError(_ error: Error) {
+    func didReceiveError(task: HTTPClient.Task<Int>, _ error: Error) {
         // this is called when we receive any network-related error, called once
     }
 }
 
-let request = try HTTPRequest(url: "https://swift.org")
+let request = try HTTPClient.Request(url: "https://swift.org")
 let delegate = CountingDelegate()
 
 try httpClient.execute(request: request, delegate: delegate).future.whenSuccess { count in

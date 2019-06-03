@@ -231,7 +231,7 @@ class SwiftHTTPTests: XCTestCase {
         request.headers.add(name: "Accept", value: "text/event-stream")
 
         let delegate = CountingDelegate()
-        let count = try httpClient.execute(request: request, delegate: delegate).wait()
+        let count = try httpClient.execute(request: request, delegate: delegate).future.wait()
 
         XCTAssertEqual(10, count)
     }
@@ -285,7 +285,7 @@ class SwiftHTTPTests: XCTestCase {
             task.cancel()
         }
 
-        XCTAssertThrowsError(try task.wait(), "Should fail") { error in
+        XCTAssertThrowsError(try task.future.wait(), "Should fail") { error in
             guard case let error = error as? HTTPClientError, error == .cancelled else {
                 return XCTFail("Should fail with cancelled")
             }

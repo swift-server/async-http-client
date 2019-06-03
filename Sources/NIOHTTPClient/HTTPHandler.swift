@@ -207,7 +207,7 @@ internal extension URL {
 
 public extension HTTPClient {
     final class Task<Response> {
-        let future: EventLoopFuture<Response>
+        public let future: EventLoopFuture<Response>
 
         private var channel: Channel?
         private var cancelled: Bool
@@ -226,10 +226,6 @@ public extension HTTPClient {
             }
         }
 
-        public func wait() throws -> Response {
-            return try self.future.wait()
-        }
-
         public func cancel() {
             self.lock.withLock {
                 if !cancelled {
@@ -237,10 +233,6 @@ public extension HTTPClient {
                     channel?.pipeline.fireUserInboundEventTriggered(TaskCancelEvent())
                 }
             }
-        }
-
-        public func cascade(promise: EventLoopPromise<Response>) {
-            self.future.cascade(to: promise)
         }
     }
 }
@@ -484,6 +476,6 @@ internal struct RedirectHandler<T> {
             request.headers.remove(name: "Proxy-Authorization")
         }
 
-        return self.execute(request).cascade(promise: promise)
+        return self.execute(request).future.cascade(to: promise)
     }
 }
