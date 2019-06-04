@@ -25,10 +25,11 @@ public class HandlingHTTPResponseDelegate<T>: HTTPClientResponseDelegate {
     var handleError: ((Error) -> Void)?
     var handleEnd: (() throws -> T)?
 
-    public func didReceiveHead(task: HTTPClient.Task<T>, _ head: HTTPResponseHead) {
+    public func didReceiveHead(task: HTTPClient.Task<T>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         if let handler = handleHead {
             handler(head)
         }
+        return task.eventLoop.makeSucceededFuture(())
     }
 
     public func didReceivePart(task: HTTPClient.Task<T>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {

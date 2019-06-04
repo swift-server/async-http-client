@@ -128,7 +128,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         self.request = request
     }
 
-    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) {
+    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         switch self.state {
         case .idle:
             self.state = .head(head)
@@ -141,6 +141,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         case .error:
             break
         }
+        return task.eventLoop.makeSucceededFuture(())
     }
 
     func didReceivePart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void> {
@@ -193,7 +194,7 @@ public protocol HTTPClientResponseDelegate: AnyObject {
 
     func didSendRequest(task: HTTPClient.Task<Response>)
 
-    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead)
+    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void>
 
     func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void>
 
@@ -209,7 +210,7 @@ extension HTTPClientResponseDelegate {
 
     public func didSendRequest(task: HTTPClient.Task<Response>) {}
 
-    public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) {}
+    public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead)  -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
 
     public func didReceivePart(task: HTTPClient.Task<Response>, _: ByteBuffer) -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
 
@@ -380,7 +381,10 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                 self.state = .redirected(head, redirectURL)
             } else {
                 self.state = .head
-                self.delegate.didReceiveHead(task: self.task, head)
+                self.mayRead = false
+                self.delegate.didReceiveHead(task: self.task, head).whenComplete { result in
+                    self.handleBackpressureResult(context: context, result: result)
+                }
             }
         case .body(let body):
             switch self.state {
@@ -388,20 +392,9 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                 break
             default:
                 self.state = .body
-                let future = self.delegate.didReceivePart(task: self.task, body)
                 self.mayRead = false
-                future.whenComplete { result in
-                    switch result {
-                    case .success:
-                        self.mayRead = true
-                        if self.pendingRead {
-                            context.read()
-                        }
-                    case .failure(let error):
-                        self.state = .end
-                        self.delegate.didReceiveError(task: self.task, error)
-                        self.promise.fail(error)
-                    }
+                self.delegate.didReceivePart(task: self.task, body).whenComplete { result in
+                    self.handleBackpressureResult(context: context, result: result)
                 }
             }
         case .end:
@@ -418,6 +411,20 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                     self.promise.fail(error)
                 }
             }
+        }
+    }
+
+    private func handleBackpressureResult(context: ChannelHandlerContext, result: Result<Void, Error>) {
+        switch result {
+        case .success:
+            self.mayRead = true
+            if self.pendingRead {
+                context.read()
+            }
+        case .failure(let error):
+            self.state = .end
+            self.delegate.didReceiveError(task: self.task, error)
+            self.promise.fail(error)
         }
     }
 
