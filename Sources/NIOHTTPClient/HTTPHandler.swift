@@ -187,9 +187,11 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
 public protocol HTTPClientResponseDelegate: AnyObject {
     associatedtype Response
 
-    func didTransmitRequestPart(task: HTTPClient.Task<Response>, _ part: IOData)
+    func didSendRequestHead(task: HTTPClient.Task<Response>, _ head: HTTPRequestHead)
 
-    func didTransmitRequest(task: HTTPClient.Task<Response>)
+    func didSendRequestPart(task: HTTPClient.Task<Response>, _ part: IOData)
+
+    func didSendRequest(task: HTTPClient.Task<Response>)
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead)
 
@@ -201,9 +203,11 @@ public protocol HTTPClientResponseDelegate: AnyObject {
 }
 
 extension HTTPClientResponseDelegate {
-    public func didTransmitRequestPart(task: HTTPClient.Task<Response>, _ part: IOData) {}
+    public func didSendRequestHead(task: HTTPClient.Task<Response>, _ head: HTTPRequestHead) {}
 
-    public func didTransmitRequest(task: HTTPClient.Task<Response>) {}
+    public func didSendRequestPart(task: HTTPClient.Task<Response>, _ part: IOData) {}
+
+    public func didSendRequest(task: HTTPClient.Task<Response>) {}
 
     public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) {}
 
@@ -319,7 +323,9 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
 
         head.headers = headers
 
-        context.write(wrapOutboundOut(.head(head)), promise: nil)
+        context.write(wrapOutboundOut(.head(head))).whenSuccess {
+            self.delegate.didSendRequestHead(task: self.task, head)
+        }
 
         self.writeBody(request: request, context: context).whenComplete { result in
             switch result {
@@ -328,7 +334,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                 context.flush()
 
                 self.state = .sent
-                self.delegate.didTransmitRequest(task: self.task)
+                self.delegate.didSendRequest(task: self.task)
 
                 let channel = context.channel
                 self.promise.futureResult.whenComplete { _ in
@@ -348,7 +354,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             return body.provider { part in
                 let future = context.writeAndFlush(self.wrapOutboundOut(.body(part)))
                 future.whenSuccess { _ in
-                    self.delegate.didTransmitRequestPart(task: self.task, part)
+                    self.delegate.didSendRequestPart(task: self.task, part)
                 }
                 return future
             }

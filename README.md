@@ -116,11 +116,15 @@ class CountingDelegate: HTTPResponseDelegate {
 
     var count = 0
 
-    func didTransmitRequestPart(task: HTTPClient.Task<Response>, _ part: IOData) {
+    func didSendRequestHead(task: HTTPClient.Task<Response>, _ head: HTTPRequestHead) {
+        // this is executed right after request head was sent, called once
+    }
+
+    func didSendRequestPart(task: HTTPClient.Task<Response>, _ part: IOData) {
         // this is executed when request body part is sent, could be called zero or more times
     }
 
-    func didTransmitRequest(task: HTTPClient.Task<Response>) {
+    func didSendRequest(task: HTTPClient.Task<Response>) {
         // this is executed when request is fully sent, called once
     }
 
