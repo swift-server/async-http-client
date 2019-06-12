@@ -23,13 +23,14 @@ extension HTTPClient {
     public struct Body {
         public struct StreamWriter {
             let closure: (IOData) -> EventLoopFuture<Void>
+
             public func write(_ data: IOData) -> EventLoopFuture<Void> {
                 return self.closure(data)
             }
         }
 
         public var length: Int?
-        public var writer: (StreamWriter) -> EventLoopFuture<Void>
+        public var stream: (StreamWriter) -> EventLoopFuture<Void>
 
         public static func byteBuffer(_ buffer: ByteBuffer) -> Body {
             return Body(length: buffer.readableBytes) { writer in
@@ -37,8 +38,8 @@ extension HTTPClient {
             }
         }
 
-        public static func stream(length: Int? = nil, _ writer: @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
-            return Body(length: length, writer: writer)
+        public static func stream(length: Int? = nil, _ stream: @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
+            return Body(length: length, stream: stream)
         }
 
         public static func data(_ data: Data) -> Body {
@@ -360,7 +361,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
 
     private func writeBody(request: HTTPClient.Request, context: ChannelHandlerContext) -> EventLoopFuture<Void> {
         if let body = request.body {
-            return body.writer(HTTPClient.Body.StreamWriter { part in
+            return body.stream(HTTPClient.Body.StreamWriter { part in
                 let future = context.writeAndFlush(self.wrapOutboundOut(.body(part)))
                 future.whenSuccess { _ in
                     self.delegate.didSendRequestPart(task: self.task, part)
