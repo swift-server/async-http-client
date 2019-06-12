@@ -19,25 +19,33 @@ import NIOHTTP1
 import NIOSSL
 
 extension HTTPClient {
-    public struct Body {
-        public var length: Int?
-        public var provider: (@escaping (IOData) -> EventLoopFuture<Void>) -> EventLoopFuture<Void>
 
-        public static func byteBuffer(_ buffer: ByteBuffer) -> Body {
-            return Body(length: buffer.readableBytes) { writer in
-                writer(.byteBuffer(buffer))
+    public struct Body {
+        public struct StreamWriter {
+            let closure: (IOData) -> EventLoopFuture<Void>
+            public func write(_ data: IOData) -> EventLoopFuture<Void> {
+                return self.closure(data)
             }
         }
 
-        public static func stream(length: Int? = nil, _ provider: @escaping (@escaping (IOData) -> EventLoopFuture<Void>) -> EventLoopFuture<Void>) -> Body {
-            return Body(length: length, provider: provider)
+        public var length: Int?
+        public var writer: (StreamWriter) -> EventLoopFuture<Void>
+
+        public static func byteBuffer(_ buffer: ByteBuffer) -> Body {
+            return Body(length: buffer.readableBytes) { writer in
+                writer.write(.byteBuffer(buffer))
+            }
+        }
+
+        public static func stream(length: Int? = nil, _ writer: @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
+            return Body(length: length, writer: writer)
         }
 
         public static func data(_ data: Data) -> Body {
             return Body(length: data.count) { writer in
                 var buffer = ByteBufferAllocator().buffer(capacity: data.count)
                 buffer.writeBytes(data)
-                return writer(.byteBuffer(buffer))
+                return writer.write(.byteBuffer(buffer))
             }
         }
 
@@ -45,7 +53,7 @@ extension HTTPClient {
             return Body(length: string.utf8.count) { writer in
                 var buffer = ByteBufferAllocator().buffer(capacity: string.utf8.count)
                 buffer.writeString(string)
-                return writer(.byteBuffer(buffer))
+                return writer.write(.byteBuffer(buffer))
             }
         }
     }
@@ -352,13 +360,13 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
 
     private func writeBody(request: HTTPClient.Request, context: ChannelHandlerContext) -> EventLoopFuture<Void> {
         if let body = request.body {
-            return body.provider { part in
+            return body.writer(HTTPClient.Body.StreamWriter { part in
                 let future = context.writeAndFlush(self.wrapOutboundOut(.body(part)))
                 future.whenSuccess { _ in
                     self.delegate.didSendRequestPart(task: self.task, part)
                 }
                 return future
-            }
+            })
         } else {
             return context.eventLoop.makeSucceededFuture(())
         }
