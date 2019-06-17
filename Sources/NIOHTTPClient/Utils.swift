@@ -25,18 +25,18 @@ public class HandlingHTTPResponseDelegate<T>: HTTPClientResponseDelegate {
     var handleError: ((Error) -> Void)?
     var handleEnd: (() throws -> T)?
 
-    public func didTransmitRequestBody(task: HTTPClient.Task<T>) {}
-
-    public func didReceiveHead(task: HTTPClient.Task<T>, _ head: HTTPResponseHead) {
+    public func didReceiveHead(task: HTTPClient.Task<T>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         if let handler = handleHead {
             handler(head)
         }
+        return task.eventLoop.makeSucceededFuture(())
     }
 
-    public func didReceivePart(task: HTTPClient.Task<T>, _ buffer: ByteBuffer) {
+    public func didReceivePart(task: HTTPClient.Task<T>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         if let handler = handleBody {
             handler(buffer)
         }
+        return task.eventLoop.makeSucceededFuture(())
     }
 
     public func didReceiveError(task: HTTPClient.Task<T>, _ error: Error) {
@@ -50,5 +50,23 @@ public class HandlingHTTPResponseDelegate<T>: HTTPClientResponseDelegate {
             return try handler()
         }
         throw EmptyEndHandlerError()
+    }
+}
+
+final class CopyingDelegate: HTTPClientResponseDelegate {
+    public typealias Response = Void
+
+    let chunkHandler: (ByteBuffer) -> EventLoopFuture<Void>
+
+    init(chunkHandler: @escaping (ByteBuffer) -> EventLoopFuture<Void>) {
+        self.chunkHandler = chunkHandler
+    }
+
+    func didReceivePart(task: HTTPClient.Task<Void>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+        return self.chunkHandler(buffer)
+    }
+
+    func didFinishRequest(task: HTTPClient.Task<Void>) throws {
+        return ()
     }
 }

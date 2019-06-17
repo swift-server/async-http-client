@@ -116,26 +116,38 @@ class CountingDelegate: HTTPResponseDelegate {
 
     var count = 0
 
-    func didTransmitRequestBody() {
-        // this is executed when request is sent, called once
+    func didSendRequestHead(task: HTTPClient.Task<Response>, _ head: HTTPRequestHead) {
+        // this is executed right after request head was sent, called once
     }
 
-    func didReceiveHead(_ head: HTTPResponseHead) {
+    func didSendRequestPart(task: HTTPClient.Task<Response>, _ part: IOData) {
+        // this is executed when request body part is sent, could be called zero or more times
+    }
+
+    func didSendRequest(task: HTTPClient.Task<Response>) {
+        // this is executed when request is fully sent, called once
+    }
+
+    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         // this is executed when we receive HTTP Reponse head part of the request (it contains response code and headers), called once
+        // in case backpressure is needed, all reads will be paused until returned future is resolved
+        return task.eventLoop.makeSucceededFuture(())
     }
 
-    func didReceivePart(_ buffer: ByteBuffer) {
+    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         // this is executed when we receive parts of the response body, could be called zero or more times
         count += buffer.readableBytes
+        // in case backpressure is needed, all reads will be paused until returned future is resolved
+        return task.eventLoop.makeSucceededFuture(())
     }
 
-    func didFinishRequest() throws -> Int {
+    func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Int {
         // this is called when the request is fully read, called once
         // this is where you return a result or throw any errors you require to propagate to the client
         return count
     }
 
-    func didReceiveError(_ error: Error) {
+    func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
         // this is called when we receive any network-related error, called once
     }
 }

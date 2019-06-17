@@ -23,11 +23,12 @@ class TestHTTPDelegate: HTTPClientResponseDelegate {
 
     var state = ResponseAccumulator.State.idle
 
-    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) {
+    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         self.state = .head(head)
+        return task.eventLoop.makeSucceededFuture(())
     }
 
-    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) {
+    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         switch self.state {
         case .head(let head):
             self.state = .body(head, buffer)
@@ -38,6 +39,7 @@ class TestHTTPDelegate: HTTPClientResponseDelegate {
         default:
             preconditionFailure("expecting head or body")
         }
+        return task.eventLoop.makeSucceededFuture(())
     }
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws {}
@@ -48,12 +50,12 @@ class CountingDelegate: HTTPClientResponseDelegate {
 
     var count = 0
 
-    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) {
-        var buffer = buffer
-        let str = buffer.readString(length: buffer.readableBytes)
+    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+        let str = buffer.getString(at: 0, length: buffer.readableBytes)
         if str?.starts(with: "id:") ?? false {
             self.count += 1
         }
+        return task.eventLoop.makeSucceededFuture(())
     }
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Int {
@@ -93,7 +95,7 @@ internal class HttpBin {
         return channel.pipeline.addHandler(try! NIOSSLServerHandler(context: context), position: .first)
     }
 
-    init(ssl: Bool = false, simulateProxy: HTTPProxySimulator.Option? = nil) {
+    init(ssl: Bool = false, simulateProxy: HTTPProxySimulator.Option? = nil, channelPromise: EventLoopPromise<Channel>? = nil) {
         self.serverChannel = try! ServerBootstrap(group: self.group)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
@@ -107,10 +109,10 @@ internal class HttpBin {
                 }.flatMap {
                     if ssl {
                         return HttpBin.configureTLS(channel: channel).flatMap {
-                            channel.pipeline.addHandler(HttpBinHandler())
+                            channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise))
                         }
                     } else {
-                        return channel.pipeline.addHandler(HttpBinHandler())
+                        return channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise))
                     }
                 }
             }.bind(host: "127.0.0.1", port: 0).wait()
@@ -175,6 +177,7 @@ internal struct HTTPResponseBuilder {
         if var body = body {
             var part = part
             body.writeBuffer(&part)
+            self.body = body
         } else {
             self.body = part
         }
@@ -189,7 +192,12 @@ internal final class HttpBinHandler: ChannelInboundHandler {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
 
+    let channelPromise: EventLoopPromise<Channel>?
     var resps = CircularBuffer<HTTPResponseBuilder>()
+
+    init(channelPromise: EventLoopPromise<Channel>? = nil) {
+        self.channelPromise = channelPromise
+    }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         switch self.unwrapInboundIn(data) {
@@ -243,6 +251,9 @@ internal final class HttpBinHandler: ChannelInboundHandler {
             case "/close":
                 context.close(promise: nil)
                 return
+            case "/custom":
+                context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
+                return
             case "/events/10/1": // TODO: parse path
                 context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
                 for i in 0 ..< 10 {
@@ -264,6 +275,9 @@ internal final class HttpBinHandler: ChannelInboundHandler {
             response.add(body)
             self.resps.prepend(response)
         case .end:
+            if let promise = self.channelPromise {
+                promise.succeed(context.channel)
+            }
             if self.resps.isEmpty {
                 return
             }
@@ -299,6 +313,14 @@ internal final class HttpBinHandler: ChannelInboundHandler {
             }
         }
         fatalError("parameter \(key) is missing from query: \(query)")
+    }
+}
+
+extension ByteBuffer {
+    public static func of(string: String) -> ByteBuffer {
+        var buffer = ByteBufferAllocator().buffer(capacity: string.count)
+        buffer.writeString(string)
+        return buffer
     }
 }
 

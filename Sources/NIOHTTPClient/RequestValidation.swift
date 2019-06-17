@@ -35,11 +35,17 @@ extension HTTPHeaders {
             }
 
             if encodings.isEmpty {
-                contentLength = body.length
+                guard let length = body.length else {
+                    throw HTTPClientError.contentLengthMissing
+                }
+                contentLength = length
             } else {
                 transferEncoding = encodings.joined(separator: ", ")
                 if !encodings.contains("chunked") {
-                    contentLength = body.length
+                    guard let length = body.length else {
+                        throw HTTPClientError.contentLengthMissing
+                    }
+                    contentLength = length
                 }
             }
         } else {

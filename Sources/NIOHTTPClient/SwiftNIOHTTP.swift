@@ -110,7 +110,8 @@ public class HTTPClient {
 
     public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, timeout: Timeout? = nil) -> Task<T.Response> {
         let timeout = timeout ?? configuration.timeout
-        let promise: EventLoopPromise<T.Response> = self.eventLoopGroup.next().makePromise()
+        let eventLoop = self.eventLoopGroup.next()
+        let promise: EventLoopPromise<T.Response> = eventLoop.makePromise()
 
         let redirectHandler: RedirectHandler<T.Response>?
         if self.configuration.followRedirects {
@@ -121,7 +122,7 @@ public class HTTPClient {
             redirectHandler = nil
         }
 
-        let task = Task(future: promise.futureResult)
+        let task = Task(eventLoop: eventLoop, future: promise.futureResult)
 
         var bootstrap = ClientBootstrap(group: self.eventLoopGroup)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
@@ -256,6 +257,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case identityCodingIncorrectlyPresent
         case chunkedSpecifiedMultipleTimes
         case invalidProxyResponse
+        case contentLengthMissing
     }
 
     private var code: Code
@@ -279,4 +281,5 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let identityCodingIncorrectlyPresent = HTTPClientError(code: .identityCodingIncorrectlyPresent)
     public static let chunkedSpecifiedMultipleTimes = HTTPClientError(code: .chunkedSpecifiedMultipleTimes)
     public static let invalidProxyResponse = HTTPClientError(code: .invalidProxyResponse)
+    public static let contentLengthMissing = HTTPClientError(code: .contentLengthMissing)
 }
