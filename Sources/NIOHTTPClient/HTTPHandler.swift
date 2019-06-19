@@ -357,7 +357,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                 self.delegate.didSendRequest(task: self.task)
 
                 let channel = context.channel
-                self.task.promise.futureResult.whenComplete { _ in
+                self.task.futureResult.whenComplete { _ in
                     channel.close(promise: nil)
                 }
             case .failure(let error):
