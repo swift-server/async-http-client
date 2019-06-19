@@ -236,23 +236,23 @@ internal extension URL {
     }
 }
 
-public extension HTTPClient {
-    final class Task<Response> {
+extension HTTPClient {
+    public final class Task<Response> {
         public let eventLoop: EventLoop
+        public let promise: EventLoopPromise<Response>
 
-        let promise: EventLoopPromise<Response>
         private var channel: Channel?
         private var cancelled: Bool
         private let lock: Lock
 
-        init(eventLoop: EventLoop) {
+        public init(eventLoop: EventLoop) {
             self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.cancelled = false
             self.lock = Lock()
         }
 
-        var futureResult: EventLoopFuture<Response> {
+        public var futureResult: EventLoopFuture<Response> {
             return self.promise.futureResult
         }
 

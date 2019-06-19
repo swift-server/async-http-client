@@ -15,7 +15,7 @@
 import Foundation
 import NIO
 import NIOFoundationCompat
-@testable import NIOHTTP1
+import NIOHTTP1
 @testable import NIOHTTPClient
 import NIOSSL
 import XCTest
