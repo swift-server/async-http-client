@@ -121,7 +121,7 @@ public class HTTPClient {
             redirectHandler = nil
         }
 
-        let task: Task<T.Response> = Task(eventLoop: eventLoop)
+        let task = Task<T.Response>(eventLoop: eventLoop)
 
         var bootstrap = ClientBootstrap(group: self.eventLoopGroup)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
