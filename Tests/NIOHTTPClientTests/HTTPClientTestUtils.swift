@@ -23,8 +23,9 @@ class TestHTTPDelegate: HTTPClientResponseDelegate {
 
     var state = ResponseAccumulator.State.idle
 
-    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) {
+    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         self.state = .head(head)
+        return task.eventLoop.makeSucceededFuture(())
     }
 
     func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {

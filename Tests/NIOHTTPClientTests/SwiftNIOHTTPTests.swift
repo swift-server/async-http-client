@@ -324,9 +324,9 @@ class SwiftHTTPTests: XCTestCase {
 
         let body: HTTPClient.Body = .stream(length: 8) { writer in
             let buffer = ByteBuffer.of(string: "1234")
-            return writer(.byteBuffer(buffer)).flatMap {
+            return writer.write(.byteBuffer(buffer)).flatMap {
                 let buffer = ByteBuffer.of(string: "4321")
-                return writer(.byteBuffer(buffer))
+                return writer.write(.byteBuffer(buffer))
             }
         }
 
@@ -352,7 +352,7 @@ class SwiftHTTPTests: XCTestCase {
                 request.headers.add(name: "Accept", value: "text/event-stream")
 
                 let delegate = CopyingDelegate { part in
-                    writer(.byteBuffer(part))
+                    writer.write(.byteBuffer(part))
                 }
                 return httpClient.execute(request: request, delegate: delegate).futureResult
             } catch {
