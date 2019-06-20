@@ -14,6 +14,7 @@
 
 import Foundation
 import NIO
+import NIOConcurrencyHelpers
 import NIOFoundationCompat
 import NIOHTTP1
 @testable import NIOHTTPClient
@@ -403,15 +404,25 @@ class SwiftHTTPTests: XCTestCase {
         class BackpressureTestDelegate: HTTPClientResponseDelegate {
             typealias Response = Void
 
-            var reads = 0
+            var _reads = 0
+            let lock: Lock
             let promise: EventLoopPromise<Void>
 
             init(promise: EventLoopPromise<Void>) {
+                self.lock = Lock()
                 self.promise = promise
             }
 
+            var reads: Int {
+                return self.lock.withLock {
+                    self._reads
+                }
+            }
+
             func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
-                self.reads += 1
+                self.lock.withLockVoid {
+                    self._reads += 1
+                }
                 return self.promise.futureResult
             }
 
