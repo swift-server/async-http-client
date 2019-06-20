@@ -416,7 +416,7 @@ class SwiftHTTPTests: XCTestCase {
             }
 
             var reads: Int {
-                self.lock.withLockVoid {
+                return self.lock.withLock {
                     self._reads
                 }
             }
