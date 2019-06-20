@@ -416,13 +416,13 @@ class SwiftHTTPTests: XCTestCase {
             }
 
             var reads: Int {
-                self.lock.withLock {
+                self.lock.withLockVoid {
                     self._reads
                 }
             }
 
             func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
-                self.lock.withLock {
+                self.lock.withLockVoid {
                     self._reads += 1
                 }
                 return self.promise.futureResult
