@@ -239,7 +239,7 @@ internal extension URL {
 extension HTTPClient {
     public final class Task<Response> {
         public let eventLoop: EventLoop
-        public let promise: EventLoopPromise<Response>
+        let promise: EventLoopPromise<Response>
 
         private var channel: Channel?
         private var cancelled: Bool
@@ -256,13 +256,6 @@ extension HTTPClient {
             return self.promise.futureResult
         }
 
-        func setChannel(_ channel: Channel) -> Channel {
-            return self.lock.withLock {
-                self.channel = channel
-                return channel
-            }
-        }
-
         public func wait() throws -> Response {
             return try self.promise.futureResult.wait()
         }
@@ -276,16 +269,19 @@ extension HTTPClient {
             }
         }
 
-        public func succeed(_ value: Response) {
+        func setChannel(_ channel: Channel) -> Channel {
+            return self.lock.withLock {
+                self.channel = channel
+                return channel
+            }
+        }
+
+        func succeed(_ value: Response) {
             self.promise.succeed(value)
         }
 
-        public func fail(_ error: Error) {
+        func fail(_ error: Error) {
             self.promise.fail(error)
-        }
-
-        public func cascade(promise: EventLoopPromise<Response>) {
-            self.promise.futureResult.cascade(to: promise)
         }
     }
 }
@@ -566,6 +562,6 @@ internal struct RedirectHandler<T> {
             request.headers.remove(name: "Proxy-Authorization")
         }
 
-        return self.execute(request).cascade(promise: promise)
+        return self.execute(request).futureResult.cascade(to: promise)
     }
 }
