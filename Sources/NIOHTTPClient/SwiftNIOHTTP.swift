@@ -61,7 +61,7 @@ public class HTTPClient {
     public func get(url: String, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try Request(url: url, method: .GET)
-            return self.execute(request: request)
+            return self.execute(request: request, timeout: timeout)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
@@ -70,7 +70,7 @@ public class HTTPClient {
     public func post(url: String, body: Body? = nil, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .POST, body: body)
-            return self.execute(request: request)
+            return self.execute(request: request, timeout: timeout)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
@@ -79,7 +79,7 @@ public class HTTPClient {
     public func patch(url: String, body: Body? = nil, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .PATCH, body: body)
-            return self.execute(request: request)
+            return self.execute(request: request, timeout: timeout)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
@@ -88,7 +88,7 @@ public class HTTPClient {
     public func put(url: String, body: Body? = nil, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .PUT, body: body)
-            return self.execute(request: request)
+            return self.execute(request: request, timeout: timeout)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
@@ -97,7 +97,7 @@ public class HTTPClient {
     public func delete(url: String, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try Request(url: url, method: .DELETE)
-            return self.execute(request: request)
+            return self.execute(request: request, timeout: timeout)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
@@ -201,7 +201,7 @@ public class HTTPClient {
         case shared(EventLoopGroup)
         case createNew
     }
-    
+
     public struct Timeout {
         public var connect: TimeAmount?
         public var read: TimeAmount?
