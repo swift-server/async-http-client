@@ -105,13 +105,12 @@ public class HTTPClient {
 
     public func execute(request: Request, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
         let accumulator = ResponseAccumulator(request: request)
-        return self.execute(request: request, delegate: accumulator, timeout: timeout).future
+        return self.execute(request: request, delegate: accumulator, timeout: timeout).futureResult
     }
 
     public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, timeout: Timeout? = nil) -> Task<T.Response> {
         let timeout = timeout ?? configuration.timeout
         let eventLoop = self.eventLoopGroup.next()
-        let promise: EventLoopPromise<T.Response> = eventLoop.makePromise()
 
         let redirectHandler: RedirectHandler<T.Response>?
         if self.configuration.followRedirects {
@@ -122,7 +121,7 @@ public class HTTPClient {
             redirectHandler = nil
         }
 
-        let task = Task(eventLoop: eventLoop, future: promise.futureResult)
+        let task = Task<T.Response>(eventLoop: eventLoop)
 
         var bootstrap = ClientBootstrap(group: self.eventLoopGroup)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
@@ -143,7 +142,7 @@ public class HTTPClient {
                         return channel.eventLoop.makeSucceededFuture(())
                     }
                 }.flatMap {
-                    let taskHandler = TaskHandler(task: task, delegate: delegate, promise: promise, redirectHandler: redirectHandler)
+                    let taskHandler = TaskHandler(task: task, delegate: delegate, redirectHandler: redirectHandler)
                     return channel.pipeline.addHandler(taskHandler)
                 }
             }
@@ -161,7 +160,7 @@ public class HTTPClient {
                 channel.writeAndFlush(request)
             }
             .whenFailure { error in
-                promise.fail(error)
+                task.fail(error)
             }
 
         return task

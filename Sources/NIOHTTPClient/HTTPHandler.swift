@@ -236,31 +236,28 @@ internal extension URL {
     }
 }
 
-public extension HTTPClient {
-    final class Task<Response> {
+extension HTTPClient {
+    public final class Task<Response> {
         public let eventLoop: EventLoop
-        let future: EventLoopFuture<Response>
+        let promise: EventLoopPromise<Response>
 
         private var channel: Channel?
         private var cancelled: Bool
         private let lock: Lock
 
-        init(eventLoop: EventLoop, future: EventLoopFuture<Response>) {
+        public init(eventLoop: EventLoop) {
             self.eventLoop = eventLoop
-            self.future = future
+            self.promise = eventLoop.makePromise()
             self.cancelled = false
             self.lock = Lock()
         }
 
-        func setChannel(_ channel: Channel) -> Channel {
-            return self.lock.withLock {
-                self.channel = channel
-                return channel
-            }
+        public var futureResult: EventLoopFuture<Response> {
+            return self.promise.futureResult
         }
 
         public func wait() throws -> Response {
-            return try self.future.wait()
+            return try self.promise.futureResult.wait()
         }
 
         public func cancel() {
@@ -272,8 +269,19 @@ public extension HTTPClient {
             }
         }
 
-        public func cascade(promise: EventLoopPromise<Response>) {
-            self.future.cascade(to: promise)
+        func setChannel(_ channel: Channel) -> Channel {
+            return self.lock.withLock {
+                self.channel = channel
+                return channel
+            }
+        }
+
+        func succeed(_ value: Response) {
+            self.promise.succeed(value)
+        }
+
+        func fail(_ error: Error) {
+            self.promise.fail(error)
         }
     }
 }
@@ -296,17 +304,15 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
 
     let task: HTTPClient.Task<T.Response>
     let delegate: T
-    let promise: EventLoopPromise<T.Response>
     let redirectHandler: RedirectHandler<T.Response>?
 
     var state: State = .idle
     var pendingRead = false
     var mayRead = true
 
-    init(task: HTTPClient.Task<T.Response>, delegate: T, promise: EventLoopPromise<T.Response>, redirectHandler: RedirectHandler<T.Response>?) {
+    init(task: HTTPClient.Task<T.Response>, delegate: T, redirectHandler: RedirectHandler<T.Response>?) {
         self.task = task
         self.delegate = delegate
-        self.promise = promise
         self.redirectHandler = redirectHandler
     }
 
@@ -347,13 +353,13 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                 self.delegate.didSendRequest(task: self.task)
 
                 let channel = context.channel
-                self.promise.futureResult.whenComplete { _ in
+                self.task.futureResult.whenComplete { _ in
                     channel.close(promise: nil)
                 }
             case .failure(let error):
                 self.state = .end
                 self.delegate.didReceiveError(task: self.task, error)
-                self.promise.fail(error)
+                self.task.fail(error)
                 context.close(promise: nil)
             }
         }
@@ -410,14 +416,14 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             switch self.state {
             case .redirected(let head, let redirectURL):
                 self.state = .end
-                self.redirectHandler?.redirect(status: head.status, to: redirectURL, promise: self.promise)
+                self.redirectHandler?.redirect(status: head.status, to: redirectURL, promise: self.task.promise)
                 context.close(promise: nil)
             default:
                 self.state = .end
                 do {
-                    self.promise.succeed(try self.delegate.didFinishRequest(task: self.task))
+                    self.task.succeed(try self.delegate.didFinishRequest(task: self.task))
                 } catch {
-                    self.promise.fail(error)
+                    self.task.fail(error)
                 }
             }
         }
@@ -433,7 +439,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
         case .failure(let error):
             self.state = .end
             self.delegate.didReceiveError(task: self.task, error)
-            self.promise.fail(error)
+            self.task.fail(error)
         }
     }
 
@@ -442,12 +448,12 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             self.state = .end
             let error = HTTPClientError.readTimeout
             self.delegate.didReceiveError(task: self.task, error)
-            self.promise.fail(error)
+            self.task.fail(error)
         } else if (event as? TaskCancelEvent) != nil {
             self.state = .end
             let error = HTTPClientError.cancelled
             self.delegate.didReceiveError(task: self.task, error)
-            self.promise.fail(error)
+            self.task.fail(error)
         } else {
             context.fireUserInboundEventTriggered(event)
         }
@@ -461,7 +467,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             self.state = .end
             let error = HTTPClientError.remoteConnectionClosed
             self.delegate.didReceiveError(task: self.task, error)
-            self.promise.fail(error)
+            self.task.fail(error)
         }
     }
 
@@ -476,12 +482,12 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             default:
                 self.state = .end
                 self.delegate.didReceiveError(task: self.task, error)
-                self.promise.fail(error)
+                self.task.fail(error)
             }
         default:
             self.state = .end
             self.delegate.didReceiveError(task: self.task, error)
-            self.promise.fail(error)
+            self.task.fail(error)
         }
     }
 }
@@ -556,6 +562,6 @@ internal struct RedirectHandler<T> {
             request.headers.remove(name: "Proxy-Authorization")
         }
 
-        return self.execute(request).cascade(promise: promise)
+        return self.execute(request).futureResult.cascade(to: promise)
     }
 }

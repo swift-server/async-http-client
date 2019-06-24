@@ -16,7 +16,7 @@ import Foundation
 import NIO
 import NIOConcurrencyHelpers
 import NIOFoundationCompat
-@testable import NIOHTTP1
+import NIOHTTP1
 @testable import NIOHTTPClient
 import NIOSSL
 import XCTest
@@ -40,11 +40,10 @@ class SwiftHTTPTests: XCTestCase {
     func testHTTPPartsHandler() throws {
         let channel = EmbeddedChannel()
         let recorder = RecordingHandler<HTTPClientResponsePart, HTTPClientRequestPart>()
-        let promise: EventLoopPromise<Void> = channel.eventLoop.makePromise()
-        let task = Task(eventLoop: channel.eventLoop, future: promise.futureResult)
+        let task = Task<Void>(eventLoop: channel.eventLoop)
 
         try channel.pipeline.addHandler(recorder).wait()
-        try channel.pipeline.addHandler(TaskHandler(task: task, delegate: TestHTTPDelegate(), promise: promise, redirectHandler: nil)).wait()
+        try channel.pipeline.addHandler(TaskHandler(task: task, delegate: TestHTTPDelegate(), redirectHandler: nil)).wait()
 
         var request = try Request(url: "http://localhost/get")
         request.headers.add(name: "X-Test-Header", value: "X-Test-Value")
@@ -68,9 +67,8 @@ class SwiftHTTPTests: XCTestCase {
     func testHTTPPartsHandlerMultiBody() throws {
         let channel = EmbeddedChannel()
         let delegate = TestHTTPDelegate()
-        let promise: EventLoopPromise<Void> = channel.eventLoop.makePromise()
-        let task = Task(eventLoop: channel.eventLoop, future: promise.futureResult)
-        let handler = TaskHandler(task: task, delegate: delegate, promise: promise, redirectHandler: nil)
+        let task = Task<Void>(eventLoop: channel.eventLoop)
+        let handler = TaskHandler(task: task, delegate: delegate, redirectHandler: nil)
 
         try channel.pipeline.addHandler(handler).wait()
 
@@ -357,7 +355,7 @@ class SwiftHTTPTests: XCTestCase {
                 let delegate = CopyingDelegate { part in
                     writer.write(.byteBuffer(part))
                 }
-                return httpClient.execute(request: request, delegate: delegate).future
+                return httpClient.execute(request: request, delegate: delegate).futureResult
             } catch {
                 return httpClient.eventLoopGroup.next().makeFailedFuture(error)
             }
@@ -393,7 +391,7 @@ class SwiftHTTPTests: XCTestCase {
                 let delegate = CopyingDelegate { _ in
                     httpClient.eventLoopGroup.next().makeFailedFuture(HTTPClientError.invalidProxyResponse)
                 }
-                return httpClient.execute(request: request, delegate: delegate).future
+                return httpClient.execute(request: request, delegate: delegate).futureResult
             } catch {
                 return httpClient.eventLoopGroup.next().makeFailedFuture(error)
             }
@@ -442,7 +440,7 @@ class SwiftHTTPTests: XCTestCase {
 
         let request = try Request(url: "http://localhost:\(httpBin.port)/custom")
         let delegate = BackpressureTestDelegate(promise: httpClient.eventLoopGroup.next().makePromise())
-        let future = httpClient.execute(request: request, delegate: delegate).future
+        let future = httpClient.execute(request: request, delegate: delegate).futureResult
 
         let channel = try promise.futureResult.wait()
 
