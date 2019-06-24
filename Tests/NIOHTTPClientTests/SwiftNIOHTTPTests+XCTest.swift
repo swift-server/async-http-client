@@ -26,8 +26,6 @@ extension SwiftHTTPTests {
     static var allTests: [(String, (SwiftHTTPTests) -> () throws -> Void)] {
         return [
             ("testRequestURI", testRequestURI),
-            ("testHTTPPartsHandler", testHTTPPartsHandler),
-            ("testHTTPPartsHandlerMultiBody", testHTTPPartsHandlerMultiBody),
             ("testGet", testGet),
             ("testPost", testPost),
             ("testGetHttps", testGetHttps),
@@ -42,9 +40,6 @@ extension SwiftHTTPTests {
             ("testProxyPlaintext", testProxyPlaintext),
             ("testProxyTLS", testProxyTLS),
             ("testUploadStreaming", testUploadStreaming),
-            ("testProxyStreaming", testProxyStreaming),
-            ("testProxyStreamingFailure", testProxyStreamingFailure),
-            ("testUploadStreamingBackpressure", testUploadStreamingBackpressure),
         ]
     }
 }

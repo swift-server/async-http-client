@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Foundation
-@testable import NIOHTTPClient
+import NIOHTTPClient
 import XCTest
 
 class HTTPCookieTests: XCTestCase {
