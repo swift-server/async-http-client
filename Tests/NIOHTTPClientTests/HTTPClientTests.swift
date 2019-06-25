@@ -18,7 +18,7 @@ import NIOHTTP1
 import NIOHTTPClient
 import XCTest
 
-class SwiftHTTPTests: XCTestCase {
+class HTTPClientTests: XCTestCase {
     typealias Request = HTTPClient.Request
 
     func testRequestURI() throws {

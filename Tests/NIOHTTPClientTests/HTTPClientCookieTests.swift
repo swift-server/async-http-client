@@ -16,7 +16,7 @@ import Foundation
 import NIOHTTPClient
 import XCTest
 
-class HTTPCookieTests: XCTestCase {
+class HTTPClientCookieTests: XCTestCase {
     func testCookie() {
         let v = "key=value; Path=/path; Domain=example.com; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Max-Age=42; Secure; HttpOnly"
         let c = HTTPClient.Cookie(from: v, defaultDomain: "exampe.org")!

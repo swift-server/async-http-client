@@ -18,7 +18,7 @@ import NIOHTTP1
 @testable import NIOHTTPClient
 import XCTest
 
-class SwiftHTTPInternalTests: XCTestCase {
+class HTTPClientInternalTests: XCTestCase {
     typealias Request = HTTPClient.Request
     typealias Task = HTTPClient.Task
 
