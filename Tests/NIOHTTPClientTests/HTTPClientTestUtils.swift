@@ -15,13 +15,21 @@
 import Foundation
 import NIO
 import NIOHTTP1
-@testable import NIOHTTPClient
+import NIOHTTPClient
 import NIOSSL
 
 class TestHTTPDelegate: HTTPClientResponseDelegate {
     typealias Response = Void
 
-    var state = ResponseAccumulator.State.idle
+    enum State {
+        case idle
+        case head(HTTPResponseHead)
+        case body(HTTPResponseHead, ByteBuffer)
+        case end
+        case error(Error)
+    }
+
+    var state = State.idle
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         self.state = .head(head)

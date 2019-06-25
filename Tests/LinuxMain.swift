@@ -26,7 +26,8 @@ import XCTest
     @testable import NIOHTTPClientTests
 
     XCTMain([
-        testCase(HTTPCookieTests.allTests),
-        testCase(SwiftHTTPTests.allTests),
+        testCase(HTTPClientCookieTests.allTests),
+        testCase(HTTPClientInternalTests.allTests),
+        testCase(HTTPClientTests.allTests),
     ])
 #endif
