@@ -44,6 +44,25 @@ class HTTPClientTests: XCTestCase {
         let response = try httpClient.get(url: "http://localhost:\(httpBin.port)/get").wait()
         XCTAssertEqual(.ok, response.status)
     }
+    
+    func testGetWithSharedEventLoopGroup() throws {
+        let httpBin = HttpBin()
+        let elg = MultiThreadedEventLoopGroup(numberOfThreads: 8)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(elg))
+        defer {
+            try! elg.syncShutdownGracefully()
+            httpBin.shutdown()
+        }
+        
+        let delegate = TestHTTPDelegate()
+        let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/events/10/1")
+        let task = httpClient.execute(request: request, delegate: delegate)
+        let expectedEventLoop = task.eventLoop
+        task.futureResult.whenComplete { (_) in
+            XCTAssertTrue(expectedEventLoop.inEventLoop)
+        }
+        try task.wait()
+    }
 
     func testPost() throws {
         let httpBin = HttpBin()
