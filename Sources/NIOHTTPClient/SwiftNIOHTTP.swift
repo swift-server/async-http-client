@@ -104,13 +104,27 @@ public class HTTPClient {
     }
 
     public func execute(request: Request, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
-        let accumulator = ResponseAccumulator(request: request)
-        return self.execute(request: request, delegate: accumulator, timeout: timeout).futureResult
+        do {
+            let requestWithHost = try RequestWithHost(request: request)
+            let accumulator = ResponseAccumulator(host: requestWithHost.host)
+            return self.execute(request: requestWithHost, delegate: accumulator, timeout: timeout).futureResult
+        } catch {
+            return self.eventLoopGroup.next().makeFailedFuture(error)
+        }
     }
 
     public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, timeout: Timeout? = nil) -> Task<T.Response> {
+        do {
+            return try self.execute(request: RequestWithHost(request: request), delegate: delegate, timeout: timeout)
+        } catch {
+            return Task(eventLoop: self.eventLoopGroup.next(), error: error)
+        }
+    }
+
+    private func execute<T: HTTPClientResponseDelegate>(request: RequestWithHost, delegate: T, timeout: Timeout? = nil) -> Task<T.Response> {
         let timeout = timeout ?? configuration.timeout
         let eventLoop = self.eventLoopGroup.next()
+        let task = Task<T.Response>(eventLoop: eventLoop)
 
         let redirectHandler: RedirectHandler<T.Response>?
         if self.configuration.followRedirects {
@@ -120,8 +134,6 @@ public class HTTPClient {
         } else {
             redirectHandler = nil
         }
-
-        let task = Task<T.Response>(eventLoop: eventLoop)
 
         var bootstrap = ClientBootstrap(group: self.eventLoopGroup)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
@@ -166,7 +178,7 @@ public class HTTPClient {
         return task
     }
 
-    private func resolveAddress(request: Request, proxy: Proxy?) -> (host: String, port: Int) {
+    private func resolveAddress(request: RequestWithHost, proxy: Proxy?) -> (host: String, port: Int) {
         switch self.configuration.proxy {
         case .none:
             return (request.host, request.port)
@@ -213,7 +225,7 @@ public class HTTPClient {
 }
 
 private extension ChannelPipeline {
-    func addProxyHandler(for request: HTTPClient.Request, decoder: ByteToMessageHandler<HTTPResponseDecoder>, encoder: HTTPRequestEncoder, tlsConfiguration: TLSConfiguration?) -> EventLoopFuture<Void> {
+    func addProxyHandler(for request: HTTPClient.RequestWithHost, decoder: ByteToMessageHandler<HTTPResponseDecoder>, encoder: HTTPRequestEncoder, tlsConfiguration: TLSConfiguration?) -> EventLoopFuture<Void> {
         let handler = HTTPClientProxyHandler(host: request.host, port: request.port, onConnect: { channel in
             channel.pipeline.removeHandler(decoder).flatMap {
                 return channel.pipeline.addHandler(
@@ -227,7 +239,7 @@ private extension ChannelPipeline {
         return self.addHandler(handler)
     }
 
-    func addSSLHandlerIfNeeded(for request: HTTPClient.Request, tlsConfiguration: TLSConfiguration?) -> EventLoopFuture<Void> {
+    func addSSLHandlerIfNeeded(for request: HTTPClient.RequestWithHost, tlsConfiguration: TLSConfiguration?) -> EventLoopFuture<Void> {
         guard request.useTLS else {
             return self.eventLoop.makeSucceededFuture(())
         }

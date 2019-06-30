@@ -23,11 +23,8 @@ class HTTPClientTests: XCTestCase {
 
     func testRequestURI() throws {
         let request1 = try Request(url: "https://someserver.com:8888/some/path?foo=bar")
-        XCTAssertEqual(request1.host, "someserver.com")
         XCTAssertEqual(request1.url.path, "/some/path")
         XCTAssertEqual(request1.url.query!, "foo=bar")
-        XCTAssertEqual(request1.port, 8888)
-        XCTAssertTrue(request1.useTLS)
 
         let request2 = try Request(url: "https://someserver.com")
         XCTAssertEqual(request2.url.path, "")

@@ -20,7 +20,16 @@ import XCTest
 
 class HTTPClientInternalTests: XCTestCase {
     typealias Request = HTTPClient.Request
+    typealias RequestWithHost = HTTPClient.RequestWithHost
     typealias Task = HTTPClient.Task
+
+    func testRequestWithHost() throws {
+        let request = try RequestWithHost(request: Request(url: "https://someserver.com:8888/some/path?foo=bar"))
+
+        XCTAssertEqual(request.host, "someserver.com")
+        XCTAssertEqual(request.port, 8888)
+        XCTAssertTrue(request.useTLS)
+    }
 
     func testHTTPPartsHandler() throws {
         let channel = EmbeddedChannel()
@@ -30,7 +39,7 @@ class HTTPClientInternalTests: XCTestCase {
         try channel.pipeline.addHandler(recorder).wait()
         try channel.pipeline.addHandler(TaskHandler(task: task, delegate: TestHTTPDelegate(), redirectHandler: nil)).wait()
 
-        var request = try Request(url: "http://localhost/get")
+        var request = try RequestWithHost(request: Request(url: "http://localhost/get"))
         request.headers.add(name: "X-Test-Header", value: "X-Test-Value")
         request.body = .string("1234")
 

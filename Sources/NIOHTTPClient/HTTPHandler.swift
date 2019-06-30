@@ -63,8 +63,6 @@ extension HTTPClient {
         public var version: HTTPVersion
         public var method: HTTPMethod
         public var url: URL
-        public var scheme: String
-        public var host: String
         public var headers: HTTPHeaders
         public var body: Body?
 
@@ -73,36 +71,89 @@ extension HTTPClient {
                 throw HTTPClientError.invalidURL
             }
 
-            try self.init(url: url, version: version, method: method, headers: headers, body: body)
+            self.init(url: url, version: version, method: method, headers: headers, body: body)
         }
 
-        public init(url: URL, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
-            guard let scheme = url.scheme else {
-                throw HTTPClientError.emptyScheme
-            }
-
-            guard Request.isSchemeSupported(scheme: scheme) else {
-                throw HTTPClientError.unsupportedScheme(scheme)
-            }
-
-            guard let host = url.host else {
-                throw HTTPClientError.emptyHost
-            }
-
+        public init(url: URL, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) {
             self.version = version
             self.method = method
             self.url = url
-            self.scheme = scheme
-            self.host = host
             self.headers = headers
             self.body = body
         }
+    }
 
-        public var useTLS: Bool {
+    struct RequestWithHost {
+        var request: Request
+        var host: String
+
+        init(request: Request) throws {
+            guard let host = request.url.host else {
+                throw HTTPClientError.emptyHost
+            }
+
+            guard let scheme = request.url.scheme else {
+                throw HTTPClientError.emptyScheme
+            }
+
+            guard RequestWithHost.isSchemeSupported(scheme: scheme) else {
+                throw HTTPClientError.unsupportedScheme(scheme)
+            }
+
+            self.request = request
+            self.host = host
+        }
+
+        var version: HTTPVersion {
+            get {
+                return self.request.version
+            }
+            set {
+                self.request.version = newValue
+            }
+        }
+
+        var method: HTTPMethod {
+            get {
+                return self.request.method
+            }
+            set {
+                self.request.method = newValue
+            }
+        }
+
+        var url: URL {
+            get {
+                return self.request.url
+            }
+            set {
+                self.request.url = newValue
+            }
+        }
+
+        var headers: HTTPHeaders {
+            get {
+                return self.request.headers
+            }
+            set {
+                self.request.headers = newValue
+            }
+        }
+
+        var body: Body? {
+            get {
+                return self.request.body
+            }
+            set {
+                self.request.body = newValue
+            }
+        }
+
+        var useTLS: Bool {
             return self.url.scheme == "https"
         }
 
-        public var port: Int {
+        var port: Int {
             return self.url.port ?? (self.useTLS ? 443 : 80)
         }
 
@@ -131,10 +182,10 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
     }
 
     var state = State.idle
-    let request: HTTPClient.Request
+    let host: String
 
-    init(request: HTTPClient.Request) {
-        self.request = request
+    init(host: String) {
+        self.host = host
     }
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
@@ -180,9 +231,9 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         case .idle:
             preconditionFailure("no head received before end")
         case .head(let head):
-            return Response(host: self.request.host, status: head.status, headers: head.headers, body: nil)
+            return Response(host: self.host, status: head.status, headers: head.headers, body: nil)
         case .body(let head, let body):
-            return Response(host: self.request.host, status: head.status, headers: head.headers, body: body)
+            return Response(host: self.host, status: head.status, headers: head.headers, body: body)
         case .end:
             preconditionFailure("request already processed")
         case .error(let error):
@@ -252,6 +303,11 @@ extension HTTPClient {
             self.lock = Lock()
         }
 
+        convenience init(eventLoop: EventLoop, error: Error) {
+            self.init(eventLoop: eventLoop)
+            self.fail(error)
+        }
+
         public var futureResult: EventLoopFuture<Response> {
             return self.promise.futureResult
         }
@@ -289,7 +345,7 @@ extension HTTPClient {
 internal struct TaskCancelEvent {}
 
 internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler, ChannelOutboundHandler {
-    typealias OutboundIn = HTTPClient.Request
+    typealias OutboundIn = HTTPClient.RequestWithHost
     typealias InboundIn = HTTPClientResponsePart
     typealias OutboundOut = HTTPClientRequestPart
 
@@ -343,7 +399,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             self.delegate.didSendRequestHead(task: self.task, head)
         }
 
-        self.writeBody(request: request, context: context).whenComplete { result in
+        self.writeBody(request: request.request, context: context).whenComplete { result in
             switch result {
             case .success:
                 context.write(self.wrapOutboundOut(.end(nil)), promise: promise)
@@ -493,8 +549,8 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
 }
 
 internal struct RedirectHandler<T> {
-    let request: HTTPClient.Request
-    let execute: (HTTPClient.Request) -> HTTPClient.Task<T>
+    let request: HTTPClient.RequestWithHost
+    let execute: (HTTPClient.RequestWithHost) -> HTTPClient.Task<T>
 
     func redirectTarget(status: HTTPResponseStatus, headers: HTTPHeaders) -> URL? {
         switch status {
@@ -512,7 +568,7 @@ internal struct RedirectHandler<T> {
             return nil
         }
 
-        guard HTTPClient.Request.isSchemeSupported(scheme: url.scheme) else {
+        guard HTTPClient.RequestWithHost.isSchemeSupported(scheme: url.scheme) else {
             return nil
         }
 
@@ -535,9 +591,7 @@ internal struct RedirectHandler<T> {
             preconditionFailure("redirectURL doesn't contain a host")
         }
 
-        if let redirectScheme = redirectURL.scheme {
-            request.scheme = redirectScheme
-        } else {
+        if redirectURL.scheme == nil {
             preconditionFailure("redirectURL doesn't contain a scheme")
         }
 
