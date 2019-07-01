@@ -25,6 +25,7 @@ import XCTest
 extension HTTPClientInternalTests {
     static var allTests: [(String, (HTTPClientInternalTests) -> () throws -> Void)] {
         return [
+            ("testRequestWithHost", testRequestWithHost),
             ("testHTTPPartsHandler", testHTTPPartsHandler),
             ("testHTTPPartsHandlerMultiBody", testHTTPPartsHandlerMultiBody),
             ("testProxyStreaming", testProxyStreaming),
