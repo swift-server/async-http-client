@@ -1,21 +1,21 @@
 //===----------------------------------------------------------------------===//
 //
-// This source file is part of the SwiftNIOHTTPClient open source project
+// This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2019 Swift Server Working Group and the SwiftNIOHTTPClient project authors
+// Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
-// See CONTRIBUTORS.txt for the list of SwiftNIOHTTPClient project authors
+// See CONTRIBUTORS.txt for the list of AsyncHTTPClient project authors
 //
 // SPDX-License-Identifier: Apache-2.0
 //
 //===----------------------------------------------------------------------===//
 
+import AsyncHTTPClient
 import NIO
 import NIOFoundationCompat
 import NIOHTTP1
-import NIOHTTPClient
 import XCTest
 
 class HTTPClientTests: XCTestCase {
@@ -134,6 +134,18 @@ class HTTPClientTests: XCTestCase {
         let decoder = JSONDecoder()
         let hostName = try decoder.decode([String: String].self, from: responseData)["data"]
         XCTAssert(hostName == "127.0.0.1")
+    }
+    
+    func testPercentEncoded() throws {
+        let httpBin = HttpBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+        
+        let response = try httpClient.get(url: "http://localhost:\(httpBin.port)/percent%20encoded").wait()
+        XCTAssertEqual(.ok, response.status)
     }
 
     func testMultipleContentLengthHeaders() throws {

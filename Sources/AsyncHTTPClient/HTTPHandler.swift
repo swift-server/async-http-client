@@ -1,12 +1,12 @@
 //===----------------------------------------------------------------------===//
 //
-// This source file is part of the SwiftNIOHTTPClient open source project
+// This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2019 Swift Server Working Group and the SwiftNIOHTTPClient project authors
+// Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
-// See CONTRIBUTORS.txt for the list of SwiftNIOHTTPClient project authors
+// See CONTRIBUTORS.txt for the list of AsyncHTTPClient project authors
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -228,7 +228,8 @@ extension HTTPClientResponseDelegate {
 
 internal extension URL {
     var uri: String {
-        return path.isEmpty ? "/" : path + (query.map { "?" + $0 } ?? "")
+        let urlEncodedPath = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
+        return path.isEmpty ? "/" : urlEncodedPath + (query.map { "?" + $0 } ?? "")
     }
 
     func hasTheSameOrigin(as other: URL) -> Bool {
