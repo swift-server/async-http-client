@@ -111,7 +111,7 @@ httpClient.execute(request: request, timeout: timeout)
 ### Streaming
 When dealing with larger amount of data, it's critical to stream the response body instead of aggregating in-memory. Handling a response stream is done using a delegate protocol. The following example demonstrates how to count the number of bytes in a streaming response body:
 ```swift
-class CountingDelegate: HTTPResponseDelegate {
+class CountingDelegate: HTTPClientResponseDelegate {
     typealias Response = Int
 
     var count = 0
@@ -152,7 +152,7 @@ class CountingDelegate: HTTPResponseDelegate {
     }
 }
 
-let request = try HTTPRequest(url: "https://swift.org")
+let request = try HTTPClient.Request(url: "https://swift.org")
 let delegate = CountingDelegate()
 
 try httpClient.execute(request: request, delegate: delegate).future.whenSuccess { count in

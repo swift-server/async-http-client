@@ -228,7 +228,8 @@ extension HTTPClientResponseDelegate {
 
 internal extension URL {
     var uri: String {
-        return path.isEmpty ? "/" : path + (query.map { "?" + $0 } ?? "")
+        let urlEncodedPath = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
+        return path.isEmpty ? "/" : urlEncodedPath + (query.map { "?" + $0 } ?? "")
     }
 
     func hasTheSameOrigin(as other: URL) -> Bool {

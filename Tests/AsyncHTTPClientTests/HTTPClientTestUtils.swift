@@ -246,6 +246,14 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 headers.add(name: "Location", value: "http://127.0.0.1:\(port)/echohostheader")
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
                 return
+            // Since this String is taken from URL.path, the percent encoding has been removed
+            case "/percent encoded":
+                if req.method != .GET {
+                    self.resps.append(HTTPResponseBuilder(status: .methodNotAllowed))
+                    return
+                }
+                self.resps.append(HTTPResponseBuilder(status: .ok))
+                return
             case "/echohostheader":
                 var builder = HTTPResponseBuilder(status: .ok)
                 let hostValue = req.headers["Host"].first ?? ""

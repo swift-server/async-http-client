@@ -135,6 +135,18 @@ class HTTPClientTests: XCTestCase {
         let hostName = try decoder.decode([String: String].self, from: responseData)["data"]
         XCTAssert(hostName == "127.0.0.1")
     }
+    
+    func testPercentEncoded() throws {
+        let httpBin = HttpBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+        
+        let response = try httpClient.get(url: "http://localhost:\(httpBin.port)/percent%20encoded").wait()
+        XCTAssertEqual(.ok, response.status)
+    }
 
     func testMultipleContentLengthHeaders() throws {
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
