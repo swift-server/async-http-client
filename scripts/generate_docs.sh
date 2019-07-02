@@ -1,13 +1,13 @@
 #!/bin/bash
 ##===----------------------------------------------------------------------===##
 ##
-## This source file is part of the SwiftNIOHTTPClient open source project
+## This source file is part of the AsyncHTTPClient open source project
 ##
-## Copyright (c) 2018-2019 Swift Server Working Group and the SwiftNIOHTTPClient project authors
+## Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
 ## Licensed under Apache License v2.0
 ##
 ## See LICENSE.txt for license information
-## See CONTRIBUTORS.txt for the list of SwiftNIOHTTPClient project authors
+## See CONTRIBUTORS.txt for the list of AsyncHTTPClient project authors
 ##
 ## SPDX-License-Identifier: Apache-2.0
 ##
@@ -18,7 +18,7 @@ set -e
 my_path="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 root_path="$my_path/.."
 version=$(git describe --abbrev=0 --tags || echo "master")
-modules=(NIOHTTPClient)
+modules=(AsyncHTTPClient)
 
 if [[ "$(uname -s)" == "Linux" ]]; then
   # build code if required
@@ -45,7 +45,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
 fi
 
 [[ -d docs/$version ]] || mkdir -p docs/$version
-[[ -d swift-nio-http-client.xcodeproj ]] || swift package generate-xcodeproj
+[[ -d async-http-client.xcodeproj ]] || swift package generate-xcodeproj
 
 # run jazzy
 if ! command -v jazzy > /dev/null; then
@@ -54,20 +54,20 @@ fi
 
 module_switcher="docs/$version/README.md"
 jazzy_args=(--clean
-            --author 'SwiftNIOHTTPClient team'
+            --author 'AsyncHTTPClient team'
             --readme "$module_switcher"
-            --author_url https://github.com/swift-server/swift-nio-http-client
-            --github_url https://github.com/swift-server/swift-nio-http-client
-            --github-file-prefix "https://github.com/swift-server/swift-nio-http-client/tree/$version"
+            --author_url https://github.com/swift-server/async-http-client
+            --github_url https://github.com/swift-server/async-http-client
+            --github-file-prefix "https://github.com/swift-server/async-http-client/tree/$version"
             --theme fullwidth
-            --xcodebuild-arguments -scheme,swift-nio-http-client-Package)
+            --xcodebuild-arguments -scheme,async-http-client-Package)
 cat > "$module_switcher" <<"EOF"
-# SwiftNIOHTTPClient Docs
+# AsyncHTTPClient Docs
 
-SwiftNIOHTTPClient is a Swift HTTTP Client package.
+AsyncHTTPClient is a Swift HTTP Client package.
 
-To get started with SwiftNIOHTTPClient, [`import NIOHTTPClient`](../NIOHTTPClient/index.html). The
-most important type is [`HTTPClient`](https://swift-server.github.io/swift-nio-http-client/docs/current/NIOHTTPClient/Classes/HTTPClient.html)
+To get started with AsyncHTTPClient, [`import AsyncHTTPClient`](../AsyncHTTPClient/index.html). The
+most important type is [`HTTPClient`](https://swift-server.github.io/async-http-client/docs/current/AsyncHTTPClient/Classes/HTTPClient.html)
 which you can use to emit log messages.
 
 EOF
@@ -91,7 +91,7 @@ if [[ $CI == true ]]; then
   cp -r "$tmp/docs" .
   cp -r "docs/$version" docs/current
   git add --all docs
-  echo '<html><head><meta http-equiv="refresh" content="0; url=docs/current/NIOHTTPClient/index.html" /></head></html>' > index.html
+  echo '<html><head><meta http-equiv="refresh" content="0; url=docs/current/AsyncHTTPClient/index.html" /></head></html>' > index.html
   git add index.html
   touch .nojekyll
   git add .nojekyll

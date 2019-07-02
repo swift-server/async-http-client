@@ -6,13 +6,13 @@ version: "3"
 services:
 
   runtime-setup:
-    image: swift-nio-http-client:default
+    image: async-http-client:default
     build:
       context: .
       dockerfile: Dockerfile
 
   common: &common
-    image: swift-nio-http-client:default
+    image: async-http-client:default
     depends_on: [runtime-setup]
     volumes:
       - ~/.ssh:/root/.ssh

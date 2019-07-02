@@ -1,21 +1,21 @@
 //===----------------------------------------------------------------------===//
 //
-// This source file is part of the SwiftNIOHTTPClient open source project
+// This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2019 Swift Server Working Group and the SwiftNIOHTTPClient project authors
+// Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
-// See CONTRIBUTORS.txt for the list of SwiftNIOHTTPClient project authors
+// See CONTRIBUTORS.txt for the list of AsyncHTTPClient project authors
 //
 // SPDX-License-Identifier: Apache-2.0
 //
 //===----------------------------------------------------------------------===//
 
+import AsyncHTTPClient
 import Foundation
 import NIO
 import NIOHTTP1
-import NIOHTTPClient
 import NIOSSL
 
 class TestHTTPDelegate: HTTPClientResponseDelegate {
@@ -245,6 +245,14 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 var headers = HTTPHeaders()
                 headers.add(name: "Location", value: "http://127.0.0.1:\(port)/echohostheader")
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
+                return
+            // Since this String is taken from URL.path, the percent encoding has been removed
+            case "/percent encoded":
+                if req.method != .GET {
+                    self.resps.append(HTTPResponseBuilder(status: .methodNotAllowed))
+                    return
+                }
+                self.resps.append(HTTPResponseBuilder(status: .ok))
                 return
             case "/echohostheader":
                 var builder = HTTPResponseBuilder(status: .ok)
