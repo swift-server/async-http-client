@@ -1,13 +1,13 @@
 #!/bin/bash
 ##===----------------------------------------------------------------------===##
 ##
-## This source file is part of the SwiftNIOHTTPClient open source project
+## This source file is part of the AsyncHTTPClient open source project
 ##
-## Copyright (c) 2018-2019 Swift Server Working Group and the SwiftNIOHTTPClient project authors
+## Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
 ## Licensed under Apache License v2.0
 ##
 ## See LICENSE.txt for license information
-## See CONTRIBUTORS.txt for the list of SwiftNIOHTTPClient project authors
+## See CONTRIBUTORS.txt for the list of AsyncHTTPClient project authors
 ##
 ## SPDX-License-Identifier: Apache-2.0
 ##
@@ -29,7 +29,7 @@ else
 fi
 
 printf "=> Checking license headers... "
-tmp=$(mktemp /tmp/.swift-nio-http-client-sanity_XXXXXX)
+tmp=$(mktemp /tmp/.async-http-client-sanity_XXXXXX)
 
 for language in swift-or-c bash dtrace; do
   declare -a matching_files
@@ -43,13 +43,13 @@ for language in swift-or-c bash dtrace; do
         cat > "$tmp" <<"EOF"
 //===----------------------------------------------------------------------===//
 //
-// This source file is part of the SwiftNIOHTTPClient open source project
+// This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2019 Swift Server Working Group and the SwiftNIOHTTPClient project authors
+// Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
-// See CONTRIBUTORS.txt for the list of SwiftNIOHTTPClient project authors
+// See CONTRIBUTORS.txt for the list of AsyncHTTPClient project authors
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -62,13 +62,13 @@ EOF
 #!/bin/bash
 ##===----------------------------------------------------------------------===##
 ##
-## This source file is part of the SwiftNIOHTTPClient open source project
+## This source file is part of the AsyncHTTPClient open source project
 ##
-## Copyright (c) 2018-2019 Swift Server Working Group and the SwiftNIOHTTPClient project authors
+## Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
 ## Licensed under Apache License v2.0
 ##
 ## See LICENSE.txt for license information
-## See CONTRIBUTORS.txt for the list of SwiftNIOHTTPClient project authors
+## See CONTRIBUTORS.txt for the list of AsyncHTTPClient project authors
 ##
 ## SPDX-License-Identifier: Apache-2.0
 ##
@@ -81,13 +81,13 @@ EOF
 #!/usr/sbin/dtrace -q -s
 /*===----------------------------------------------------------------------===*
  *
- *  This source file is part of the SwiftNIOHTTPClient open source project
+ *  This source file is part of the AsyncHTTPClient open source project
  *
- *  Copyright (c) 2018-2019 Swift Server Working Group and the SwiftNIOHTTPClient project authors
+ *  Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
  *  Licensed under Apache License v2.0
  *
  *  See LICENSE.txt for license information
- *  See CONTRIBUTORS.txt for the list of SwiftNIOHTTPClient project authors
+ *  See CONTRIBUTORS.txt for the list of AsyncHTTPClient project authors
  *
  *  SPDX-License-Identifier: Apache-2.0
  *

@@ -1,13 +1,13 @@
 // swift-tools-version:5.0
 //===----------------------------------------------------------------------===//
 //
-// This source file is part of the SwiftNIOHTTPClient open source project
+// This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2019 Swift Server Working Group and the SwiftNIOHTTPClient project authors
+// Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
-// See CONTRIBUTORS.txt for the list of SwiftNIOHTTPClient project authors
+// See CONTRIBUTORS.txt for the list of AsyncHTTPClient project authors
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -16,9 +16,9 @@
 import PackageDescription
 
 let package = Package(
-    name: "swift-nio-http-client",
+    name: "async-http-client",
     products: [
-        .library(name: "NIOHTTPClient", targets: ["NIOHTTPClient"]),
+        .library(name: "AsyncHTTPClient", targets: ["AsyncHTTPClient"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
@@ -26,12 +26,12 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "NIOHTTPClient",
+            name: "AsyncHTTPClient",
             dependencies: ["NIO", "NIOHTTP1", "NIOSSL", "NIOConcurrencyHelpers"]
         ),
         .testTarget(
-            name: "NIOHTTPClientTests",
-            dependencies: ["NIOHTTPClient", "NIOFoundationCompat"]
+            name: "AsyncHTTPClientTests",
+            dependencies: ["AsyncHTTPClient", "NIOFoundationCompat"]
         ),
     ]
 )

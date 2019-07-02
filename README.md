@@ -1,4 +1,4 @@
-# SwiftNIOHTTPClient
+# AsyncHTTPClient
 This package provides simple HTTP Client library built on top of SwiftNIO.
 
 This library provides the following:
@@ -10,7 +10,7 @@ This library provides the following:
 
 ---
 
-**NOTE**: You will need [Xcode 10.2](https://itunes.apple.com/us/app/xcode/id497799835) or [Swift 5.0](https://swift.org/download/#swift-50) to try out `SwiftNIOHTTPClient`.
+**NOTE**: You will need [Xcode 10.2](https://itunes.apple.com/us/app/xcode/id497799835) or [Swift 5.0](https://swift.org/download/#swift-50) to try out `AsyncHTTPClient`.
 
 ---
 
@@ -21,18 +21,18 @@ Add the following entry in your <code>Package.swift</code> to start using <code>
 
 ```swift
 // it's early days here so we haven't tagged a version yet, but will soon
-.package(url: "https://github.com/swift-server/swift-nio-http-client.git", .branch("master"))
+.package(url: "https://github.com/swift-server/async-http-client.git", .branch("master"))
 ```
-and  `NIOHTTPClient` dependency to your target:
+and  `AsyncHTTPClient` dependency to your target:
 ```swift
-.target(name: "MyApp", dependencies: ["NIOHTTPClient"]),
+.target(name: "MyApp", dependencies: ["AsyncHTTPClient"]),
 ```
 
 #### Request-Response API
 The code snippet below illustrates how to make a simple GET request to a remote server:
 
 ```swift
-import NIOHTTPClient
+import AsyncHTTPClient
 
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
 httpClient.get(url: "https://swift.org").whenComplete { result in
@@ -63,7 +63,7 @@ In this case shutdown of the client is not neccecary.
 
 Most common HTTP methods are supported out of the box. In case you need to have more control over the method, or you want to add headers or body, use the `HTTPRequest` struct:
 ```swift
-import NIOHTTPClient
+import AsyncHTTPClient
 
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
 defer {
