@@ -60,22 +60,20 @@ extension HTTPClient {
     }
 
     public struct Request {
-        public var version: HTTPVersion
         public var method: HTTPMethod
         public var url: URL
         public var headers: HTTPHeaders
         public var body: Body?
 
-        public init(url: String, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+        public init(url: String, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
             guard let url = URL(string: url) else {
                 throw HTTPClientError.invalidURL
             }
 
-            self.init(url: url, version: version, method: method, headers: headers, body: body)
+            self.init(url: url, method: method, headers: headers, body: body)
         }
 
-        public init(url: URL, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) {
-            self.version = version
+        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) {
             self.method = method
             self.url = url
             self.headers = headers
@@ -102,15 +100,6 @@ extension HTTPClient {
 
             self.request = request
             self.host = host
-        }
-
-        var version: HTTPVersion {
-            get {
-                return self.request.version
-            }
-            set {
-                self.request.version = newValue
-            }
         }
 
         var method: HTTPMethod {
@@ -377,10 +366,10 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
         self.state = .idle
         let request = unwrapOutboundIn(data)
 
-        var head = HTTPRequestHead(version: request.version, method: request.method, uri: request.url.uri)
+        var head = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: request.method, uri: request.url.uri)
         var headers = request.headers
 
-        if request.version.major == 1, request.version.minor == 1, !request.headers.contains(name: "Host") {
+        if !request.headers.contains(name: "Host") {
             headers.add(name: "Host", value: request.host)
         }
 
