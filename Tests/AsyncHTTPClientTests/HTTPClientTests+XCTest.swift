@@ -27,6 +27,7 @@ extension HTTPClientTests {
         return [
             ("testRequestURI", testRequestURI),
             ("testGet", testGet),
+            ("testGetWithSharedEventLoopGroup", testGetWithSharedEventLoopGroup),
             ("testPost", testPost),
             ("testGetHttps", testGetHttps),
             ("testPostHttps", testPostHttps),

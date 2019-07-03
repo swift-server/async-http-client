@@ -123,7 +123,7 @@ public class HTTPClient {
 
         let task = Task<T.Response>(eventLoop: eventLoop)
 
-        var bootstrap = ClientBootstrap(group: self.eventLoopGroup)
+        var bootstrap = ClientBootstrap(group: eventLoop)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
             .channelInitializer { channel in
                 let encoder = HTTPRequestEncoder()
