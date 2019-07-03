@@ -316,6 +316,7 @@ extension HTTPClient {
         }
 
         func setChannel(_ channel: Channel) -> Channel {
+            precondition(self.eventLoop === channel.eventLoop, "Channel must use same event loop as this task.")
             return self.lock.withLock {
                 self.channel = channel
                 return channel

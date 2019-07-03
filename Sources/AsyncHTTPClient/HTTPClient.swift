@@ -58,84 +58,83 @@ public class HTTPClient {
         }
     }
 
-    public func get(url: String, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
+    public func get(url: String, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try Request(url: url, method: .GET)
-            return self.execute(request: request, timeout: timeout)
+            return self.execute(request: request, deadline: deadline)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
     }
 
-    public func post(url: String, body: Body? = nil, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
+    public func post(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .POST, body: body)
-            return self.execute(request: request, timeout: timeout)
+            return self.execute(request: request, deadline: deadline)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
     }
 
-    public func patch(url: String, body: Body? = nil, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
+    public func patch(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .PATCH, body: body)
-            return self.execute(request: request, timeout: timeout)
+            return self.execute(request: request, deadline: deadline)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
     }
 
-    public func put(url: String, body: Body? = nil, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
+    public func put(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .PUT, body: body)
-            return self.execute(request: request, timeout: timeout)
+            return self.execute(request: request, deadline: deadline)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
     }
 
-    public func delete(url: String, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
+    public func delete(url: String, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try Request(url: url, method: .DELETE)
-            return self.execute(request: request, timeout: timeout)
+            return self.execute(request: request, deadline: deadline)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
     }
 
-    public func execute(request: Request, timeout: Timeout? = nil) -> EventLoopFuture<Response> {
+    public func execute(request: Request, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let requestWithHost = try RequestWithHost(request: request)
             let accumulator = ResponseAccumulator(host: requestWithHost.host)
-            return self.execute(request: requestWithHost, delegate: accumulator, timeout: timeout).futureResult
+            return self.execute(request: requestWithHost, delegate: accumulator, deadline: deadline).futureResult
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
     }
 
-    public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, timeout: Timeout? = nil) -> Task<T.Response> {
+    public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, deadline: NIODeadline? = nil) -> Task<T.Response> {
         do {
-            return try self.execute(request: RequestWithHost(request: request), delegate: delegate, timeout: timeout)
+            return try self.execute(request: RequestWithHost(request: request), delegate: delegate, deadline: deadline)
         } catch {
             return Task(eventLoop: self.eventLoopGroup.next(), error: error)
         }
     }
 
-    private func execute<T: HTTPClientResponseDelegate>(request: RequestWithHost, delegate: T, timeout: Timeout? = nil) -> Task<T.Response> {
-        let timeout = timeout ?? configuration.timeout
+    private func execute<T: HTTPClientResponseDelegate>(request: RequestWithHost, delegate: T, deadline: NIODeadline? = nil) -> Task<T.Response> {
         let eventLoop = self.eventLoopGroup.next()
         let task = Task<T.Response>(eventLoop: eventLoop)
 
         let redirectHandler: RedirectHandler<T.Response>?
         if self.configuration.followRedirects {
             redirectHandler = RedirectHandler<T.Response>(request: request) { newRequest in
-                self.execute(request: newRequest, delegate: delegate, timeout: timeout)
+                self.execute(request: newRequest, delegate: delegate, deadline: deadline)
             }
         } else {
             redirectHandler = nil
         }
 
-        var bootstrap = ClientBootstrap(group: self.eventLoopGroup)
+        var bootstrap = ClientBootstrap(group: eventLoop)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
             .channelInitializer { channel in
                 let encoder = HTTPRequestEncoder()
@@ -148,8 +147,8 @@ public class HTTPClient {
                         return channel.pipeline.addProxyHandler(for: request, decoder: decoder, encoder: encoder, tlsConfiguration: self.configuration.tlsConfiguration)
                     }
                 }.flatMap {
-                    if let readTimeout = timeout.read {
-                        return channel.pipeline.addHandler(IdleStateHandler(readTimeout: readTimeout))
+                    if let timeout = self.resolve(timeout: self.configuration.timeout.read, deadline: deadline) {
+                        return channel.pipeline.addHandler(IdleStateHandler(readTimeout: timeout))
                     } else {
                         return channel.eventLoop.makeSucceededFuture(())
                     }
@@ -159,8 +158,8 @@ public class HTTPClient {
                 }
             }
 
-        if let connectTimeout = timeout.connect {
-            bootstrap = bootstrap.connectTimeout(connectTimeout)
+        if let timeout = self.resolve(timeout: self.configuration.timeout.connect, deadline: deadline) {
+            bootstrap = bootstrap.connectTimeout(timeout)
         }
 
         let address = self.resolveAddress(request: request, proxy: self.configuration.proxy)
@@ -176,6 +175,19 @@ public class HTTPClient {
             }
 
         return task
+    }
+
+    private func resolve(timeout: TimeAmount?, deadline: NIODeadline?) -> TimeAmount? {
+        switch (timeout, deadline) {
+        case (.some(let timeout), .some(let deadline)):
+            return min(timeout, deadline - .now())
+        case (.some(let timeout), .none):
+            return timeout
+        case (.none, .some(let deadline)):
+            return deadline - .now()
+        case (.none, .none):
+            return nil
+        }
     }
 
     private func resolveAddress(request: RequestWithHost, proxy: Proxy?) -> (host: String, port: Int) {

@@ -41,6 +41,25 @@ class HTTPClientTests: XCTestCase {
         let response = try httpClient.get(url: "http://localhost:\(httpBin.port)/get").wait()
         XCTAssertEqual(.ok, response.status)
     }
+    
+    func testGetWithSharedEventLoopGroup() throws {
+        let httpBin = HttpBin()
+        let elg = MultiThreadedEventLoopGroup(numberOfThreads: 8)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(elg))
+        defer {
+            try! elg.syncShutdownGracefully()
+            httpBin.shutdown()
+        }
+        
+        let delegate = TestHTTPDelegate()
+        let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/events/10/1")
+        let task = httpClient.execute(request: request, delegate: delegate)
+        let expectedEventLoop = task.eventLoop
+        task.futureResult.whenComplete { (_) in
+            XCTAssertTrue(expectedEventLoop.inEventLoop)
+        }
+        try task.wait()
+    }
 
     func testPost() throws {
         let httpBin = HttpBin()
@@ -208,6 +227,22 @@ class HTTPClientTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(httpBin.port)/wait").wait(), "Should fail") { error in
+            guard case let error = error as? HTTPClientError, error == .readTimeout else {
+                return XCTFail("Should fail with readTimeout")
+            }
+        }
+    }
+
+    func testDeadline() throws {
+        let httpBin = HttpBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+
+        XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(httpBin.port)/wait", deadline: .now() + .milliseconds(150)).wait(), "Should fail") { error in
             guard case let error = error as? HTTPClientError, error == .readTimeout else {
                 return XCTFail("Should fail with readTimeout")
             }

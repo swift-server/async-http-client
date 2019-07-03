@@ -27,6 +27,7 @@ extension HTTPClientTests {
         return [
             ("testRequestURI", testRequestURI),
             ("testGet", testGet),
+            ("testGetWithSharedEventLoopGroup", testGetWithSharedEventLoopGroup),
             ("testPost", testPost),
             ("testGetHttps", testGetHttps),
             ("testPostHttps", testPostHttps),
@@ -37,6 +38,7 @@ extension HTTPClientTests {
             ("testStreaming", testStreaming),
             ("testRemoteClose", testRemoteClose),
             ("testReadTimeout", testReadTimeout),
+            ("testDeadline", testDeadline),
             ("testCancel", testCancel),
             ("testProxyPlaintext", testProxyPlaintext),
             ("testProxyTLS", testProxyTLS),
