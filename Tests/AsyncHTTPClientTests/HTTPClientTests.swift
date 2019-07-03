@@ -236,6 +236,22 @@ class HTTPClientTests: XCTestCase {
         }
     }
 
+    func testDeadline() throws {
+        let httpBin = HttpBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+
+        XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(httpBin.port)/wait", deadline: .now() + .milliseconds(150)).wait(), "Should fail") { error in
+            guard case let error = error as? HTTPClientError, error == .readTimeout else {
+                return XCTFail("Should fail with readTimeout")
+            }
+        }
+    }
+
     func testCancel() throws {
         let httpBin = HttpBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)

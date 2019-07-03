@@ -38,6 +38,7 @@ extension HTTPClientTests {
             ("testStreaming", testStreaming),
             ("testRemoteClose", testRemoteClose),
             ("testReadTimeout", testReadTimeout),
+            ("testDeadline", testDeadline),
             ("testCancel", testCancel),
             ("testProxyPlaintext", testProxyPlaintext),
             ("testProxyTLS", testProxyTLS),
