@@ -86,7 +86,7 @@ class HTTPClientInternalTests: XCTestCase {
                 var request = try Request(url: "http://localhost:\(httpBin.port)/events/10/1")
                 request.headers.add(name: "Accept", value: "text/event-stream")
 
-                let delegate = CopyingDelegate { part in
+                let delegate = HTTPClientCopyingDelegate { part in
                     writer.write(.byteBuffer(part))
                 }
                 return httpClient.execute(request: request, delegate: delegate).futureResult
@@ -122,7 +122,7 @@ class HTTPClientInternalTests: XCTestCase {
                 var request = try Request(url: "http://localhost:\(httpBin.port)/events/10/1")
                 request.headers.add(name: "Accept", value: "text/event-stream")
 
-                let delegate = CopyingDelegate { _ in
+                let delegate = HTTPClientCopyingDelegate { _ in
                     httpClient.eventLoopGroup.next().makeFailedFuture(HTTPClientError.invalidProxyResponse)
                 }
                 return httpClient.execute(request: request, delegate: delegate).futureResult
