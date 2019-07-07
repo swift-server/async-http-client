@@ -20,28 +20,49 @@ import NIOSSL
 
 extension HTTPClient {
 
+    /// Represent request body.
     public struct Body {
+        /// Chunk provider.
         public struct StreamWriter {
             let closure: (IOData) -> EventLoopFuture<Void>
 
+            /// Write data to upstream connection.
+            ///
+            /// - parameters:
+            ///     - data: Data to write.
             public func write(_ data: IOData) -> EventLoopFuture<Void> {
                 return self.closure(data)
             }
         }
 
+        /// Body size.
         public var length: Int?
+        /// Body chunk provider.
         public var stream: (StreamWriter) -> EventLoopFuture<Void>
 
+        /// Create and stream body using `ByteBuffer`.
+        ///
+        /// - parameters:
+        ///     - buffer: Body `ByteBuffer` representation.
         public static func byteBuffer(_ buffer: ByteBuffer) -> Body {
             return Body(length: buffer.readableBytes) { writer in
                 writer.write(.byteBuffer(buffer))
             }
         }
 
+        /// Create and stream body using `StreamWriter`.
+        ///
+        /// - parameters:
+        ///     - length: Body size.
+        ///     - stream: Body chunk provider.
         public static func stream(length: Int? = nil, _ stream: @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
             return Body(length: length, stream: stream)
         }
 
+        /// Create and stream body using `Data`.
+        ///
+        /// - parameters:
+        ///     - data: Body `Data` representation.
         public static func data(_ data: Data) -> Body {
             return Body(length: data.count) { writer in
                 var buffer = ByteBufferAllocator().buffer(capacity: data.count)
@@ -50,6 +71,10 @@ extension HTTPClient {
             }
         }
 
+        /// Create and stream body using `String`.
+        ///
+        /// - parameters:
+        ///     - string: Body `String` representation.
         public static func string(_ string: String) -> Body {
             return Body(length: string.utf8.count) { writer in
                 var buffer = ByteBufferAllocator().buffer(capacity: string.utf8.count)
@@ -59,13 +84,21 @@ extension HTTPClient {
         }
     }
 
+    /// Represent HTTP request.
     public struct Request {
+        /// Request HTTP version, defaults to `HTTP/1.1`.
         public var version: HTTPVersion
+        /// Request HTTP method, defaults to `GET`.
         public var method: HTTPMethod
+        /// Remote URL.
         public var url: URL
+        /// Remote HTTP scheme, resolved from `URL`.
         public var scheme: String
+        /// Remote host, resolved from `URL`.
         public var host: String
+        /// Request custom HTTP Headers, defaults to no headers.
         public var headers: HTTPHeaders
+        /// Request body, defaults to no body.
         public var body: Body?
 
         public init(url: String, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
@@ -76,6 +109,18 @@ extension HTTPClient {
             try self.init(url: url, version: version, method: method, headers: headers, body: body)
         }
 
+        /// Create HTTP request.
+        ///
+        /// - parameters:
+        ///     - url: Remote `URL`.
+        ///     - version: HTTP version.
+        ///     - method: HTTP method.
+        ///     - headers: Custom HTTP headers.
+        ///     - body: Request body.
+        /// - throws:
+        ///     - `emptyScheme` if URL does not contain HTTP scheme.
+        ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
+        ///     - `emptyHost` if URL does not contains a host.
         public init(url: URL, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
             guard let scheme = url.scheme else {
                 throw HTTPClientError.emptyScheme
@@ -98,10 +143,12 @@ extension HTTPClient {
             self.body = body
         }
 
+        /// Whether request will be executed using secure socket.
         public var useTLS: Bool {
             return self.url.scheme == "https"
         }
 
+        /// Resolved port.
         public var port: Int {
             return self.url.port ?? (self.useTLS ? 443 : 80)
         }
@@ -111,10 +158,15 @@ extension HTTPClient {
         }
     }
 
+    /// Represent HTTP response.
     public struct Response {
+        /// Remote host of the request.
         public var host: String
+        /// Response HTTP status.
         public var status: HTTPResponseStatus
+        /// Reponse HTTP headers.
         public var headers: HTTPHeaders
+        /// Response body.
         public var body: ByteBuffer?
     }
 }
@@ -191,24 +243,62 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
     }
 }
 
-/// This delegate is strongly held by the HTTPTaskHandler
-/// for the duration of the HTTPRequest processing and will be
-/// released together with the HTTPTaskHandler when channel is closed
+/// HTTPClientResponseDelegate allows to receive notification about request processing and to control how reponse parts are processed.
+///
+///  - note: This delegate is strongly held by the `HTTPTaskHandler`
+///          for the duration of the `Request` processing and will be
+///          released together with the `HTTPTaskHandler` when channel is closed.
 public protocol HTTPClientResponseDelegate: AnyObject {
     associatedtype Response
 
+    /// Called when request `Head` is sent. Will be called once.
+    ///
+    /// - parameters:
+    ///     - task: Current request context.
+    ///     - head: Request `Head`.
     func didSendRequestHead(task: HTTPClient.Task<Response>, _ head: HTTPRequestHead)
 
+    /// Called when request part was sent. Could be called zero or more times.
+    ///
+    /// - parameters:
+    ///     - task: Current request context.
+    ///     - part: Request body `Part`.
     func didSendRequestPart(task: HTTPClient.Task<Response>, _ part: IOData)
 
+    /// Called when request is fully sent. Will be called once.
+    ///
+    /// - parameters:
+    ///     - task: Current request context.
     func didSendRequest(task: HTTPClient.Task<Response>)
 
+    /// Called when response `Head` is received. Will be called once. Response processing will resume when returned `EventLoopFuture` is fullfilled.
+    ///
+    /// - parameters:
+    ///     - task: Current request context.
+    ///     - head: Received reposonse head.
+    /// - returns: `EventLoopFuture` that will be used for backpressure.
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void>
 
+    /// Called when response body `Part` is received. Could be called zero or more times. Response processing will resume when returned `EventLoopFuture` is fullfilled.
+    ///
+    /// - parameters:
+    ///     - task: Current request context.
+    ///     - buffer: Received body `Part`.
+    /// - returns: `EventLoopFuture` that will be used for backpressure.
     func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void>
 
+    /// Called when error was thrown during request execution. Request processing will be stopped.
+    ///
+    /// - parameters:
+    ///     - task: Current request context.
+    ///     - error: Error that occured during response processing.
     func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error)
 
+    /// Called when response is fully processed. Client is requred to return result of the processing specified by `Response` associated type.
+    ///
+    /// - parameters:
+    ///     - task: Current request context.
+    /// - returns: Result of processing.
     func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response
 }
 
@@ -238,7 +328,9 @@ internal extension URL {
 }
 
 extension HTTPClient {
+    /// Response execution context.
     public final class Task<Response> {
+        /// `EventLoop` used to execute and process request.
         public let eventLoop: EventLoop
         let promise: EventLoopPromise<Response>
 
@@ -253,14 +345,20 @@ extension HTTPClient {
             self.lock = Lock()
         }
 
+        /// `EventLoopFuture` of this request.
         public var futureResult: EventLoopFuture<Response> {
             return self.promise.futureResult
         }
 
+        /// Waits for execution of request.
+        ///
+        /// - returns: The value of the `EventLoopFuture` when it completes.
+        /// - throws: The error value of the `EventLoopFuture` if it errors.
         public func wait() throws -> Response {
             return try self.promise.futureResult.wait()
         }
 
+        /// Cancels the request execution.
         public func cancel() {
             self.lock.withLock {
                 if !cancelled {
