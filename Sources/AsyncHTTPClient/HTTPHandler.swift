@@ -178,13 +178,13 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
     func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
         switch self.state {
         case .idle:
-            didReceiveError(task: task, HTTPClientError.malformedResponse("no head received before end"))
+            throw HTTPClientError.malformedResponse("no head received before end")
         case .head(let head):
             return Response(host: self.request.host, status: head.status, headers: head.headers, body: nil)
         case .body(let head, let body):
             return Response(host: self.request.host, status: head.status, headers: head.headers, body: body)
         case .end:
-            didReceiveError(task: task, HTTPClientError.malformedResponse("request already processed"))
+            throw HTTPClientError.malformedResponse("request already processed")
         case .error(let error):
             throw error
         }
