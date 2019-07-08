@@ -93,7 +93,7 @@ public class HTTPClient {
     ///
     /// - parameters:
     ///     - url: Remote URL.
-    ///     - deadline: Maximum request duration.
+    ///     - deadline: The time when the request must have been completed by.
     public func get(url: String, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try Request(url: url, method: .GET)
@@ -108,7 +108,7 @@ public class HTTPClient {
     /// - parameters:
     ///     - url: Remote URL.
     ///     - body: Request body.
-    ///     - deadline: Maximum request duration.
+    ///     - deadline: The time when the request must have been completed by.
     public func post(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .POST, body: body)
@@ -123,7 +123,7 @@ public class HTTPClient {
     /// - parameters:
     ///     - url: Remote URL.
     ///     - body: Request body.
-    ///     - deadline: Maximum request duration.
+    ///     - deadline: The time when the request must have been completed by.
     public func patch(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .PATCH, body: body)
@@ -138,7 +138,7 @@ public class HTTPClient {
     /// - parameters:
     ///     - url: Remote URL.
     ///     - body: Request body.
-    ///     - deadline: Maximum request duration.
+    ///     - deadline: The time when the request must have been completed by.
     public func put(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .PUT, body: body)
@@ -152,7 +152,7 @@ public class HTTPClient {
     ///
     /// - parameters:
     ///     - url: Remote URL.
-    ///     - deadline: Maximum request duration.
+    ///     - deadline: The time when the request must have been completed by.
     public func delete(url: String, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try Request(url: url, method: .DELETE)
@@ -166,7 +166,7 @@ public class HTTPClient {
     ///
     /// - parameters:
     ///     - request: HTTP request to execute.
-    ///     - deadline: Maximum request duration.
+    ///     - deadline: The time when the request must have been completed by
     public func execute(request: Request, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         let accumulator = ResponseAccumulator(request: request)
         return self.execute(request: request, delegate: accumulator, deadline: deadline).futureResult
@@ -177,7 +177,7 @@ public class HTTPClient {
     /// - parameters:
     ///     - request: HTTP request to execute.
     ///     - delegate: Delegate to process response parts.
-    ///     - deadline: Maximum request duration.
+    ///     - deadline: The time when the request must have been completed by.
     public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, deadline: NIODeadline? = nil) -> Task<T.Response> {
         let eventLoop = self.eventLoopGroup.next()
 
