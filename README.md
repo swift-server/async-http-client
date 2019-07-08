@@ -20,8 +20,7 @@ This library provides the following:
 Add the following entry in your <code>Package.swift</code> to start using <code>HTTPClient</code>:
 
 ```swift
-// it's early days here so we haven't tagged a version yet, but will soon
-.package(url: "https://github.com/swift-server/async-http-client.git", .branch("master"))
+.package(url: "https://github.com/swift-server/async-http-client.git", from: "1.0.0-alpha.1")
 ```
 and  `AsyncHTTPClient` dependency to your target:
 ```swift
