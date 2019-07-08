@@ -363,6 +363,8 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                 case .failure(let error):
                     self.state = .end
                     self.delegate.didReceiveError(task: self.task, error)
+                    promise?.fail(error)
+
                     self.task.fail(error)
                     context.close(promise: nil)
                 }
