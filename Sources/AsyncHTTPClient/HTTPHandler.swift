@@ -142,11 +142,11 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         case .idle:
             self.state = .head(head)
         case .head:
-            preconditionFailure("head already set")
+            didReceiveError(task: task, HTTPClientError.malformedResponse("head already set"))
         case .body:
-            preconditionFailure("no head received before body")
+            didReceiveError(task: task, HTTPClientError.malformedResponse("no head received before body"))
         case .end:
-            preconditionFailure("request already processed")
+            didReceiveError(task: task, HTTPClientError.malformedResponse("request already processed"))
         case .error:
             break
         }
@@ -156,7 +156,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
     func didReceivePart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void> {
         switch self.state {
         case .idle:
-            preconditionFailure("no head received before body")
+            didReceiveError(task: task, HTTPClientError.malformedResponse("no head received before body"))
         case .head(let head):
             self.state = .body(head, part)
         case .body(let head, var body):
@@ -164,7 +164,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
             body.writeBuffer(&part)
             self.state = .body(head, body)
         case .end:
-            preconditionFailure("request already processed")
+            didReceiveError(task: task, HTTPClientError.malformedResponse("request already processed"))
         case .error:
             break
         }
@@ -178,13 +178,13 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
     func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
         switch self.state {
         case .idle:
-            preconditionFailure("no head received before end")
+            didReceiveError(task: task, HTTPClientError.malformedResponse("no head received before end"))
         case .head(let head):
             return Response(host: self.request.host, status: head.status, headers: head.headers, body: nil)
         case .body(let head, let body):
             return Response(host: self.request.host, status: head.status, headers: head.headers, body: body)
         case .end:
-            preconditionFailure("request already processed")
+            didReceiveError(task: task, HTTPClientError.malformedResponse("request already processed"))
         case .error(let error):
             throw error
         }
@@ -534,13 +534,15 @@ internal struct RedirectHandler<T> {
         if let redirectHost = redirectURL.host {
             request.host = redirectHost
         } else {
-            preconditionFailure("redirectURL doesn't contain a host")
+            promise.fail(HTTPClientError.malformedResponse("redirect URL doesn't contain a host"))
+            return
         }
 
         if let redirectScheme = redirectURL.scheme {
             request.scheme = redirectScheme
         } else {
-            preconditionFailure("redirectURL doesn't contain a scheme")
+            promise.fail(HTTPClientError.malformedResponse("redirect URL doesn't contain a scheme"))
+            return
         }
 
         var convertToGet = false
@@ -564,6 +566,6 @@ internal struct RedirectHandler<T> {
             request.headers.remove(name: "Proxy-Authorization")
         }
 
-        return self.execute(request).futureResult.cascade(to: promise)
+        self.execute(request).futureResult.cascade(to: promise)
     }
 }

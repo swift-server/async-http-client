@@ -269,6 +269,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case chunkedSpecifiedMultipleTimes
         case invalidProxyResponse
         case contentLengthMissing
+        case malformedResponse(String)
     }
 
     private var code: Code
@@ -293,4 +294,5 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let chunkedSpecifiedMultipleTimes = HTTPClientError(code: .chunkedSpecifiedMultipleTimes)
     public static let invalidProxyResponse = HTTPClientError(code: .invalidProxyResponse)
     public static let contentLengthMissing = HTTPClientError(code: .contentLengthMissing)
+    public static func malformedResponse(_ message: String) = HTTPClientError { return HTTPClientError(code: .malformedResponse(message)) }
 }
