@@ -258,7 +258,7 @@ public protocol HTTPClientResponseDelegate: AnyObject {
     ///     - head: Request `Head`.
     func didSendRequestHead(task: HTTPClient.Task<Response>, _ head: HTTPRequestHead)
 
-    /// Called when request part was sent. Could be called zero or more times.
+    /// Called when a part of the request body is sent. Could be called zero or more times.
     ///
     /// - parameters:
     ///     - task: Current request context.
@@ -271,7 +271,9 @@ public protocol HTTPClientResponseDelegate: AnyObject {
     ///     - task: Current request context.
     func didSendRequest(task: HTTPClient.Task<Response>)
 
-    /// Called when response `Head` is received. Will be called once. Response processing will resume when returned `EventLoopFuture` is fullfilled.
+    /// Called when response `Head` is received. Will be called once.
+    /// You must return an `EventLoopFuture<Void>` that you complete when you have finished processing the body part.
+    /// You can create an already succeeded future by calling `task.eventLoop.makeSucceededFuture(())`.
     ///
     /// - parameters:
     ///     - task: Current request context.
@@ -279,7 +281,9 @@ public protocol HTTPClientResponseDelegate: AnyObject {
     /// - returns: `EventLoopFuture` that will be used for backpressure.
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void>
 
-    /// Called when response body `Part` is received. Could be called zero or more times. Response processing will resume when returned `EventLoopFuture` is fullfilled.
+    /// Called when part of a response body is received. Could be called zero or more times.
+    /// You must return an `EventLoopFuture<Void>` that you complete when you have finished processing the body part.
+    /// You can create an already succeeded future by calling `task.eventLoop.makeSucceededFuture(())`.
     ///
     /// - parameters:
     ///     - task: Current request context.
@@ -287,14 +291,14 @@ public protocol HTTPClientResponseDelegate: AnyObject {
     /// - returns: `EventLoopFuture` that will be used for backpressure.
     func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void>
 
-    /// Called when error was thrown during request execution. Request processing will be stopped.
+    /// Called when error was thrown during request execution. Will be called zero or one time only. Request processing will be stopped after that.
     ///
     /// - parameters:
     ///     - task: Current request context.
     ///     - error: Error that occured during response processing.
     func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error)
 
-    /// Called when response is fully processed. Client is requred to return result of the processing specified by `Response` associated type.
+    /// Called when the complete HTTP request is finished. You must return an instance of your `Response` associated type. Will be called once, except if an error occurred.
     ///
     /// - parameters:
     ///     - task: Current request context.
@@ -328,7 +332,8 @@ internal extension URL {
 }
 
 extension HTTPClient {
-    /// Response execution context.
+    /// Response execution context. Will be created by the library and could be used for obtaining
+    /// `EventLoopFuture<Response>` of the execution or cancellation of the execution.
     public final class Task<Response> {
         /// `EventLoop` used to execute and process request.
         public let eventLoop: EventLoop

@@ -20,26 +20,27 @@ extension HTTPClient {
     public struct Cookie {
         /// The name of the cookie.
         public var name: String
-        /// The cookie's sting value.
+        /// The cookie's string value.
         public var value: String
         /// The cookie's path.
         public var path: String
-        /// The domain of the cookie
+        /// The domain of the cookie.
         public var domain: String?
         /// The cookie's expiration date.
         public var expires: Date?
         /// The cookie's age.
         public var maxAge: Int?
-        /// A Boolean value that indicates whether the cookie should only be sent to HTTP servers.
+        /// Whether the cookie should only be sent to HTTP servers.
         public var httpOnly: Bool
-        /// A Boolean value that indicates whether this cookie should only be sent over secure channels.
+        /// Whether the cookie should only be sent over secure channels.
         public var secure: Bool
 
-        /// Parses HTTP cookie from `Set-Cookie` header.
+        /// Create a Cookie by parsing a `Set-Cookie` header.
         ///
         /// - parameters:
         ///     - string: String representation of the `Set-Cookie` response header.
         ///     - defaultDomain: Default domain to use if cookie was sent without one.
+        /// - returns: nil if the header is invalid.
         public init?(from string: String, defaultDomain: String) {
             let components = string.components(separatedBy: ";").map {
                 $0.trimmingCharacters(in: .whitespaces)
