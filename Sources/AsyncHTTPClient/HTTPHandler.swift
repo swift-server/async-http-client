@@ -29,7 +29,7 @@ extension HTTPClient {
             /// Write data to upstream connection.
             ///
             /// - parameters:
-            ///     - data: Data to write.
+            ///     - data: `IOData` to write.
             public func write(_ data: IOData) -> EventLoopFuture<Void> {
                 return self.closure(data)
             }
@@ -101,6 +101,19 @@ extension HTTPClient {
         /// Request body, defaults to no body.
         public var body: Body?
 
+        /// Create HTTP request.
+        ///
+        /// - parameters:
+        ///     - url: Remote `URL`.
+        ///     - version: HTTP version.
+        ///     - method: HTTP method.
+        ///     - headers: Custom HTTP headers.
+        ///     - body: Request body.
+        /// - throws:
+        ///     - `invalidURL` if URL cannot be parsed.
+        ///     - `emptyScheme` if URL does not contain HTTP scheme.
+        ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
+        ///     - `emptyHost` if URL does not contains a host.
         public init(url: String, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
             guard let url = URL(string: url) else {
                 throw HTTPClientError.invalidURL
@@ -109,7 +122,7 @@ extension HTTPClient {
             try self.init(url: url, version: version, method: method, headers: headers, body: body)
         }
 
-        /// Create HTTP request.
+        /// Create an HTTP `Request`.
         ///
         /// - parameters:
         ///     - url: Remote `URL`.
@@ -243,7 +256,10 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
     }
 }
 
-/// HTTPClientResponseDelegate allows to receive notification about request processing and to control how reponse parts are processed.
+/// `HTTPClientResponseDelegate` allows to receive notification about request processing and to control how reponse parts are processed.
+/// You can implement this protocol if you need fine control over an HTTP request/response, for example if you want to inspect the response
+/// headers before deciding whether to accept a response body, or if you want to stream your request body. Pass an instance of your conforming
+/// class to the `HTTPClient.execute()` method and this package will call each delegate method appropriately as the request takes place.
 ///
 ///  - note: This delegate is strongly held by the `HTTPTaskHandler`
 ///          for the duration of the `Request` processing and will be
@@ -251,11 +267,11 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
 public protocol HTTPClientResponseDelegate: AnyObject {
     associatedtype Response
 
-    /// Called when request `Head` is sent. Will be called once.
+    /// Called when request head is sent. Will be called once.
     ///
     /// - parameters:
     ///     - task: Current request context.
-    ///     - head: Request `Head`.
+    ///     - head: Request head.
     func didSendRequestHead(task: HTTPClient.Task<Response>, _ head: HTTPRequestHead)
 
     /// Called when a part of the request body is sent. Could be called zero or more times.
@@ -271,7 +287,7 @@ public protocol HTTPClientResponseDelegate: AnyObject {
     ///     - task: Current request context.
     func didSendRequest(task: HTTPClient.Task<Response>)
 
-    /// Called when response `Head` is received. Will be called once.
+    /// Called when response head is received. Will be called once.
     /// You must return an `EventLoopFuture<Void>` that you complete when you have finished processing the body part.
     /// You can create an already succeeded future by calling `task.eventLoop.makeSucceededFuture(())`.
     ///

@@ -27,7 +27,7 @@ import NIOSSL
 ///     client.get(url: "https://swift.org", deadline: .now() + .seconds(1)).whenComplete { result in
 ///         switch result {
 ///         case .failure(let error):
-///         // process error
+///             // process error
 ///         case .success(let response):
 ///             if let response.status == .ok {
 ///                 // handle response
@@ -49,7 +49,7 @@ public class HTTPClient {
     let configuration: Configuration
     let isShutdown = Atomic<Bool>(value: false)
 
-    /// Create an HTTPClient with specified `EventLoopGroup` provider and configuration.
+    /// Create an `HTTPClient` with specified `EventLoopGroup` provider and configuration.
     ///
     /// - parameters:
     ///     - eventLoopGroupProvider: Specify how `EventLoopGroup` will be created.
@@ -89,11 +89,11 @@ public class HTTPClient {
         }
     }
 
-    /// Execute GET request using specified URL.
+    /// Execute `GET` request using specified URL.
     ///
     /// - parameters:
     ///     - url: Remote URL.
-    ///     - deadline: The time when the request must have been completed by.
+    ///     - deadline: Point in time by which the request must complete.
     public func get(url: String, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try Request(url: url, method: .GET)
@@ -103,12 +103,12 @@ public class HTTPClient {
         }
     }
 
-    /// Execute POST request using specified URL.
+    /// Execute `POST` request using specified URL.
     ///
     /// - parameters:
     ///     - url: Remote URL.
     ///     - body: Request body.
-    ///     - deadline: The time when the request must have been completed by.
+    ///     - deadline: Point in time by which the request must complete.
     public func post(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .POST, body: body)
@@ -118,12 +118,12 @@ public class HTTPClient {
         }
     }
 
-    /// Execute PATCH request using specified URL.
+    /// Execute `PATCH` request using specified URL.
     ///
     /// - parameters:
     ///     - url: Remote URL.
     ///     - body: Request body.
-    ///     - deadline: The time when the request must have been completed by.
+    ///     - deadline: Point in time by which the request must complete.
     public func patch(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .PATCH, body: body)
@@ -133,12 +133,12 @@ public class HTTPClient {
         }
     }
 
-    /// Execute PUT request using specified URL.
+    /// Execute `PUT` request using specified URL.
     ///
     /// - parameters:
     ///     - url: Remote URL.
     ///     - body: Request body.
-    ///     - deadline: The time when the request must have been completed by.
+    ///     - deadline: Point in time by which the request must complete.
     public func put(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .PUT, body: body)
@@ -148,7 +148,7 @@ public class HTTPClient {
         }
     }
 
-    /// Execute DELETE request using specified URL.
+    /// Execute `DELETE` request using specified URL.
     ///
     /// - parameters:
     ///     - url: Remote URL.
@@ -166,7 +166,7 @@ public class HTTPClient {
     ///
     /// - parameters:
     ///     - request: HTTP request to execute.
-    ///     - deadline: The time when the request must have been completed by
+    ///     - deadline: Point in time by which the request must complete.
     public func execute(request: Request, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         let accumulator = ResponseAccumulator(request: request)
         return self.execute(request: request, delegate: accumulator, deadline: deadline).futureResult
@@ -177,7 +177,7 @@ public class HTTPClient {
     /// - parameters:
     ///     - request: HTTP request to execute.
     ///     - delegate: Delegate to process response parts.
-    ///     - deadline: The time when the request must have been completed by.
+    ///     - deadline: Point in time by which the request must complete.
     public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, deadline: NIODeadline? = nil) -> Task<T.Response> {
         let eventLoop = self.eventLoopGroup.next()
 
@@ -257,11 +257,11 @@ public class HTTPClient {
         }
     }
 
-    /// HTTPClient configuration.
+    /// `HTTPClient` configuration.
     public struct Configuration {
         /// TLS configuration, defaults to `TLSConfiguration.forClient()`.
         public var tlsConfiguration: TLSConfiguration?
-        /// Enables following certain 3xx redirects automatically, defaults to `false`.
+        /// Enables following 3xx redirects automatically, defaults to `false`.
         public var followRedirects: Bool
         /// Default client timeout, defaults to no timeouts.
         public var timeout: Timeout
@@ -293,9 +293,9 @@ public class HTTPClient {
 
     /// Timeout configuration
     public struct Timeout {
-        /// Specifies `connect` timeout.
+        /// Specifies connect timeout.
         public var connect: TimeAmount?
-        /// Specifies `read` timeout.
+        /// Specifies read timeout.
         public var read: TimeAmount?
 
         /// Create timeout.

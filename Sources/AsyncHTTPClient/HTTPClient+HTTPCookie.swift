@@ -38,10 +38,10 @@ extension HTTPClient {
         /// Create a Cookie by parsing a `Set-Cookie` header.
         ///
         /// - parameters:
-        ///     - string: String representation of the `Set-Cookie` response header.
+        ///     - header: String representation of the `Set-Cookie` response header.
         ///     - defaultDomain: Default domain to use if cookie was sent without one.
         /// - returns: nil if the header is invalid.
-        public init?(from string: String, defaultDomain: String) {
+        public init?(header: String, defaultDomain: String) {
             let components = string.components(separatedBy: ";").map {
                 $0.trimmingCharacters(in: .whitespaces)
             }
@@ -109,7 +109,7 @@ extension HTTPClient {
         ///
         /// - parameters:
         ///     - name: The name of the cookie.
-        ///     - value: The cookie's sting value.
+        ///     - value: The cookie's string value.
         ///     - path: The cookie's path.
         ///     - domain: The domain of the cookie, defaults to nil.
         ///     - expires: The cookie's expiration date, defaults to nil.
