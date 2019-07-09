@@ -28,7 +28,7 @@ extension HTTPClient {
         public var domain: String?
         /// The cookie's expiration date.
         public var expires: Date?
-        /// The cookie's age.
+        /// The cookie's age in seconds.
         public var maxAge: Int?
         /// Whether the cookie should only be sent to HTTP servers.
         public var httpOnly: Bool
@@ -113,7 +113,7 @@ extension HTTPClient {
         ///     - path: The cookie's path.
         ///     - domain: The domain of the cookie, defaults to nil.
         ///     - expires: The cookie's expiration date, defaults to nil.
-        ///     - maxAge: The cookie's age, defaults to nil.
+        ///     - maxAge: The cookie's age in seconds, defaults to nil.
         ///     - httpOnly: Whether this cookie should be used by HTTP servers only, defaults to false.
         ///     - secure: Whether this cookie should only be sent using secure channels, defaults to false.
         public init(name: String, value: String, path: String = "/", domain: String? = nil, expires: Date? = nil, maxAge: Int? = nil, httpOnly: Bool = false, secure: Bool = false) {

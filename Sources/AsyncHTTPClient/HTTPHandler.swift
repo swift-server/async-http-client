@@ -266,6 +266,8 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
 ///  - note: This delegate is strongly held by the `HTTPTaskHandler`
 ///          for the duration of the `Request` processing and will be
 ///          released together with the `HTTPTaskHandler` when channel is closed.
+///          Users of the library are not required to keep a reference to the
+///          object that implements this protocol, but may do so if needed.
 public protocol HTTPClientResponseDelegate: AnyObject {
     associatedtype Response
 
@@ -368,7 +370,7 @@ extension HTTPClient {
             self.lock = Lock()
         }
 
-        /// `EventLoopFuture` of this request.
+        /// `EventLoopFuture` for the response returned by this request.
         public var futureResult: EventLoopFuture<Response> {
             return self.promise.futureResult
         }
