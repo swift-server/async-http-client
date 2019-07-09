@@ -65,9 +65,9 @@ extension HTTPClient {
         public var headers: HTTPHeaders
         public var body: Body?
 
-        public init(url: String, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+        public init?(url: String, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) {
             guard let url = URL(string: url) else {
-                throw HTTPClientError.invalidURL
+                return nil
             }
 
             self.init(url: url, method: method, headers: headers, body: body)
