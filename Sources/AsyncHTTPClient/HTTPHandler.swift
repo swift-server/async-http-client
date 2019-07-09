@@ -26,7 +26,7 @@ extension HTTPClient {
         public struct StreamWriter {
             let closure: (IOData) -> EventLoopFuture<Void>
 
-            /// Write data to upstream connection.
+            /// Write data to server.
             ///
             /// - parameters:
             ///     - data: `IOData` to write.
@@ -35,7 +35,8 @@ extension HTTPClient {
             }
         }
 
-        /// Body size.
+        /// Body size. Request validation will be failed with `HTTPClientErrors.contentLengthMissing` if nil,
+        /// unless `Trasfer-Encoding: chunked` header is set.
         public var length: Int?
         /// Body chunk provider.
         public var stream: (StreamWriter) -> EventLoopFuture<Void>
@@ -53,7 +54,8 @@ extension HTTPClient {
         /// Create and stream body using `StreamWriter`.
         ///
         /// - parameters:
-        ///     - length: Body size.
+        ///     - length: Body size. Request validation will be failed with `HTTPClientErrors.contentLengthMissing` if nil,
+        ///               unless `Trasfer-Encoding: chunked` header is set.
         ///     - stream: Body chunk provider.
         public static func stream(length: Int? = nil, _ stream: @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
             return Body(length: length, stream: stream)
