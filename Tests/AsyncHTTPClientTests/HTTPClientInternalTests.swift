@@ -20,6 +20,7 @@ import XCTest
 
 class HTTPClientInternalTests: XCTestCase {
     typealias Request = HTTPClient.Request
+    typealias Response = HTTPClient.Response
     typealias Task = HTTPClient.Task
 
     func testHTTPPartsHandler() throws {
@@ -192,6 +193,31 @@ class HTTPClientInternalTests: XCTestCase {
         try future.wait()
 
         XCTAssertEqual(delegate.reads, 3)
+    }
+
+    func testMalformedResponse() throws {
+        let channel = EmbeddedChannel()
+        let request = try Request(url: "http://localhost/")
+        let delegate = ResponseAccumulator(request: request)
+        let task = Task<Response>(eventLoop: channel.eventLoop)
+        let handler = TaskHandler(task: task, delegate: delegate, redirectHandler: nil)
+
+        try channel.pipeline.addHandler(handler).wait()
+
+        handler.state = .sent
+        var body = channel.allocator.buffer(capacity: 4)
+        body.writeStaticString("1234")
+
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: HTTPResponseStatus.ok))))
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: HTTPResponseStatus.ok))))
+
+        switch delegate.state {
+        case .error(let error):
+            XCTAssertEqual("HTTPClientError.malformedResponse(\"head already set\")", "\(error)")
+            print(error)
+        default:
+            XCTFail("Expecting .malformedResponse")
+        }
     }
 }
 
