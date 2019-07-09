@@ -42,7 +42,7 @@ extension HTTPClient {
         ///     - defaultDomain: Default domain to use if cookie was sent without one.
         /// - returns: nil if the header is invalid.
         public init?(header: String, defaultDomain: String) {
-            let components = string.components(separatedBy: ";").map {
+            let components = header.components(separatedBy: ";").map {
                 $0.trimmingCharacters(in: .whitespaces)
             }
 
@@ -145,6 +145,6 @@ extension HTTPClient.Response {
 
     /// List of HTTP cookies returned by the server.
     public var cookies: [HTTPClient.Cookie] {
-        return self.cookieHeaders.compactMap { HTTPClient.Cookie(from: $0.value, defaultDomain: self.host) }
+        return self.cookieHeaders.compactMap { HTTPClient.Cookie(header: $0.value, defaultDomain: self.host) }
     }
 }
