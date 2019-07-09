@@ -269,7 +269,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
 public protocol HTTPClientResponseDelegate: AnyObject {
     associatedtype Response
 
-    /// Called when request head is sent. Will be called once.
+    /// Called when the request head is sent. Will be called once.
     ///
     /// - parameters:
     ///     - task: Current request context.
@@ -283,7 +283,7 @@ public protocol HTTPClientResponseDelegate: AnyObject {
     ///     - part: Request body `Part`.
     func didSendRequestPart(task: HTTPClient.Task<Response>, _ part: IOData)
 
-    /// Called when request is fully sent. Will be called once.
+    /// Called when the request is fully sent. Will be called once.
     ///
     /// - parameters:
     ///     - task: Current request context.
