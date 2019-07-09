@@ -258,7 +258,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
     }
 }
 
-/// `HTTPClientResponseDelegate` allows to receive notification about request processing and to control how reponse parts are processed.
+/// `HTTPClientResponseDelegate` allows an implementation to receive notifications about request processing and to control how response parts are processed.
 /// You can implement this protocol if you need fine control over an HTTP request/response, for example if you want to inspect the response
 /// headers before deciding whether to accept a response body, or if you want to stream your request body. Pass an instance of your conforming
 /// class to the `HTTPClient.execute()` method and this package will call each delegate method appropriately as the request takes place.
