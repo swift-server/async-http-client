@@ -262,6 +262,15 @@ public class HTTPClient {
         /// TLS configuration, defaults to `TLSConfiguration.forClient()`.
         public var tlsConfiguration: TLSConfiguration?
         /// Enables following 3xx redirects automatically, defaults to `false`.
+        ///
+        /// Following redirects are supported:
+        ///  - `301: Moved Permanently`
+        ///  - `302: Found`
+        ///  - `303: See Other`
+        ///  - `304: Not Modified`
+        ///  - `305: Use Proxy`
+        ///  - `307: Temporary Redirect`
+        ///  - `308: Permanent Redirect`
         public var followRedirects: Bool
         /// Default client timeout, defaults to no timeouts.
         public var timeout: Timeout
