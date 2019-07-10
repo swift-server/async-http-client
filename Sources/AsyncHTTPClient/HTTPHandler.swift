@@ -91,16 +91,13 @@ extension HTTPClient {
         public var version: HTTPVersion
         /// Request HTTP method, defaults to `GET`.
         public var method: HTTPMethod
-        /// Remote URL.
-        public var url: URL
-        /// Remote HTTP scheme, resolved from `URL`.
-        public var scheme: String
-        /// Remote host, resolved from `URL`.
-        public var host: String
         /// Request custom HTTP Headers, defaults to no headers.
         public var headers: HTTPHeaders
         /// Request body, defaults to no body.
         public var body: Body?
+        private var _url: URL!
+        private var _scheme: String!
+        private var _host: String!
 
         /// Create HTTP request.
         ///
@@ -136,7 +133,15 @@ extension HTTPClient {
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
         public init(url: URL, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
-            guard let scheme = url.scheme else {
+            self.version = version
+            self.method = method
+            self.headers = headers
+            self.body = body
+            try self.setURL(url)
+        }
+
+        public mutating func setURL(_ url: URL) throws {
+            guard let scheme = url.scheme?.lowercased() else {
                 throw HTTPClientError.emptyScheme
             }
 
@@ -148,18 +153,29 @@ extension HTTPClient {
                 throw HTTPClientError.emptyHost
             }
 
-            self.version = version
-            self.method = method
-            self.url = url
-            self.scheme = scheme
-            self.host = host
-            self.headers = headers
-            self.body = body
+            self._url = url
+            self._scheme = scheme
+            self._host = host
+        }
+
+        /// Remote URL.
+        public var url: URL {
+            return self._url
+        }
+
+        /// Remote HTTP scheme, resolved from `URL`.
+        public var scheme: String {
+            return self._scheme
+        }
+
+        /// Remote host, resolved from `URL`.
+        public var host: String {
+            return self._host
         }
 
         /// Whether request will be executed using secure socket.
         public var useTLS: Bool {
-            return self.url.scheme == "https"
+            return self.scheme == "https"
         }
 
         /// Resolved port.
@@ -167,7 +183,7 @@ extension HTTPClient {
             return self.url.port ?? (self.useTLS ? 443 : 80)
         }
 
-        static func isSchemeSupported(scheme: String?) -> Bool {
+        static func isSchemeSupported(scheme: String) -> Bool {
             return scheme == "http" || scheme == "https"
         }
     }
@@ -640,7 +656,7 @@ internal struct RedirectHandler<T> {
             return nil
         }
 
-        guard HTTPClient.Request.isSchemeSupported(scheme: url.scheme) else {
+        guard HTTPClient.Request.isSchemeSupported(scheme: request.scheme) else {
             return nil
         }
 
@@ -655,18 +671,10 @@ internal struct RedirectHandler<T> {
         let originalURL = self.request.url
 
         var request = self.request
-        request.url = redirectURL
-
-        if let redirectHost = redirectURL.host {
-            request.host = redirectHost
-        } else {
-            preconditionFailure("redirectURL doesn't contain a host")
-        }
-
-        if let redirectScheme = redirectURL.scheme {
-            request.scheme = redirectScheme
-        } else {
-            preconditionFailure("redirectURL doesn't contain a scheme")
+        do {
+            try request.setURL(redirectURL)
+        } catch {
+            return promise.fail(error)
         }
 
         var convertToGet = false
