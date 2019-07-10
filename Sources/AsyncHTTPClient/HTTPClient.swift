@@ -59,48 +59,38 @@ public class HTTPClient {
     }
 
     public func get(url: String, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        do {
-            let request = try Request(url: url, method: .GET)
-            return self.execute(request: request, deadline: deadline)
-        } catch {
-            return self.eventLoopGroup.next().makeFailedFuture(error)
+        guard let request = Request(url: url, method: .GET) else {
+            return self.eventLoopGroup.next().makeFailedFuture(HTTPClientError.invalidURL)
         }
+        return self.execute(request: request, deadline: deadline)
     }
 
     public func post(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        do {
-            let request = try HTTPClient.Request(url: url, method: .POST, body: body)
-            return self.execute(request: request, deadline: deadline)
-        } catch {
-            return self.eventLoopGroup.next().makeFailedFuture(error)
+        guard let request = Request(url: url, method: .POST, body: body) else {
+            return self.eventLoopGroup.next().makeFailedFuture(HTTPClientError.invalidURL)
         }
+        return self.execute(request: request, deadline: deadline)
     }
 
     public func patch(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        do {
-            let request = try HTTPClient.Request(url: url, method: .PATCH, body: body)
-            return self.execute(request: request, deadline: deadline)
-        } catch {
-            return self.eventLoopGroup.next().makeFailedFuture(error)
+        guard let request = Request(url: url, method: .PATCH, body: body) else {
+            return self.eventLoopGroup.next().makeFailedFuture(HTTPClientError.invalidURL)
         }
+        return self.execute(request: request, deadline: deadline)
     }
 
     public func put(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        do {
-            let request = try HTTPClient.Request(url: url, method: .PUT, body: body)
-            return self.execute(request: request, deadline: deadline)
-        } catch {
-            return self.eventLoopGroup.next().makeFailedFuture(error)
+        guard let request = Request(url: url, method: .PUT, body: body) else {
+            return self.eventLoopGroup.next().makeFailedFuture(HTTPClientError.invalidURL)
         }
+        return self.execute(request: request, deadline: deadline)
     }
 
     public func delete(url: String, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        do {
-            let request = try Request(url: url, method: .DELETE)
-            return self.execute(request: request, deadline: deadline)
-        } catch {
-            return self.eventLoopGroup.next().makeFailedFuture(error)
+        guard let request = Request(url: url, method: .DELETE) else {
+            return self.eventLoopGroup.next().makeFailedFuture(HTTPClientError.invalidURL)
         }
+        return self.execute(request: request, deadline: deadline)
     }
 
     public func execute(request: Request, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {

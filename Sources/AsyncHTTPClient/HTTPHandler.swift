@@ -60,33 +60,34 @@ extension HTTPClient {
     }
 
     public struct Request {
-        public var version: HTTPVersion
-        public var method: HTTPMethod
-        public var url: URL
-        public var scheme: String
-        public var host: String
+        public let version: HTTPVersion
+        public let method: HTTPMethod
+        public let url: URL
         public var headers: HTTPHeaders
         public var body: Body?
+        
+        internal let scheme: String
+        internal let host: String
 
-        public init(url: String, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+        public init?(url: String, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) {
             guard let url = URL(string: url) else {
-                throw HTTPClientError.invalidURL
+                return nil
             }
 
-            try self.init(url: url, version: version, method: method, headers: headers, body: body)
+            self.init(url: url, version: version, method: method, headers: headers, body: body)
         }
 
-        public init(url: URL, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
-            guard let scheme = url.scheme else {
-                throw HTTPClientError.emptyScheme
+        public init?(url: URL, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) {
+            guard let scheme = url.scheme?.lowercased() else {
+                return nil
             }
 
             guard Request.isSchemeSupported(scheme: scheme) else {
-                throw HTTPClientError.unsupportedScheme(scheme)
+                return nil
             }
 
             guard let host = url.host else {
-                throw HTTPClientError.emptyHost
+                return nil
             }
 
             self.version = version
@@ -99,14 +100,14 @@ extension HTTPClient {
         }
 
         public var useTLS: Bool {
-            return self.url.scheme == "https"
+            return self.scheme == "https"
         }
 
         public var port: Int {
             return self.url.port ?? (self.useTLS ? 443 : 80)
         }
 
-        static func isSchemeSupported(scheme: String?) -> Bool {
+        static func isSchemeSupported(scheme: String) -> Bool {
             return scheme == "http" || scheme == "https"
         }
     }
@@ -514,7 +515,7 @@ internal struct RedirectHandler<T> {
             return nil
         }
 
-        guard HTTPClient.Request.isSchemeSupported(scheme: url.scheme) else {
+        guard HTTPClient.Request.isSchemeSupported(scheme: request.scheme) else {
             return nil
         }
 
@@ -526,22 +527,7 @@ internal struct RedirectHandler<T> {
     }
 
     func redirect(status: HTTPResponseStatus, to redirectURL: URL, promise: EventLoopPromise<T>) {
-        let originalURL = self.request.url
-
-        var request = self.request
-        request.url = redirectURL
-
-        if let redirectHost = redirectURL.host {
-            request.host = redirectHost
-        } else {
-            preconditionFailure("redirectURL doesn't contain a host")
-        }
-
-        if let redirectScheme = redirectURL.scheme {
-            request.scheme = redirectScheme
-        } else {
-            preconditionFailure("redirectURL doesn't contain a scheme")
-        }
+        let originalRequest = self.request
 
         var convertToGet = false
         if status == .seeOther, request.method != .HEAD {
@@ -549,21 +535,28 @@ internal struct RedirectHandler<T> {
         } else if status == .movedPermanently || status == .found, request.method == .POST {
             convertToGet = true
         }
-
+        
+        var method = originalRequest.method
+        var headers = originalRequest.headers
+        var body = originalRequest.body
+        
         if convertToGet {
-            request.method = .GET
-            request.body = nil
-            request.headers.remove(name: "Content-Length")
-            request.headers.remove(name: "Content-Type")
+            method = .GET
+            body = nil
+            headers.remove(name: "Content-Length")
+            headers.remove(name: "Content-Type")            
         }
 
-        if !originalURL.hasTheSameOrigin(as: redirectURL) {
-            request.headers.remove(name: "Origin")
-            request.headers.remove(name: "Cookie")
-            request.headers.remove(name: "Authorization")
-            request.headers.remove(name: "Proxy-Authorization")
+        if !originalRequest.url.hasTheSameOrigin(as: redirectURL) {
+            headers.remove(name: "Origin")
+            headers.remove(name: "Cookie")
+            headers.remove(name: "Authorization")
+            headers.remove(name: "Proxy-Authorization")
         }
-
+        
+        guard let request = HTTPClient.Request(url: redirectURL, version: originalRequest.version,  method: method, headers: headers, body: body) else {
+            return promise.fail(HTTPClientError.invalidURL)
+        }
         return self.execute(request).futureResult.cascade(to: promise)
     }
 }

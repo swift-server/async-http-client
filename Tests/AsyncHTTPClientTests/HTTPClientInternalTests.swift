@@ -30,7 +30,7 @@ class HTTPClientInternalTests: XCTestCase {
         try channel.pipeline.addHandler(recorder).wait()
         try channel.pipeline.addHandler(TaskHandler(task: task, delegate: TestHTTPDelegate(), redirectHandler: nil)).wait()
 
-        var request = try Request(url: "http://localhost/get")
+        var request = Request(url: "http://localhost/get")!
         request.headers.add(name: "X-Test-Header", value: "X-Test-Value")
         request.body = .string("1234")
 
@@ -82,17 +82,13 @@ class HTTPClientInternalTests: XCTestCase {
         }
 
         let body: HTTPClient.Body = .stream(length: 50) { writer in
-            do {
-                var request = try Request(url: "http://localhost:\(httpBin.port)/events/10/1")
-                request.headers.add(name: "Accept", value: "text/event-stream")
+            var request = Request(url: "http://localhost:\(httpBin.port)/events/10/1")!
+            request.headers.add(name: "Accept", value: "text/event-stream")
 
-                let delegate = HTTPClientCopyingDelegate { part in
-                    writer.write(.byteBuffer(part))
-                }
-                return httpClient.execute(request: request, delegate: delegate).futureResult
-            } catch {
-                return httpClient.eventLoopGroup.next().makeFailedFuture(error)
+            let delegate = HTTPClientCopyingDelegate { part in
+                writer.write(.byteBuffer(part))
             }
+            return httpClient.execute(request: request, delegate: delegate).futureResult
         }
 
         let upload = try! httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait()
@@ -118,17 +114,13 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertThrowsError(try httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait())
 
         body = .stream(length: 50) { _ in
-            do {
-                var request = try Request(url: "http://localhost:\(httpBin.port)/events/10/1")
-                request.headers.add(name: "Accept", value: "text/event-stream")
+            var request = Request(url: "http://localhost:\(httpBin.port)/events/10/1")!
+            request.headers.add(name: "Accept", value: "text/event-stream")
 
-                let delegate = HTTPClientCopyingDelegate { _ in
-                    httpClient.eventLoopGroup.next().makeFailedFuture(HTTPClientError.invalidProxyResponse)
-                }
-                return httpClient.execute(request: request, delegate: delegate).futureResult
-            } catch {
-                return httpClient.eventLoopGroup.next().makeFailedFuture(error)
+            let delegate = HTTPClientCopyingDelegate { _ in
+                httpClient.eventLoopGroup.next().makeFailedFuture(HTTPClientError.invalidProxyResponse)
             }
+            return httpClient.execute(request: request, delegate: delegate).futureResult
         }
 
         XCTAssertThrowsError(try httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait())
@@ -172,7 +164,7 @@ class HTTPClientInternalTests: XCTestCase {
             httpBin.shutdown()
         }
 
-        let request = try Request(url: "http://localhost:\(httpBin.port)/custom")
+        let request = Request(url: "http://localhost:\(httpBin.port)/custom")!
         let delegate = BackpressureTestDelegate(promise: httpClient.eventLoopGroup.next().makePromise())
         let future = httpClient.execute(request: request, delegate: delegate).futureResult
 
