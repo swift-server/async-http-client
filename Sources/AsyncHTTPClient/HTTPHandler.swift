@@ -259,7 +259,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
 }
 
 /// `HTTPClientResponseDelegate` allows an implementation to receive notifications about request processing and to control how response parts are processed.
-/// You can implement this protocol if you need fine control over an HTTP request/response, for example if you want to inspect the response
+/// You can implement this protocol if you need fine-grained control over an HTTP request/response, for example, if you want to inspect the response
 /// headers before deciding whether to accept a response body, or if you want to stream your request body. Pass an instance of your conforming
 /// class to the `HTTPClient.execute()` method and this package will call each delegate method appropriately as the request takes place.
 ///
@@ -355,7 +355,7 @@ extension HTTPClient {
     /// Response execution context. Will be created by the library and could be used for obtaining
     /// `EventLoopFuture<Response>` of the execution or cancellation of the execution.
     public final class Task<Response> {
-        /// `EventLoop` used to execute and process request.
+        /// `EventLoop` used to execute and process this request.
         public let eventLoop: EventLoop
         let promise: EventLoopPromise<Response>
 
@@ -375,7 +375,7 @@ extension HTTPClient {
             return self.promise.futureResult
         }
 
-        /// Waits for execution of request.
+        /// Waits for execution of this request to complete.
         ///
         /// - returns: The value of the `EventLoopFuture` when it completes.
         /// - throws: The error value of the `EventLoopFuture` if it errors.
