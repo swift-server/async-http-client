@@ -236,13 +236,19 @@ public class HTTPClient {
     }
 
     private func resolve(timeout: TimeAmount?, deadline: NIODeadline?) -> TimeAmount? {
-        switch (timeout, deadline) {
+        // compute timeout from deadline
+        var deadlineTimeout: TimeAmount?
+        if case .some(let deadline) = deadline {
+            let now = NIODeadline.now()
+            deadlineTimeout = deadline > now ? deadline - now : .nanoseconds(0)
+        }
+        switch (timeout, deadlineTimeout) {
         case (.some(let timeout), .some(let deadline)):
-            return min(timeout, deadline - .now())
+            return min(timeout, deadline)
         case (.some(let timeout), .none):
             return timeout
         case (.none, .some(let deadline)):
-            return deadline - .now()
+            return deadline
         case (.none, .none):
             return nil
         }

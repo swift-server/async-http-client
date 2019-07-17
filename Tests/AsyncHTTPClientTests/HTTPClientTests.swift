@@ -330,4 +330,13 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(.ok, response.status)
         XCTAssertEqual("12344321", data.data)
     }
+    
+    func testTightDeadlineCausingCrash() throws {
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        defer {
+            try! httpClient.syncShutdown()
+        }
+        
+        XCTAssertThrowsError(try httpClient.get(url: "https://github.com", deadline: .uptimeNanoseconds(0)).wait())
+    }
 }

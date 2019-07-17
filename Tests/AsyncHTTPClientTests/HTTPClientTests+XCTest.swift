@@ -43,6 +43,7 @@ extension HTTPClientTests {
             ("testProxyPlaintext", testProxyPlaintext),
             ("testProxyTLS", testProxyTLS),
             ("testUploadStreaming", testUploadStreaming),
+            ("testTightDeadlineCausingCrash", testTightDeadlineCausingCrash),
         ]
     }
 }
