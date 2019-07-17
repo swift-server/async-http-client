@@ -16,18 +16,33 @@ import Foundation
 import NIOHTTP1
 
 extension HTTPClient {
+    /// A representation of an HTTP cookie.
     public struct Cookie {
+        /// The name of the cookie.
         public var name: String
+        /// The cookie's string value.
         public var value: String
+        /// The cookie's path.
         public var path: String
+        /// The domain of the cookie.
         public var domain: String?
+        /// The cookie's expiration date.
         public var expires: Date?
+        /// The cookie's age in seconds.
         public var maxAge: Int?
+        /// Whether the cookie should only be sent to HTTP servers.
         public var httpOnly: Bool
+        /// Whether the cookie should only be sent over secure channels.
         public var secure: Bool
 
-        public init?(from string: String, defaultDomain: String) {
-            let components = string.components(separatedBy: ";").map {
+        /// Create a Cookie by parsing a `Set-Cookie` header.
+        ///
+        /// - parameters:
+        ///     - header: String representation of the `Set-Cookie` response header.
+        ///     - defaultDomain: Default domain to use if cookie was sent without one.
+        /// - returns: nil if the header is invalid.
+        public init?(header: String, defaultDomain: String) {
+            let components = header.components(separatedBy: ";").map {
                 $0.trimmingCharacters(in: .whitespaces)
             }
 
@@ -90,6 +105,17 @@ extension HTTPClient {
             }
         }
 
+        /// Create HTTP cookie.
+        ///
+        /// - parameters:
+        ///     - name: The name of the cookie.
+        ///     - value: The cookie's string value.
+        ///     - path: The cookie's path.
+        ///     - domain: The domain of the cookie, defaults to nil.
+        ///     - expires: The cookie's expiration date, defaults to nil.
+        ///     - maxAge: The cookie's age in seconds, defaults to nil.
+        ///     - httpOnly: Whether this cookie should be used by HTTP servers only, defaults to false.
+        ///     - secure: Whether this cookie should only be sent using secure channels, defaults to false.
         public init(name: String, value: String, path: String = "/", domain: String? = nil, expires: Date? = nil, maxAge: Int? = nil, httpOnly: Bool = false, secure: Bool = false) {
             self.name = name
             self.value = value
@@ -112,12 +138,13 @@ extension HTTPClient {
     }
 }
 
-public extension HTTPClient.Response {
-    internal var cookieHeaders: [HTTPHeaders.Element] {
+extension HTTPClient.Response {
+    var cookieHeaders: [HTTPHeaders.Element] {
         return headers.filter { $0.name.lowercased() == "set-cookie" }
     }
 
-    var cookies: [HTTPClient.Cookie] {
-        return self.cookieHeaders.compactMap { HTTPClient.Cookie(from: $0.value, defaultDomain: self.host) }
+    /// List of HTTP cookies returned by the server.
+    public var cookies: [HTTPClient.Cookie] {
+        return self.cookieHeaders.compactMap { HTTPClient.Cookie(header: $0.value, defaultDomain: self.host) }
     }
 }
