@@ -88,16 +88,19 @@ extension HTTPClient {
     /// Represent HTTP request.
     public struct Request {
         /// Request HTTP version, defaults to `HTTP/1.1`.
-        public var version: HTTPVersion
+        public let version: HTTPVersion
         /// Request HTTP method, defaults to `GET`.
-        public var method: HTTPMethod
+        public let method: HTTPMethod
+        /// Remote URL.
+        public let url: URL
+        /// Remote HTTP scheme, resolved from `URL`.
+        public let scheme: String
+        /// Remote host, resolved from `URL`.
+        public let host: String
         /// Request custom HTTP Headers, defaults to no headers.
         public var headers: HTTPHeaders
         /// Request body, defaults to no body.
         public var body: Body?
-        private var _url: URL!
-        private var _scheme: String!
-        private var _host: String!
 
         /// Create HTTP request.
         ///
@@ -133,14 +136,6 @@ extension HTTPClient {
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
         public init(url: URL, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
-            self.version = version
-            self.method = method
-            self.headers = headers
-            self.body = body
-            try self.setURL(url)
-        }
-
-        public mutating func setURL(_ url: URL) throws {
             guard let scheme = url.scheme?.lowercased() else {
                 throw HTTPClientError.emptyScheme
             }
@@ -153,24 +148,13 @@ extension HTTPClient {
                 throw HTTPClientError.emptyHost
             }
 
-            self._url = url
-            self._scheme = scheme
-            self._host = host
-        }
-
-        /// Remote URL.
-        public var url: URL {
-            return self._url
-        }
-
-        /// Remote HTTP scheme, resolved from `URL`.
-        public var scheme: String {
-            return self._scheme
-        }
-
-        /// Remote host, resolved from `URL`.
-        public var host: String {
-            return self._host
+            self.version = version
+            self.method = method
+            self.url = url
+            self.scheme = scheme
+            self.host = host
+            self.headers = headers
+            self.body = body
         }
 
         /// Whether request will be executed using secure socket.
@@ -668,14 +652,7 @@ internal struct RedirectHandler<T> {
     }
 
     func redirect(status: HTTPResponseStatus, to redirectURL: URL, promise: EventLoopPromise<T>) {
-        let originalURL = self.request.url
-
-        var request = self.request
-        do {
-            try request.setURL(redirectURL)
-        } catch {
-            return promise.fail(error)
-        }
+        let originalRequest = self.request
 
         var convertToGet = false
         if status == .seeOther, request.method != .HEAD {
@@ -684,20 +661,29 @@ internal struct RedirectHandler<T> {
             convertToGet = true
         }
 
+        var method = originalRequest.method
+        var headers = originalRequest.headers
+        var body = originalRequest.body
+
         if convertToGet {
-            request.method = .GET
-            request.body = nil
-            request.headers.remove(name: "Content-Length")
-            request.headers.remove(name: "Content-Type")
+            method = .GET
+            body = nil
+            headers.remove(name: "Content-Length")
+            headers.remove(name: "Content-Type")
         }
 
-        if !originalURL.hasTheSameOrigin(as: redirectURL) {
-            request.headers.remove(name: "Origin")
-            request.headers.remove(name: "Cookie")
-            request.headers.remove(name: "Authorization")
-            request.headers.remove(name: "Proxy-Authorization")
+        if !originalRequest.url.hasTheSameOrigin(as: redirectURL) {
+            headers.remove(name: "Origin")
+            headers.remove(name: "Cookie")
+            headers.remove(name: "Authorization")
+            headers.remove(name: "Proxy-Authorization")
         }
 
-        return self.execute(request).futureResult.cascade(to: promise)
+        do {
+            let newRequest = try HTTPClient.Request(url: redirectURL, version: originalRequest.version, method: method, headers: headers, body: body)
+            return self.execute(newRequest).futureResult.cascade(to: promise)
+        } catch {
+            return promise.fail(error)
+        }
     }
 }
