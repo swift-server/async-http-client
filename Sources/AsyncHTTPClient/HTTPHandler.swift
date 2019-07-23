@@ -87,8 +87,6 @@ extension HTTPClient {
 
     /// Represent HTTP request.
     public struct Request {
-        /// Request HTTP version, defaults to `HTTP/1.1`.
-        public let version: HTTPVersion
         /// Request HTTP method, defaults to `GET`.
         public let method: HTTPMethod
         /// Remote URL.
@@ -115,12 +113,12 @@ extension HTTPClient {
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
-        public init(url: String, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+        public init(url: String, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
             guard let url = URL(string: url) else {
                 throw HTTPClientError.invalidURL
             }
 
-            try self.init(url: url, version: version, method: method, headers: headers, body: body)
+            try self.init(url: url, method: method, headers: headers, body: body)
         }
 
         /// Create an HTTP `Request`.
@@ -135,7 +133,7 @@ extension HTTPClient {
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
-        public init(url: URL, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
             guard let scheme = url.scheme?.lowercased() else {
                 throw HTTPClientError.emptyScheme
             }
@@ -148,7 +146,6 @@ extension HTTPClient {
                 throw HTTPClientError.emptyHost
             }
 
-            self.version = version
             self.method = method
             self.url = url
             self.scheme = scheme
@@ -444,10 +441,10 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
         self.state = .idle
         let request = unwrapOutboundIn(data)
 
-        var head = HTTPRequestHead(version: request.version, method: request.method, uri: request.url.uri)
+        var head = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: request.method, uri: request.url.uri)
         var headers = request.headers
 
-        if request.version.major == 1, request.version.minor == 1, !request.headers.contains(name: "Host") {
+        if !request.headers.contains(name: "Host") {
             headers.add(name: "Host", value: request.host)
         }
 
@@ -680,7 +677,7 @@ internal struct RedirectHandler<T> {
         }
 
         do {
-            let newRequest = try HTTPClient.Request(url: redirectURL, version: originalRequest.version, method: method, headers: headers, body: body)
+            let newRequest = try HTTPClient.Request(url: redirectURL, method: method, headers: headers, body: body)
             return self.execute(newRequest).futureResult.cascade(to: promise)
         } catch {
             return promise.fail(error)
