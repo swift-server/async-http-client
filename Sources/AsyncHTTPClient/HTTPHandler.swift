@@ -468,26 +468,30 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             self.delegate.didSendRequestHead(task: self.task, head)
         }
 
-        self.writeBody(request: request, context: context).whenComplete { result in
-            switch result {
-            case .success:
-                context.write(self.wrapOutboundOut(.end(nil)), promise: promise)
-                context.flush()
-
-                self.state = .sent
-                self.delegate.didSendRequest(task: self.task)
-
-                let channel = context.channel
-                self.task.futureResult.whenComplete { _ in
-                    channel.close(promise: nil)
-                }
-            case .failure(let error):
-                self.state = .end
-                self.delegate.didReceiveError(task: self.task, error)
-                self.task.fail(error)
-                context.close(promise: nil)
+        self.writeBody(request: request, context: context)
+            .flatMap {
+                context.writeAndFlush(self.wrapOutboundOut(.end(nil)))
             }
-        }
+            .whenComplete { result in
+                switch result {
+                case .success:
+                    self.state = .sent
+                    self.delegate.didSendRequest(task: self.task)
+                    promise?.succeed(())
+
+                    let channel = context.channel
+                    self.task.futureResult.whenComplete { _ in
+                        channel.close(promise: nil)
+                    }
+                case .failure(let error):
+                    self.state = .end
+                    self.delegate.didReceiveError(task: self.task, error)
+                    promise?.fail(error)
+
+                    self.task.fail(error)
+                    context.close(promise: nil)
+                }
+            }
     }
 
     private func writeBody(request: HTTPClient.Request, context: ChannelHandlerContext) -> EventLoopFuture<Void> {
