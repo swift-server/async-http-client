@@ -18,12 +18,42 @@ import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOSSL
 
+/// HTTPClient class provides API for request execution.
+///
+/// Example:
+///
+/// ```swift
+///     let client = HTTPClient(eventLoopGroupProvider = .createNew)
+///     client.get(url: "https://swift.org", deadline: .now() + .seconds(1)).whenComplete { result in
+///         switch result {
+///         case .failure(let error):
+///             // process error
+///         case .success(let response):
+///             if let response.status == .ok {
+///                 // handle response
+///             } else {
+///                 // handle remote error
+///             }
+///         }
+///     }
+/// ```
+///
+/// It is important to close the client instance, for example in a defer statement, after use to cleanly shutdown the underlying NIO `EventLoopGroup`:
+///
+/// ```swift
+///     try client.syncShutdown()
+/// ```
 public class HTTPClient {
     public let eventLoopGroup: EventLoopGroup
     let eventLoopGroupProvider: EventLoopGroupProvider
     let configuration: Configuration
     let isShutdown = Atomic<Bool>(value: false)
 
+    /// Create an `HTTPClient` with specified `EventLoopGroup` provider and configuration.
+    ///
+    /// - parameters:
+    ///     - eventLoopGroupProvider: Specify how `EventLoopGroup` will be created.
+    ///     - configuration: Client configuration.
     public init(eventLoopGroupProvider: EventLoopGroupProvider, configuration: Configuration = Configuration()) {
         self.eventLoopGroupProvider = eventLoopGroupProvider
         switch self.eventLoopGroupProvider {
@@ -44,6 +74,7 @@ public class HTTPClient {
         }
     }
 
+    /// Shuts down the client and `EventLoopGroup` if it was created by the client.
     public func syncShutdown() throws {
         switch self.eventLoopGroupProvider {
         case .shared:
@@ -58,6 +89,11 @@ public class HTTPClient {
         }
     }
 
+    /// Execute `GET` request using specified URL.
+    ///
+    /// - parameters:
+    ///     - url: Remote URL.
+    ///     - deadline: Point in time by which the request must complete.
     public func get(url: String, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try Request(url: url, method: .GET)
@@ -67,6 +103,12 @@ public class HTTPClient {
         }
     }
 
+    /// Execute `POST` request using specified URL.
+    ///
+    /// - parameters:
+    ///     - url: Remote URL.
+    ///     - body: Request body.
+    ///     - deadline: Point in time by which the request must complete.
     public func post(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .POST, body: body)
@@ -76,6 +118,12 @@ public class HTTPClient {
         }
     }
 
+    /// Execute `PATCH` request using specified URL.
+    ///
+    /// - parameters:
+    ///     - url: Remote URL.
+    ///     - body: Request body.
+    ///     - deadline: Point in time by which the request must complete.
     public func patch(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .PATCH, body: body)
@@ -85,6 +133,12 @@ public class HTTPClient {
         }
     }
 
+    /// Execute `PUT` request using specified URL.
+    ///
+    /// - parameters:
+    ///     - url: Remote URL.
+    ///     - body: Request body.
+    ///     - deadline: Point in time by which the request must complete.
     public func put(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .PUT, body: body)
@@ -94,6 +148,11 @@ public class HTTPClient {
         }
     }
 
+    /// Execute `DELETE` request using specified URL.
+    ///
+    /// - parameters:
+    ///     - url: Remote URL.
+    ///     - deadline: The time when the request must have been completed by.
     public func delete(url: String, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try Request(url: url, method: .DELETE)
@@ -103,11 +162,22 @@ public class HTTPClient {
         }
     }
 
+    /// Execute arbitrary HTTP request using specified URL.
+    ///
+    /// - parameters:
+    ///     - request: HTTP request to execute.
+    ///     - deadline: Point in time by which the request must complete.
     public func execute(request: Request, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         let accumulator = ResponseAccumulator(request: request)
         return self.execute(request: request, delegate: accumulator, deadline: deadline).futureResult
     }
 
+    /// Execute arbitrary HTTP request and handle response processing using provided delegate.
+    ///
+    /// - parameters:
+    ///     - request: HTTP request to execute.
+    ///     - delegate: Delegate to process response parts.
+    ///     - deadline: Point in time by which the request must complete.
     public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, deadline: NIODeadline? = nil) -> Task<T.Response> {
         let eventLoop = self.eventLoopGroup.next()
 
@@ -187,10 +257,24 @@ public class HTTPClient {
         }
     }
 
+    /// `HTTPClient` configuration.
     public struct Configuration {
+        /// TLS configuration, defaults to `TLSConfiguration.forClient()`.
         public var tlsConfiguration: TLSConfiguration?
+        /// Enables following 3xx redirects automatically, defaults to `false`.
+        ///
+        /// Following redirects are supported:
+        ///  - `301: Moved Permanently`
+        ///  - `302: Found`
+        ///  - `303: See Other`
+        ///  - `304: Not Modified`
+        ///  - `305: Use Proxy`
+        ///  - `307: Temporary Redirect`
+        ///  - `308: Permanent Redirect`
         public var followRedirects: Bool
+        /// Default client timeout, defaults to no timeouts.
         public var timeout: Timeout
+        /// Upstream proxy, defaults to no proxy.
         public var proxy: Proxy?
 
         public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
@@ -208,15 +292,26 @@ public class HTTPClient {
         }
     }
 
+    /// Specifies how `EventLoopGroup` will be created and establishes lifecycle ownership.
     public enum EventLoopGroupProvider {
+        /// `EventLoopGroup` will be provided by the user. Owner of this group is responsible for its lifecycle.
         case shared(EventLoopGroup)
+        /// `EventLoopGroup` will be created by the client. When `syncShutdown` is called, created `EventLoopGroup` will be shut down as well.
         case createNew
     }
 
+    /// Timeout configuration
     public struct Timeout {
+        /// Specifies connect timeout.
         public var connect: TimeAmount?
+        /// Specifies read timeout.
         public var read: TimeAmount?
 
+        /// Create timeout.
+        ///
+        /// - parameters:
+        ///     - connect: `connect` timeout.
+        ///     - read: `read` timeout.
         public init(connect: TimeAmount? = nil, read: TimeAmount? = nil) {
             self.connect = connect
             self.read = read
@@ -255,6 +350,7 @@ private extension ChannelPipeline {
     }
 }
 
+/// Possible client errors.
 public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     private enum Code: Equatable {
         case invalidURL
@@ -282,17 +378,29 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         return "HTTPClientError.\(String(describing: self.code))"
     }
 
+    /// URL provided is invalid.
     public static let invalidURL = HTTPClientError(code: .invalidURL)
+    /// URL does not contain host.
     public static let emptyHost = HTTPClientError(code: .emptyHost)
+    /// Client is shutdown and cannot be used for new requests.
     public static let alreadyShutdown = HTTPClientError(code: .alreadyShutdown)
+    /// URL does not contain scheme.
     public static let emptyScheme = HTTPClientError(code: .emptyScheme)
+    /// Provided URL scheme is not supported, supported schemes are: `http` and `https`
     public static func unsupportedScheme(_ scheme: String) -> HTTPClientError { return HTTPClientError(code: .unsupportedScheme(scheme)) }
+    /// Request timed out.
     public static let readTimeout = HTTPClientError(code: .readTimeout)
+    /// Remote connection was closed unexpectedly.
     public static let remoteConnectionClosed = HTTPClientError(code: .remoteConnectionClosed)
+    /// Request was cancelled.
     public static let cancelled = HTTPClientError(code: .cancelled)
+    /// Request contains invalid identity encoding.
     public static let identityCodingIncorrectlyPresent = HTTPClientError(code: .identityCodingIncorrectlyPresent)
+    /// Request contains multiple chunks definitions.
     public static let chunkedSpecifiedMultipleTimes = HTTPClientError(code: .chunkedSpecifiedMultipleTimes)
+    /// Proxy response was invalid.
     public static let invalidProxyResponse = HTTPClientError(code: .invalidProxyResponse)
+    /// Request does not contain `Content-Length` header.
     public static let contentLengthMissing = HTTPClientError(code: .contentLengthMissing)
     public static func malformedResponse(_ message: String) -> HTTPClientError { return HTTPClientError(code: .malformedResponse(message)) }
 }

@@ -39,7 +39,7 @@ httpClient.get(url: "https://swift.org").whenComplete { result in
     case .failure(let error):
         // process error
     case .success(let response):
-        if let response.status == .ok {
+        if response.status == .ok {
             // handle response
         } else {
             // handle remote error
@@ -69,7 +69,7 @@ defer {
     try? httpClient.syncShutdown()
 }
 
-var request = try HTTPClient.HTTPRequest(url: "https://swift.org", method: .POST)
+var request = try HTTPClient.Request(url: "https://swift.org", method: .POST)
 request.headers.add(name: "User-Agent", value: "Swift HTTPClient")
 request.body = .string("some-body")
 
@@ -78,7 +78,7 @@ httpClient.execute(request: request).whenComplete { result in
     case .failure(let error):
         // process error
     case .success(let response):
-        if let response.status == .ok {
+        if response.status == .ok {
             // handle response
         } else {
             // handle remote error
@@ -110,6 +110,9 @@ httpClient.execute(request: request, timeout: timeout)
 ### Streaming
 When dealing with larger amount of data, it's critical to stream the response body instead of aggregating in-memory. Handling a response stream is done using a delegate protocol. The following example demonstrates how to count the number of bytes in a streaming response body:
 ```swift
+import NIO
+import NIOHTTP1
+
 class CountingDelegate: HTTPClientResponseDelegate {
     typealias Response = Int
 
@@ -154,7 +157,7 @@ class CountingDelegate: HTTPClientResponseDelegate {
 let request = try HTTPClient.Request(url: "https://swift.org")
 let delegate = CountingDelegate()
 
-try httpClient.execute(request: request, delegate: delegate).future.whenSuccess { count in
+httpClient.execute(request: request, delegate: delegate).futureResult.whenSuccess { count in
     print(count)
 }
 ```
