@@ -478,11 +478,6 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                     self.state = .sent
                     self.delegate.didSendRequest(task: self.task)
                     promise?.succeed(())
-
-                    let channel = context.channel
-                    self.task.futureResult.whenComplete { _ in
-                        channel.close(promise: nil)
-                    }
                 case .failure(let error):
                     self.state = .end
                     self.delegate.didReceiveError(task: self.task, error)
@@ -554,6 +549,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                 } catch {
                     self.task.fail(error)
                 }
+                context.close(promise: nil)
             }
         }
     }
@@ -569,6 +565,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             self.state = .end
             self.delegate.didReceiveError(task: self.task, error)
             self.task.fail(error)
+            context.close(promise: nil)
         }
     }
 
@@ -578,11 +575,13 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             let error = HTTPClientError.readTimeout
             self.delegate.didReceiveError(task: self.task, error)
             self.task.fail(error)
+            context.close(promise: nil)
         } else if (event as? TaskCancelEvent) != nil {
             self.state = .end
             let error = HTTPClientError.cancelled
             self.delegate.didReceiveError(task: self.task, error)
             self.task.fail(error)
+            context.close(promise: nil)
         } else {
             context.fireUserInboundEventTriggered(event)
         }
@@ -597,6 +596,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             let error = HTTPClientError.remoteConnectionClosed
             self.delegate.didReceiveError(task: self.task, error)
             self.task.fail(error)
+            context.close(promise: nil)
         }
     }
 
@@ -612,11 +612,13 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                 self.state = .end
                 self.delegate.didReceiveError(task: self.task, error)
                 self.task.fail(error)
+                context.close(promise: nil)
             }
         default:
             self.state = .end
             self.delegate.didReceiveError(task: self.task, error)
             self.task.fail(error)
+            context.close(promise: nil)
         }
     }
 }
