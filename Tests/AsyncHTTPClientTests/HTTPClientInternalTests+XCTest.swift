@@ -30,7 +30,6 @@ extension HTTPClientInternalTests {
             ("testProxyStreaming", testProxyStreaming),
             ("testProxyStreamingFailure", testProxyStreamingFailure),
             ("testUploadStreamingBackpressure", testUploadStreamingBackpressure),
-            ("testMalformedResponse", testMalformedResponse),
         ]
     }
 }
