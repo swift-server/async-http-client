@@ -330,4 +330,36 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(.ok, response.status)
         XCTAssertEqual("12344321", data.data)
     }
+
+    func testHeadOnProcessedConnection() throws {
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        defer {
+            try! httpClient.syncShutdown()
+            try! group.syncShutdownGracefully()
+        }
+
+        class BadHandler: ChannelDuplexHandler {
+            typealias InboundIn = ByteBuffer
+            typealias OutboundIn = ByteBuffer
+            typealias OutboundOut = ByteBuffer
+
+            func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+                let response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n"
+                context.writeAndFlush(self.wrapOutboundOut(ByteBuffer.of(string: response)), promise: nil)
+                context.writeAndFlush(self.wrapOutboundOut(ByteBuffer.of(string: response)), promise: nil)
+                context.close(promise: nil)
+            }
+        }
+
+        let serverChannel = try! ServerBootstrap(group: group)
+            .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+            .childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
+            .childChannelInitializer { channel in
+                channel.pipeline.addHandler(BadHandler(), position: .first)
+            }.bind(host: "127.0.0.1", port: 0).wait()
+
+        let response = try httpClient.get(url: "http://localhost:\(serverChannel.localAddress!.port!)").wait()
+        XCTAssertEqual(.ok, response.status)
+    }
 }
