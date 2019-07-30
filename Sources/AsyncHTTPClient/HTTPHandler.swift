@@ -637,7 +637,7 @@ internal struct RedirectHandler<T> {
             return nil
         }
 
-        guard HTTPClient.Request.isSchemeSupported(scheme: request.scheme) else {
+        guard HTTPClient.Request.isSchemeSupported(scheme: self.request.scheme) else {
             return nil
         }
 
@@ -652,9 +652,9 @@ internal struct RedirectHandler<T> {
         let originalRequest = self.request
 
         var convertToGet = false
-        if status == .seeOther, request.method != .HEAD {
+        if status == .seeOther, self.request.method != .HEAD {
             convertToGet = true
-        } else if status == .movedPermanently || status == .found, request.method == .POST {
+        } else if status == .movedPermanently || status == .found, self.request.method == .POST {
             convertToGet = true
         }
 
