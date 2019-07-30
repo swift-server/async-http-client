@@ -19,7 +19,6 @@ import NIOHTTP1
 import NIOSSL
 
 extension HTTPClient {
-
     /// Represent request body.
     public struct Body {
         /// Chunk provider.
@@ -88,16 +87,14 @@ extension HTTPClient {
 
     /// Represent HTTP request.
     public struct Request {
-        /// Request HTTP version, defaults to `HTTP/1.1`.
-        public var version: HTTPVersion
         /// Request HTTP method, defaults to `GET`.
-        public var method: HTTPMethod
+        public let method: HTTPMethod
         /// Remote URL.
-        public var url: URL
+        public let url: URL
         /// Remote HTTP scheme, resolved from `URL`.
-        public var scheme: String
+        public let scheme: String
         /// Remote host, resolved from `URL`.
-        public var host: String
+        public let host: String
         /// Request custom HTTP Headers, defaults to no headers.
         public var headers: HTTPHeaders
         /// Request body, defaults to no body.
@@ -116,12 +113,12 @@ extension HTTPClient {
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
-        public init(url: String, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+        public init(url: String, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
             guard let url = URL(string: url) else {
                 throw HTTPClientError.invalidURL
             }
 
-            try self.init(url: url, version: version, method: method, headers: headers, body: body)
+            try self.init(url: url, method: method, headers: headers, body: body)
         }
 
         /// Create an HTTP `Request`.
@@ -136,8 +133,8 @@ extension HTTPClient {
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
-        public init(url: URL, version: HTTPVersion = HTTPVersion(major: 1, minor: 1), method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
-            guard let scheme = url.scheme else {
+        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+            guard let scheme = url.scheme?.lowercased() else {
                 throw HTTPClientError.emptyScheme
             }
 
@@ -149,7 +146,6 @@ extension HTTPClient {
                 throw HTTPClientError.emptyHost
             }
 
-            self.version = version
             self.method = method
             self.url = url
             self.scheme = scheme
@@ -160,7 +156,7 @@ extension HTTPClient {
 
         /// Whether request will be executed using secure socket.
         public var useTLS: Bool {
-            return self.url.scheme == "https"
+            return self.scheme == "https"
         }
 
         /// Resolved port.
@@ -168,7 +164,7 @@ extension HTTPClient {
             return self.url.port ?? (self.useTLS ? 443 : 80)
         }
 
-        static func isSchemeSupported(scheme: String?) -> Bool {
+        static func isSchemeSupported(scheme: String) -> Bool {
             return scheme == "http" || scheme == "https"
         }
     }
@@ -333,7 +329,7 @@ extension HTTPClientResponseDelegate {
 
     public func didSendRequest(task: HTTPClient.Task<Response>) {}
 
-    public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead)  -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
+    public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
 
     public func didReceivePart(task: HTTPClient.Task<Response>, _: ByteBuffer) -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
 
@@ -445,10 +441,10 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
         self.state = .idle
         let request = unwrapOutboundIn(data)
 
-        var head = HTTPRequestHead(version: request.version, method: request.method, uri: request.url.uri)
+        var head = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: request.method, uri: request.url.uri)
         var headers = request.headers
 
-        if request.version.major == 1, request.version.minor == 1, !request.headers.contains(name: "Host") {
+        if !request.headers.contains(name: "Host") {
             headers.add(name: "Host", value: request.host)
         }
 
@@ -643,7 +639,7 @@ internal struct RedirectHandler<T> {
             return nil
         }
 
-        guard HTTPClient.Request.isSchemeSupported(scheme: url.scheme) else {
+        guard HTTPClient.Request.isSchemeSupported(scheme: self.request.scheme) else {
             return nil
         }
 
@@ -655,44 +651,38 @@ internal struct RedirectHandler<T> {
     }
 
     func redirect(status: HTTPResponseStatus, to redirectURL: URL, promise: EventLoopPromise<T>) {
-        let originalURL = self.request.url
-
-        var request = self.request
-        request.url = redirectURL
-
-        if let redirectHost = redirectURL.host {
-            request.host = redirectHost
-        } else {
-            preconditionFailure("redirectURL doesn't contain a host")
-        }
-
-        if let redirectScheme = redirectURL.scheme {
-            request.scheme = redirectScheme
-        } else {
-            preconditionFailure("redirectURL doesn't contain a scheme")
-        }
+        let originalRequest = self.request
 
         var convertToGet = false
-        if status == .seeOther, request.method != .HEAD {
+        if status == .seeOther, self.request.method != .HEAD {
             convertToGet = true
-        } else if status == .movedPermanently || status == .found, request.method == .POST {
+        } else if status == .movedPermanently || status == .found, self.request.method == .POST {
             convertToGet = true
         }
+
+        var method = originalRequest.method
+        var headers = originalRequest.headers
+        var body = originalRequest.body
 
         if convertToGet {
-            request.method = .GET
-            request.body = nil
-            request.headers.remove(name: "Content-Length")
-            request.headers.remove(name: "Content-Type")
+            method = .GET
+            body = nil
+            headers.remove(name: "Content-Length")
+            headers.remove(name: "Content-Type")
         }
 
-        if !originalURL.hasTheSameOrigin(as: redirectURL) {
-            request.headers.remove(name: "Origin")
-            request.headers.remove(name: "Cookie")
-            request.headers.remove(name: "Authorization")
-            request.headers.remove(name: "Proxy-Authorization")
+        if !originalRequest.url.hasTheSameOrigin(as: redirectURL) {
+            headers.remove(name: "Origin")
+            headers.remove(name: "Cookie")
+            headers.remove(name: "Authorization")
+            headers.remove(name: "Proxy-Authorization")
         }
 
-        return self.execute(request).futureResult.cascade(to: promise)
+        do {
+            let newRequest = try HTTPClient.Request(url: redirectURL, method: method, headers: headers, body: body)
+            return self.execute(newRequest).futureResult.cascade(to: promise)
+        } catch {
+            return promise.fail(error)
+        }
     }
 }

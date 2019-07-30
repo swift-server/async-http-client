@@ -194,4 +194,3 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertEqual(delegate.reads, 3)
     }
 }
-
