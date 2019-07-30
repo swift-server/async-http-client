@@ -19,7 +19,6 @@ import NIOHTTP1
 import NIOSSL
 
 extension HTTPClient {
-
     /// Represent request body.
     public struct Body {
         /// Chunk provider.
@@ -333,7 +332,7 @@ extension HTTPClientResponseDelegate {
 
     public func didSendRequest(task: HTTPClient.Task<Response>) {}
 
-    public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead)  -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
+    public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
 
     public func didReceivePart(task: HTTPClient.Task<Response>, _: ByteBuffer) -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
 
