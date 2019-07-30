@@ -44,7 +44,7 @@ class HTTPClientTests: XCTestCase {
         let response = try httpClient.get(url: "http://localhost:\(httpBin.port)/get").wait()
         XCTAssertEqual(.ok, response.status)
     }
-    
+
     func testGetWithSharedEventLoopGroup() throws {
         let httpBin = HttpBin()
         let elg = MultiThreadedEventLoopGroup(numberOfThreads: 8)
@@ -53,12 +53,12 @@ class HTTPClientTests: XCTestCase {
             try! elg.syncShutdownGracefully()
             httpBin.shutdown()
         }
-        
+
         let delegate = TestHTTPDelegate()
         let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/events/10/1")
         let task = httpClient.execute(request: request, delegate: delegate)
         let expectedEventLoop = task.eventLoop
-        task.futureResult.whenComplete { (_) in
+        task.futureResult.whenComplete { _ in
             XCTAssertTrue(expectedEventLoop.inEventLoop)
         }
         try task.wait()
@@ -154,7 +154,7 @@ class HTTPClientTests: XCTestCase {
         let hostName = try decoder.decode([String: String].self, from: responseData)["data"]
         XCTAssert(hostName == "127.0.0.1")
     }
-    
+
     func testPercentEncoded() throws {
         let httpBin = HttpBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
@@ -162,7 +162,7 @@ class HTTPClientTests: XCTestCase {
             try! httpClient.syncShutdown()
             httpBin.shutdown()
         }
-        
+
         let response = try httpClient.get(url: "http://localhost:\(httpBin.port)/percent%20encoded").wait()
         XCTAssertEqual(.ok, response.status)
     }

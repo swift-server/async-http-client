@@ -28,10 +28,23 @@ else
   printf "\033[0;32mokay.\033[0m\n"
 fi
 
-printf "=> Checking license headers... "
+printf "=> Checking format... "
+FIRST_OUT="$(git status --porcelain)"
+swiftformat . > /dev/null 2>&1
+SECOND_OUT="$(git status --porcelain)"
+if [[ "$FIRST_OUT" != "$SECOND_OUT" ]]; then
+  printf "\033[0;31mformatting issues!\033[0m\n"
+  git --no-pager diff
+  exit 1
+else
+  printf "\033[0;32mokay.\033[0m\n"
+fi
+
+printf "=> Checking license headers\n"
 tmp=$(mktemp /tmp/.async-http-client-sanity_XXXXXX)
 
 for language in swift-or-c bash dtrace; do
+  printf "   * $language... "
   declare -a matching_files
   declare -a exceptions
   expections=( )
