@@ -26,6 +26,8 @@ extension HTTPClientTests {
     static var allTests: [(String, (HTTPClientTests) -> () throws -> Void)] {
         return [
             ("testRequestURI", testRequestURI),
+            ("testBadRequestURI", testBadRequestURI),
+            ("testSchemaCasing", testSchemaCasing),
             ("testGet", testGet),
             ("testGetWithSharedEventLoopGroup", testGetWithSharedEventLoopGroup),
             ("testPost", testPost),

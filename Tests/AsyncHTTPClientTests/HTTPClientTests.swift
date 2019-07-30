@@ -23,7 +23,7 @@ class HTTPClientTests: XCTestCase {
 
     func testRequestURI() throws {
         let request1 = try Request(url: "https://someserver.com:8888/some/path?foo=bar")
-        XCTAssertEqual(request1.host, "someserver.com")
+        XCTAssertEqual(request1.url.host, "someserver.com")
         XCTAssertEqual(request1.url.path, "/some/path")
         XCTAssertEqual(request1.url.query!, "foo=bar")
         XCTAssertEqual(request1.port, 8888)
@@ -31,6 +31,22 @@ class HTTPClientTests: XCTestCase {
 
         let request2 = try Request(url: "https://someserver.com")
         XCTAssertEqual(request2.url.path, "")
+    }
+
+    func testBadRequestURI() throws {
+        XCTAssertThrowsError(try Request(url: "some/path"), "should throw") { error in
+            XCTAssertEqual(error as! HTTPClientError, HTTPClientError.emptyScheme)
+        }
+        XCTAssertThrowsError(try Request(url: "file://somewhere/some/path?foo=bar"), "should throw") { error in
+            XCTAssertEqual(error as! HTTPClientError, HTTPClientError.unsupportedScheme("file"))
+        }
+        XCTAssertThrowsError(try Request(url: "https:/foo"), "should throw") { error in
+            XCTAssertEqual(error as! HTTPClientError, HTTPClientError.emptyHost)
+        }
+    }
+
+    func testSchemaCasing() throws {
+        XCTAssertNoThrow(try Request(url: "hTTpS://someserver.com:8888/some/path?foo=bar"))
     }
 
     func testGet() throws {
