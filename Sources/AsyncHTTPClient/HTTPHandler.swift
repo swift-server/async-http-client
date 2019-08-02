@@ -448,7 +448,9 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             headers.add(name: "Host", value: request.host)
         }
 
-        headers.add(name: "Connection", value: "close")
+        if !request.headers.contains(name: "Connection") {
+            headers.add(name: "Connection", value: "close")
+        }
 
         do {
             try headers.validate(body: request.body)
