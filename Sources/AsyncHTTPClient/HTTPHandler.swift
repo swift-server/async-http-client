@@ -179,7 +179,7 @@ extension HTTPClient {
         public var headers: HTTPHeaders
         /// Response body.
         public var body: ByteBuffer?
-        
+
         /// Create HTTP `Response`.
         ///
         /// - parameters:
