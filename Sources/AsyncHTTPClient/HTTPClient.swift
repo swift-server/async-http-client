@@ -211,7 +211,7 @@ public class HTTPClient {
                         return channel.eventLoop.makeSucceededFuture(())
                     }
                 }.flatMap {
-                    let taskHandler = TaskHandler(task: task, delegate: delegate, redirectHandler: redirectHandler)
+                    let taskHandler = TaskHandler(task: task, delegate: delegate, redirectHandler: redirectHandler, ignoreNIOSSLUncleanShutdownError: self.configuration.ignoreNIOSSLUncleanShutdownError)
                     return channel.pipeline.addHandler(taskHandler)
                 }
             }
@@ -276,19 +276,23 @@ public class HTTPClient {
         public var timeout: Timeout
         /// Upstream proxy, defaults to no proxy.
         public var proxy: Proxy?
+        /// Enables ignore NIOSSLError.uncleanShutdown when state is .head or .body, defaults to `false`.
+        public var ignoreNIOSSLUncleanShutdownError: Bool
 
-        public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
+        public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreNIOSSLUncleanShutdownError: Bool = false) {
             self.tlsConfiguration = tlsConfiguration
             self.followRedirects = followRedirects
             self.timeout = timeout
             self.proxy = proxy
+            self.ignoreNIOSSLUncleanShutdownError = ignoreNIOSSLUncleanShutdownError
         }
 
-        public init(certificateVerification: CertificateVerification, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
+        public init(certificateVerification: CertificateVerification, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreNIOSSLUncleanShutdownError: Bool = false) {
             self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
             self.followRedirects = followRedirects
             self.timeout = timeout
             self.proxy = proxy
+            self.ignoreNIOSSLUncleanShutdownError = ignoreNIOSSLUncleanShutdownError
         }
     }
 

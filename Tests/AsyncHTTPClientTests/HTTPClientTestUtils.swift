@@ -332,7 +332,7 @@ internal final class HttpBinHandler: ChannelInboundHandler {
     }
 }
 
-internal class HttpBinWithNIOSSLUncleanShutdown {
+internal class HttpBinForSSLUncleanShutdown {
     let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
     let serverChannel: Channel
 
@@ -351,7 +351,7 @@ internal class HttpBinWithNIOSSLUncleanShutdown {
                                                                    privateKey: .privateKey(try! NIOSSLPrivateKey(buffer: key.utf8.map(Int8.init), format: .pem)))
                     let context = try! NIOSSLContext(configuration: configuration)
                     return channel.pipeline.addHandler(try! NIOSSLServerHandler(context: context), name: "NIOSSLServerHandler", position: .first).flatMap {
-                        channel.pipeline.addHandler(HttpBinWithNIOSSLUncleanShutdownHandler(channelPromise: channelPromise))
+                        channel.pipeline.addHandler(HttpBinForSSLUncleanShutdownHandler(channelPromise: channelPromise))
                     }
                 }
             }.bind(host: "127.0.0.1", port: 0).wait()
@@ -362,7 +362,7 @@ internal class HttpBinWithNIOSSLUncleanShutdown {
     }
 }
 
-internal final class HttpBinWithNIOSSLUncleanShutdownHandler: ChannelInboundHandler {
+internal final class HttpBinForSSLUncleanShutdownHandler: ChannelInboundHandler {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = ByteBuffer
 

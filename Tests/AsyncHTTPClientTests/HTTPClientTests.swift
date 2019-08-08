@@ -348,10 +348,27 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual("12344321", data.data)
     }
 
-    func testNoContentLengthWithNIOSSLUncleanShutdown() throws {
-        let httpBin = HttpBinWithNIOSSLUncleanShutdown()
+    func testNoContentLengthForSSLUncleanShutdown() throws {
+        let httpBin = HttpBinForSSLUncleanShutdown()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
+
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+
+        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/nocontentlength").wait(), "Should fail") { error in
+            guard case let error = error as? NIOSSLError, case .uncleanShutdown = error else {
+                return XCTFail("Should fail with NIOSSLError.uncleanShutdown")
+            }
+        }
+    }
+
+    func testNoContentLengthWithIgnoreErrorForSSLUncleanShutdown() throws {
+        let httpBin = HttpBinForSSLUncleanShutdown()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none, ignoreNIOSSLUncleanShutdownError: true))
 
         defer {
             try! httpClient.syncShutdown()
@@ -366,8 +383,8 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual("foo", string)
     }
 
-    func testCorrectContentLengthWithNIOSSLUncleanShutdown() throws {
-        let httpBin = HttpBinWithNIOSSLUncleanShutdown()
+    func testCorrectContentLengthForSSLUncleanShutdown() throws {
+        let httpBin = HttpBinForSSLUncleanShutdown()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
 
@@ -384,8 +401,8 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual("Not Found", string)
     }
 
-    func testNoContentWithNIOSSLUncleanShutdown() throws {
-        let httpBin = HttpBinWithNIOSSLUncleanShutdown()
+    func testNoContentForSSLUncleanShutdown() throws {
+        let httpBin = HttpBinForSSLUncleanShutdown()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
 
@@ -400,8 +417,8 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(response.body, nil)
     }
 
-    func testNoResponseWithNIOSSLUncleanShutdown() throws {
-        let httpBin = HttpBinWithNIOSSLUncleanShutdown()
+    func testNoResponseForSSLUncleanShutdown() throws {
+        let httpBin = HttpBinForSSLUncleanShutdown()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
 
@@ -417,10 +434,44 @@ class HTTPClientTests: XCTestCase {
         }
     }
 
-    func testWrongContentLengthWithNIOSSLUncleanShutdown() throws {
-        let httpBin = HttpBinWithNIOSSLUncleanShutdown()
+    func testNoResponseWithIgnoreErrorForSSLUncleanShutdown() throws {
+        let httpBin = HttpBinForSSLUncleanShutdown()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none, ignoreNIOSSLUncleanShutdownError: true))
+
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+
+        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/noresponse").wait(), "Should fail") { error in
+            guard case let error = error as? NIOSSLError, case .uncleanShutdown = error else {
+                return XCTFail("Should fail with NIOSSLError.uncleanShutdown")
+            }
+        }
+    }
+
+    func testWrongContentLengthForSSLUncleanShutdown() throws {
+        let httpBin = HttpBinForSSLUncleanShutdown()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
+
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+
+        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/wrongcontentlength").wait(), "Should fail") { error in
+            guard case let error = error as? NIOSSLError, case .uncleanShutdown = error else {
+                return XCTFail("Should fail with NIOSSLError.uncleanShutdown")
+            }
+        }
+    }
+
+    func testWrongContentLengthWithIgnoreErrorForSSLUncleanShutdown() throws {
+        let httpBin = HttpBinForSSLUncleanShutdown()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none, ignoreNIOSSLUncleanShutdownError: true))
 
         defer {
             try! httpClient.syncShutdown()

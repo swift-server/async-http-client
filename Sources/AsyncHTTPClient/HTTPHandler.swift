@@ -426,15 +426,17 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
     let task: HTTPClient.Task<T.Response>
     let delegate: T
     let redirectHandler: RedirectHandler<T.Response>?
+    let ignoreNIOSSLUncleanShutdownError: Bool
 
     var state: State = .idle
     var pendingRead = false
     var mayRead = true
 
-    init(task: HTTPClient.Task<T.Response>, delegate: T, redirectHandler: RedirectHandler<T.Response>?) {
+    init(task: HTTPClient.Task<T.Response>, delegate: T, redirectHandler: RedirectHandler<T.Response>?, ignoreNIOSSLUncleanShutdownError: Bool) {
         self.task = task
         self.delegate = delegate
         self.redirectHandler = redirectHandler
+        self.ignoreNIOSSLUncleanShutdownError = ignoreNIOSSLUncleanShutdownError
     }
 
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
@@ -605,8 +607,11 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                 /// this could lead to incomplete SSL shutdown. But since request is already processed, we can ignore this error.
                 break
             case .head, .body:
-                /// we can also ignore this error like .end .
-                break
+                if self.ignoreNIOSSLUncleanShutdownError {
+                    /// we can also ignore this error like .end .
+                    break
+                }
+                fallthrough
             default:
                 self.state = .end
                 self.delegate.didReceiveError(task: self.task, error)
