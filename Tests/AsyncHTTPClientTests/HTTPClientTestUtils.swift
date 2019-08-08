@@ -332,6 +332,105 @@ internal final class HttpBinHandler: ChannelInboundHandler {
     }
 }
 
+internal class HttpBinWithNIOSSLUncleanShutdown {
+    let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+    let serverChannel: Channel
+
+    var port: Int {
+        return Int(self.serverChannel.localAddress!.port!)
+    }
+
+    init(channelPromise: EventLoopPromise<Channel>? = nil) {
+        self.serverChannel = try! ServerBootstrap(group: self.group)
+            .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+            .childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
+            .childChannelInitializer { channel in
+                let requestDecoder = HTTPRequestDecoder()
+                return channel.pipeline.addHandler(ByteToMessageHandler(requestDecoder)).flatMap {
+                    let configuration = TLSConfiguration.forServer(certificateChain: [.certificate(try! NIOSSLCertificate(buffer: cert.utf8.map(Int8.init), format: .pem))],
+                                                                   privateKey: .privateKey(try! NIOSSLPrivateKey(buffer: key.utf8.map(Int8.init), format: .pem)))
+                    let context = try! NIOSSLContext(configuration: configuration)
+                    return channel.pipeline.addHandler(try! NIOSSLServerHandler(context: context), name: "NIOSSLServerHandler", position: .first).flatMap {
+                        channel.pipeline.addHandler(HttpBinWithNIOSSLUncleanShutdownHandler(channelPromise: channelPromise))
+                    }
+                }
+            }.bind(host: "127.0.0.1", port: 0).wait()
+    }
+
+    func shutdown() {
+        try! self.group.syncShutdownGracefully()
+    }
+}
+
+internal final class HttpBinWithNIOSSLUncleanShutdownHandler: ChannelInboundHandler {
+    typealias InboundIn = HTTPServerRequestPart
+    typealias OutboundOut = ByteBuffer
+
+    let channelPromise: EventLoopPromise<Channel>?
+
+    init(channelPromise: EventLoopPromise<Channel>? = nil) {
+        self.channelPromise = channelPromise
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        switch self.unwrapInboundIn(data) {
+        case .head(let req):
+            if let promise = self.channelPromise {
+                promise.succeed(context.channel)
+            }
+
+            let response: String?
+            switch req.uri {
+            case "/nocontentlength":
+                response = """
+                HTTP/1.1 200 OK\r\n\
+                Connection: close\r\n\
+                \r\n\
+                foo
+                """
+            case "/nocontent":
+                response = """
+                HTTP/1.1 204 OK\r\n\
+                Connection: close\r\n\
+                \r\n
+                """
+            case "/noresponse":
+                response = nil
+            case "/wrongcontentlength":
+                response = """
+                HTTP/1.1 200 OK\r\n\
+                Connection: close\r\n\
+                Content-Length: 6\r\n\
+                \r\n\
+                foo
+                """
+            default:
+                response = """
+                HTTP/1.1 404 OK\r\n\
+                Connection: close\r\n\
+                Content-Length: 9\r\n\
+                \r\n\
+                Not Found
+                """
+            }
+
+            if let response = response {
+                var buffer = context.channel.allocator.buffer(capacity: response.count)
+                buffer.writeString(response)
+                context.writeAndFlush(self.wrapOutboundOut(buffer), promise: nil)
+            }
+
+            _ = context.channel.pipeline.removeHandler(name: "NIOSSLServerHandler").map { _ in
+                context.close(promise: nil)
+            }
+        case .body:
+            ()
+        case .end:
+            ()
+        }
+    }
+}
+
 extension ByteBuffer {
     public static func of(string: String) -> ByteBuffer {
         var buffer = ByteBufferAllocator().buffer(capacity: string.count)

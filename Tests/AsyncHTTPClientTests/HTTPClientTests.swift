@@ -16,6 +16,7 @@ import AsyncHTTPClient
 import NIO
 import NIOFoundationCompat
 import NIOHTTP1
+import NIOSSL
 import XCTest
 
 class HTTPClientTests: XCTestCase {
@@ -345,5 +346,91 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertEqual(.ok, response.status)
         XCTAssertEqual("12344321", data.data)
+    }
+
+    func testNoContentLengthWithNIOSSLUncleanShutdown() throws {
+        let httpBin = HttpBinWithNIOSSLUncleanShutdown()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none))
+
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+
+        let response = try httpClient.get(url: "https://localhost:\(httpBin.port)/nocontentlength").wait()
+        let bytes = response.body.flatMap { $0.getData(at: 0, length: $0.readableBytes) }
+        let string = String(decoding: bytes!, as: UTF8.self)
+
+        XCTAssertEqual(.ok, response.status)
+        XCTAssertEqual("foo", string)
+    }
+
+    func testCorrectContentLengthWithNIOSSLUncleanShutdown() throws {
+        let httpBin = HttpBinWithNIOSSLUncleanShutdown()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none))
+
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+
+        let response = try httpClient.get(url: "https://localhost:\(httpBin.port)/").wait()
+        let bytes = response.body.flatMap { $0.getData(at: 0, length: $0.readableBytes) }
+        let string = String(decoding: bytes!, as: UTF8.self)
+
+        XCTAssertEqual(.notFound, response.status)
+        XCTAssertEqual("Not Found", string)
+    }
+
+    func testNoContentWithNIOSSLUncleanShutdown() throws {
+        let httpBin = HttpBinWithNIOSSLUncleanShutdown()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none))
+
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+
+        let response = try httpClient.get(url: "https://localhost:\(httpBin.port)/nocontent").wait()
+
+        XCTAssertEqual(.noContent, response.status)
+        XCTAssertEqual(response.body, nil)
+    }
+
+    func testNoResponseWithNIOSSLUncleanShutdown() throws {
+        let httpBin = HttpBinWithNIOSSLUncleanShutdown()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none))
+
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+
+        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/noresponse").wait(), "Should fail") { error in
+            guard case let error = error as? NIOSSLError, case .uncleanShutdown = error else {
+                return XCTFail("Should fail with NIOSSLError.uncleanShutdown")
+            }
+        }
+    }
+
+    func testWrongContentLengthWithNIOSSLUncleanShutdown() throws {
+        let httpBin = HttpBinWithNIOSSLUncleanShutdown()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none))
+
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+
+        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/wrongcontentlength").wait(), "Should fail") { error in
+            guard case let error = error as? HTTPParserError, case .invalidEOFState = error else {
+                return XCTFail("Should fail with HTTPParserError.invalidEOFState")
+            }
+        }
     }
 }

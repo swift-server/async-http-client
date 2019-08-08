@@ -604,6 +604,9 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                 /// Some HTTP Servers can 'forget' to respond with CloseNotify when client is closing connection,
                 /// this could lead to incomplete SSL shutdown. But since request is already processed, we can ignore this error.
                 break
+            case .head, .body:
+                /// we can also ignore this error like .end .
+                break
             default:
                 self.state = .end
                 self.delegate.didReceiveError(task: self.task, error)
