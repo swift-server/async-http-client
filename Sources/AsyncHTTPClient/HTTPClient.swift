@@ -276,8 +276,12 @@ public class HTTPClient {
         public var timeout: Timeout
         /// Upstream proxy, defaults to no proxy.
         public var proxy: Proxy?
-        /// Enables ignore NIOSSLError.uncleanShutdown when state is .head or .body, defaults to `false`.
+        /// Ignore TLS unclean shutdown error, defaults to `false`.
         public var ignoreNIOSSLUncleanShutdownError: Bool
+
+        public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
+            self.init(tlsConfiguration: tlsConfiguration, followRedirects: followRedirects, timeout: timeout, proxy: proxy, ignoreNIOSSLUncleanShutdownError: false)
+        }
 
         public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreNIOSSLUncleanShutdownError: Bool = false) {
             self.tlsConfiguration = tlsConfiguration
@@ -285,6 +289,10 @@ public class HTTPClient {
             self.timeout = timeout
             self.proxy = proxy
             self.ignoreNIOSSLUncleanShutdownError = ignoreNIOSSLUncleanShutdownError
+        }
+
+        public init(certificateVerification: CertificateVerification, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
+            self.init(certificateVerification: certificateVerification, followRedirects: followRedirects, timeout: timeout, proxy: proxy, ignoreNIOSSLUncleanShutdownError: false)
         }
 
         public init(certificateVerification: CertificateVerification, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreNIOSSLUncleanShutdownError: Bool = false) {
