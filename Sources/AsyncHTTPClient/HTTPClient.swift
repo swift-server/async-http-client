@@ -172,6 +172,17 @@ public class HTTPClient {
         return self.execute(request: request, delegate: accumulator, deadline: deadline).futureResult
     }
 
+    /// Execute arbitrary HTTP request using specified URL.
+    ///
+    /// - parameters:
+    ///     - request: HTTP request to execute.
+    ///     - eventLoop: NIO Event Loop to use.
+    ///     - deadline: Point in time by which the request must complete.
+    public func execute(request: Request, eventLoop: EventLoop, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+        let accumulator = ResponseAccumulator(request: request)
+        return self.execute(request: request, delegate: accumulator, eventLoop: eventLoop, deadline: deadline).futureResult
+    }
+
     /// Execute arbitrary HTTP request and handle response processing using provided delegate.
     ///
     /// - parameters:
