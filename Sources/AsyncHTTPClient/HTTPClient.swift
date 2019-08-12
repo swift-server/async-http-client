@@ -180,7 +180,17 @@ public class HTTPClient {
     ///     - deadline: Point in time by which the request must complete.
     public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, deadline: NIODeadline? = nil) -> Task<T.Response> {
         let eventLoop = self.eventLoopGroup.next()
+        return self.execute(request: request, delegate: delegate, eventLoop: eventLoop, deadline: deadline)
+    }
 
+    /// Execute arbitrary HTTP request and handle response processing using provided delegate.
+    ///
+    /// - parameters:
+    ///     - request: HTTP request to execute.
+    ///     - delegate: Delegate to process response parts.
+    ///     - eventLoop: NIO Event Loop to use.
+    ///     - deadline: Point in time by which the request must complete.
+    public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, eventLoop: EventLoop, deadline: NIODeadline? = nil) -> Task<T.Response> {
         let redirectHandler: RedirectHandler<T.Response>?
         if self.configuration.followRedirects {
             redirectHandler = RedirectHandler<T.Response>(request: request) { newRequest in
