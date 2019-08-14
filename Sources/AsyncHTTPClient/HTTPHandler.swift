@@ -179,6 +179,20 @@ extension HTTPClient {
         public var headers: HTTPHeaders
         /// Response body.
         public var body: ByteBuffer?
+
+        /// Create HTTP `Response`.
+        ///
+        /// - parameters:
+        ///     - host: Remote host of the request.
+        ///     - status: Response HTTP status.
+        ///     - headers: Reponse HTTP headers.
+        ///     - body: Response body.
+        public init(host: String, status: HTTPResponseStatus, headers: HTTPHeaders, body: ByteBuffer?) {
+            self.host = host
+            self.status = status
+            self.headers = headers
+            self.body = body
+        }
     }
 }
 
@@ -389,6 +403,7 @@ extension HTTPClient {
             }
         }
 
+        @discardableResult
         func setChannel(_ channel: Channel) -> Channel {
             precondition(self.eventLoop === channel.eventLoop, "Channel must use same event loop as this task.")
             return self.lock.withLock {
