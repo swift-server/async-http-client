@@ -368,7 +368,7 @@ class HTTPClientTests: XCTestCase {
     func testNoContentLengthWithIgnoreErrorForSSLUncleanShutdown() throws {
         let httpBin = HttpBinForSSLUncleanShutdown()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
-                                    configuration: HTTPClient.Configuration(certificateVerification: .none, ignoreNIOSSLUncleanShutdownError: true))
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none, ignoreUncleanSSLShutdown: true))
 
         defer {
             try! httpClient.syncShutdown()
@@ -437,7 +437,7 @@ class HTTPClientTests: XCTestCase {
     func testNoResponseWithIgnoreErrorForSSLUncleanShutdown() throws {
         let httpBin = HttpBinForSSLUncleanShutdown()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
-                                    configuration: HTTPClient.Configuration(certificateVerification: .none, ignoreNIOSSLUncleanShutdownError: true))
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none, ignoreUncleanSSLShutdown: true))
 
         defer {
             try! httpClient.syncShutdown()
@@ -471,7 +471,7 @@ class HTTPClientTests: XCTestCase {
     func testWrongContentLengthWithIgnoreErrorForSSLUncleanShutdown() throws {
         let httpBin = HttpBinForSSLUncleanShutdown()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
-                                    configuration: HTTPClient.Configuration(certificateVerification: .none, ignoreNIOSSLUncleanShutdownError: true))
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none, ignoreUncleanSSLShutdown: true))
 
         defer {
             try! httpClient.syncShutdown()

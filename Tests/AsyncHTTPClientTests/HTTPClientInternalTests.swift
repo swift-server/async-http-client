@@ -28,7 +28,7 @@ class HTTPClientInternalTests: XCTestCase {
         let task = Task<Void>(eventLoop: channel.eventLoop)
 
         try channel.pipeline.addHandler(recorder).wait()
-        try channel.pipeline.addHandler(TaskHandler(task: task, delegate: TestHTTPDelegate(), redirectHandler: nil, ignoreNIOSSLUncleanShutdownError: false)).wait()
+        try channel.pipeline.addHandler(TaskHandler(task: task, delegate: TestHTTPDelegate(), redirectHandler: nil, ignoreUncleanSSLShutdown: false)).wait()
 
         var request = try Request(url: "http://localhost/get")
         request.headers.add(name: "X-Test-Header", value: "X-Test-Value")
@@ -53,7 +53,7 @@ class HTTPClientInternalTests: XCTestCase {
         let channel = EmbeddedChannel()
         let delegate = TestHTTPDelegate()
         let task = Task<Void>(eventLoop: channel.eventLoop)
-        let handler = TaskHandler(task: task, delegate: delegate, redirectHandler: nil, ignoreNIOSSLUncleanShutdownError: false)
+        let handler = TaskHandler(task: task, delegate: delegate, redirectHandler: nil, ignoreUncleanSSLShutdown: false)
 
         try channel.pipeline.addHandler(handler).wait()
 

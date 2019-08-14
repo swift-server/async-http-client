@@ -426,17 +426,17 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
     let task: HTTPClient.Task<T.Response>
     let delegate: T
     let redirectHandler: RedirectHandler<T.Response>?
-    let ignoreNIOSSLUncleanShutdownError: Bool
+    let ignoreUncleanSSLShutdown: Bool
 
     var state: State = .idle
     var pendingRead = false
     var mayRead = true
 
-    init(task: HTTPClient.Task<T.Response>, delegate: T, redirectHandler: RedirectHandler<T.Response>?, ignoreNIOSSLUncleanShutdownError: Bool) {
+    init(task: HTTPClient.Task<T.Response>, delegate: T, redirectHandler: RedirectHandler<T.Response>?, ignoreUncleanSSLShutdown: Bool) {
         self.task = task
         self.delegate = delegate
         self.redirectHandler = redirectHandler
-        self.ignoreNIOSSLUncleanShutdownError = ignoreNIOSSLUncleanShutdownError
+        self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
     }
 
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
@@ -606,8 +606,8 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
                 /// Some HTTP Servers can 'forget' to respond with CloseNotify when client is closing connection,
                 /// this could lead to incomplete SSL shutdown. But since request is already processed, we can ignore this error.
                 break
-            case .head where self.ignoreNIOSSLUncleanShutdownError,
-                 .body where self.ignoreNIOSSLUncleanShutdownError:
+            case .head where self.ignoreUncleanSSLShutdown,
+                 .body where self.ignoreUncleanSSLShutdown:
                 /// We can also ignore this error like `.end`.
                 break
             default:
