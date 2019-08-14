@@ -403,6 +403,7 @@ extension HTTPClient {
             }
         }
 
+        @discardableResult
         func setChannel(_ channel: Channel) -> Channel {
             precondition(self.eventLoop === channel.eventLoop, "Channel must use same event loop as this task.")
             return self.lock.withLock {
