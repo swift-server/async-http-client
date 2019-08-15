@@ -484,4 +484,41 @@ class HTTPClientTests: XCTestCase {
             }
         }
     }
+
+    func testEventLoopArgument() throws {
+        let httpBin = HttpBin()
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
+        defer {
+            try! eventLoopGroup.syncShutdownGracefully()
+            httpBin.shutdown()
+        }
+
+        class EventLoopValidatingDelegate: HTTPClientResponseDelegate {
+            typealias Response = Bool
+
+            let eventLoop: EventLoop
+            var result = false
+
+            init(eventLoop: EventLoop) {
+                self.eventLoop = eventLoop
+            }
+
+            func didReceiveHead(task: HTTPClient.Task<Bool>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
+                self.result = task.eventLoop === self.eventLoop
+                return task.eventLoop.makeSucceededFuture(())
+            }
+
+            func didFinishRequest(task: HTTPClient.Task<Bool>) throws -> Bool {
+               return result
+            }
+        }
+
+        let eventLoop = eventLoopGroup.next()
+        let delegate = EventLoopValidatingDelegate(eventLoop: eventLoop)
+        let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get")
+        let response = try httpClient.execute(request: request, delegate: delegate, eventLoop: eventLoop).wait()
+
+        XCTAssertEqual(true, response)
+    }
 }
