@@ -510,7 +510,7 @@ class HTTPClientTests: XCTestCase {
             }
 
             func didFinishRequest(task: HTTPClient.Task<Bool>) throws -> Bool {
-                return result
+                return self.result
             }
         }
 
