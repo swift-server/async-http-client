@@ -359,7 +359,7 @@ class HTTPClientTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/nocontentlength").wait(), "Should fail") { error in
-            guard case let error = error as? NIOSSLError, case .uncleanShutdown = error else {
+            guard case let error = error as? NIOSSLError, error == .uncleanShutdown else {
                 return XCTFail("Should fail with NIOSSLError.uncleanShutdown")
             }
         }
@@ -428,7 +428,7 @@ class HTTPClientTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/noresponse").wait(), "Should fail") { error in
-            guard case let error = error as? NIOSSLError, case .uncleanShutdown = error else {
+            guard case let error = error as? NIOSSLError, error == .uncleanShutdown else {
                 return XCTFail("Should fail with NIOSSLError.uncleanShutdown")
             }
         }
@@ -445,7 +445,7 @@ class HTTPClientTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/noresponse").wait(), "Should fail") { error in
-            guard case let error = error as? NIOSSLError, case .uncleanShutdown = error else {
+            guard case let error = error as? NIOSSLError, error == .uncleanShutdown else {
                 return XCTFail("Should fail with NIOSSLError.uncleanShutdown")
             }
         }
@@ -462,7 +462,7 @@ class HTTPClientTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/wrongcontentlength").wait(), "Should fail") { error in
-            guard case let error = error as? NIOSSLError, case .uncleanShutdown = error else {
+            guard case let error = error as? NIOSSLError, error == .uncleanShutdown else {
                 return XCTFail("Should fail with NIOSSLError.uncleanShutdown")
             }
         }
@@ -479,7 +479,7 @@ class HTTPClientTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/wrongcontentlength").wait(), "Should fail") { error in
-            guard case let error = error as? HTTPParserError, case .invalidEOFState = error else {
+            guard case let error = error as? HTTPParserError, error == .invalidEOFState else {
                 return XCTFail("Should fail with HTTPParserError.invalidEOFState")
             }
         }
