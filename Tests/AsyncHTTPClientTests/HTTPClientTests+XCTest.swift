@@ -45,6 +45,14 @@ extension HTTPClientTests {
             ("testProxyPlaintext", testProxyPlaintext),
             ("testProxyTLS", testProxyTLS),
             ("testUploadStreaming", testUploadStreaming),
+            ("testNoContentLengthForSSLUncleanShutdown", testNoContentLengthForSSLUncleanShutdown),
+            ("testNoContentLengthWithIgnoreErrorForSSLUncleanShutdown", testNoContentLengthWithIgnoreErrorForSSLUncleanShutdown),
+            ("testCorrectContentLengthForSSLUncleanShutdown", testCorrectContentLengthForSSLUncleanShutdown),
+            ("testNoContentForSSLUncleanShutdown", testNoContentForSSLUncleanShutdown),
+            ("testNoResponseForSSLUncleanShutdown", testNoResponseForSSLUncleanShutdown),
+            ("testNoResponseWithIgnoreErrorForSSLUncleanShutdown", testNoResponseWithIgnoreErrorForSSLUncleanShutdown),
+            ("testWrongContentLengthForSSLUncleanShutdown", testWrongContentLengthForSSLUncleanShutdown),
+            ("testWrongContentLengthWithIgnoreErrorForSSLUncleanShutdown", testWrongContentLengthWithIgnoreErrorForSSLUncleanShutdown),
         ]
     }
 }
