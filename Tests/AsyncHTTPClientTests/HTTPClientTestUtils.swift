@@ -36,7 +36,7 @@ class TestHTTPDelegate: HTTPClientResponseDelegate {
         return task.eventLoop.makeSucceededFuture(())
     }
 
-    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+    func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         switch self.state {
         case .head(let head):
             self.state = .body(head, buffer)
@@ -58,7 +58,7 @@ class CountingDelegate: HTTPClientResponseDelegate {
 
     var count = 0
 
-    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+    func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         let str = buffer.getString(at: 0, length: buffer.readableBytes)
         if str?.starts(with: "id:") ?? false {
             self.count += 1

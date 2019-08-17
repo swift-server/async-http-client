@@ -153,7 +153,7 @@ class HTTPClientInternalTests: XCTestCase {
                 }
             }
 
-            func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+            func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
                 self.lock.withLockVoid {
                     self._reads += 1
                 }
