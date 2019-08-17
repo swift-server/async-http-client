@@ -230,7 +230,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         return task.eventLoop.makeSucceededFuture(())
     }
 
-    func didReceivePart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void> {
+    func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void> {
         switch self.state {
         case .idle:
             preconditionFailure("no head received before body")
@@ -319,7 +319,7 @@ public protocol HTTPClientResponseDelegate: AnyObject {
     ///     - task: Current request context.
     ///     - buffer: Received body `Part`.
     /// - returns: `EventLoopFuture` that will be used for backpressure.
-    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void>
+    func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void>
 
     /// Called when error was thrown during request execution. Will be called zero or one time only. Request processing will be stopped after that.
     ///
@@ -345,7 +345,7 @@ extension HTTPClientResponseDelegate {
 
     public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
 
-    public func didReceivePart(task: HTTPClient.Task<Response>, _: ByteBuffer) -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
+    public func didReceiveBodyPart(task: HTTPClient.Task<Response>, _: ByteBuffer) -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
 
     public func didReceiveError(task: HTTPClient.Task<Response>, _: Error) {}
 }
@@ -550,7 +550,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             default:
                 self.state = .body
                 self.mayRead = false
-                self.delegate.didReceivePart(task: self.task, body).whenComplete { result in
+                self.delegate.didReceiveBodyPart(task: self.task, body).whenComplete { result in
                     self.handleBackpressureResult(context: context, result: result)
                 }
             }

@@ -24,7 +24,7 @@ public final class HTTPClientCopyingDelegate: HTTPClientResponseDelegate {
         self.chunkHandler = chunkHandler
     }
 
-    public func didReceivePart(task: HTTPClient.Task<Void>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+    public func didReceiveBodyPart(task: HTTPClient.Task<Void>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         return self.chunkHandler(buffer)
     }
 

@@ -136,7 +136,7 @@ class CountingDelegate: HTTPClientResponseDelegate {
         return task.eventLoop.makeSucceededFuture(())
     }
 
-    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+    func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         // this is executed when we receive parts of the response body, could be called zero or more times
         count += buffer.readableBytes
         // in case backpressure is needed, all reads will be paused until returned future is resolved
