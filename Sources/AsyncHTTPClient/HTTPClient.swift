@@ -176,11 +176,11 @@ public class HTTPClient {
     ///
     /// - parameters:
     ///     - request: HTTP request to execute.
-    ///     - eventLoop: NIO Event Loop to use.
+    ///     - eventLoop: NIO Event Loop preferrence.
     ///     - deadline: Point in time by which the request must complete.
-    public func execute(request: Request, eventLoop: EventLoop, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+    public func execute(request: Request, eventLoopPreferrence: EventLoop, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         let accumulator = ResponseAccumulator(request: request)
-        return self.execute(request: request, delegate: accumulator, eventLoop: eventLoop, deadline: deadline).futureResult
+        return self.execute(request: request, delegate: accumulator, eventLoop: eventLoopPreferrence, deadline: deadline).futureResult
     }
 
     /// Execute arbitrary HTTP request and handle response processing using provided delegate.
@@ -199,9 +199,19 @@ public class HTTPClient {
     /// - parameters:
     ///     - request: HTTP request to execute.
     ///     - delegate: Delegate to process response parts.
-    ///     - eventLoop: NIO Event Loop to use.
+    ///     - eventLoop: NIO Event Loop preferrence.
     ///     - deadline: Point in time by which the request must complete.
-    public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, eventLoop: EventLoop, deadline: NIODeadline? = nil) -> Task<T.Response> {
+    public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, eventLoop: EventLoopPreferrence, deadline: NIODeadline? = nil) -> Task<T.Response> {
+        switch eventLoop.preferrence {
+        case .indifferent:
+            return self.execute(request: request, delegate: delegate, eventLoop: self.eventLoopGroup.next(), deadline: deadline)
+        case .prefers(let preferred):
+            return self.execute(request: request, delegate: delegate, eventLoop: preferred, deadline: deadline)
+        }
+
+    }
+
+    private func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, eventLoop: EventLoop, deadline: NIODeadline? = nil) -> Task<T.Response> {
         let redirectHandler: RedirectHandler<T.Response>?
         if self.configuration.followRedirects {
             redirectHandler = RedirectHandler<T.Response>(request: request) { newRequest in
@@ -331,6 +341,22 @@ public class HTTPClient {
         case shared(EventLoopGroup)
         /// `EventLoopGroup` will be created by the client. When `syncShutdown` is called, created `EventLoopGroup` will be shut down as well.
         case createNew
+    }
+
+    /// Specifies how the library will treat event loop passed by the user.
+    public struct EventLoopPreferrence {
+        enum Preferrence {
+            /// Event Loop will be selected by the library.
+            case indifferent
+            /// Library will try to use provided event loop if possible.
+            case prefers(EventLoop)
+        }
+        var preferrence: Preferrence
+
+        /// Event Loop will be selected by the library.
+        public static let indifferent = EventLoopPreferrence(preferrence: .indifferent)
+        /// Library will try to use provided event loop if possible.
+        public static func prefers(_ eventLoop: EventLoop) -> EventLoopPreferrence { EventLoopPreferrence(preferrence: .prefers(eventLoop)) }
     }
 
     /// Timeout configuration

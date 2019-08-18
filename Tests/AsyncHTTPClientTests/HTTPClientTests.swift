@@ -517,7 +517,7 @@ class HTTPClientTests: XCTestCase {
         let eventLoop = eventLoopGroup.next()
         let delegate = EventLoopValidatingDelegate(eventLoop: eventLoop)
         let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get")
-        let response = try httpClient.execute(request: request, delegate: delegate, eventLoop: eventLoop).wait()
+        let response = try httpClient.execute(request: request, delegate: delegate, eventLoop: .prefers(eventLoop)).wait()
 
         XCTAssertEqual(true, response)
     }
