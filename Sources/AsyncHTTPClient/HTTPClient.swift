@@ -208,7 +208,6 @@ public class HTTPClient {
         case .prefers(let preferred):
             return self.execute(request: request, delegate: delegate, eventLoop: preferred, deadline: deadline)
         }
-
     }
 
     private func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, eventLoop: EventLoop, deadline: NIODeadline? = nil) -> Task<T.Response> {
@@ -351,6 +350,7 @@ public class HTTPClient {
             /// Library will try to use provided event loop if possible.
             case prefers(EventLoop)
         }
+
         var preferrence: Preferrence
 
         /// Event Loop will be selected by the library.
