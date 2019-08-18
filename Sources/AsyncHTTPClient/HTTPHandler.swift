@@ -531,7 +531,7 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-        let response = unwrapInboundIn(data)
+        let response = self.unwrapInboundIn(data)
         switch response {
         case .head(let head):
             if let redirectURL = redirectHandler?.redirectTarget(status: head.status, headers: head.headers) {

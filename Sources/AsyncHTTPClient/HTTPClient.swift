@@ -205,6 +205,12 @@ public class HTTPClient {
                         return channel.pipeline.addProxyHandler(for: request, decoder: decoder, encoder: encoder, tlsConfiguration: self.configuration.tlsConfiguration)
                     }
                 }.flatMap {
+                    if self.configuration.decompression {
+                        return channel.pipeline.addHandler(HTTPResponseDecompressor())
+                    } else {
+                        return channel.eventLoop.makeSucceededFuture(())
+                    }
+                }.flatMap {
                     if let timeout = self.resolve(timeout: self.configuration.timeout.read, deadline: deadline) {
                         return channel.pipeline.addHandler(IdleStateHandler(readTimeout: timeout))
                     } else {
@@ -276,30 +282,36 @@ public class HTTPClient {
         public var timeout: Timeout
         /// Upstream proxy, defaults to no proxy.
         public var proxy: Proxy?
+        /// Enables automatic body decompression. Supported algorithms are gzip and deflate.
+        public var decompression: Bool
         /// Ignore TLS unclean shutdown error, defaults to `false`.
         public var ignoreUncleanSSLShutdown: Bool
 
-        public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
-            self.init(tlsConfiguration: tlsConfiguration, followRedirects: followRedirects, timeout: timeout, proxy: proxy, ignoreUncleanSSLShutdown: false)
-        }
-
-        public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreUncleanSSLShutdown: Bool = false) {
+        public init(tlsConfiguration: TLSConfiguration? = nil,
+                    followRedirects: Bool = false,
+                    timeout: Timeout = Timeout(),
+                    proxy: Proxy? = nil,
+                    ignoreUncleanSSLShutdown: Bool = false,
+                    decompression: Bool = false) {
             self.tlsConfiguration = tlsConfiguration
             self.followRedirects = followRedirects
             self.timeout = timeout
             self.proxy = proxy
+            self.decompression = decompression
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
         }
 
-        public init(certificateVerification: CertificateVerification, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
-            self.init(certificateVerification: certificateVerification, followRedirects: followRedirects, timeout: timeout, proxy: proxy, ignoreUncleanSSLShutdown: false)
-        }
-
-        public init(certificateVerification: CertificateVerification, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreUncleanSSLShutdown: Bool = false) {
+        public init(certificateVerification: CertificateVerification,
+                    followRedirects: Bool = false,
+                    timeout: Timeout = Timeout(),
+                    proxy: Proxy? = nil,
+                    ignoreUncleanSSLShutdown: Bool = false,
+                    decompression: Bool = false) {
             self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
             self.followRedirects = followRedirects
             self.timeout = timeout
             self.proxy = proxy
+            self.decompression = decompression
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
         }
     }

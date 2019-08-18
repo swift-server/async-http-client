@@ -16,6 +16,7 @@ import AsyncHTTPClient
 import Foundation
 import NIO
 import NIOHTTP1
+import NIOHTTPCompression
 import NIOSSL
 
 class TestHTTPDelegate: HTTPClientResponseDelegate {
@@ -103,26 +104,35 @@ internal class HttpBin {
         return channel.pipeline.addHandler(try! NIOSSLServerHandler(context: context), position: .first)
     }
 
-    init(ssl: Bool = false, simulateProxy: HTTPProxySimulator.Option? = nil, channelPromise: EventLoopPromise<Channel>? = nil) {
+    init(ssl: Bool = false, compress: Bool = false, simulateProxy: HTTPProxySimulator.Option? = nil, channelPromise: EventLoopPromise<Channel>? = nil) {
         self.serverChannel = try! ServerBootstrap(group: self.group)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
             .childChannelInitializer { channel in
-                channel.pipeline.configureHTTPServerPipeline(withPipeliningAssistance: true, withErrorHandling: true).flatMap {
-                    if let simulateProxy = simulateProxy {
-                        return channel.pipeline.addHandler(HTTPProxySimulator(option: simulateProxy), position: .first)
-                    } else {
-                        return channel.eventLoop.makeSucceededFuture(())
-                    }
-                }.flatMap {
-                    if ssl {
-                        return HttpBin.configureTLS(channel: channel).flatMap {
-                            channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise))
+                channel.pipeline.configureHTTPServerPipeline(withPipeliningAssistance: true, withErrorHandling: true)
+                    .flatMap {
+                        if compress {
+                            return channel.pipeline.addHandler(HTTPResponseCompressor())
+                        } else {
+                            return channel.eventLoop.makeSucceededFuture(())
                         }
-                    } else {
-                        return channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise))
                     }
-                }
+                    .flatMap {
+                        if let simulateProxy = simulateProxy {
+                            return channel.pipeline.addHandler(HTTPProxySimulator(option: simulateProxy), position: .first)
+                        } else {
+                            return channel.eventLoop.makeSucceededFuture(())
+                        }
+                    }
+                    .flatMap {
+                        if ssl {
+                            return HttpBin.configureTLS(channel: channel).flatMap {
+                                channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise))
+                            }
+                        } else {
+                            return channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise))
+                        }
+                    }
             }.bind(host: "127.0.0.1", port: 0).wait()
     }
 

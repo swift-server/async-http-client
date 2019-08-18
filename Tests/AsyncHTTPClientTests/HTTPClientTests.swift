@@ -484,4 +484,39 @@ class HTTPClientTests: XCTestCase {
             }
         }
     }
+
+    func testDecompression() throws {
+        let httpBin = HttpBin(compress: true)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(decompression: true))
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+
+        var body = ""
+        for _ in 1 ... 1000 {
+            body += "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
+        }
+
+        for algorithm in [nil, "gzip", "deflate"] {
+            var request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/post", method: .POST)
+            request.body = .string(body)
+            if let algorithm = algorithm {
+                request.headers.add(name: "Accept-Encoding", value: algorithm)
+            }
+
+            let response = try httpClient.execute(request: request).wait()
+            let bytes = response.body!.getData(at: 0, length: response.body!.readableBytes)!
+            let data = try JSONDecoder().decode(RequestInfo.self, from: bytes)
+
+            XCTAssertEqual(.ok, response.status)
+            XCTAssertGreaterThan(body.count, response.headers["Content-Length"].first.flatMap { Int($0) }!)
+            if let algorithm = algorithm {
+                XCTAssertEqual(algorithm, response.headers["Content-Encoding"].first)
+            } else {
+                XCTAssertEqual("deflate", response.headers["Content-Encoding"].first)
+            }
+            XCTAssertEqual(body, data.data)
+        }
+    }
 }
