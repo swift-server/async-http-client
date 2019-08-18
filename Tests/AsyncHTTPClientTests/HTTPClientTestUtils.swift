@@ -36,7 +36,7 @@ class TestHTTPDelegate: HTTPClientResponseDelegate {
         return task.eventLoop.makeSucceededFuture(())
     }
 
-    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+    func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         switch self.state {
         case .head(let head):
             self.state = .body(head, buffer)
@@ -58,7 +58,7 @@ class CountingDelegate: HTTPClientResponseDelegate {
 
     var count = 0
 
-    func didReceivePart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+    func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         let str = buffer.getString(at: 0, length: buffer.readableBytes)
         if str?.starts(with: "id:") ?? false {
             self.count += 1
@@ -97,8 +97,8 @@ internal class HttpBin {
     }
 
     static func configureTLS(channel: Channel) -> EventLoopFuture<Void> {
-        let configuration = TLSConfiguration.forServer(certificateChain: [.certificate(try! NIOSSLCertificate(buffer: cert.utf8.map(Int8.init), format: .pem))],
-                                                       privateKey: .privateKey(try! NIOSSLPrivateKey(buffer: key.utf8.map(Int8.init), format: .pem)))
+        let configuration = TLSConfiguration.forServer(certificateChain: [.certificate(try! NIOSSLCertificate(bytes: Array(cert.utf8), format: .pem))],
+                                                       privateKey: .privateKey(try! NIOSSLPrivateKey(bytes: Array(key.utf8), format: .pem)))
         let context = try! NIOSSLContext(configuration: configuration)
         return channel.pipeline.addHandler(try! NIOSSLServerHandler(context: context), position: .first)
     }
@@ -347,8 +347,8 @@ internal class HttpBinForSSLUncleanShutdown {
             .childChannelInitializer { channel in
                 let requestDecoder = HTTPRequestDecoder()
                 return channel.pipeline.addHandler(ByteToMessageHandler(requestDecoder)).flatMap {
-                    let configuration = TLSConfiguration.forServer(certificateChain: [.certificate(try! NIOSSLCertificate(buffer: cert.utf8.map(Int8.init), format: .pem))],
-                                                                   privateKey: .privateKey(try! NIOSSLPrivateKey(buffer: key.utf8.map(Int8.init), format: .pem)))
+                    let configuration = TLSConfiguration.forServer(certificateChain: [.certificate(try! NIOSSLCertificate(bytes: Array(cert.utf8), format: .pem))],
+                                                                   privateKey: .privateKey(try! NIOSSLPrivateKey(bytes: Array(key.utf8), format: .pem)))
                     let context = try! NIOSSLContext(configuration: configuration)
                     return channel.pipeline.addHandler(try! NIOSSLServerHandler(context: context), name: "NIOSSLServerHandler", position: .first).flatMap {
                         channel.pipeline.addHandler(HttpBinForSSLUncleanShutdownHandler(channelPromise: channelPromise))
