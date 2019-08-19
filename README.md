@@ -28,7 +28,12 @@ and  `AsyncHTTPClient` dependency to your target:
 ```
 
 #### Request-Response API
-The code snippet below illustrates how to make a simple GET request to a remote server:
+
+The code snippet below illustrates how to make a simple GET request to a remote server.
+
+Please note that the example will spawn a new `EventLoopGroup` which will _create fresh threads_ which is a very costly operation. In a real-world application that uses [SwiftNIO](https://github.com/apple/swift-nio) for other parts of your application (for example a web server), please prefer `eventLoopGroupProvider: .shared(myExistingEventLoopGroup)` to share the `EventLoopGroup` used by AsyncHTTPClient with other parts of your application.
+
+If your application does not use SwiftNIO yet, it is acceptable to use `eventLoopGroupProvider: .createNew` but please make sure to share the returned `HTTPClient` instance throughout your whole application. Do not create a large number of `HTTPClient` instances with `eventLoopGroupProvider: .createNew`, this is very wasteful and might exhaust the resources of your calling program.
 
 ```swift
 import AsyncHTTPClient
@@ -48,15 +53,7 @@ httpClient.get(url: "https://swift.org").whenComplete { result in
 }
 ```
 
-It is important to close the client instance, for example in a `defer` statement, after use to cleanly shutdown the underlying NIO `EventLoopGroup`:
-```swift
-try? httpClient.syncShutdown()
-```
-Alternatively, you can provide shared `EventLoopGroup`:
-```swift
-let httpClient = HTTPClient(eventLoopGroupProvider: .shared(userProvidedGroup))
-```
-In this case shutdown of the client is not neccecary.
+You should always shut down `HTTPClient` instances you created using `try httpClient.syncShutdown()`. Please note that you must not call `httpClient.syncShutdown` before all requests of the HTTP client have finished, or else the in-flight requests will likely fail because their network connections are interrupted.
 
 ## Usage guide
 
