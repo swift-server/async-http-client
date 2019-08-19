@@ -176,11 +176,11 @@ public class HTTPClient {
     ///
     /// - parameters:
     ///     - request: HTTP request to execute.
-    ///     - eventLoop: NIO Event Loop preferrence.
+    ///     - eventLoop: NIO Event Loop preference.
     ///     - deadline: Point in time by which the request must complete.
-    public func execute(request: Request, eventLoopPreferrence: EventLoop, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+    public func execute(request: Request, eventLoop: EventLoopPreference, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         let accumulator = ResponseAccumulator(request: request)
-        return self.execute(request: request, delegate: accumulator, eventLoop: eventLoopPreferrence, deadline: deadline).futureResult
+        return self.execute(request: request, delegate: accumulator, eventLoop: eventLoop, deadline: deadline).futureResult
     }
 
     /// Execute arbitrary HTTP request and handle response processing using provided delegate.
@@ -199,10 +199,10 @@ public class HTTPClient {
     /// - parameters:
     ///     - request: HTTP request to execute.
     ///     - delegate: Delegate to process response parts.
-    ///     - eventLoop: NIO Event Loop preferrence.
+    ///     - eventLoop: NIO Event Loop preference.
     ///     - deadline: Point in time by which the request must complete.
-    public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, eventLoop: EventLoopPreferrence, deadline: NIODeadline? = nil) -> Task<T.Response> {
-        switch eventLoop.preferrence {
+    public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, eventLoop: EventLoopPreference, deadline: NIODeadline? = nil) -> Task<T.Response> {
+        switch eventLoop.preference {
         case .indifferent:
             return self.execute(request: request, delegate: delegate, eventLoop: self.eventLoopGroup.next(), deadline: deadline)
         case .prefers(let preferred):
@@ -343,20 +343,20 @@ public class HTTPClient {
     }
 
     /// Specifies how the library will treat event loop passed by the user.
-    public struct EventLoopPreferrence {
-        enum Preferrence {
+    public struct EventLoopPreference {
+        enum Preference {
             /// Event Loop will be selected by the library.
             case indifferent
             /// Library will try to use provided event loop if possible.
             case prefers(EventLoop)
         }
 
-        var preferrence: Preferrence
+        var preference: Preference
 
         /// Event Loop will be selected by the library.
-        public static let indifferent = EventLoopPreferrence(preferrence: .indifferent)
+        public static let indifferent = EventLoopPreference(preference: .indifferent)
         /// Library will try to use provided event loop if possible.
-        public static func prefers(_ eventLoop: EventLoop) -> EventLoopPreferrence { EventLoopPreferrence(preferrence: .prefers(eventLoop)) }
+        public static func prefers(_ eventLoop: EventLoop) -> EventLoopPreference { EventLoopPreference(preference: .prefers(eventLoop)) }
     }
 
     /// Timeout configuration
