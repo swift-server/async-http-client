@@ -356,7 +356,9 @@ public class HTTPClient {
         /// Event Loop will be selected by the library.
         public static let indifferent = EventLoopPreference(preference: .indifferent)
         /// Library will try to use provided event loop if possible.
-        public static func prefers(_ eventLoop: EventLoop) -> EventLoopPreference { EventLoopPreference(preference: .prefers(eventLoop)) }
+        public static func prefers(_ eventLoop: EventLoop) -> EventLoopPreference {
+            return EventLoopPreference(preference: .prefers(eventLoop))
+        }
     }
 
     /// Timeout configuration
