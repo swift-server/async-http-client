@@ -206,6 +206,7 @@ public class HTTPClient {
         case .indifferent:
             return self.execute(request: request, delegate: delegate, eventLoop: self.eventLoopGroup.next(), deadline: deadline)
         case .prefers(let preferred):
+            precondition(self.eventLoopGroup.makeIterator().contains { $0 === preferred }, "Provided EventLoop must be part of clients EventLoopGroup.")
             return self.execute(request: request, delegate: delegate, eventLoop: preferred, deadline: deadline)
         }
     }
@@ -353,11 +354,15 @@ public class HTTPClient {
 
         var preference: Preference
 
+        init(_ preference: Preference) {
+            self.preference = preference
+        }
+
         /// Event Loop will be selected by the library.
-        public static let indifferent = EventLoopPreference(preference: .indifferent)
+        public static let indifferent = EventLoopPreference(.indifferent)
         /// Library will try to use provided event loop if possible.
         public static func prefers(_ eventLoop: EventLoop) -> EventLoopPreference {
-            return EventLoopPreference(preference: .prefers(eventLoop))
+            return EventLoopPreference(.prefers(eventLoop))
         }
     }
 
