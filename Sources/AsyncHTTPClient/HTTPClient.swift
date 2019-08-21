@@ -215,7 +215,7 @@ public class HTTPClient {
         let redirectHandler: RedirectHandler<T.Response>?
         if self.configuration.followRedirects {
             redirectHandler = RedirectHandler<T.Response>(request: request) { newRequest in
-                self.execute(request: newRequest, delegate: delegate, deadline: deadline)
+                self.execute(request: newRequest, delegate: delegate, eventLoop: eventLoop, deadline: deadline)
             }
         } else {
             redirectHandler = nil

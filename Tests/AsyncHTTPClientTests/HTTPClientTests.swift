@@ -487,8 +487,9 @@ class HTTPClientTests: XCTestCase {
 
     func testEventLoopArgument() throws {
         let httpBin = HttpBin()
-        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 5)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup),
+                                    configuration: HTTPClient.Configuration(followRedirects: true))
         defer {
             try! eventLoopGroup.syncShutdownGracefully()
             httpBin.shutdown()
@@ -516,9 +517,13 @@ class HTTPClientTests: XCTestCase {
 
         let eventLoop = eventLoopGroup.next()
         let delegate = EventLoopValidatingDelegate(eventLoop: eventLoop)
-        let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get")
-        let response = try httpClient.execute(request: request, delegate: delegate, eventLoop: .prefers(eventLoop)).wait()
+        var request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get")
+        var response = try httpClient.execute(request: request, delegate: delegate, eventLoop: .prefers(eventLoop)).wait()
+        XCTAssertEqual(true, response)
 
+        // redirect
+        request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/redirect/302")
+        response = try httpClient.execute(request: request, delegate: delegate, eventLoop: .prefers(eventLoop)).wait()
         XCTAssertEqual(true, response)
     }
 }
