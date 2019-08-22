@@ -485,6 +485,48 @@ class HTTPClientTests: XCTestCase {
         }
     }
 
+    func testEventLoopArgument() throws {
+        let httpBin = HttpBin()
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 5)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup),
+                                    configuration: HTTPClient.Configuration(followRedirects: true))
+        defer {
+            try! eventLoopGroup.syncShutdownGracefully()
+            httpBin.shutdown()
+        }
+
+        class EventLoopValidatingDelegate: HTTPClientResponseDelegate {
+            typealias Response = Bool
+
+            let eventLoop: EventLoop
+            var result = false
+
+            init(eventLoop: EventLoop) {
+                self.eventLoop = eventLoop
+            }
+
+            func didReceiveHead(task: HTTPClient.Task<Bool>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
+                self.result = task.eventLoop === self.eventLoop
+                return task.eventLoop.makeSucceededFuture(())
+            }
+
+            func didFinishRequest(task: HTTPClient.Task<Bool>) throws -> Bool {
+                return self.result
+            }
+        }
+
+        let eventLoop = eventLoopGroup.next()
+        let delegate = EventLoopValidatingDelegate(eventLoop: eventLoop)
+        var request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get")
+        var response = try httpClient.execute(request: request, delegate: delegate, eventLoop: .prefers(eventLoop)).wait()
+        XCTAssertEqual(true, response)
+
+        // redirect
+        request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/redirect/302")
+        response = try httpClient.execute(request: request, delegate: delegate, eventLoop: .prefers(eventLoop)).wait()
+        XCTAssertEqual(true, response)
+    }
+
     func testDecompression() throws {
         let httpBin = HttpBin(compress: true)
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(decompression: true))
@@ -519,4 +561,5 @@ class HTTPClientTests: XCTestCase {
             XCTAssertEqual(body, data.data)
         }
     }
+
 }

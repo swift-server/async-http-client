@@ -172,6 +172,17 @@ public class HTTPClient {
         return self.execute(request: request, delegate: accumulator, deadline: deadline).futureResult
     }
 
+    /// Execute arbitrary HTTP request using specified URL.
+    ///
+    /// - parameters:
+    ///     - request: HTTP request to execute.
+    ///     - eventLoop: NIO Event Loop preference.
+    ///     - deadline: Point in time by which the request must complete.
+    public func execute(request: Request, eventLoop: EventLoopPreference, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+        let accumulator = ResponseAccumulator(request: request)
+        return self.execute(request: request, delegate: accumulator, eventLoop: eventLoop, deadline: deadline).futureResult
+    }
+
     /// Execute arbitrary HTTP request and handle response processing using provided delegate.
     ///
     /// - parameters:
@@ -180,11 +191,31 @@ public class HTTPClient {
     ///     - deadline: Point in time by which the request must complete.
     public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, deadline: NIODeadline? = nil) -> Task<T.Response> {
         let eventLoop = self.eventLoopGroup.next()
+        return self.execute(request: request, delegate: delegate, eventLoop: eventLoop, deadline: deadline)
+    }
 
+    /// Execute arbitrary HTTP request and handle response processing using provided delegate.
+    ///
+    /// - parameters:
+    ///     - request: HTTP request to execute.
+    ///     - delegate: Delegate to process response parts.
+    ///     - eventLoop: NIO Event Loop preference.
+    ///     - deadline: Point in time by which the request must complete.
+    public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, eventLoop: EventLoopPreference, deadline: NIODeadline? = nil) -> Task<T.Response> {
+        switch eventLoop.preference {
+        case .indifferent:
+            return self.execute(request: request, delegate: delegate, eventLoop: self.eventLoopGroup.next(), deadline: deadline)
+        case .prefers(let preferred):
+            precondition(self.eventLoopGroup.makeIterator().contains { $0 === preferred }, "Provided EventLoop must be part of clients EventLoopGroup.")
+            return self.execute(request: request, delegate: delegate, eventLoop: preferred, deadline: deadline)
+        }
+    }
+
+    private func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, eventLoop: EventLoop, deadline: NIODeadline? = nil) -> Task<T.Response> {
         let redirectHandler: RedirectHandler<T.Response>?
         if self.configuration.followRedirects {
             redirectHandler = RedirectHandler<T.Response>(request: request) { newRequest in
-                self.execute(request: newRequest, delegate: delegate, deadline: deadline)
+                self.execute(request: newRequest, delegate: delegate, eventLoop: eventLoop, deadline: deadline)
             }
         } else {
             redirectHandler = nil
@@ -322,6 +353,29 @@ public class HTTPClient {
         case shared(EventLoopGroup)
         /// `EventLoopGroup` will be created by the client. When `syncShutdown` is called, created `EventLoopGroup` will be shut down as well.
         case createNew
+    }
+
+    /// Specifies how the library will treat event loop passed by the user.
+    public struct EventLoopPreference {
+        enum Preference {
+            /// Event Loop will be selected by the library.
+            case indifferent
+            /// Library will try to use provided event loop if possible.
+            case prefers(EventLoop)
+        }
+
+        var preference: Preference
+
+        init(_ preference: Preference) {
+            self.preference = preference
+        }
+
+        /// Event Loop will be selected by the library.
+        public static let indifferent = EventLoopPreference(.indifferent)
+        /// Library will try to use provided event loop if possible.
+        public static func prefers(_ eventLoop: EventLoop) -> EventLoopPreference {
+            return EventLoopPreference(.prefers(eventLoop))
+        }
     }
 
     /// Timeout configuration
