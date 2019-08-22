@@ -24,11 +24,19 @@ import NIOHTTP1
 /// If a `TLSConfiguration` is used in conjunction with `HTTPClientProxy`,
 /// TLS will be established _after_ successful proxy, between your client
 /// and the destination server.
-public extension HTTPClient {
+public extension HTTPClient.Configuration {
+    /// Proxy server configuration
     struct Proxy {
-        internal let host: String
-        internal let port: Int
+        /// Specifies Proxy server host.
+        public var host: String
+        /// Specifies Proxy server port.
+        public var port: Int
 
+        /// Create proxy.
+        ///
+        /// - parameters:
+        ///     - host: proxy server host.
+        ///     - port: proxy server port.
         public static func server(host: String, port: Int) -> Proxy {
             return .init(host: host, port: port)
         }
