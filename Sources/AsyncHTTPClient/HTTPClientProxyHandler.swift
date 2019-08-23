@@ -15,17 +15,17 @@
 import NIO
 import NIOHTTP1
 
-/// Specifies the remote address of an HTTP proxy.
-///
-/// Adding an `HTTPClientProxy` to your client's `HTTPClient.Configuration`
-/// will cause requests to be passed through the specified proxy using the
-/// HTTP `CONNECT` method.
-///
-/// If a `TLSConfiguration` is used in conjunction with `HTTPClientProxy`,
-/// TLS will be established _after_ successful proxy, between your client
-/// and the destination server.
 public extension HTTPClient.Configuration {
     /// Proxy server configuration
+    /// Specifies the remote address of an HTTP proxy.
+    ///
+    /// Adding an `Proxy` to your client's `HTTPClient.Configuration`
+    /// will cause requests to be passed through the specified proxy using the
+    /// HTTP `CONNECT` method.
+    ///
+    /// If a `TLSConfiguration` is used in conjunction with `HTTPClient.Configuration.Proxy`,
+    /// TLS will be established _after_ successful proxy, between your client
+    /// and the destination server.
     struct Proxy {
         /// Specifies Proxy server host.
         public var host: String
