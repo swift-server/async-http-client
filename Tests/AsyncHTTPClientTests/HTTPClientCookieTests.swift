@@ -42,4 +42,16 @@ class HTTPClientCookieTests: XCTestCase {
         XCTAssertFalse(c.httpOnly)
         XCTAssertFalse(c.secure)
     }
+
+    func testCookieInit() {
+        let c = HTTPClient.Cookie(name: "key", value: "value", path: "/path", domain: "example.com", expires: Date(timeIntervalSince1970: 1_445_412_480), maxAge: 42, httpOnly: true, secure: true)
+        XCTAssertEqual("key", c.name)
+        XCTAssertEqual("value", c.value)
+        XCTAssertEqual("/path", c.path)
+        XCTAssertEqual("example.com", c.domain)
+        XCTAssertEqual(Date(timeIntervalSince1970: 1_445_412_480), c.expires)
+        XCTAssertEqual(42, c.maxAge)
+        XCTAssertTrue(c.httpOnly)
+        XCTAssertTrue(c.secure)
+    }
 }

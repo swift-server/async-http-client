@@ -27,6 +27,7 @@ extension HTTPClientCookieTests {
         return [
             ("testCookie", testCookie),
             ("testCookieDefaults", testCookieDefaults),
+            ("testCookieInit", testCookieInit),
         ]
     }
 }
