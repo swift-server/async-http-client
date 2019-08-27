@@ -122,6 +122,7 @@ extension HTTPClient {
             self.path = path
             self.domain = domain
             self.expires = expires
+            self.maxAge = maxAge
             self.httpOnly = httpOnly
             self.secure = secure
         }

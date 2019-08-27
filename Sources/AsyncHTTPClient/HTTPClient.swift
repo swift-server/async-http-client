@@ -279,7 +279,7 @@ public class HTTPClient {
         }
     }
 
-    private func resolveAddress(request: Request, proxy: Proxy?) -> (host: String, port: Int) {
+    private func resolveAddress(request: Request, proxy: Configuration.Proxy?) -> (host: String, port: Int) {
         switch self.configuration.proxy {
         case .none:
             return (request.host, request.port)
