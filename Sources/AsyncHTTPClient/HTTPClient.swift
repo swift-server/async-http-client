@@ -290,24 +290,6 @@ public class HTTPClient {
 
     /// `HTTPClient` configuration.
     public struct Configuration {
-        /// Timeout configuration
-        public struct Timeout {
-            /// Specifies connect timeout.
-            public var connect: TimeAmount?
-            /// Specifies read timeout.
-            public var read: TimeAmount?
-
-            /// Create timeout.
-            ///
-            /// - parameters:
-            ///     - connect: `connect` timeout.
-            ///     - read: `read` timeout.
-            public init(connect: TimeAmount? = nil, read: TimeAmount? = nil) {
-                self.connect = connect
-                self.read = read
-            }
-        }
-
         /// TLS configuration, defaults to `TLSConfiguration.forClient()`.
         public var tlsConfiguration: TLSConfiguration?
         /// Enables following 3xx redirects automatically, defaults to `false`.
@@ -381,6 +363,26 @@ public class HTTPClient {
         /// Library will try to use provided event loop if possible.
         public static func prefers(_ eventLoop: EventLoop) -> EventLoopPreference {
             return EventLoopPreference(.prefers(eventLoop))
+        }
+    }
+}
+
+extension HTTPClient.Configuration {
+    /// Timeout configuration
+    public struct Timeout {
+        /// Specifies connect timeout.
+        public var connect: TimeAmount?
+        /// Specifies read timeout.
+        public var read: TimeAmount?
+
+        /// Create timeout.
+        ///
+        /// - parameters:
+        ///     - connect: `connect` timeout.
+        ///     - read: `read` timeout.
+        public init(connect: TimeAmount? = nil, read: TimeAmount? = nil) {
+            self.connect = connect
+            self.read = read
         }
     }
 }
