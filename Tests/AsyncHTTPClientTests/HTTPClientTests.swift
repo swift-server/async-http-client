@@ -293,6 +293,14 @@ class HTTPClientTests: XCTestCase {
         }
     }
 
+    func testHTTPClientAuthorization() {
+        var authorization = HTTPClient.Authorization.basic(username: "aladdin", password: "opensesame")
+        XCTAssertEqual(authorization.headerValue, "Basic YWxhZGRpbjpvcGVuc2VzYW1l")
+
+        authorization = HTTPClient.Authorization.bearer(tokens: "mF_9.B5f-4.1JqM")
+        XCTAssertEqual(authorization.headerValue, "Bearer mF_9.B5f-4.1JqM")
+    }
+
     func testProxyPlaintext() throws {
         let httpBin = HttpBin(simulateProxy: .plaintext)
         let httpClient = HTTPClient(
@@ -322,6 +330,37 @@ class HTTPClientTests: XCTestCase {
         }
         let res = try httpClient.get(url: "https://test/ok").wait()
         XCTAssertEqual(res.status, .ok)
+    }
+
+    func testProxyPlaintextWithCorrectlyAuthorization() throws {
+        let httpBin = HttpBin(simulateProxy: .plaintext)
+        let httpClient = HTTPClient(
+            eventLoopGroupProvider: .createNew,
+            configuration: .init(proxy: .server(host: "localhost", port: httpBin.port, authorization: .basic(username: "aladdin", password: "opensesame")))
+        )
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+        let res = try httpClient.get(url: "http://test/ok").wait()
+        XCTAssertEqual(res.status, .ok)
+    }
+
+    func testProxyPlaintextWithIncorrectlyAuthorization() throws {
+        let httpBin = HttpBin(simulateProxy: .plaintext)
+        let httpClient = HTTPClient(
+            eventLoopGroupProvider: .createNew,
+            configuration: .init(proxy: .server(host: "localhost", port: httpBin.port, authorization: .basic(username: "aladdin", password: "opensesamefoo")))
+        )
+        defer {
+            try! httpClient.syncShutdown()
+            httpBin.shutdown()
+        }
+        XCTAssertThrowsError(try httpClient.get(url: "http://test/ok").wait(), "Should fail") { error in
+            guard case let error = error as? HTTPClientError, error == .proxyAuthenticationRequired else {
+                return XCTFail("Should fail with HTTPClientError.proxyAuthenticationRequired")
+            }
+        }
     }
 
     func testUploadStreaming() throws {

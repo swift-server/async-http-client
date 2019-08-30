@@ -232,8 +232,8 @@ public class HTTPClient {
                     switch self.configuration.proxy {
                     case .none:
                         return channel.pipeline.addSSLHandlerIfNeeded(for: request, tlsConfiguration: self.configuration.tlsConfiguration)
-                    case .some:
-                        return channel.pipeline.addProxyHandler(for: request, decoder: decoder, encoder: encoder, tlsConfiguration: self.configuration.tlsConfiguration)
+                    case .some(let proxy):
+                        return channel.pipeline.addProxyHandler(for: request, decoder: decoder, encoder: encoder, tlsConfiguration: self.configuration.tlsConfiguration, proxy: proxy)
                     }
                 }.flatMap {
                     if let timeout = self.resolve(timeout: self.configuration.timeout.read, deadline: deadline) {
@@ -386,8 +386,8 @@ public class HTTPClient {
 }
 
 private extension ChannelPipeline {
-    func addProxyHandler(for request: HTTPClient.Request, decoder: ByteToMessageHandler<HTTPResponseDecoder>, encoder: HTTPRequestEncoder, tlsConfiguration: TLSConfiguration?) -> EventLoopFuture<Void> {
-        let handler = HTTPClientProxyHandler(host: request.host, port: request.port, onConnect: { channel in
+    func addProxyHandler(for request: HTTPClient.Request, decoder: ByteToMessageHandler<HTTPResponseDecoder>, encoder: HTTPRequestEncoder, tlsConfiguration: TLSConfiguration?, proxy: HTTPClient.Configuration.Proxy?) -> EventLoopFuture<Void> {
+        let handler = HTTPClientProxyHandler(host: request.host, port: request.port, authorization: proxy?.authorization, onConnect: { channel in
             channel.pipeline.removeHandler(decoder).flatMap {
                 return channel.pipeline.addHandler(
                     ByteToMessageHandler(HTTPResponseDecoder(leftOverBytesStrategy: .forwardBytes)),
@@ -431,6 +431,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case chunkedSpecifiedMultipleTimes
         case invalidProxyResponse
         case contentLengthMissing
+        case proxyAuthenticationRequired
     }
 
     private var code: Code
@@ -467,4 +468,6 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let invalidProxyResponse = HTTPClientError(code: .invalidProxyResponse)
     /// Request does not contain `Content-Length` header.
     public static let contentLengthMissing = HTTPClientError(code: .contentLengthMissing)
+    /// Proxy Authentication Required
+    public static let proxyAuthenticationRequired = HTTPClientError(code: .proxyAuthenticationRequired)
 }

@@ -110,7 +110,10 @@ internal class HttpBin {
             .childChannelInitializer { channel in
                 channel.pipeline.configureHTTPServerPipeline(withPipeliningAssistance: true, withErrorHandling: true).flatMap {
                     if let simulateProxy = simulateProxy {
-                        return channel.pipeline.addHandler(HTTPProxySimulator(option: simulateProxy), position: .first)
+                        let responseEncoder = HTTPResponseEncoder()
+                        let requestDecoder = ByteToMessageHandler(HTTPRequestDecoder(leftOverBytesStrategy: .forwardBytes))
+
+                        return channel.pipeline.addHandlers([responseEncoder, requestDecoder, HTTPProxySimulator(option: simulateProxy, encoder: responseEncoder, decoder: requestDecoder)], position: .first)
                     } else {
                         return channel.eventLoop.makeSucceededFuture(())
                     }
@@ -132,9 +135,9 @@ internal class HttpBin {
 }
 
 final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
-    typealias InboundIn = ByteBuffer
-    typealias InboundOut = ByteBuffer
-    typealias OutboundOut = ByteBuffer
+    typealias InboundIn = HTTPServerRequestPart
+    typealias InboundOut = HTTPServerResponsePart
+    typealias OutboundOut = HTTPServerResponsePart
 
     enum Option {
         case plaintext
@@ -142,33 +145,44 @@ final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
     }
 
     let option: Option
+    let encoder: HTTPResponseEncoder
+    let decoder: ByteToMessageHandler<HTTPRequestDecoder>
+    var head: HTTPResponseHead
 
-    init(option: Option) {
+    init(option: Option, encoder: HTTPResponseEncoder, decoder: ByteToMessageHandler<HTTPRequestDecoder>) {
         self.option = option
+        self.encoder = encoder
+        self.decoder = decoder
+        self.head = HTTPResponseHead(version: .init(major: 1, minor: 1), status: .ok, headers: .init([("Content-Length", "0"), ("Connection", "close")]))
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-        let response = """
-        HTTP/1.1 200 OK\r\n\
-        Content-Length: 0\r\n\
-        Connection: close\r\n\
-        \r\n
-        """
-        var buffer = self.unwrapInboundIn(data)
-        let request = buffer.readString(length: buffer.readableBytes)!
-        if request.hasPrefix("CONNECT") {
-            var buffer = context.channel.allocator.buffer(capacity: 0)
-            buffer.writeString(response)
-            context.write(self.wrapInboundOut(buffer), promise: nil)
-            context.flush()
+        let request = self.unwrapInboundIn(data)
+        switch request {
+        case .head(let head):
+            guard head.method == .CONNECT else {
+                fatalError("Expected a CONNECT request")
+            }
+            if head.headers.contains(name: "proxy-authorization") {
+                if head.headers["proxy-authorization"].first != "Basic YWxhZGRpbjpvcGVuc2VzYW1l" {
+                    self.head.status = .proxyAuthenticationRequired
+                }
+            }
+        case .body:
+            ()
+        case .end:
+            context.write(self.wrapOutboundOut(.head(self.head)), promise: nil)
+            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+
             context.channel.pipeline.removeHandler(self, promise: nil)
+            context.channel.pipeline.removeHandler(self.decoder, promise: nil)
+            context.channel.pipeline.removeHandler(self.encoder, promise: nil)
+
             switch self.option {
             case .tls:
                 _ = HttpBin.configureTLS(channel: context.channel)
             case .plaintext: break
             }
-        } else {
-            fatalError("Expected a CONNECT request")
         }
     }
 }
