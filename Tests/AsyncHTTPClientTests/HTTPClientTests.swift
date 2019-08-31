@@ -239,7 +239,7 @@ class HTTPClientTests: XCTestCase {
 
     func testReadTimeout() throws {
         let httpBin = HttpBin()
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: HTTPClient.Configuration(timeout: HTTPClient.Timeout(read: .milliseconds(150))))
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: HTTPClient.Configuration(timeout: HTTPClient.Configuration.Timeout(read: .milliseconds(150))))
 
         defer {
             try! httpClient.syncShutdown()

@@ -365,7 +365,9 @@ public class HTTPClient {
             return EventLoopPreference(.prefers(eventLoop))
         }
     }
+}
 
+extension HTTPClient.Configuration {
     /// Timeout configuration
     public struct Timeout {
         /// Specifies connect timeout.
