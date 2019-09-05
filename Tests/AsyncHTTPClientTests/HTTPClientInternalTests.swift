@@ -77,7 +77,7 @@ class HTTPClientInternalTests: XCTestCase {
         let httpBin = HttpBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
         defer {
-            try! httpClient.syncShutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
             httpBin.shutdown()
         }
 
@@ -107,7 +107,7 @@ class HTTPClientInternalTests: XCTestCase {
         let httpBin = HttpBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
         defer {
-            try! httpClient.syncShutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
             httpBin.shutdown()
         }
 
@@ -168,7 +168,7 @@ class HTTPClientInternalTests: XCTestCase {
         let httpBin = HttpBin(channelPromise: promise)
 
         defer {
-            try! httpClient.syncShutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
             httpBin.shutdown()
         }
 
