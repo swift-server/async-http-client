@@ -262,7 +262,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         case .error:
             break
         }
-        return task.eventLoop.makeSucceededFuture(())
+        return task.currentEventLoop.makeSucceededFuture(())
     }
 
     func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void> {
@@ -280,7 +280,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         case .error:
             break
         }
-        return task.eventLoop.makeSucceededFuture(())
+        return task.currentEventLoop.makeSucceededFuture(())
     }
 
     func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
@@ -378,9 +378,9 @@ extension HTTPClientResponseDelegate {
 
     public func didSendRequest(task: HTTPClient.Task<Response>) {}
 
-    public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
+    public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) -> EventLoopFuture<Void> { return task.currentEventLoop.makeSucceededFuture(()) }
 
-    public func didReceiveBodyPart(task: HTTPClient.Task<Response>, _: ByteBuffer) -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
+    public func didReceiveBodyPart(task: HTTPClient.Task<Response>, _: ByteBuffer) -> EventLoopFuture<Void> { return task.currentEventLoop.makeSucceededFuture(()) }
 
     public func didReceiveError(task: HTTPClient.Task<Response>, _: Error) {}
 }
@@ -401,15 +401,23 @@ extension HTTPClient {
     /// `EventLoopFuture<Response>` of the execution or cancellation of the execution.
     public final class Task<Response> {
         /// `EventLoop` used to execute and process this request.
-        public let eventLoop: EventLoop
-        let promise: EventLoopPromise<Response>
+        public var currentEventLoop: EventLoop {
+            return self.lock.withLock {
+                _currentEventLoop
+            }
+        }
 
+        /// The stored property used by `currentEventLoop` in combination with the `lock`
+        ///
+        /// In most cases you should use `currentEventLoop` instead
+        private var _currentEventLoop: EventLoop
+        let promise: EventLoopPromise<Response>
         private var channel: Channel?
         private var cancelled: Bool
         private let lock: Lock
 
-        public init(eventLoop: EventLoop) {
-            self.eventLoop = eventLoop
+        init(eventLoop: EventLoop) {
+            self._currentEventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.cancelled = false
             self.lock = Lock()
@@ -440,8 +448,8 @@ extension HTTPClient {
 
         @discardableResult
         func setChannel(_ channel: Channel) -> Channel {
-            precondition(self.eventLoop === channel.eventLoop, "Channel must use same event loop as this task.")
             return self.lock.withLock {
+                self._currentEventLoop = channel.eventLoop
                 self.channel = channel
                 return channel
             }
@@ -574,9 +582,11 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             } else {
                 self.state = .head
                 self.mayRead = false
-                self.delegate.didReceiveHead(task: self.task, head).whenComplete { result in
-                    self.handleBackpressureResult(context: context, result: result)
-                }
+                self.delegate.didReceiveHead(task: self.task, head)
+                    .hop(to: context.eventLoop)
+                    .whenComplete { result in
+                        self.handleBackpressureResult(context: context, result: result)
+                    }
             }
         case .body(let body):
             switch self.state {
@@ -585,9 +595,11 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             default:
                 self.state = .body
                 self.mayRead = false
-                self.delegate.didReceiveBodyPart(task: self.task, body).whenComplete { result in
-                    self.handleBackpressureResult(context: context, result: result)
-                }
+                self.delegate.didReceiveBodyPart(task: self.task, body)
+                    .hop(to: context.eventLoop)
+                    .whenComplete { result in
+                        self.handleBackpressureResult(context: context, result: result)
+                    }
             }
         case .end:
             switch self.state {

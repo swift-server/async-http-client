@@ -21,6 +21,12 @@ import NIOSSL
 class TestHTTPDelegate: HTTPClientResponseDelegate {
     typealias Response = Void
 
+    init(backpressureEventLoop: EventLoop? = nil) {
+        self.backpressureEventLoop = backpressureEventLoop
+    }
+
+    var backpressureEventLoop: EventLoop?
+
     enum State {
         case idle
         case head(HTTPResponseHead)
@@ -33,7 +39,7 @@ class TestHTTPDelegate: HTTPClientResponseDelegate {
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         self.state = .head(head)
-        return task.eventLoop.makeSucceededFuture(())
+        return (self.backpressureEventLoop ?? task.currentEventLoop).makeSucceededFuture(())
     }
 
     func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
@@ -47,7 +53,7 @@ class TestHTTPDelegate: HTTPClientResponseDelegate {
         default:
             preconditionFailure("expecting head or body")
         }
-        return task.eventLoop.makeSucceededFuture(())
+        return (self.backpressureEventLoop ?? task.currentEventLoop).makeSucceededFuture(())
     }
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws {}
@@ -63,7 +69,7 @@ class CountingDelegate: HTTPClientResponseDelegate {
         if str?.starts(with: "id:") ?? false {
             self.count += 1
         }
-        return task.eventLoop.makeSucceededFuture(())
+        return task.currentEventLoop.makeSucceededFuture(())
     }
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Int {

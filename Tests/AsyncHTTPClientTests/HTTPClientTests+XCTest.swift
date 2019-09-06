@@ -29,7 +29,7 @@ extension HTTPClientTests {
             ("testBadRequestURI", testBadRequestURI),
             ("testSchemaCasing", testSchemaCasing),
             ("testGet", testGet),
-            ("testGetWithSharedEventLoopGroup", testGetWithSharedEventLoopGroup),
+            ("testGetWithDifferentEventLoopBackpressure", testGetWithDifferentEventLoopBackpressure),
             ("testPost", testPost),
             ("testGetHttps", testGetHttps),
             ("testPostHttps", testPostHttps),
