@@ -62,23 +62,19 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(.ok, response.status)
     }
 
-    func testGetWithSharedEventLoopGroup() throws {
+    func testGetWithDifferentEventLoopBackpressure() throws {
         let httpBin = HttpBin()
-        let elg = MultiThreadedEventLoopGroup(numberOfThreads: 8)
-        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(elg))
+        let loopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        let external = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(loopGroup))
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
-            XCTAssertNoThrow(try elg.syncShutdownGracefully())
+            XCTAssertNoThrow(try loopGroup.syncShutdownGracefully())
             httpBin.shutdown()
         }
-
-        let delegate = TestHTTPDelegate()
         let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/events/10/1")
+        let delegate = TestHTTPDelegate(backpressureEventLoop: external.next())
         let task = httpClient.execute(request: request, delegate: delegate)
-        let expectedEventLoop = task.eventLoop
-        task.futureResult.whenComplete { _ in
-            XCTAssertTrue(expectedEventLoop.inEventLoop)
-        }
         try task.wait()
     }
 
@@ -508,8 +504,8 @@ class HTTPClientTests: XCTestCase {
             }
 
             func didReceiveHead(task: HTTPClient.Task<Bool>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
-                self.result = task.eventLoop === self.eventLoop
-                return task.eventLoop.makeSucceededFuture(())
+                self.result = task.currentEventLoop === self.eventLoop
+                return task.currentEventLoop.makeSucceededFuture(())
             }
 
             func didFinishRequest(task: HTTPClient.Task<Bool>) throws -> Bool {
