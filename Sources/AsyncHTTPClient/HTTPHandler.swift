@@ -432,7 +432,7 @@ extension HTTPClient {
 
 internal struct TaskCancelEvent {}
 
-internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler, ChannelOutboundHandler {
+internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: ChannelInboundHandler, ChannelOutboundHandler {
     typealias OutboundIn = HTTPClient.Request
     typealias InboundIn = HTTPClientResponsePart
     typealias OutboundOut = HTTPClientRequestPart
@@ -446,16 +446,16 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
         case end
     }
 
-    let task: HTTPClient.Task<T.Response>
-    let delegate: T
-    let redirectHandler: RedirectHandler<T.Response>?
+    let task: HTTPClient.Task<Delegate.Response>
+    let delegate: Delegate
+    let redirectHandler: RedirectHandler<Delegate.Response>?
     let ignoreUncleanSSLShutdown: Bool
 
     var state: State = .idle
     var pendingRead = false
     var mayRead = true
 
-    init(task: HTTPClient.Task<T.Response>, delegate: T, redirectHandler: RedirectHandler<T.Response>?, ignoreUncleanSSLShutdown: Bool) {
+    init(task: HTTPClient.Task<Delegate.Response>, delegate: Delegate, redirectHandler: RedirectHandler<Delegate.Response>?, ignoreUncleanSSLShutdown: Bool) {
         self.task = task
         self.delegate = delegate
         self.redirectHandler = redirectHandler
@@ -650,9 +650,9 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
     }
 }
 
-internal struct RedirectHandler<T> {
+internal struct RedirectHandler<ResponseType> {
     let request: HTTPClient.Request
-    let execute: (HTTPClient.Request) -> HTTPClient.Task<T>
+    let execute: (HTTPClient.Request) -> HTTPClient.Task<ResponseType>
 
     func redirectTarget(status: HTTPResponseStatus, headers: HTTPHeaders) -> URL? {
         switch status {
@@ -681,7 +681,7 @@ internal struct RedirectHandler<T> {
         return url.absoluteURL
     }
 
-    func redirect(status: HTTPResponseStatus, to redirectURL: URL, promise: EventLoopPromise<T>) {
+    func redirect(status: HTTPResponseStatus, to redirectURL: URL, promise: EventLoopPromise<ResponseType>) {
         let originalRequest = self.request
 
         var convertToGet = false

@@ -184,7 +184,9 @@ public class HTTPClient {
     ///     - request: HTTP request to execute.
     ///     - delegate: Delegate to process response parts.
     ///     - deadline: Point in time by which the request must complete.
-    public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, deadline: NIODeadline? = nil) -> Task<T.Response> {
+    public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
+                                                              delegate: Delegate,
+                                                              deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
         let eventLoop = self.eventLoopGroup.next()
         return self.execute(request: request, delegate: delegate, eventLoop: eventLoop, deadline: deadline)
     }
@@ -196,7 +198,10 @@ public class HTTPClient {
     ///     - delegate: Delegate to process response parts.
     ///     - eventLoop: NIO Event Loop preference.
     ///     - deadline: Point in time by which the request must complete.
-    public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, eventLoop: EventLoopPreference, deadline: NIODeadline? = nil) -> Task<T.Response> {
+    public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
+                                                              delegate: Delegate,
+                                                              eventLoop: EventLoopPreference,
+                                                              deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
         switch eventLoop.preference {
         case .indifferent:
             return self.execute(request: request, delegate: delegate, eventLoop: self.eventLoopGroup.next(), deadline: deadline)
@@ -206,17 +211,20 @@ public class HTTPClient {
         }
     }
 
-    private func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, eventLoop: EventLoop, deadline: NIODeadline? = nil) -> Task<T.Response> {
-        let redirectHandler: RedirectHandler<T.Response>?
+    private func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
+                                                               delegate: Delegate,
+                                                               eventLoop: EventLoop,
+                                                               deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
+        let redirectHandler: RedirectHandler<Delegate.Response>?
         if self.configuration.followRedirects {
-            redirectHandler = RedirectHandler<T.Response>(request: request) { newRequest in
+            redirectHandler = RedirectHandler<Delegate.Response>(request: request) { newRequest in
                 self.execute(request: newRequest, delegate: delegate, eventLoop: eventLoop, deadline: deadline)
             }
         } else {
             redirectHandler = nil
         }
 
-        let task = Task<T.Response>(eventLoop: eventLoop)
+        let task = Task<Delegate.Response>(eventLoop: eventLoop)
 
         var bootstrap = ClientBootstrap(group: eventLoop)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
