@@ -194,6 +194,41 @@ extension HTTPClient {
             self.body = body
         }
     }
+
+    /// HTTP authentication
+    public struct Authorization {
+        private enum Scheme {
+            case Basic(String)
+            case Bearer(String)
+        }
+
+        private let scheme: Scheme
+
+        private init(scheme: Scheme) {
+            self.scheme = scheme
+        }
+
+        public static func basic(username: String, password: String) -> HTTPClient.Authorization {
+            return .basic(credentials: Data("\(username):\(password)".utf8).base64EncodedString())
+        }
+
+        public static func basic(credentials: String) -> HTTPClient.Authorization {
+            return .init(scheme: .Basic(credentials))
+        }
+
+        public static func bearer(tokens: String) -> HTTPClient.Authorization {
+            return .init(scheme: .Bearer(tokens))
+        }
+
+        public var headerValue: String {
+            switch self.scheme {
+            case .Basic(let credentials):
+                return "Basic \(credentials)"
+            case .Bearer(let tokens):
+                return "Bearer \(tokens)"
+            }
+        }
+    }
 }
 
 internal class ResponseAccumulator: HTTPClientResponseDelegate {
