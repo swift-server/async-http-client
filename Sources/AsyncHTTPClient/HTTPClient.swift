@@ -205,28 +205,42 @@ public class HTTPClient {
         switch eventLoop.preference {
         case .indifferent:
             return self.execute(request: request, delegate: delegate, eventLoop: self.eventLoopGroup.next(), deadline: deadline)
-        case .prefers(let preferred):
-            precondition(self.eventLoopGroup.makeIterator().contains { $0 === preferred }, "Provided EventLoop must be part of clients EventLoopGroup.")
-            return self.execute(request: request, delegate: delegate, eventLoop: preferred, deadline: deadline)
+        case .delegate(on: let eventLoop):
+            precondition(self.eventLoopGroup.makeIterator().contains { $0 === eventLoop }, "Provided EventLoop must be part of clients EventLoopGroup.")
+            return self.execute(request: request, delegate: delegate, eventLoop: eventLoop, deadline: deadline)
+        case .delegateAndChannel(on: let eventLoop):
+            precondition(self.eventLoopGroup.makeIterator().contains { $0 === eventLoop }, "Provided EventLoop must be part of clients EventLoopGroup.")
+            return self.execute(request: request, delegate: delegate, eventLoop: eventLoop, deadline: deadline)
+        case .testOnly_exact(channelOn: let channelEL, delegateOn: let delegateEL):
+            return self.execute(request: request,
+                                delegate: delegate,
+                                eventLoop: delegateEL,
+                                channelEL: channelEL,
+                                deadline: deadline)
         }
     }
 
     private func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
                                                                delegate: Delegate,
-                                                               eventLoop: EventLoop,
+                                                               eventLoop delegateEL: EventLoop,
+                                                               channelEL: EventLoop? = nil,
                                                                deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
         let redirectHandler: RedirectHandler<Delegate.Response>?
         if self.configuration.followRedirects {
             redirectHandler = RedirectHandler<Delegate.Response>(request: request) { newRequest in
-                self.execute(request: newRequest, delegate: delegate, eventLoop: eventLoop, deadline: deadline)
+                self.execute(request: newRequest,
+                             delegate: delegate,
+                             eventLoop: delegateEL,
+                             channelEL: channelEL,
+                             deadline: deadline)
             }
         } else {
             redirectHandler = nil
         }
 
-        let task = Task<Delegate.Response>(eventLoop: eventLoop)
+        let task = Task<Delegate.Response>(eventLoop: delegateEL)
 
-        var bootstrap = ClientBootstrap(group: eventLoop)
+        var bootstrap = ClientBootstrap(group: channelEL ?? delegateEL)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
             .channelInitializer { channel in
                 let encoder = HTTPRequestEncoder()
@@ -262,9 +276,7 @@ public class HTTPClient {
             .flatMap { channel in
                 channel.writeAndFlush(request)
             }
-            .whenFailure { error in
-                task.fail(error)
-            }
+            .cascadeFailure(to: task.promise)
 
         return task
     }
@@ -351,8 +363,12 @@ public class HTTPClient {
         enum Preference {
             /// Event Loop will be selected by the library.
             case indifferent
-            /// Library will try to use provided event loop if possible.
-            case prefers(EventLoop)
+            /// The delegate will be run on the specified EventLoop (and the Channel if possible).
+            case delegate(on: EventLoop)
+            /// The delegate and the `Channel` will be run on the specified EventLoop.
+            case delegateAndChannel(on: EventLoop)
+
+            case testOnly_exact(channelOn: EventLoop, delegateOn: EventLoop)
         }
 
         var preference: Preference
@@ -363,9 +379,28 @@ public class HTTPClient {
 
         /// Event Loop will be selected by the library.
         public static let indifferent = EventLoopPreference(.indifferent)
+
         /// Library will try to use provided event loop if possible.
+        @available(*, deprecated, renamed: "delegate(on:)")
         public static func prefers(_ eventLoop: EventLoop) -> EventLoopPreference {
-            return EventLoopPreference(.prefers(eventLoop))
+            return EventLoopPreference(.delegate(on: eventLoop))
+        }
+
+        /// The delegate will be run on the specified EventLoop (and the Channel if possible).
+        ///
+        /// This will call the configured delegate on `eventLoop` and will try to use a `Channel` on the same
+        /// `EventLoop` but will not establish a new network connection just to satisfy the `EventLoop` preference if
+        /// another existing connection on a different `EventLoop` is readily available from a connection pool.
+        public static func delegate(on eventLoop: EventLoop) -> EventLoopPreference {
+            return EventLoopPreference(.delegate(on: eventLoop))
+        }
+
+        /// The delegate and the `Channel` will be run on the specified EventLoop.
+        ///
+        /// Use this for use-cases where you prefer a new connection to be established over re-using an existing
+        /// connection that might be on a different `EventLoop`.
+        public static func delegateAndChannel(on eventLoop: EventLoop) -> EventLoopPreference {
+            return EventLoopPreference(.delegateAndChannel(on: eventLoop))
         }
     }
 }

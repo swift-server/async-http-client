@@ -262,7 +262,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         case .error:
             break
         }
-        return task.currentEventLoop.makeSucceededFuture(())
+        return task.eventLoop.makeSucceededFuture(())
     }
 
     func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void> {
@@ -280,7 +280,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         case .error:
             break
         }
-        return task.currentEventLoop.makeSucceededFuture(())
+        return task.eventLoop.makeSucceededFuture(())
     }
 
     func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
@@ -378,9 +378,13 @@ extension HTTPClientResponseDelegate {
 
     public func didSendRequest(task: HTTPClient.Task<Response>) {}
 
-    public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) -> EventLoopFuture<Void> { return task.currentEventLoop.makeSucceededFuture(()) }
+    public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) -> EventLoopFuture<Void> {
+        return task.eventLoop.makeSucceededFuture(())
+    }
 
-    public func didReceiveBodyPart(task: HTTPClient.Task<Response>, _: ByteBuffer) -> EventLoopFuture<Void> { return task.currentEventLoop.makeSucceededFuture(()) }
+    public func didReceiveBodyPart(task: HTTPClient.Task<Response>, _: ByteBuffer) -> EventLoopFuture<Void> {
+        return task.eventLoop.makeSucceededFuture(())
+    }
 
     public func didReceiveError(task: HTTPClient.Task<Response>, _: Error) {}
 }
@@ -434,24 +438,21 @@ extension HTTPClient {
     /// Response execution context. Will be created by the library and could be used for obtaining
     /// `EventLoopFuture<Response>` of the execution or cancellation of the execution.
     public final class Task<Response> {
-        /// `EventLoop` used to execute and process this request.
+        @available(*, deprecated, renamed: "eventLoop")
         public var currentEventLoop: EventLoop {
-            return self.lock.withLock {
-                _currentEventLoop
-            }
+            return self.eventLoop
         }
 
-        /// The stored property used by `currentEventLoop` in combination with the `lock`
-        ///
-        /// In most cases you should use `currentEventLoop` instead
-        private var _currentEventLoop: EventLoop
+        /// The `EventLoop` the delegate will be executed on.
+        public let eventLoop: EventLoop
+
         let promise: EventLoopPromise<Response>
         private var channel: Channel?
         private var cancelled: Bool
         private let lock: Lock
 
         init(eventLoop: EventLoop) {
-            self._currentEventLoop = eventLoop
+            self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.cancelled = false
             self.lock = Lock()
@@ -483,29 +484,18 @@ extension HTTPClient {
         @discardableResult
         func setChannel(_ channel: Channel) -> Channel {
             return self.lock.withLock {
-                self._currentEventLoop = channel.eventLoop
                 self.channel = channel
                 return channel
             }
-        }
-
-        func succeed(_ value: Response) {
-            self.promise.succeed(value)
-        }
-
-        func fail(_ error: Error) {
-            self.promise.fail(error)
         }
     }
 }
 
 internal struct TaskCancelEvent {}
 
-internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: ChannelInboundHandler, ChannelOutboundHandler {
-    typealias OutboundIn = HTTPClient.Request
-    typealias InboundIn = HTTPClientResponsePart
-    typealias OutboundOut = HTTPClientRequestPart
+// MARK: - TaskHandler
 
+internal class TaskHandler<Delegate: HTTPClientResponseDelegate> {
     enum State {
         case idle
         case sent
@@ -530,6 +520,88 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: ChannelInbound
         self.redirectHandler = redirectHandler
         self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
     }
+}
+
+// MARK: Delegate Callouts
+
+extension TaskHandler {
+    func failTaskAndNotifyDelegate<Err: Error>(error: Err,
+                                               _ body: @escaping (HTTPClient.Task<Delegate.Response>, Err) -> Void) {
+        func doIt() {
+            body(self.task, error)
+            self.task.promise.fail(error)
+        }
+
+        if self.task.eventLoop.inEventLoop {
+            doIt()
+        } else {
+            self.task.eventLoop.execute {
+                doIt()
+            }
+        }
+    }
+
+    func callOutToDelegateFireAndForget(_ body: @escaping (HTTPClient.Task<Delegate.Response>) -> Void) {
+        self.callOutToDelegateFireAndForget(value: ()) { (task, _: ()) in body(task) }
+    }
+
+    func callOutToDelegateFireAndForget<Value>(value: Value,
+                                               _ body: @escaping (HTTPClient.Task<Delegate.Response>, Value) -> Void) {
+        if self.task.eventLoop.inEventLoop {
+            body(self.task, value)
+        } else {
+            self.task.eventLoop.execute {
+                body(self.task, value)
+            }
+        }
+    }
+
+    func callOutToDelegate<Value>(value: Value,
+                                  channelEventLoop: EventLoop,
+                                  _ body: @escaping (HTTPClient.Task<Delegate.Response>, Value) -> EventLoopFuture<Void>) -> EventLoopFuture<Void> {
+        if self.task.eventLoop.inEventLoop {
+            return body(self.task, value).hop(to: channelEventLoop)
+        } else {
+            return self.task.eventLoop.submit {
+                body(self.task, value)
+            }.flatMap { $0 }.hop(to: channelEventLoop)
+        }
+    }
+
+    func callOutToDelegate<Response>(promise: EventLoopPromise<Response>? = nil,
+                                     _ body: @escaping (HTTPClient.Task<Delegate.Response>) throws -> Response) {
+        func doIt() {
+            do {
+                let result = try body(self.task)
+                promise?.succeed(result)
+            } catch {
+                promise?.fail(error)
+            }
+        }
+
+        if self.task.eventLoop.inEventLoop {
+            doIt()
+        } else {
+            self.task.eventLoop.submit {
+                doIt()
+            }.cascadeFailure(to: promise)
+        }
+    }
+
+    func callOutToDelegate<Response>(channelEventLoop: EventLoop,
+                                     _ body: @escaping (HTTPClient.Task<Delegate.Response>) throws -> Response) -> EventLoopFuture<Response> {
+        let promise = channelEventLoop.makePromise(of: Response.self)
+        self.callOutToDelegate(promise: promise, body)
+        return promise.futureResult
+    }
+}
+
+// MARK: ChannelHandler implementation
+
+extension TaskHandler: ChannelDuplexHandler {
+    typealias OutboundIn = HTTPClient.Request
+    typealias InboundIn = HTTPClientResponsePart
+    typealias OutboundOut = HTTPClientRequestPart
 
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
         self.state = .idle
@@ -547,6 +619,7 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: ChannelInbound
         do {
             try headers.validate(body: request.body)
         } catch {
+            promise?.fail(error)
             context.fireErrorCaught(error)
             self.state = .end
             return
@@ -554,34 +627,29 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: ChannelInbound
 
         head.headers = headers
 
-        context.write(wrapOutboundOut(.head(head))).whenSuccess {
-            self.delegate.didSendRequestHead(task: self.task, head)
-        }
+        context.write(wrapOutboundOut(.head(head))).map {
+            self.callOutToDelegateFireAndForget(value: head, self.delegate.didSendRequestHead)
+        }.flatMap {
+            self.writeBody(request: request, context: context)
+        }.flatMap {
+            context.eventLoop.assertInEventLoop()
+            return context.writeAndFlush(self.wrapOutboundOut(.end(nil)))
+        }.map {
+            context.eventLoop.assertInEventLoop()
+            self.state = .sent
+            self.callOutToDelegateFireAndForget(self.delegate.didSendRequest)
 
-        self.writeBody(request: request, context: context)
-            .flatMap {
-                context.writeAndFlush(self.wrapOutboundOut(.end(nil)))
+            let channel = context.channel
+            self.task.futureResult.whenComplete { _ in
+                channel.close(promise: nil)
             }
-            .whenComplete { result in
-                switch result {
-                case .success:
-                    self.state = .sent
-                    self.delegate.didSendRequest(task: self.task)
-                    promise?.succeed(())
-
-                    let channel = context.channel
-                    self.task.futureResult.whenComplete { _ in
-                        channel.close(promise: nil)
-                    }
-                case .failure(let error):
-                    self.state = .end
-                    self.delegate.didReceiveError(task: self.task, error)
-                    promise?.fail(error)
-
-                    self.task.fail(error)
-                    context.close(promise: nil)
-                }
-            }
+        }.flatMapErrorThrowing { error in
+            context.eventLoop.assertInEventLoop()
+            self.state = .end
+            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+            context.close(promise: nil)
+            throw error
+        }.cascade(to: promise)
     }
 
     private func writeBody(request: HTTPClient.Request, context: ChannelHandlerContext) -> EventLoopFuture<Void> {
@@ -590,8 +658,9 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: ChannelInbound
         }
 
         return body.stream(HTTPClient.Body.StreamWriter { part in
-            context.writeAndFlush(self.wrapOutboundOut(.body(part))).map {
-                self.delegate.didSendRequestPart(task: self.task, part)
+            context.eventLoop.assertInEventLoop()
+            return context.writeAndFlush(self.wrapOutboundOut(.body(part))).map {
+                self.callOutToDelegateFireAndForget(value: part, self.delegate.didSendRequestPart)
             }
         })
     }
@@ -614,8 +683,7 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: ChannelInbound
             } else {
                 self.state = .head
                 self.mayRead = false
-                self.delegate.didReceiveHead(task: self.task, head)
-                    .hop(to: context.eventLoop)
+                self.callOutToDelegate(value: head, channelEventLoop: context.eventLoop, self.delegate.didReceiveHead)
                     .whenComplete { result in
                         self.handleBackpressureResult(context: context, result: result)
                     }
@@ -627,8 +695,7 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: ChannelInbound
             default:
                 self.state = .body
                 self.mayRead = false
-                self.delegate.didReceiveBodyPart(task: self.task, body)
-                    .hop(to: context.eventLoop)
+                self.callOutToDelegate(value: body, channelEventLoop: context.eventLoop, self.delegate.didReceiveBodyPart)
                     .whenComplete { result in
                         self.handleBackpressureResult(context: context, result: result)
                     }
@@ -641,16 +708,13 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: ChannelInbound
                 context.close(promise: nil)
             default:
                 self.state = .end
-                do {
-                    self.task.succeed(try self.delegate.didFinishRequest(task: self.task))
-                } catch {
-                    self.task.fail(error)
-                }
+                self.callOutToDelegate(promise: self.task.promise, self.delegate.didFinishRequest)
             }
         }
     }
 
     private func handleBackpressureResult(context: ChannelHandlerContext, result: Result<Void, Error>) {
+        context.eventLoop.assertInEventLoop()
         switch result {
         case .success:
             self.mayRead = true
@@ -659,8 +723,7 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: ChannelInbound
             }
         case .failure(let error):
             self.state = .end
-            self.delegate.didReceiveError(task: self.task, error)
-            self.task.fail(error)
+            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
         }
     }
 
@@ -668,13 +731,11 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: ChannelInbound
         if (event as? IdleStateHandler.IdleStateEvent) == .read {
             self.state = .end
             let error = HTTPClientError.readTimeout
-            self.delegate.didReceiveError(task: self.task, error)
-            self.task.fail(error)
+            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
         } else if (event as? TaskCancelEvent) != nil {
             self.state = .end
             let error = HTTPClientError.cancelled
-            self.delegate.didReceiveError(task: self.task, error)
-            self.task.fail(error)
+            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
         } else {
             context.fireUserInboundEventTriggered(event)
         }
@@ -687,8 +748,7 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: ChannelInbound
         default:
             self.state = .end
             let error = HTTPClientError.remoteConnectionClosed
-            self.delegate.didReceiveError(task: self.task, error)
-            self.task.fail(error)
+            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
         }
     }
 
@@ -706,16 +766,16 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: ChannelInbound
                 break
             default:
                 self.state = .end
-                self.delegate.didReceiveError(task: self.task, error)
-                self.task.fail(error)
+                self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
             }
         default:
             self.state = .end
-            self.delegate.didReceiveError(task: self.task, error)
-            self.task.fail(error)
+            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
         }
     }
 }
+
+// MARK: - RedirectHandler
 
 internal struct RedirectHandler<ResponseType> {
     let request: HTTPClient.Request

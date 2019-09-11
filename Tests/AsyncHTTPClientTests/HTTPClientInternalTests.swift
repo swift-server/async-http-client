@@ -49,6 +49,27 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.end(nil)))
     }
 
+    func testBadHTTPRequest() throws {
+        let channel = EmbeddedChannel()
+        let recorder = RecordingHandler<HTTPClientResponsePart, HTTPClientRequestPart>()
+        let task = Task<Void>(eventLoop: channel.eventLoop)
+
+        XCTAssertNoThrow(try channel.pipeline.addHandler(recorder).wait())
+        XCTAssertNoThrow(try channel.pipeline.addHandler(TaskHandler(task: task,
+                                                                     delegate: TestHTTPDelegate(),
+                                                                     redirectHandler: nil,
+                                                                     ignoreUncleanSSLShutdown: false)).wait())
+
+        var request = try Request(url: "http://localhost/get")
+        request.headers.add(name: "X-Test-Header", value: "X-Test-Value")
+        request.headers.add(name: "Transfer-Encoding", value: "identity")
+        request.body = .string("1234")
+
+        XCTAssertThrowsError(try channel.writeOutbound(request)) { error in
+            XCTAssertEqual(HTTPClientError.identityCodingIncorrectlyPresent, error as? HTTPClientError)
+        }
+    }
+
     func testHTTPPartsHandlerMultiBody() throws {
         let channel = EmbeddedChannel()
         let delegate = TestHTTPDelegate()
@@ -227,5 +248,155 @@ class HTTPClientInternalTests: XCTestCase {
 
         let request11 = try Request(url: "https://someserver.com/some%20path")
         XCTAssertEqual(request11.url.uri, "/some%20path")
+    }
+
+    func testChannelAndDelegateOnDifferentEventLoops() throws {
+        class Delegate: HTTPClientResponseDelegate {
+            typealias Response = ([Message], [Message])
+
+            enum Message {
+                case head(HTTPResponseHead)
+                case bodyPart(ByteBuffer)
+                case sentRequestHead(HTTPRequestHead)
+                case sentRequestPart(IOData)
+                case sentRequest
+                case error(Error)
+            }
+
+            var receivedMessages: [Message] = []
+            var sentMessages: [Message] = []
+            private let eventLoop: EventLoop
+            private let randoEL: EventLoop
+
+            init(expectedEventLoop: EventLoop, randomOtherEventLoop: EventLoop) {
+                self.eventLoop = expectedEventLoop
+                self.randoEL = randomOtherEventLoop
+            }
+
+            func didSendRequestHead(task: HTTPClient.Task<Response>, _ head: HTTPRequestHead) {
+                self.eventLoop.assertInEventLoop()
+                self.sentMessages.append(.sentRequestHead(head))
+            }
+
+            func didSendRequestPart(task: HTTPClient.Task<Response>, _ part: IOData) {
+                self.eventLoop.assertInEventLoop()
+                self.sentMessages.append(.sentRequestPart(part))
+            }
+
+            func didSendRequest(task: HTTPClient.Task<Response>) {
+                self.eventLoop.assertInEventLoop()
+                self.sentMessages.append(.sentRequest)
+            }
+
+            func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
+                self.eventLoop.assertInEventLoop()
+                self.receivedMessages.append(.error(error))
+            }
+
+            public func didReceiveHead(task: HTTPClient.Task<Response>,
+                                       _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
+                self.eventLoop.assertInEventLoop()
+                self.receivedMessages.append(.head(head))
+                return self.randoEL.makeSucceededFuture(())
+            }
+
+            func didReceiveBodyPart(task: HTTPClient.Task<Response>,
+                                    _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+                self.eventLoop.assertInEventLoop()
+                self.receivedMessages.append(.bodyPart(buffer))
+                return self.randoEL.makeSucceededFuture(())
+            }
+
+            func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
+                self.eventLoop.assertInEventLoop()
+                return (self.receivedMessages, self.sentMessages)
+            }
+        }
+
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 3)
+        defer {
+            XCTAssertNoThrow(try group.syncShutdownGracefully())
+        }
+
+        let channelEL = group.next()
+        let delegateEL = group.next()
+        let randoEL = group.next()
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(group))
+        let promise: EventLoopPromise<Channel> = httpClient.eventLoopGroup.next().makePromise()
+        let httpBin = HTTPBin(channelPromise: promise)
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        let body: HTTPClient.Body = .stream(length: 8) { writer in
+            let buffer = ByteBuffer.of(string: "1234")
+            return writer.write(.byteBuffer(buffer)).flatMap {
+                let buffer = ByteBuffer.of(string: "4321")
+                return writer.write(.byteBuffer(buffer))
+            }
+        }
+
+        let request = try Request(url: "http://127.0.0.1:\(httpBin.port)/custom",
+                                  body: body)
+        let delegate = Delegate(expectedEventLoop: delegateEL, randomOtherEventLoop: randoEL)
+        let future = httpClient.execute(request: request,
+                                        delegate: delegate,
+                                        eventLoop: .init(.testOnly_exact(channelOn: channelEL,
+                                                                         delegateOn: delegateEL))).futureResult
+
+        let channel = try promise.futureResult.wait()
+
+        // Send 3 parts, but only one should be received until the future is complete
+        let buffer = ByteBuffer.of(string: "1234")
+        try channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(buffer))).wait()
+
+        try channel.writeAndFlush(HTTPServerResponsePart.end(nil)).wait()
+        let (receivedMessages, sentMessages) = try future.wait()
+        XCTAssertEqual(2, receivedMessages.count)
+        XCTAssertEqual(4, sentMessages.count)
+
+        switch sentMessages.dropFirst(0).first {
+        case .some(.sentRequestHead(let head)):
+            XCTAssertEqual(request.url.uri, head.uri)
+        default:
+            XCTFail("wrong message")
+        }
+
+        switch sentMessages.dropFirst(1).first {
+        case .some(.sentRequestPart(.byteBuffer(let buffer))):
+            XCTAssertEqual("1234", String(decoding: buffer.readableBytesView, as: Unicode.UTF8.self))
+        default:
+            XCTFail("wrong message")
+        }
+
+        switch sentMessages.dropFirst(2).first {
+        case .some(.sentRequestPart(.byteBuffer(let buffer))):
+            XCTAssertEqual("4321", String(decoding: buffer.readableBytesView, as: Unicode.UTF8.self))
+        default:
+            XCTFail("wrong message")
+        }
+
+        switch sentMessages.dropFirst(3).first {
+        case .some(.sentRequest):
+            () // OK
+        default:
+            XCTFail("wrong message")
+        }
+
+        switch receivedMessages.dropFirst(0).first {
+        case .some(.head(let head)):
+            XCTAssertEqual(["transfer-encoding": "chunked"], head.headers)
+        default:
+            XCTFail("wrong message")
+        }
+
+        switch receivedMessages.dropFirst(1).first {
+        case .some(.bodyPart(let buffer)):
+            XCTAssertEqual("1234", String(decoding: buffer.readableBytesView, as: Unicode.UTF8.self))
+        default:
+            XCTFail("wrong message")
+        }
     }
 }
