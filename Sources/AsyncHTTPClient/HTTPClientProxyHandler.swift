@@ -96,7 +96,7 @@ internal final class HTTPClientProxyHandler: ChannelDuplexHandler, RemovableChan
             switch res {
             case .head(let head):
                 switch head.status.code {
-                case 200 ..< 300:
+                case 200..<300:
                     // Any 2xx (Successful) response indicates that the sender (and all
                     // inbound proxies) will switch to tunnel mode immediately after the
                     // blank line that concludes the successful response's header section
