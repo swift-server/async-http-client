@@ -551,17 +551,15 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: ChannelInbound
     }
 
     private func writeBody(request: HTTPClient.Request, context: ChannelHandlerContext) -> EventLoopFuture<Void> {
-        if let body = request.body {
-            return body.stream(HTTPClient.Body.StreamWriter { part in
-                let future = context.writeAndFlush(self.wrapOutboundOut(.body(part)))
-                future.whenSuccess { _ in
-                    self.delegate.didSendRequestPart(task: self.task, part)
-                }
-                return future
-            })
-        } else {
+        guard let body = request.body else {
             return context.eventLoop.makeSucceededFuture(())
         }
+
+        return body.stream(HTTPClient.Body.StreamWriter { part in
+            context.writeAndFlush(self.wrapOutboundOut(.body(part))).map {
+                self.delegate.didSendRequestPart(task: self.task, part)
+            }
+        })
     }
 
     public func read(context: ChannelHandlerContext) {

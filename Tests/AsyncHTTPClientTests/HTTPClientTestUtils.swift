@@ -15,6 +15,7 @@
 import AsyncHTTPClient
 import Foundation
 import NIO
+import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOSSL
 
@@ -90,9 +91,10 @@ internal final class RecordingHandler<Input, Output>: ChannelDuplexHandler {
     }
 }
 
-internal class HttpBin {
+internal final class HTTPBin {
     let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
     let serverChannel: Channel
+    let isShutdown: Atomic<Bool> = .init(value: false)
 
     var port: Int {
         return Int(self.serverChannel.localAddress!.port!)
@@ -125,7 +127,7 @@ internal class HttpBin {
                     }
                 }.flatMap {
                     if ssl {
-                        return HttpBin.configureTLS(channel: channel).flatMap {
+                        return HTTPBin.configureTLS(channel: channel).flatMap {
                             channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise))
                         }
                     } else {
@@ -135,8 +137,13 @@ internal class HttpBin {
             }.bind(host: "127.0.0.1", port: 0).wait()
     }
 
-    func shutdown() {
-        try! self.group.syncShutdownGracefully()
+    func shutdown() throws {
+        self.isShutdown.store(true)
+        try self.group.syncShutdownGracefully()
+    }
+
+    deinit {
+        assert(self.isShutdown.load(), "HTTPBin not shutdown before deinit")
     }
 }
 
@@ -186,7 +193,7 @@ final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
 
             switch self.option {
             case .tls:
-                _ = HttpBin.configureTLS(channel: context.channel)
+                _ = HTTPBin.configureTLS(channel: context.channel)
             case .plaintext: break
             }
         }
@@ -311,20 +318,16 @@ internal final class HttpBinHandler: ChannelInboundHandler {
             response.add(body)
             self.resps.prepend(response)
         case .end:
-            if let promise = self.channelPromise {
-                promise.succeed(context.channel)
-            }
+            self.channelPromise?.succeed(context.channel)
             if self.resps.isEmpty {
                 return
             }
             let response = self.resps.removeFirst()
             context.write(wrapOutboundOut(.head(response.head)), promise: nil)
-            if let body = response.body {
-                let data = body.withUnsafeReadableBytes {
-                    Data(bytes: $0.baseAddress!, count: $0.count)
-                }
-
-                let serialized = try! JSONEncoder().encode(RequestInfo(data: String(data: data, encoding: .utf8)!))
+            if var body = response.body {
+                let data = body.readData(length: body.readableBytes)!
+                let serialized = try! JSONEncoder().encode(RequestInfo(data: String(decoding: data,
+                                                                                    as: Unicode.UTF8.self)))
 
                 var responseBody = context.channel.allocator.buffer(capacity: serialized.count)
                 responseBody.writeBytes(serialized)
@@ -395,9 +398,7 @@ internal final class HttpBinForSSLUncleanShutdownHandler: ChannelInboundHandler 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         switch self.unwrapInboundIn(data) {
         case .head(let req):
-            if let promise = self.channelPromise {
-                promise.succeed(context.channel)
-            }
+            self.channelPromise?.succeed(context.channel)
 
             let response: String?
             switch req.uri {
@@ -440,7 +441,7 @@ internal final class HttpBinForSSLUncleanShutdownHandler: ChannelInboundHandler 
                 context.writeAndFlush(self.wrapOutboundOut(buffer), promise: nil)
             }
 
-            _ = context.channel.pipeline.removeHandler(name: "NIOSSLServerHandler").map { _ in
+            context.channel.pipeline.removeHandler(name: "NIOSSLServerHandler").whenSuccess {
                 context.close(promise: nil)
             }
         case .body:

@@ -74,11 +74,11 @@ class HTTPClientInternalTests: XCTestCase {
     }
 
     func testProxyStreaming() throws {
-        let httpBin = HttpBin()
+        let httpBin = HTTPBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         let body: HTTPClient.Body = .stream(length: 50) { writer in
@@ -104,11 +104,11 @@ class HTTPClientInternalTests: XCTestCase {
     }
 
     func testProxyStreamingFailure() throws {
-        let httpBin = HttpBin()
+        let httpBin = HTTPBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         var body: HTTPClient.Body = .stream(length: 50) { _ in
@@ -165,11 +165,11 @@ class HTTPClientInternalTests: XCTestCase {
 
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
         let promise: EventLoopPromise<Channel> = httpClient.eventLoopGroup.next().makePromise()
-        let httpBin = HttpBin(channelPromise: promise)
+        let httpBin = HTTPBin(channelPromise: promise)
 
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         let request = try Request(url: "http://localhost:\(httpBin.port)/custom")
