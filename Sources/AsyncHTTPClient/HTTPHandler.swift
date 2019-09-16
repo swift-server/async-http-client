@@ -350,14 +350,42 @@ extension HTTPClientResponseDelegate {
     public func didReceiveError(task: HTTPClient.Task<Response>, _: Error) {}
 }
 
-internal extension URL {
+extension URL {
+    var percentEncodedPath: String {
+        if self.path.isEmpty {
+            return "/"
+        }
+        return self.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? self.path
+    }
+
+    var pathHasTrailingSlash: Bool {
+        let url = self.absoluteString
+
+        var pathEndIndex = url.index(before: url.endIndex)
+        if let queryIndex = url.firstIndex(of: "?") {
+            pathEndIndex = url.index(before: queryIndex)
+        } else if let fragmentIndex = url.firstIndex(of: "#") {
+            pathEndIndex = url.index(before: fragmentIndex)
+        }
+
+        return url[pathEndIndex] == "/"
+    }
+
     var uri: String {
-        let urlEncodedPath = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
-        return path.isEmpty ? "/" : urlEncodedPath + (query.map { "?" + $0 } ?? "")
+        var uri = self.percentEncodedPath
+        if self.pathHasTrailingSlash, uri != "/" {
+            uri += "/"
+        }
+
+        if let query = self.query {
+            uri += "?" + query
+        }
+
+        return uri
     }
 
     func hasTheSameOrigin(as other: URL) -> Bool {
-        return host == other.host && scheme == other.scheme && port == other.port
+        return self.host == other.host && self.scheme == other.scheme && self.port == other.port
     }
 }
 
