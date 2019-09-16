@@ -66,12 +66,7 @@ public class HTTPClient {
     }
 
     deinit {
-        switch self.eventLoopGroupProvider {
-        case .shared:
-            return
-        case .createNew:
-            assert(self.isShutdown.load(), "Client not stopped before the deinit.")
-        }
+        assert(self.isShutdown.load(), "Client not shut down before the deinit. Please call client.syncShutdown() when no longer needed.")
     }
 
     /// Shuts down the client and `EventLoopGroup` if it was created by the client.
@@ -189,7 +184,9 @@ public class HTTPClient {
     ///     - request: HTTP request to execute.
     ///     - delegate: Delegate to process response parts.
     ///     - deadline: Point in time by which the request must complete.
-    public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, deadline: NIODeadline? = nil) -> Task<T.Response> {
+    public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
+                                                              delegate: Delegate,
+                                                              deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
         let eventLoop = self.eventLoopGroup.next()
         return self.execute(request: request, delegate: delegate, eventLoop: eventLoop, deadline: deadline)
     }
@@ -201,7 +198,10 @@ public class HTTPClient {
     ///     - delegate: Delegate to process response parts.
     ///     - eventLoop: NIO Event Loop preference.
     ///     - deadline: Point in time by which the request must complete.
-    public func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, eventLoop: EventLoopPreference, deadline: NIODeadline? = nil) -> Task<T.Response> {
+    public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
+                                                              delegate: Delegate,
+                                                              eventLoop: EventLoopPreference,
+                                                              deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
         switch eventLoop.preference {
         case .indifferent:
             return self.execute(request: request, delegate: delegate, eventLoop: self.eventLoopGroup.next(), deadline: deadline)
@@ -211,17 +211,20 @@ public class HTTPClient {
         }
     }
 
-    private func execute<T: HTTPClientResponseDelegate>(request: Request, delegate: T, eventLoop: EventLoop, deadline: NIODeadline? = nil) -> Task<T.Response> {
-        let redirectHandler: RedirectHandler<T.Response>?
+    private func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
+                                                               delegate: Delegate,
+                                                               eventLoop: EventLoop,
+                                                               deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
+        let redirectHandler: RedirectHandler<Delegate.Response>?
         if self.configuration.followRedirects {
-            redirectHandler = RedirectHandler<T.Response>(request: request) { newRequest in
+            redirectHandler = RedirectHandler<Delegate.Response>(request: request) { newRequest in
                 self.execute(request: newRequest, delegate: delegate, eventLoop: eventLoop, deadline: deadline)
             }
         } else {
             redirectHandler = nil
         }
 
-        let task = Task<T.Response>(eventLoop: eventLoop)
+        let task = Task<Delegate.Response>(eventLoop: eventLoop)
 
         var bootstrap = ClientBootstrap(group: eventLoop)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
@@ -232,8 +235,8 @@ public class HTTPClient {
                     switch self.configuration.proxy {
                     case .none:
                         return channel.pipeline.addSSLHandlerIfNeeded(for: request, tlsConfiguration: self.configuration.tlsConfiguration)
-                    case .some:
-                        return channel.pipeline.addProxyHandler(for: request, decoder: decoder, encoder: encoder, tlsConfiguration: self.configuration.tlsConfiguration)
+                    case .some(let proxy):
+                        return channel.pipeline.addProxyHandler(for: request, decoder: decoder, encoder: encoder, tlsConfiguration: self.configuration.tlsConfiguration, proxy: proxy)
                     }
                 }.flatMap {
                     if self.configuration.decompression {
@@ -285,7 +288,7 @@ public class HTTPClient {
         }
     }
 
-    private func resolveAddress(request: Request, proxy: Proxy?) -> (host: String, port: Int) {
+    private func resolveAddress(request: Request, proxy: Configuration.Proxy?) -> (host: String, port: Int) {
         switch self.configuration.proxy {
         case .none:
             return (request.host, request.port)
@@ -377,7 +380,9 @@ public class HTTPClient {
             return EventLoopPreference(.prefers(eventLoop))
         }
     }
+}
 
+extension HTTPClient.Configuration {
     /// Timeout configuration
     public struct Timeout {
         /// Specifies connect timeout.
@@ -398,8 +403,8 @@ public class HTTPClient {
 }
 
 private extension ChannelPipeline {
-    func addProxyHandler(for request: HTTPClient.Request, decoder: ByteToMessageHandler<HTTPResponseDecoder>, encoder: HTTPRequestEncoder, tlsConfiguration: TLSConfiguration?) -> EventLoopFuture<Void> {
-        let handler = HTTPClientProxyHandler(host: request.host, port: request.port, onConnect: { channel in
+    func addProxyHandler(for request: HTTPClient.Request, decoder: ByteToMessageHandler<HTTPResponseDecoder>, encoder: HTTPRequestEncoder, tlsConfiguration: TLSConfiguration?, proxy: HTTPClient.Configuration.Proxy?) -> EventLoopFuture<Void> {
+        let handler = HTTPClientProxyHandler(host: request.host, port: request.port, authorization: proxy?.authorization, onConnect: { channel in
             channel.pipeline.removeHandler(decoder).flatMap {
                 return channel.pipeline.addHandler(
                     ByteToMessageHandler(HTTPResponseDecoder(leftOverBytesStrategy: .forwardBytes)),
@@ -443,6 +448,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case chunkedSpecifiedMultipleTimes
         case invalidProxyResponse
         case contentLengthMissing
+        case proxyAuthenticationRequired
     }
 
     private var code: Code
@@ -479,4 +485,6 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let invalidProxyResponse = HTTPClientError(code: .invalidProxyResponse)
     /// Request does not contain `Content-Length` header.
     public static let contentLengthMissing = HTTPClientError(code: .contentLengthMissing)
+    /// Proxy Authentication Required
+    public static let proxyAuthenticationRequired = HTTPClientError(code: .proxyAuthenticationRequired)
 }

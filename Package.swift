@@ -32,7 +32,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AsyncHTTPClientTests",
-            dependencies: ["AsyncHTTPClient", "NIOFoundationCompat"]
+            dependencies: ["NIO", "NIOConcurrencyHelpers", "NIOSSL", "AsyncHTTPClient", "NIOFoundationCompat"]
         ),
     ]
 )

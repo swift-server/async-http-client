@@ -194,6 +194,41 @@ extension HTTPClient {
             self.body = body
         }
     }
+
+    /// HTTP authentication
+    public struct Authorization {
+        private enum Scheme {
+            case Basic(String)
+            case Bearer(String)
+        }
+
+        private let scheme: Scheme
+
+        private init(scheme: Scheme) {
+            self.scheme = scheme
+        }
+
+        public static func basic(username: String, password: String) -> HTTPClient.Authorization {
+            return .basic(credentials: Data("\(username):\(password)".utf8).base64EncodedString())
+        }
+
+        public static func basic(credentials: String) -> HTTPClient.Authorization {
+            return .init(scheme: .Basic(credentials))
+        }
+
+        public static func bearer(tokens: String) -> HTTPClient.Authorization {
+            return .init(scheme: .Bearer(tokens))
+        }
+
+        public var headerValue: String {
+            switch self.scheme {
+            case .Basic(let credentials):
+                return "Basic \(credentials)"
+            case .Bearer(let tokens):
+                return "Bearer \(tokens)"
+            }
+        }
+    }
 }
 
 internal class ResponseAccumulator: HTTPClientResponseDelegate {
@@ -227,7 +262,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         case .error:
             break
         }
-        return task.eventLoop.makeSucceededFuture(())
+        return task.currentEventLoop.makeSucceededFuture(())
     }
 
     func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void> {
@@ -245,7 +280,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         case .error:
             break
         }
-        return task.eventLoop.makeSucceededFuture(())
+        return task.currentEventLoop.makeSucceededFuture(())
     }
 
     func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
@@ -343,9 +378,9 @@ extension HTTPClientResponseDelegate {
 
     public func didSendRequest(task: HTTPClient.Task<Response>) {}
 
-    public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
+    public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) -> EventLoopFuture<Void> { return task.currentEventLoop.makeSucceededFuture(()) }
 
-    public func didReceiveBodyPart(task: HTTPClient.Task<Response>, _: ByteBuffer) -> EventLoopFuture<Void> { return task.eventLoop.makeSucceededFuture(()) }
+    public func didReceiveBodyPart(task: HTTPClient.Task<Response>, _: ByteBuffer) -> EventLoopFuture<Void> { return task.currentEventLoop.makeSucceededFuture(()) }
 
     public func didReceiveError(task: HTTPClient.Task<Response>, _: Error) {}
 }
@@ -366,15 +401,23 @@ extension HTTPClient {
     /// `EventLoopFuture<Response>` of the execution or cancellation of the execution.
     public final class Task<Response> {
         /// `EventLoop` used to execute and process this request.
-        public let eventLoop: EventLoop
-        let promise: EventLoopPromise<Response>
+        public var currentEventLoop: EventLoop {
+            return self.lock.withLock {
+                _currentEventLoop
+            }
+        }
 
+        /// The stored property used by `currentEventLoop` in combination with the `lock`
+        ///
+        /// In most cases you should use `currentEventLoop` instead
+        private var _currentEventLoop: EventLoop
+        let promise: EventLoopPromise<Response>
         private var channel: Channel?
         private var cancelled: Bool
         private let lock: Lock
 
-        public init(eventLoop: EventLoop) {
-            self.eventLoop = eventLoop
+        init(eventLoop: EventLoop) {
+            self._currentEventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.cancelled = false
             self.lock = Lock()
@@ -405,8 +448,8 @@ extension HTTPClient {
 
         @discardableResult
         func setChannel(_ channel: Channel) -> Channel {
-            precondition(self.eventLoop === channel.eventLoop, "Channel must use same event loop as this task.")
             return self.lock.withLock {
+                self._currentEventLoop = channel.eventLoop
                 self.channel = channel
                 return channel
             }
@@ -424,7 +467,7 @@ extension HTTPClient {
 
 internal struct TaskCancelEvent {}
 
-internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler, ChannelOutboundHandler {
+internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: ChannelInboundHandler, ChannelOutboundHandler {
     typealias OutboundIn = HTTPClient.Request
     typealias InboundIn = HTTPClientResponsePart
     typealias OutboundOut = HTTPClientRequestPart
@@ -438,16 +481,16 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
         case end
     }
 
-    let task: HTTPClient.Task<T.Response>
-    let delegate: T
-    let redirectHandler: RedirectHandler<T.Response>?
+    let task: HTTPClient.Task<Delegate.Response>
+    let delegate: Delegate
+    let redirectHandler: RedirectHandler<Delegate.Response>?
     let ignoreUncleanSSLShutdown: Bool
 
     var state: State = .idle
     var pendingRead = false
     var mayRead = true
 
-    init(task: HTTPClient.Task<T.Response>, delegate: T, redirectHandler: RedirectHandler<T.Response>?, ignoreUncleanSSLShutdown: Bool) {
+    init(task: HTTPClient.Task<Delegate.Response>, delegate: Delegate, redirectHandler: RedirectHandler<Delegate.Response>?, ignoreUncleanSSLShutdown: Bool) {
         self.task = task
         self.delegate = delegate
         self.redirectHandler = redirectHandler
@@ -508,17 +551,15 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
     }
 
     private func writeBody(request: HTTPClient.Request, context: ChannelHandlerContext) -> EventLoopFuture<Void> {
-        if let body = request.body {
-            return body.stream(HTTPClient.Body.StreamWriter { part in
-                let future = context.writeAndFlush(self.wrapOutboundOut(.body(part)))
-                future.whenSuccess { _ in
-                    self.delegate.didSendRequestPart(task: self.task, part)
-                }
-                return future
-            })
-        } else {
+        guard let body = request.body else {
             return context.eventLoop.makeSucceededFuture(())
         }
+
+        return body.stream(HTTPClient.Body.StreamWriter { part in
+            context.writeAndFlush(self.wrapOutboundOut(.body(part))).map {
+                self.delegate.didSendRequestPart(task: self.task, part)
+            }
+        })
     }
 
     public func read(context: ChannelHandlerContext) {
@@ -539,9 +580,11 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             } else {
                 self.state = .head
                 self.mayRead = false
-                self.delegate.didReceiveHead(task: self.task, head).whenComplete { result in
-                    self.handleBackpressureResult(context: context, result: result)
-                }
+                self.delegate.didReceiveHead(task: self.task, head)
+                    .hop(to: context.eventLoop)
+                    .whenComplete { result in
+                        self.handleBackpressureResult(context: context, result: result)
+                    }
             }
         case .body(let body):
             switch self.state {
@@ -550,9 +593,11 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
             default:
                 self.state = .body
                 self.mayRead = false
-                self.delegate.didReceiveBodyPart(task: self.task, body).whenComplete { result in
-                    self.handleBackpressureResult(context: context, result: result)
-                }
+                self.delegate.didReceiveBodyPart(task: self.task, body)
+                    .hop(to: context.eventLoop)
+                    .whenComplete { result in
+                        self.handleBackpressureResult(context: context, result: result)
+                    }
             }
         case .end:
             switch self.state {
@@ -638,9 +683,9 @@ internal class TaskHandler<T: HTTPClientResponseDelegate>: ChannelInboundHandler
     }
 }
 
-internal struct RedirectHandler<T> {
+internal struct RedirectHandler<ResponseType> {
     let request: HTTPClient.Request
-    let execute: (HTTPClient.Request) -> HTTPClient.Task<T>
+    let execute: (HTTPClient.Request) -> HTTPClient.Task<ResponseType>
 
     func redirectTarget(status: HTTPResponseStatus, headers: HTTPHeaders) -> URL? {
         switch status {
@@ -669,7 +714,7 @@ internal struct RedirectHandler<T> {
         return url.absoluteURL
     }
 
-    func redirect(status: HTTPResponseStatus, to redirectURL: URL, promise: EventLoopPromise<T>) {
+    func redirect(status: HTTPResponseStatus, to redirectURL: URL, promise: EventLoopPromise<ResponseType>) {
         let originalRequest = self.request
 
         var convertToGet = false

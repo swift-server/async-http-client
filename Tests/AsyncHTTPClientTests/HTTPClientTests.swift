@@ -51,42 +51,39 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testGet() throws {
-        let httpBin = HttpBin()
+        let httpBin = HTTPBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
         defer {
-            try! httpClient.syncShutdown()
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         let response = try httpClient.get(url: "http://localhost:\(httpBin.port)/get").wait()
         XCTAssertEqual(.ok, response.status)
     }
 
-    func testGetWithSharedEventLoopGroup() throws {
-        let httpBin = HttpBin()
-        let elg = MultiThreadedEventLoopGroup(numberOfThreads: 8)
-        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(elg))
+    func testGetWithDifferentEventLoopBackpressure() throws {
+        let httpBin = HTTPBin()
+        let loopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        let external = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(loopGroup))
         defer {
-            try! elg.syncShutdownGracefully()
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try loopGroup.syncShutdownGracefully())
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
-
-        let delegate = TestHTTPDelegate()
         let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/events/10/1")
+        let delegate = TestHTTPDelegate(backpressureEventLoop: external.next())
         let task = httpClient.execute(request: request, delegate: delegate)
-        let expectedEventLoop = task.eventLoop
-        task.futureResult.whenComplete { _ in
-            XCTAssertTrue(expectedEventLoop.inEventLoop)
-        }
         try task.wait()
     }
 
     func testPost() throws {
-        let httpBin = HttpBin()
+        let httpBin = HTTPBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
         defer {
-            try! httpClient.syncShutdown()
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         let response = try httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: .string("1234")).wait()
@@ -98,12 +95,12 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testGetHttps() throws {
-        let httpBin = HttpBin(ssl: true)
+        let httpBin = HTTPBin(ssl: true)
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
         defer {
-            try! httpClient.syncShutdown()
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         let response = try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()
@@ -111,12 +108,12 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testPostHttps() throws {
-        let httpBin = HttpBin(ssl: true)
+        let httpBin = HTTPBin(ssl: true)
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
         defer {
-            try! httpClient.syncShutdown()
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         let request = try Request(url: "https://localhost:\(httpBin.port)/post", method: .POST, body: .string("1234"))
@@ -130,15 +127,15 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testHttpRedirect() throws {
-        let httpBin = HttpBin(ssl: false)
-        let httpsBin = HttpBin(ssl: true)
+        let httpBin = HTTPBin(ssl: false)
+        let httpsBin = HTTPBin(ssl: true)
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
                                     configuration: HTTPClient.Configuration(certificateVerification: .none, followRedirects: true))
 
         defer {
-            try! httpClient.syncShutdown()
-            httpBin.shutdown()
-            httpsBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
+            XCTAssertNoThrow(try httpsBin.shutdown())
         }
 
         var response = try httpClient.get(url: "http://localhost:\(httpBin.port)/redirect/302").wait()
@@ -149,13 +146,13 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testHttpHostRedirect() throws {
-        let httpBin = HttpBin(ssl: false)
+        let httpBin = HTTPBin(ssl: false)
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
                                     configuration: HTTPClient.Configuration(certificateVerification: .none, followRedirects: true))
 
         defer {
-            try! httpClient.syncShutdown()
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         let response = try httpClient.get(url: "http://localhost:\(httpBin.port)/redirect/loopback?port=\(httpBin.port)").wait()
@@ -173,11 +170,11 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testPercentEncoded() throws {
-        let httpBin = HttpBin()
+        let httpBin = HTTPBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
         defer {
-            try! httpClient.syncShutdown()
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         let response = try httpClient.get(url: "http://localhost:\(httpBin.port)/percent%20encoded").wait()
@@ -187,11 +184,11 @@ class HTTPClientTests: XCTestCase {
     func testMultipleContentLengthHeaders() throws {
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
         defer {
-            try! httpClient.syncShutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
         }
-        let httpBin = HttpBin()
+        let httpBin = HTTPBin()
         defer {
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         let body = ByteBuffer.of(string: "hello world!")
@@ -205,11 +202,11 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testStreaming() throws {
-        let httpBin = HttpBin()
+        let httpBin = HTTPBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
         defer {
-            try! httpClient.syncShutdown()
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         var request = try Request(url: "http://localhost:\(httpBin.port)/events/10/1")
@@ -222,12 +219,12 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testRemoteClose() throws {
-        let httpBin = HttpBin()
+        let httpBin = HTTPBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
 
         defer {
-            try! httpClient.syncShutdown()
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(httpBin.port)/close").wait(), "Should fail") { error in
@@ -238,12 +235,12 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testReadTimeout() throws {
-        let httpBin = HttpBin()
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: HTTPClient.Configuration(timeout: HTTPClient.Timeout(read: .milliseconds(150))))
+        let httpBin = HTTPBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: HTTPClient.Configuration(timeout: HTTPClient.Configuration.Timeout(read: .milliseconds(150))))
 
         defer {
-            try! httpClient.syncShutdown()
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(httpBin.port)/wait").wait(), "Should fail") { error in
@@ -254,12 +251,12 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testDeadline() throws {
-        let httpBin = HttpBin()
+        let httpBin = HTTPBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
 
         defer {
-            try! httpClient.syncShutdown()
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(httpBin.port)/wait", deadline: .now() + .milliseconds(150)).wait(), "Should fail") { error in
@@ -270,12 +267,12 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testCancel() throws {
-        let httpBin = HttpBin()
+        let httpBin = HTTPBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
 
         defer {
-            try! httpClient.syncShutdown()
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         let queue = DispatchQueue(label: "nio-test")
@@ -293,22 +290,30 @@ class HTTPClientTests: XCTestCase {
         }
     }
 
+    func testHTTPClientAuthorization() {
+        var authorization = HTTPClient.Authorization.basic(username: "aladdin", password: "opensesame")
+        XCTAssertEqual(authorization.headerValue, "Basic YWxhZGRpbjpvcGVuc2VzYW1l")
+
+        authorization = HTTPClient.Authorization.bearer(tokens: "mF_9.B5f-4.1JqM")
+        XCTAssertEqual(authorization.headerValue, "Bearer mF_9.B5f-4.1JqM")
+    }
+
     func testProxyPlaintext() throws {
-        let httpBin = HttpBin(simulateProxy: .plaintext)
+        let httpBin = HTTPBin(simulateProxy: .plaintext)
         let httpClient = HTTPClient(
             eventLoopGroupProvider: .createNew,
             configuration: .init(proxy: .server(host: "localhost", port: httpBin.port))
         )
         defer {
-            try! httpClient.syncShutdown()
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
         let res = try httpClient.get(url: "http://test/ok").wait()
         XCTAssertEqual(res.status, .ok)
     }
 
     func testProxyTLS() throws {
-        let httpBin = HttpBin(simulateProxy: .tls)
+        let httpBin = HTTPBin(simulateProxy: .tls)
         let httpClient = HTTPClient(
             eventLoopGroupProvider: .createNew,
             configuration: .init(
@@ -317,19 +322,50 @@ class HTTPClientTests: XCTestCase {
             )
         )
         defer {
-            try! httpClient.syncShutdown()
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
         let res = try httpClient.get(url: "https://test/ok").wait()
         XCTAssertEqual(res.status, .ok)
     }
 
+    func testProxyPlaintextWithCorrectlyAuthorization() throws {
+        let httpBin = HTTPBin(simulateProxy: .plaintext)
+        let httpClient = HTTPClient(
+            eventLoopGroupProvider: .createNew,
+            configuration: .init(proxy: .server(host: "localhost", port: httpBin.port, authorization: .basic(username: "aladdin", password: "opensesame")))
+        )
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+        let res = try httpClient.get(url: "http://test/ok").wait()
+        XCTAssertEqual(res.status, .ok)
+    }
+
+    func testProxyPlaintextWithIncorrectlyAuthorization() throws {
+        let httpBin = HTTPBin(simulateProxy: .plaintext)
+        let httpClient = HTTPClient(
+            eventLoopGroupProvider: .createNew,
+            configuration: .init(proxy: .server(host: "localhost", port: httpBin.port, authorization: .basic(username: "aladdin", password: "opensesamefoo")))
+        )
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+        XCTAssertThrowsError(try httpClient.get(url: "http://test/ok").wait(), "Should fail") { error in
+            guard case let error = error as? HTTPClientError, error == .proxyAuthenticationRequired else {
+                return XCTFail("Should fail with HTTPClientError.proxyAuthenticationRequired")
+            }
+        }
+    }
+
     func testUploadStreaming() throws {
-        let httpBin = HttpBin()
+        let httpBin = HTTPBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
         defer {
-            try! httpClient.syncShutdown()
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         let body: HTTPClient.Body = .stream(length: 8) { writer in
@@ -354,7 +390,7 @@ class HTTPClientTests: XCTestCase {
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
 
         defer {
-            try! httpClient.syncShutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
             httpBin.shutdown()
         }
 
@@ -371,7 +407,7 @@ class HTTPClientTests: XCTestCase {
                                     configuration: HTTPClient.Configuration(certificateVerification: .none, ignoreUncleanSSLShutdown: true))
 
         defer {
-            try! httpClient.syncShutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
             httpBin.shutdown()
         }
 
@@ -389,7 +425,7 @@ class HTTPClientTests: XCTestCase {
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
 
         defer {
-            try! httpClient.syncShutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
             httpBin.shutdown()
         }
 
@@ -407,7 +443,7 @@ class HTTPClientTests: XCTestCase {
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
 
         defer {
-            try! httpClient.syncShutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
             httpBin.shutdown()
         }
 
@@ -423,7 +459,7 @@ class HTTPClientTests: XCTestCase {
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
 
         defer {
-            try! httpClient.syncShutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
             httpBin.shutdown()
         }
 
@@ -440,7 +476,7 @@ class HTTPClientTests: XCTestCase {
                                     configuration: HTTPClient.Configuration(certificateVerification: .none, ignoreUncleanSSLShutdown: true))
 
         defer {
-            try! httpClient.syncShutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
             httpBin.shutdown()
         }
 
@@ -457,7 +493,7 @@ class HTTPClientTests: XCTestCase {
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
 
         defer {
-            try! httpClient.syncShutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
             httpBin.shutdown()
         }
 
@@ -474,7 +510,7 @@ class HTTPClientTests: XCTestCase {
                                     configuration: HTTPClient.Configuration(certificateVerification: .none, ignoreUncleanSSLShutdown: true))
 
         defer {
-            try! httpClient.syncShutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
             httpBin.shutdown()
         }
 
@@ -486,13 +522,14 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testEventLoopArgument() throws {
-        let httpBin = HttpBin()
+        let httpBin = HTTPBin()
         let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 5)
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup),
                                     configuration: HTTPClient.Configuration(followRedirects: true))
         defer {
-            try! eventLoopGroup.syncShutdownGracefully()
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully())
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         class EventLoopValidatingDelegate: HTTPClientResponseDelegate {
@@ -506,8 +543,8 @@ class HTTPClientTests: XCTestCase {
             }
 
             func didReceiveHead(task: HTTPClient.Task<Bool>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
-                self.result = task.eventLoop === self.eventLoop
-                return task.eventLoop.makeSucceededFuture(())
+                self.result = task.currentEventLoop === self.eventLoop
+                return task.currentEventLoop.makeSucceededFuture(())
             }
 
             func didFinishRequest(task: HTTPClient.Task<Bool>) throws -> Bool {
@@ -528,11 +565,11 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testDecompression() throws {
-        let httpBin = HttpBin(compress: true)
+        let httpBin = HTTPBin(compress: true)
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(decompression: true))
         defer {
-            try! httpClient.syncShutdown()
-            httpBin.shutdown()
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         var body = ""

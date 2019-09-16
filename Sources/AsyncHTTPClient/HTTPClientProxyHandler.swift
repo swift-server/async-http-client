@@ -15,22 +15,42 @@
 import NIO
 import NIOHTTP1
 
-/// Specifies the remote address of an HTTP proxy.
-///
-/// Adding an `HTTPClientProxy` to your client's `HTTPClient.Configuration`
-/// will cause requests to be passed through the specified proxy using the
-/// HTTP `CONNECT` method.
-///
-/// If a `TLSConfiguration` is used in conjunction with `HTTPClientProxy`,
-/// TLS will be established _after_ successful proxy, between your client
-/// and the destination server.
-public extension HTTPClient {
+public extension HTTPClient.Configuration {
+    /// Proxy server configuration
+    /// Specifies the remote address of an HTTP proxy.
+    ///
+    /// Adding an `Proxy` to your client's `HTTPClient.Configuration`
+    /// will cause requests to be passed through the specified proxy using the
+    /// HTTP `CONNECT` method.
+    ///
+    /// If a `TLSConfiguration` is used in conjunction with `HTTPClient.Configuration.Proxy`,
+    /// TLS will be established _after_ successful proxy, between your client
+    /// and the destination server.
     struct Proxy {
-        internal let host: String
-        internal let port: Int
+        /// Specifies Proxy server host.
+        public var host: String
+        /// Specifies Proxy server port.
+        public var port: Int
+        /// Specifies Proxy server authorization.
+        public var authorization: HTTPClient.Authorization?
 
+        /// Create proxy.
+        ///
+        /// - parameters:
+        ///     - host: proxy server host.
+        ///     - port: proxy server port.
         public static func server(host: String, port: Int) -> Proxy {
-            return .init(host: host, port: port)
+            return .init(host: host, port: port, authorization: nil)
+        }
+
+        /// Create proxy.
+        ///
+        /// - parameters:
+        ///     - host: proxy server host.
+        ///     - port: proxy server port.
+        ///     - authorization: proxy server authorization.
+        public static func server(host: String, port: Int, authorization: HTTPClient.Authorization? = nil) -> Proxy {
+            return .init(host: host, port: port, authorization: authorization)
         }
     }
 }
@@ -53,14 +73,16 @@ internal final class HTTPClientProxyHandler: ChannelDuplexHandler, RemovableChan
 
     private let host: String
     private let port: Int
+    private let authorization: HTTPClient.Authorization?
     private var onConnect: (Channel) -> EventLoopFuture<Void>
     private var writeBuffer: CircularBuffer<WriteItem>
     private var readBuffer: CircularBuffer<NIOAny>
     private var readState: ReadState
 
-    init(host: String, port: Int, onConnect: @escaping (Channel) -> EventLoopFuture<Void>) {
+    init(host: String, port: Int, authorization: HTTPClient.Authorization?, onConnect: @escaping (Channel) -> EventLoopFuture<Void>) {
         self.host = host
         self.port = port
+        self.authorization = authorization
         self.onConnect = onConnect
         self.writeBuffer = .init()
         self.readBuffer = .init()
@@ -79,6 +101,8 @@ internal final class HTTPClientProxyHandler: ChannelDuplexHandler, RemovableChan
                     // inbound proxies) will switch to tunnel mode immediately after the
                     // blank line that concludes the successful response's header section
                     break
+                case 407:
+                    context.fireErrorCaught(HTTPClientError.proxyAuthenticationRequired)
                 default:
                     // Any response other than a successful response
                     // indicates that the tunnel has not yet been formed and that the
@@ -142,6 +166,9 @@ internal final class HTTPClientProxyHandler: ChannelDuplexHandler, RemovableChan
             uri: "\(self.host):\(self.port)"
         )
         head.headers.add(name: "proxy-connection", value: "keep-alive")
+        if let authorization = authorization {
+            head.headers.add(name: "proxy-authorization", value: authorization.headerValue)
+        }
         context.write(self.wrapOutboundOut(.head(head)), promise: nil)
         context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
         context.flush()
