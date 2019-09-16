@@ -15,11 +15,18 @@
 import AsyncHTTPClient
 import Foundation
 import NIO
+import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOSSL
 
 class TestHTTPDelegate: HTTPClientResponseDelegate {
     typealias Response = Void
+
+    init(backpressureEventLoop: EventLoop? = nil) {
+        self.backpressureEventLoop = backpressureEventLoop
+    }
+
+    var backpressureEventLoop: EventLoop?
 
     enum State {
         case idle
@@ -33,7 +40,7 @@ class TestHTTPDelegate: HTTPClientResponseDelegate {
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         self.state = .head(head)
-        return task.eventLoop.makeSucceededFuture(())
+        return (self.backpressureEventLoop ?? task.currentEventLoop).makeSucceededFuture(())
     }
 
     func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
@@ -47,7 +54,7 @@ class TestHTTPDelegate: HTTPClientResponseDelegate {
         default:
             preconditionFailure("expecting head or body")
         }
-        return task.eventLoop.makeSucceededFuture(())
+        return (self.backpressureEventLoop ?? task.currentEventLoop).makeSucceededFuture(())
     }
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws {}
@@ -63,7 +70,7 @@ class CountingDelegate: HTTPClientResponseDelegate {
         if str?.starts(with: "id:") ?? false {
             self.count += 1
         }
-        return task.eventLoop.makeSucceededFuture(())
+        return task.currentEventLoop.makeSucceededFuture(())
     }
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Int {
@@ -84,9 +91,10 @@ internal final class RecordingHandler<Input, Output>: ChannelDuplexHandler {
     }
 }
 
-internal class HttpBin {
+internal final class HTTPBin {
     let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
     let serverChannel: Channel
+    let isShutdown: Atomic<Bool> = .init(value: false)
 
     var port: Int {
         return Int(self.serverChannel.localAddress!.port!)
@@ -110,13 +118,16 @@ internal class HttpBin {
             .childChannelInitializer { channel in
                 channel.pipeline.configureHTTPServerPipeline(withPipeliningAssistance: true, withErrorHandling: true).flatMap {
                     if let simulateProxy = simulateProxy {
-                        return channel.pipeline.addHandler(HTTPProxySimulator(option: simulateProxy), position: .first)
+                        let responseEncoder = HTTPResponseEncoder()
+                        let requestDecoder = ByteToMessageHandler(HTTPRequestDecoder(leftOverBytesStrategy: .forwardBytes))
+
+                        return channel.pipeline.addHandlers([responseEncoder, requestDecoder, HTTPProxySimulator(option: simulateProxy, encoder: responseEncoder, decoder: requestDecoder)], position: .first)
                     } else {
                         return channel.eventLoop.makeSucceededFuture(())
                     }
                 }.flatMap {
                     if ssl {
-                        return HttpBin.configureTLS(channel: channel).flatMap {
+                        return HTTPBin.configureTLS(channel: channel).flatMap {
                             channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise))
                         }
                     } else {
@@ -126,15 +137,20 @@ internal class HttpBin {
             }.bind(host: "127.0.0.1", port: 0).wait()
     }
 
-    func shutdown() {
-        try! self.group.syncShutdownGracefully()
+    func shutdown() throws {
+        self.isShutdown.store(true)
+        try self.group.syncShutdownGracefully()
+    }
+
+    deinit {
+        assert(self.isShutdown.load(), "HTTPBin not shutdown before deinit")
     }
 }
 
 final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
-    typealias InboundIn = ByteBuffer
-    typealias InboundOut = ByteBuffer
-    typealias OutboundOut = ByteBuffer
+    typealias InboundIn = HTTPServerRequestPart
+    typealias InboundOut = HTTPServerResponsePart
+    typealias OutboundOut = HTTPServerResponsePart
 
     enum Option {
         case plaintext
@@ -142,33 +158,44 @@ final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
     }
 
     let option: Option
+    let encoder: HTTPResponseEncoder
+    let decoder: ByteToMessageHandler<HTTPRequestDecoder>
+    var head: HTTPResponseHead
 
-    init(option: Option) {
+    init(option: Option, encoder: HTTPResponseEncoder, decoder: ByteToMessageHandler<HTTPRequestDecoder>) {
         self.option = option
+        self.encoder = encoder
+        self.decoder = decoder
+        self.head = HTTPResponseHead(version: .init(major: 1, minor: 1), status: .ok, headers: .init([("Content-Length", "0"), ("Connection", "close")]))
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-        let response = """
-        HTTP/1.1 200 OK\r\n\
-        Content-Length: 0\r\n\
-        Connection: close\r\n\
-        \r\n
-        """
-        var buffer = self.unwrapInboundIn(data)
-        let request = buffer.readString(length: buffer.readableBytes)!
-        if request.hasPrefix("CONNECT") {
-            var buffer = context.channel.allocator.buffer(capacity: 0)
-            buffer.writeString(response)
-            context.write(self.wrapInboundOut(buffer), promise: nil)
-            context.flush()
+        let request = self.unwrapInboundIn(data)
+        switch request {
+        case .head(let head):
+            guard head.method == .CONNECT else {
+                fatalError("Expected a CONNECT request")
+            }
+            if head.headers.contains(name: "proxy-authorization") {
+                if head.headers["proxy-authorization"].first != "Basic YWxhZGRpbjpvcGVuc2VzYW1l" {
+                    self.head.status = .proxyAuthenticationRequired
+                }
+            }
+        case .body:
+            ()
+        case .end:
+            context.write(self.wrapOutboundOut(.head(self.head)), promise: nil)
+            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+
             context.channel.pipeline.removeHandler(self, promise: nil)
+            context.channel.pipeline.removeHandler(self.decoder, promise: nil)
+            context.channel.pipeline.removeHandler(self.encoder, promise: nil)
+
             switch self.option {
             case .tls:
-                _ = HttpBin.configureTLS(channel: context.channel)
+                _ = HTTPBin.configureTLS(channel: context.channel)
             case .plaintext: break
             }
-        } else {
-            fatalError("Expected a CONNECT request")
         }
     }
 }
@@ -291,20 +318,16 @@ internal final class HttpBinHandler: ChannelInboundHandler {
             response.add(body)
             self.resps.prepend(response)
         case .end:
-            if let promise = self.channelPromise {
-                promise.succeed(context.channel)
-            }
+            self.channelPromise?.succeed(context.channel)
             if self.resps.isEmpty {
                 return
             }
             let response = self.resps.removeFirst()
             context.write(wrapOutboundOut(.head(response.head)), promise: nil)
-            if let body = response.body {
-                let data = body.withUnsafeReadableBytes {
-                    Data(bytes: $0.baseAddress!, count: $0.count)
-                }
-
-                let serialized = try! JSONEncoder().encode(RequestInfo(data: String(data: data, encoding: .utf8)!))
+            if var body = response.body {
+                let data = body.readData(length: body.readableBytes)!
+                let serialized = try! JSONEncoder().encode(RequestInfo(data: String(decoding: data,
+                                                                                    as: Unicode.UTF8.self)))
 
                 var responseBody = context.channel.allocator.buffer(capacity: serialized.count)
                 responseBody.writeBytes(serialized)
@@ -375,9 +398,7 @@ internal final class HttpBinForSSLUncleanShutdownHandler: ChannelInboundHandler 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         switch self.unwrapInboundIn(data) {
         case .head(let req):
-            if let promise = self.channelPromise {
-                promise.succeed(context.channel)
-            }
+            self.channelPromise?.succeed(context.channel)
 
             let response: String?
             switch req.uri {
@@ -420,7 +441,7 @@ internal final class HttpBinForSSLUncleanShutdownHandler: ChannelInboundHandler 
                 context.writeAndFlush(self.wrapOutboundOut(buffer), promise: nil)
             }
 
-            _ = context.channel.pipeline.removeHandler(name: "NIOSSLServerHandler").map { _ in
+            context.channel.pipeline.removeHandler(name: "NIOSSLServerHandler").whenSuccess {
                 context.close(promise: nil)
             }
         case .body:
