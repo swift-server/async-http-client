@@ -566,7 +566,7 @@ class HTTPClientTests: XCTestCase {
 
     func testDecompression() throws {
         let httpBin = HTTPBin(compress: true)
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(decompression: true))
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(decompression: true, decompressionLimit: .none))
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
             XCTAssertNoThrow(try httpBin.shutdown())
@@ -596,6 +596,27 @@ class HTTPClientTests: XCTestCase {
                 XCTAssertEqual("deflate", response.headers["Content-Encoding"].first)
             }
             XCTAssertEqual(body, data.data)
+        }
+    }
+
+    func testDecompressionLimit() throws {
+        let httpBin = HTTPBin(compress: true)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(decompression: true, decompressionLimit: .ratio(10)))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        var request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/post", method: .POST)
+        request.body = .byteBuffer(ByteBuffer.of(bytes: [120, 156, 75, 76, 28, 5, 200, 0, 0, 248, 66, 103, 17]))
+        request.headers.add(name: "Accept-Encoding", value: "deflate")
+
+        do {
+            _ = try httpClient.execute(request: request).wait()
+        } catch let error as HTTPClientError {
+            XCTAssertEqual(error, .decompressionLimit)
+        } catch {
+            XCTFail("Unexptected error: \(error)")
         }
     }
 

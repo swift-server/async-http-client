@@ -240,7 +240,7 @@ public class HTTPClient {
                     }
                 }.flatMap {
                     if self.configuration.decompression {
-                        return channel.pipeline.addHandler(HTTPResponseDecompressor())
+                        return channel.pipeline.addHandler(HTTPResponseDecompressor(limit: self.configuration.decompressionLimit))
                     } else {
                         return channel.eventLoop.makeSucceededFuture(())
                     }
@@ -320,19 +320,23 @@ public class HTTPClient {
         public var decompression: Bool
         /// Ignore TLS unclean shutdown error, defaults to `false`.
         public var ignoreUncleanSSLShutdown: Bool
+        /// Limit decompression, default is a ratio of 100.
+        public var decompressionLimit: DecompressionLimit
 
         public init(tlsConfiguration: TLSConfiguration? = nil,
                     followRedirects: Bool = false,
                     timeout: Timeout = Timeout(),
                     proxy: Proxy? = nil,
                     ignoreUncleanSSLShutdown: Bool = false,
-                    decompression: Bool = false) {
+                    decompression: Bool = false,
+                    decompressionLimit: DecompressionLimit = .ratio(100)) {
             self.tlsConfiguration = tlsConfiguration
             self.followRedirects = followRedirects
             self.timeout = timeout
             self.proxy = proxy
-            self.decompression = decompression
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
+            self.decompression = decompression
+            self.decompressionLimit = decompressionLimit
         }
 
         public init(certificateVerification: CertificateVerification,
@@ -340,13 +344,15 @@ public class HTTPClient {
                     timeout: Timeout = Timeout(),
                     proxy: Proxy? = nil,
                     ignoreUncleanSSLShutdown: Bool = false,
-                    decompression: Bool = false) {
+                    decompression: Bool = false,
+                    decompressionLimit: DecompressionLimit = .ratio(100)) {
             self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
             self.followRedirects = followRedirects
             self.timeout = timeout
             self.proxy = proxy
-            self.decompression = decompression
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
+            self.decompression = decompression
+            self.decompressionLimit = decompressionLimit
         }
     }
 
@@ -378,6 +384,27 @@ public class HTTPClient {
         /// Library will try to use provided event loop if possible.
         public static func prefers(_ eventLoop: EventLoop) -> EventLoopPreference {
             return EventLoopPreference(.prefers(eventLoop))
+        }
+    }
+
+    /// Specifies how to limit decompression inflation.
+    public enum DecompressionLimit {
+        /// No limit will be set.
+        case none
+        /// Limit will be set on the request body size.
+        case size(Int)
+        /// Limit will be set on a ratio between compressed body size and decompressed result.
+        case ratio(Int)
+
+        func exceeded(compressed: Int, decompressed: Int) -> Bool {
+            switch self {
+            case .none:
+                return false
+            case .size(let allowed):
+                return compressed > allowed
+            case .ratio(let ratio):
+                return decompressed > compressed * ratio
+            }
         }
     }
 }
