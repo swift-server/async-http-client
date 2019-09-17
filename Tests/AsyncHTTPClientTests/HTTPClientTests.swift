@@ -573,7 +573,7 @@ class HTTPClientTests: XCTestCase {
         }
 
         var body = ""
-        for _ in 1 ... 1000 {
+        for _ in 1...1000 {
             body += "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
         }
 
