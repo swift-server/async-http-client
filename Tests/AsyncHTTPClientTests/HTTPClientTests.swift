@@ -619,5 +619,4 @@ class HTTPClientTests: XCTestCase {
             XCTFail("Unexptected error: \(error)")
         }
     }
-
 }
