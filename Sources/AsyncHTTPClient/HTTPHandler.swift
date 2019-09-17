@@ -394,16 +394,20 @@ extension URL {
     }
 
     var pathHasTrailingSlash: Bool {
-        let url = self.absoluteString
+        if #available(OSX 10.11, iOS 9.0, tvOS 9.0, watchOS 2.0, *) {
+            return self.hasDirectoryPath
+        } else {
+            let url = self.absoluteString
 
-        var pathEndIndex = url.index(before: url.endIndex)
-        if let queryIndex = url.firstIndex(of: "?") {
-            pathEndIndex = url.index(before: queryIndex)
-        } else if let fragmentIndex = url.firstIndex(of: "#") {
-            pathEndIndex = url.index(before: fragmentIndex)
+            var pathEndIndex = url.index(before: url.endIndex)
+            if let queryIndex = url.firstIndex(of: "?") {
+                pathEndIndex = url.index(before: queryIndex)
+            } else if let fragmentIndex = url.suffix(from: url.firstIndex(of: "@") ?? url.startIndex).lastIndex(of: "#") {
+                pathEndIndex = url.index(before: fragmentIndex)
+            }
+
+            return url[pathEndIndex] == "/"
         }
-
-        return url[pathEndIndex] == "/"
     }
 
     var uri: String {
