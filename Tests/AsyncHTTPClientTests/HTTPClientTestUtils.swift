@@ -310,7 +310,7 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 return
             case "/events/10/1": // TODO: parse path
                 context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
-                for i in 0 ..< 10 {
+                for i in 0..<10 {
                     let msg = "id: \(i)"
                     var buf = context.channel.allocator.buffer(capacity: msg.count)
                     buf.writeString(msg)
