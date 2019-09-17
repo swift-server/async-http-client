@@ -449,6 +449,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case invalidProxyResponse
         case contentLengthMissing
         case proxyAuthenticationRequired
+        case decompressionLimit
     }
 
     private var code: Code
@@ -485,6 +486,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let invalidProxyResponse = HTTPClientError(code: .invalidProxyResponse)
     /// Request does not contain `Content-Length` header.
     public static let contentLengthMissing = HTTPClientError(code: .contentLengthMissing)
-    /// Proxy Authentication Required
+    /// Proxy Authentication Required.
     public static let proxyAuthenticationRequired = HTTPClientError(code: .proxyAuthenticationRequired)
+    /// Decompression limit reached.
+    public static let decompressionLimit = HTTPClientError(code: .decompressionLimit)
 }

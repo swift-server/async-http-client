@@ -68,6 +68,7 @@ final class HTTPResponseDecompressor: ChannelDuplexHandler, RemovableChannelHand
 
     private var state = State.empty
     private var stream = z_stream()
+    private var inflated = 0
 
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
         let request = self.unwrapOutboundIn(data)
@@ -106,9 +107,13 @@ final class HTTPResponseDecompressor: ChannelDuplexHandler, RemovableChannelHand
             context.fireChannelRead(data)
         case .body(var part):
             switch self.state {
-            case .compressed:
+            case .compressed(_, let originalLength):
                 self.stream.inflatePart(input: &part, allocator: context.channel.allocator) { output in
-                    context.fireChannelRead(self.wrapInboundOut(.body(output)))
+                    self.inflated += output.readableBytes
+                    if self.inflated > originalLength * 10 {
+                        context.fireErrorCaught(HTTPClientError.decompressionLimit)
+                    }
+                    return context.fireChannelRead(self.wrapInboundOut(.body(output)))
                 }
             default:
                 context.fireChannelRead(data)

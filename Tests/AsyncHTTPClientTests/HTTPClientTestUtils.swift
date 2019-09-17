@@ -469,6 +469,12 @@ extension ByteBuffer {
         buffer.writeString(string)
         return buffer
     }
+
+    public static func of(bytes: [UInt8]) -> ByteBuffer {
+        var buffer = ByteBufferAllocator().buffer(capacity: bytes.count)
+        buffer.writeBytes(bytes)
+        return buffer
+    }
 }
 
 private let cert = """
