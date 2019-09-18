@@ -22,8 +22,8 @@ private enum CompressionAlgorithm: String {
 }
 
 extension z_stream {
-    mutating func inflatePart(input: inout ByteBuffer, allocator: ByteBufferAllocator, consumer: (ByteBuffer) -> Void) {
-        input.readWithUnsafeMutableReadableBytes { dataPtr in
+    mutating func inflatePart(input: inout ByteBuffer, output: inout ByteBuffer) {
+        input.readWithUnsafeMutableReadableBytes { (dataPtr: UnsafeMutableRawBufferPointer) -> Int in
             let typedPtr = dataPtr.baseAddress!.assumingMemoryBound(to: UInt8.self)
             let typedDataPtr = UnsafeMutableBufferPointer(start: typedPtr, count: dataPtr.count)
 
@@ -37,13 +37,9 @@ extension z_stream {
                 self.next_out = nil
             }
 
-            repeat {
-                var buffer = allocator.buffer(capacity: 16384)
-                self.inflatePart(to: &buffer)
-                consumer(buffer)
-            } while self.avail_out == 0
+            self.inflatePart(to: &output)
 
-            return Int(self.avail_in)
+            return typedDataPtr.count - Int(self.avail_in)
         }
     }
 
@@ -120,13 +116,17 @@ final class HTTPResponseDecompressor: ChannelDuplexHandler, RemovableChannelHand
         case .body(var part):
             switch self.state {
             case .compressed(_, let originalLength):
-                self.stream.inflatePart(input: &part, allocator: context.channel.allocator) { output in
-                    self.inflated += output.readableBytes
+                while part.readableBytes > 0 {
+                    var buffer = context.channel.allocator.buffer(capacity: 16384)
+                    self.stream.inflatePart(input: &part, output: &buffer)
+                    self.inflated += buffer.readableBytes
+
                     if self.limit.exceeded(compressed: originalLength, decompressed: self.inflated) {
                         context.fireErrorCaught(HTTPClientError.decompressionLimit)
                         return
                     }
-                    context.fireChannelRead(self.wrapInboundOut(.body(output)))
+
+                    context.fireChannelRead(self.wrapInboundOut(.body(buffer)))
                 }
             default:
                 context.fireChannelRead(data)
