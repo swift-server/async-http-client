@@ -22,8 +22,8 @@ private enum CompressionAlgorithm: String {
 }
 
 extension z_stream {
-    mutating func inflatePart(input: inout ByteBuffer, output: inout ByteBuffer) {
-        input.readWithUnsafeMutableReadableBytes { (dataPtr: UnsafeMutableRawBufferPointer) -> Int in
+    mutating func inflatePart(input: inout ByteBuffer, output: inout ByteBuffer) throws {
+        try input.readWithUnsafeMutableReadableBytes { (dataPtr: UnsafeMutableRawBufferPointer) -> Int in
             let typedPtr = dataPtr.baseAddress!.assumingMemoryBound(to: UInt8.self)
             let typedDataPtr = UnsafeMutableBufferPointer(start: typedPtr, count: dataPtr.count)
 
@@ -37,21 +37,23 @@ extension z_stream {
                 self.next_out = nil
             }
 
-            self.inflatePart(to: &output)
+            try self.inflatePart(to: &output)
 
             return typedDataPtr.count - Int(self.avail_in)
         }
     }
 
-    private mutating func inflatePart(to buffer: inout ByteBuffer) {
-        buffer.writeWithUnsafeMutableBytes { outputPtr in
+    private mutating func inflatePart(to buffer: inout ByteBuffer) throws {
+        try buffer.writeWithUnsafeMutableBytes { outputPtr in
             let typedOutputPtr = UnsafeMutableBufferPointer(start: outputPtr.baseAddress!.assumingMemoryBound(to: UInt8.self), count: outputPtr.count)
 
             self.avail_out = UInt32(typedOutputPtr.count)
             self.next_out = typedOutputPtr.baseAddress!
 
             let rc = inflate(&self, Z_NO_FLUSH)
-            precondition(rc == Z_OK || rc == Z_STREAM_END, "decompression failed: \(rc)")
+            guard rc == Z_OK || rc == Z_STREAM_END else {
+                throw HTTPClientError.decompression(rc)
+            }
 
             return typedOutputPtr.count - Int(self.avail_out)
         }
@@ -109,7 +111,11 @@ final class HTTPResponseDecompressor: ChannelDuplexHandler, RemovableChannelHand
             let length = head.headers[canonicalForm: "Content-Length"].first.flatMap { Int($0) }
 
             if let algorithm = algorithm, let length = length {
-                self.initializeDecoder(encoding: algorithm, length: length)
+                do {
+                    try self.initializeDecoder(encoding: algorithm, length: length)
+                } catch {
+                    context.fireErrorCaught(error)
+                }
             }
 
             context.fireChannelRead(data)
@@ -117,16 +123,21 @@ final class HTTPResponseDecompressor: ChannelDuplexHandler, RemovableChannelHand
             switch self.state {
             case .compressed(_, let originalLength):
                 while part.readableBytes > 0 {
-                    var buffer = context.channel.allocator.buffer(capacity: 16384)
-                    self.stream.inflatePart(input: &part, output: &buffer)
-                    self.inflated += buffer.readableBytes
+                    do {
+                        var buffer = context.channel.allocator.buffer(capacity: 16384)
+                        try self.stream.inflatePart(input: &part, output: &buffer)
+                        self.inflated += buffer.readableBytes
 
-                    if self.limit.exceeded(compressed: originalLength, decompressed: self.inflated) {
-                        context.fireErrorCaught(HTTPClientError.decompressionLimit)
+                        if self.limit.exceeded(compressed: originalLength, decompressed: self.inflated) {
+                            context.fireErrorCaught(HTTPClientError.decompressionLimit)
+                            return
+                        }
+
+                        context.fireChannelRead(self.wrapInboundOut(.body(buffer)))
+                    } catch {
+                        context.fireErrorCaught(error)
                         return
                     }
-
-                    context.fireChannelRead(self.wrapInboundOut(.body(buffer)))
                 }
             default:
                 context.fireChannelRead(data)
@@ -137,7 +148,7 @@ final class HTTPResponseDecompressor: ChannelDuplexHandler, RemovableChannelHand
         }
     }
 
-    private func initializeDecoder(encoding: CompressionAlgorithm, length: Int) {
+    private func initializeDecoder(encoding: CompressionAlgorithm, length: Int) throws {
         self.state = .compressed(encoding, length)
 
         self.stream.zalloc = nil
@@ -153,6 +164,8 @@ final class HTTPResponseDecompressor: ChannelDuplexHandler, RemovableChannelHand
         }
 
         let rc = CNIOExtrasZlib_inflateInit2(&self.stream, window)
-        precondition(rc == Z_OK, "Unexpected return from zlib init: \(rc)")
+        guard rc == Z_OK else {
+            throw HTTPClientError.decompressionInitialization(rc)
+        }
     }
 }

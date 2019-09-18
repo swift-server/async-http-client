@@ -477,6 +477,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case contentLengthMissing
         case proxyAuthenticationRequired
         case decompressionLimit
+        case decompressionInitialization(Int32)
+        case decompression(Int32)
     }
 
     private var code: Code
@@ -517,4 +519,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let proxyAuthenticationRequired = HTTPClientError(code: .proxyAuthenticationRequired)
     /// Decompression limit reached.
     public static let decompressionLimit = HTTPClientError(code: .decompressionLimit)
+    /// Decompression initialization failed.
+    public static func decompressionInitialization(_ code: Int32) -> HTTPClientError { return  HTTPClientError(code: .decompressionInitialization(code)) }
+    /// Decompression failed.
+    public static func decompression(_ code: Int32) -> HTTPClientError { return  HTTPClientError(code: .decompression(code)) }
 }
