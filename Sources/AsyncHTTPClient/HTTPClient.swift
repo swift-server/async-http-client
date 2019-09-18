@@ -520,7 +520,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     /// Decompression limit reached.
     public static let decompressionLimit = HTTPClientError(code: .decompressionLimit)
     /// Decompression initialization failed.
-    public static func decompressionInitialization(_ code: Int32) -> HTTPClientError { return  HTTPClientError(code: .decompressionInitialization(code)) }
+    public static func decompressionInitialization(_ code: Int32) -> HTTPClientError { return HTTPClientError(code: .decompressionInitialization(code)) }
     /// Decompression failed.
-    public static func decompression(_ code: Int32) -> HTTPClientError { return  HTTPClientError(code: .decompression(code)) }
+    public static func decompression(_ code: Int32) -> HTTPClientError { return HTTPClientError(code: .decompression(code)) }
 }
