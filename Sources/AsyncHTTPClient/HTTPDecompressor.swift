@@ -22,13 +22,20 @@ private enum CompressionAlgorithm: String {
 }
 
 extension z_stream {
-    public mutating func inflatePart(input: inout ByteBuffer, allocator: ByteBufferAllocator, consumer: (ByteBuffer) -> Void) {
+    mutating func inflatePart(input: inout ByteBuffer, allocator: ByteBufferAllocator, consumer: (ByteBuffer) -> Void) {
         input.readWithUnsafeMutableReadableBytes { dataPtr in
             let typedPtr = dataPtr.baseAddress!.assumingMemoryBound(to: UInt8.self)
             let typedDataPtr = UnsafeMutableBufferPointer(start: typedPtr, count: dataPtr.count)
 
             self.avail_in = UInt32(typedDataPtr.count)
             self.next_in = typedDataPtr.baseAddress!
+
+            defer {
+                self.avail_in = 0
+                self.next_in = nil
+                self.avail_out = 0
+                self.next_out = nil
+            }
 
             repeat {
                 var buffer = allocator.buffer(capacity: 16384)
@@ -40,7 +47,7 @@ extension z_stream {
         }
     }
 
-    public mutating func inflatePart(to buffer: inout ByteBuffer) {
+    private mutating func inflatePart(to buffer: inout ByteBuffer) {
         buffer.writeWithUnsafeMutableBytes { outputPtr in
             let typedOutputPtr = UnsafeMutableBufferPointer(start: outputPtr.baseAddress!.assumingMemoryBound(to: UInt8.self), count: outputPtr.count)
 
