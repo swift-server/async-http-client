@@ -17,8 +17,6 @@ import PackageDescription
 
 let package = Package(
     name: "async-http-client",
-    // this parameter is darwin-specific, linux is supported as well
-    platforms: [.macOS(.v10_11), .iOS(.v9), .tvOS(.v9), .watchOS(.v2)],
     products: [
         .library(name: "AsyncHTTPClient", targets: ["AsyncHTTPClient"]),
     ],
