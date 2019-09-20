@@ -194,6 +194,41 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertEqual(delegate.reads, 3)
     }
 
+    func testRequestURITrailingSlash() throws {
+        let request1 = try Request(url: "https://someserver.com:8888/some/path?foo=bar#ref")
+        XCTAssertEqual(request1.url.uri, "/some/path?foo=bar")
+
+        let request2 = try Request(url: "https://someserver.com:8888/some/path/?foo=bar#ref")
+        XCTAssertEqual(request2.url.uri, "/some/path/?foo=bar")
+
+        let request3 = try Request(url: "https://someserver.com:8888?foo=bar#ref")
+        XCTAssertEqual(request3.url.uri, "/?foo=bar")
+
+        let request4 = try Request(url: "https://someserver.com:8888/?foo=bar#ref")
+        XCTAssertEqual(request4.url.uri, "/?foo=bar")
+
+        let request5 = try Request(url: "https://someserver.com:8888/some/path")
+        XCTAssertEqual(request5.url.uri, "/some/path")
+
+        let request6 = try Request(url: "https://someserver.com:8888/some/path/")
+        XCTAssertEqual(request6.url.uri, "/some/path/")
+
+        let request7 = try Request(url: "https://someserver.com:8888")
+        XCTAssertEqual(request7.url.uri, "/")
+
+        let request8 = try Request(url: "https://someserver.com:8888/")
+        XCTAssertEqual(request8.url.uri, "/")
+
+        let request9 = try Request(url: "https://someserver.com:8888#ref")
+        XCTAssertEqual(request9.url.uri, "/")
+
+        let request10 = try Request(url: "https://someserver.com:8888/#ref")
+        XCTAssertEqual(request10.url.uri, "/")
+
+        let request11 = try Request(url: "https://someserver.com/some%20path")
+        XCTAssertEqual(request11.url.uri, "/some%20path")
+    }
+
     func testDecompressionNoLimit() throws {
         let channel = EmbeddedChannel()
         try channel.pipeline.addHandler(HTTPResponseDecompressor(limit: .none)).wait()

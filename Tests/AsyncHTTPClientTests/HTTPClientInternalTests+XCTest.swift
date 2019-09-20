@@ -30,6 +30,7 @@ extension HTTPClientInternalTests {
             ("testProxyStreaming", testProxyStreaming),
             ("testProxyStreamingFailure", testProxyStreamingFailure),
             ("testUploadStreamingBackpressure", testUploadStreamingBackpressure),
+            ("testRequestURITrailingSlash", testRequestURITrailingSlash),
             ("testDecompressionNoLimit", testDecompressionNoLimit),
             ("testDecompressionLimitRatio", testDecompressionLimitRatio),
             ("testDecompressionLimitSize", testDecompressionLimitSize),
