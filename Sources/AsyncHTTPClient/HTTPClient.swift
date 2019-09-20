@@ -239,10 +239,11 @@ public class HTTPClient {
                         return channel.pipeline.addProxyHandler(for: request, decoder: decoder, encoder: encoder, tlsConfiguration: self.configuration.tlsConfiguration, proxy: proxy)
                     }
                 }.flatMap {
-                    if self.configuration.decompression {
-                        return channel.pipeline.addHandler(HTTPResponseDecompressor(limit: self.configuration.decompressionLimit))
-                    } else {
+                    switch self.configuration.decompression {
+                    case .disabled:
                         return channel.eventLoop.makeSucceededFuture(())
+                    case .enabled(let limit):
+                        return channel.pipeline.addHandler(HTTPResponseDecompressor(limit: limit))
                     }
                 }.flatMap {
                     if let timeout = self.resolve(timeout: self.configuration.timeout.read, deadline: deadline) {
@@ -317,26 +318,22 @@ public class HTTPClient {
         /// Upstream proxy, defaults to no proxy.
         public var proxy: Proxy?
         /// Enables automatic body decompression. Supported algorithms are gzip and deflate.
-        public var decompression: Bool
+        public var decompression: Decompression
         /// Ignore TLS unclean shutdown error, defaults to `false`.
         public var ignoreUncleanSSLShutdown: Bool
-        /// Limit decompression, default is a ratio of 100.
-        public var decompressionLimit: DecompressionLimit
 
         public init(tlsConfiguration: TLSConfiguration? = nil,
                     followRedirects: Bool = false,
                     timeout: Timeout = Timeout(),
                     proxy: Proxy? = nil,
                     ignoreUncleanSSLShutdown: Bool = false,
-                    decompression: Bool = false,
-                    decompressionLimit: DecompressionLimit = .ratio(100)) {
+                    decompression: Decompression = .disabled) {
             self.tlsConfiguration = tlsConfiguration
             self.followRedirects = followRedirects
             self.timeout = timeout
             self.proxy = proxy
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
             self.decompression = decompression
-            self.decompressionLimit = decompressionLimit
         }
 
         public init(certificateVerification: CertificateVerification,
@@ -344,15 +341,13 @@ public class HTTPClient {
                     timeout: Timeout = Timeout(),
                     proxy: Proxy? = nil,
                     ignoreUncleanSSLShutdown: Bool = false,
-                    decompression: Bool = false,
-                    decompressionLimit: DecompressionLimit = .ratio(100)) {
+                    decompression: Decompression = .disabled) {
             self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
             self.followRedirects = followRedirects
             self.timeout = timeout
             self.proxy = proxy
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
             self.decompression = decompression
-            self.decompressionLimit = decompressionLimit
         }
     }
 
@@ -385,6 +380,14 @@ public class HTTPClient {
         public static func prefers(_ eventLoop: EventLoop) -> EventLoopPreference {
             return EventLoopPreference(.prefers(eventLoop))
         }
+    }
+
+    /// Specifies decompression settings.
+    public enum Decompression {
+        /// Decompression is disabled.
+        case disabled
+        /// Decompression is enabled.
+        case enabled(limit: DecompressionLimit)
     }
 
     /// Specifies how to limit decompression inflation.

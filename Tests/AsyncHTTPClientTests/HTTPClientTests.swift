@@ -566,7 +566,7 @@ class HTTPClientTests: XCTestCase {
 
     func testDecompression() throws {
         let httpBin = HTTPBin(compress: true)
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(decompression: true, decompressionLimit: .none))
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(decompression: .enabled(limit: .none)))
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
             XCTAssertNoThrow(try httpBin.shutdown())
@@ -601,7 +601,7 @@ class HTTPClientTests: XCTestCase {
 
     func testDecompressionLimit() throws {
         let httpBin = HTTPBin(compress: true)
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(decompression: true, decompressionLimit: .ratio(10)))
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(decompression: .enabled(limit: .ratio(10))))
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
             XCTAssertNoThrow(try httpBin.shutdown())
