@@ -26,11 +26,13 @@ extension HTTPClientInternalTests {
     static var allTests: [(String, (HTTPClientInternalTests) -> () throws -> Void)] {
         return [
             ("testHTTPPartsHandler", testHTTPPartsHandler),
+            ("testBadHTTPRequest", testBadHTTPRequest),
             ("testHTTPPartsHandlerMultiBody", testHTTPPartsHandlerMultiBody),
             ("testProxyStreaming", testProxyStreaming),
             ("testProxyStreamingFailure", testProxyStreamingFailure),
             ("testUploadStreamingBackpressure", testUploadStreamingBackpressure),
             ("testRequestURITrailingSlash", testRequestURITrailingSlash),
+            ("testChannelAndDelegateOnDifferentEventLoops", testChannelAndDelegateOnDifferentEventLoops),
         ]
     }
 }
