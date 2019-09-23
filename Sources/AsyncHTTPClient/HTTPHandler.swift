@@ -473,12 +473,14 @@ extension HTTPClient {
 
         /// Cancels the request execution.
         public func cancel() {
-            self.lock.withLock {
+            let channel: Channel? = self.lock.withLock {
                 if !cancelled {
                     cancelled = true
-                    channel?.pipeline.fireUserInboundEventTriggered(TaskCancelEvent())
+                    return self.channel
                 }
+                return nil
             }
+            channel?.triggerUserOutboundEvent(TaskCancelEvent(), promise: nil)
         }
 
         @discardableResult
@@ -732,12 +734,19 @@ extension TaskHandler: ChannelDuplexHandler {
             self.state = .end
             let error = HTTPClientError.readTimeout
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
-        } else if (event as? TaskCancelEvent) != nil {
+        } else {
+            context.fireUserInboundEventTriggered(event)
+        }
+    }
+
+    func triggerUserOutboundEvent(context: ChannelHandlerContext, event: Any, promise: EventLoopPromise<Void>?) {
+        if (event as? TaskCancelEvent) != nil {
             self.state = .end
             let error = HTTPClientError.cancelled
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+            promise?.succeed(())
         } else {
-            context.fireUserInboundEventTriggered(event)
+            context.triggerUserOutboundEvent(event, promise: promise)
         }
     }
 
