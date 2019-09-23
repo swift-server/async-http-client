@@ -476,7 +476,7 @@ extension HTTPClient {
             self.lock.withLock {
                 if !cancelled {
                     cancelled = true
-                    channel?.pipeline.fireUserInboundEventTriggered(TaskCancelEvent())
+                    channel?.triggerUserOutboundEvent(TaskCancelEvent(), promise: nil)
                 }
             }
         }
