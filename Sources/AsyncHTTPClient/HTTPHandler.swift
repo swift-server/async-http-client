@@ -473,12 +473,14 @@ extension HTTPClient {
 
         /// Cancels the request execution.
         public func cancel() {
-            self.lock.withLock {
+            let channel: Channel? = self.lock.withLock {
                 if !cancelled {
                     cancelled = true
-                    channel?.triggerUserOutboundEvent(TaskCancelEvent(), promise: nil)
+                    return self.channel
                 }
+                return nil
             }
+            channel?.triggerUserOutboundEvent(TaskCancelEvent(), promise: nil)
         }
 
         @discardableResult
