@@ -41,7 +41,7 @@ class TestHTTPDelegate: HTTPClientResponseDelegate {
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         self.state = .head(head)
-        return (self.backpressureEventLoop ?? task.currentEventLoop).makeSucceededFuture(())
+        return (self.backpressureEventLoop ?? task.eventLoop).makeSucceededFuture(())
     }
 
     func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
@@ -55,7 +55,7 @@ class TestHTTPDelegate: HTTPClientResponseDelegate {
         default:
             preconditionFailure("expecting head or body")
         }
-        return (self.backpressureEventLoop ?? task.currentEventLoop).makeSucceededFuture(())
+        return (self.backpressureEventLoop ?? task.eventLoop).makeSucceededFuture(())
     }
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws {}
@@ -71,7 +71,7 @@ class CountingDelegate: HTTPClientResponseDelegate {
         if str?.starts(with: "id:") ?? false {
             self.count += 1
         }
-        return task.currentEventLoop.makeSucceededFuture(())
+        return task.eventLoop.makeSucceededFuture(())
     }
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Int {
@@ -325,6 +325,9 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 return
             }
         case .body(let body):
+            if self.resps.isEmpty {
+                return
+            }
             var response = self.resps.removeFirst()
             response.add(body)
             self.resps.prepend(response)

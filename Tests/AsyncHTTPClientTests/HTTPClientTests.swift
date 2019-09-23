@@ -543,8 +543,8 @@ class HTTPClientTests: XCTestCase {
             }
 
             func didReceiveHead(task: HTTPClient.Task<Bool>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
-                self.result = task.currentEventLoop === self.eventLoop
-                return task.currentEventLoop.makeSucceededFuture(())
+                self.result = task.eventLoop === self.eventLoop
+                return task.eventLoop.makeSucceededFuture(())
             }
 
             func didFinishRequest(task: HTTPClient.Task<Bool>) throws -> Bool {
@@ -555,12 +555,12 @@ class HTTPClientTests: XCTestCase {
         let eventLoop = eventLoopGroup.next()
         let delegate = EventLoopValidatingDelegate(eventLoop: eventLoop)
         var request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get")
-        var response = try httpClient.execute(request: request, delegate: delegate, eventLoop: .prefers(eventLoop)).wait()
+        var response = try httpClient.execute(request: request, delegate: delegate, eventLoop: .delegate(on: eventLoop)).wait()
         XCTAssertEqual(true, response)
 
         // redirect
         request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/redirect/302")
-        response = try httpClient.execute(request: request, delegate: delegate, eventLoop: .prefers(eventLoop)).wait()
+        response = try httpClient.execute(request: request, delegate: delegate, eventLoop: .delegate(on: eventLoop)).wait()
         XCTAssertEqual(true, response)
     }
 
