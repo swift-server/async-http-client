@@ -787,8 +787,9 @@ extension TaskHandler: ChannelDuplexHandler {
 // MARK: - RedirectHandler
 
 internal struct RedirectHandler<ResponseType> {
+    let limit: HTTPClient.Configuration.RedirectLimit.Next
     let request: HTTPClient.Request
-    let execute: (HTTPClient.Request) -> HTTPClient.Task<ResponseType>
+    let execute: (HTTPClient.Request, HTTPClient.Configuration.RedirectLimit.Next) -> HTTPClient.Task<ResponseType>
 
     func redirectTarget(status: HTTPResponseStatus, headers: HTTPHeaders) -> URL? {
         switch status {
@@ -818,6 +819,24 @@ internal struct RedirectHandler<ResponseType> {
     }
 
     func redirect(status: HTTPResponseStatus, to redirectURL: URL, promise: EventLoopPromise<ResponseType>) {
+        let nextLimit: HTTPClient.Configuration.RedirectLimit.Next
+        switch self.limit {
+        case .none:
+            nextLimit = .none
+        case .count(let left):
+            if left == 0 {
+                return promise.fail(HTTPClientError.redirectLimitReached)
+            }
+            nextLimit = .count(left: left - 1)
+        case .loop(let visited):
+            if visited.contains(redirectURL) {
+                return promise.fail(HTTPClientError.redirectLimitReached)
+            }
+            var visited = visited
+            visited.insert(redirectURL)
+            nextLimit = .loop(visited: visited)
+        }
+
         let originalRequest = self.request
 
         var convertToGet = false
@@ -847,7 +866,7 @@ internal struct RedirectHandler<ResponseType> {
 
         do {
             let newRequest = try HTTPClient.Request(url: redirectURL, method: method, headers: headers, body: body)
-            return self.execute(newRequest).futureResult.cascade(to: promise)
+            return self.execute(newRequest, nextLimit).futureResult.cascade(to: promise)
         } catch {
             return promise.fail(error)
         }

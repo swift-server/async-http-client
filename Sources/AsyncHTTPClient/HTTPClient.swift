@@ -221,14 +221,16 @@ public class HTTPClient {
     }
 
     private func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
+                                                               redirectLimit: Configuration.RedirectLimit.Next? = nil,
                                                                delegate: Delegate,
                                                                eventLoop delegateEL: EventLoop,
                                                                channelEL: EventLoop? = nil,
                                                                deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
         let redirectHandler: RedirectHandler<Delegate.Response>?
-        if self.configuration.followRedirects {
-            redirectHandler = RedirectHandler<Delegate.Response>(request: request) { newRequest in
+        if let next = redirectLimit ?? self.configuration.followRedirects.next {
+            redirectHandler = RedirectHandler<Delegate.Response>(limit: next, request: request) { newRequest, limit in
                 self.execute(request: newRequest,
+                             redirectLimit: limit,
                              delegate: delegate,
                              eventLoop: delegateEL,
                              channelEL: channelEL,
@@ -317,7 +319,7 @@ public class HTTPClient {
         ///  - `305: Use Proxy`
         ///  - `307: Temporary Redirect`
         ///  - `308: Permanent Redirect`
-        public var followRedirects: Bool
+        public var followRedirects: FollowRedirects
         /// Default client timeout, defaults to no timeouts.
         public var timeout: Timeout
         /// Upstream proxy, defaults to no proxy.
@@ -325,11 +327,11 @@ public class HTTPClient {
         /// Ignore TLS unclean shutdown error, defaults to `false`.
         public var ignoreUncleanSSLShutdown: Bool
 
-        public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
+        public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: FollowRedirects = .disabled, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
             self.init(tlsConfiguration: tlsConfiguration, followRedirects: followRedirects, timeout: timeout, proxy: proxy, ignoreUncleanSSLShutdown: false)
         }
 
-        public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreUncleanSSLShutdown: Bool = false) {
+        public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: FollowRedirects = .disabled, timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreUncleanSSLShutdown: Bool = false) {
             self.tlsConfiguration = tlsConfiguration
             self.followRedirects = followRedirects
             self.timeout = timeout
@@ -337,11 +339,11 @@ public class HTTPClient {
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
         }
 
-        public init(certificateVerification: CertificateVerification, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
+        public init(certificateVerification: CertificateVerification, followRedirects: FollowRedirects = .disabled, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
             self.init(certificateVerification: certificateVerification, followRedirects: followRedirects, timeout: timeout, proxy: proxy, ignoreUncleanSSLShutdown: false)
         }
 
-        public init(certificateVerification: CertificateVerification, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreUncleanSSLShutdown: Bool = false) {
+        public init(certificateVerification: CertificateVerification, followRedirects: FollowRedirects = .disabled, timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreUncleanSSLShutdown: Bool = false) {
             self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
             self.followRedirects = followRedirects
             self.timeout = timeout
@@ -423,6 +425,41 @@ extension HTTPClient.Configuration {
             self.read = read
         }
     }
+
+    /// Specifies redirect limit.
+    public struct RedirectLimit {
+        enum Next {
+            case none
+            case loop(visited: Set<URL>)
+            case count(left: Int)
+        }
+
+        var next: Next
+
+        /// No redirect limit.
+        public static let none = RedirectLimit(next: .none)
+        /// Request execution will be stopped if redirect loop is detected.
+        public static let detectLoop = RedirectLimit(next: .loop(visited: Set()))
+        /// Specifies maximum number of redirects for a single request.
+        public static func count(_ value: Int) -> RedirectLimit { return RedirectLimit(next: .count(left: value)) }
+    }
+
+    /// Specifies redirect processing settings.
+    public enum FollowRedirects {
+        /// Redirects are not followed.
+        case disabled
+        /// Redirecets are followed with a specified limit.
+        case enabled(limit: RedirectLimit)
+
+        var next: RedirectLimit.Next? {
+            switch self {
+            case .disabled:
+                return nil
+            case .enabled(let limit):
+                return limit.next
+            }
+        }
+    }
 }
 
 private extension ChannelPipeline {
@@ -472,6 +509,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case invalidProxyResponse
         case contentLengthMissing
         case proxyAuthenticationRequired
+        case redirectLimitReached
     }
 
     private var code: Code
@@ -508,6 +546,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let invalidProxyResponse = HTTPClientError(code: .invalidProxyResponse)
     /// Request does not contain `Content-Length` header.
     public static let contentLengthMissing = HTTPClientError(code: .contentLengthMissing)
-    /// Proxy Authentication Required
+    /// Proxy Authentication Required.
     public static let proxyAuthenticationRequired = HTTPClientError(code: .proxyAuthenticationRequired)
+    /// Redirect Limit reached.
+    public static let redirectLimitReached = HTTPClientError(code: .redirectLimitReached)
 }
