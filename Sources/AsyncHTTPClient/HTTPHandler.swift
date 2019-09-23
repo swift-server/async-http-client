@@ -734,12 +734,19 @@ extension TaskHandler: ChannelDuplexHandler {
             self.state = .end
             let error = HTTPClientError.readTimeout
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
-        } else if (event as? TaskCancelEvent) != nil {
+        } else {
+            context.fireUserInboundEventTriggered(event)
+        }
+    }
+
+    func triggerUserOutboundEvent(context: ChannelHandlerContext, event: Any, promise: EventLoopPromise<Void>?) {
+        if (event as? TaskCancelEvent) != nil {
             self.state = .end
             let error = HTTPClientError.cancelled
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+            promise?.succeed(())
         } else {
-            context.fireUserInboundEventTriggered(event)
+            context.triggerUserOutboundEvent(event, promise: promise)
         }
     }
 
