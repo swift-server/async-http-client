@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <title>EventLoopGroupProvider Enumeration Reference</title>
+    <title>Authorization Structure Reference</title>
     <link rel="stylesheet" type="text/css" href="../../css/jazzy.css" />
     <link rel="stylesheet" type="text/css" href="../../css/highlight.css" />
     <meta charset="utf-8">
@@ -14,9 +14,9 @@
   </head>
   <body>
 
-    <a name="//apple_ref/swift/Enum/EventLoopGroupProvider" class="dashAnchor"></a>
+    <a name="//apple_ref/swift/Struct/Authorization" class="dashAnchor"></a>
 
-    <a title="EventLoopGroupProvider Enumeration Reference"></a>
+    <a title="Authorization Structure Reference"></a>
 
     <header class="header">
       <p class="header-col header-col--primary">
@@ -44,7 +44,7 @@
     <p class="breadcrumbs">
       <a class="breadcrumb" href="../../index.html">AsyncHTTPClient Reference</a>
       <img class="carat" src="../../img/carat.png" />
-      EventLoopGroupProvider Enumeration Reference
+      Authorization Structure Reference
     </p>
 
     <div class="content-wrapper">
@@ -118,14 +118,14 @@
 
         <section class="section">
           <div class="section-content">
-            <h1>EventLoopGroupProvider</h1>
+            <h1>Authorization</h1>
               <div class="declaration">
                 <div class="language">
-                  <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">enum</span> <span class="kt">EventLoopGroupProvider</span></code></pre>
+                  <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">struct</span> <span class="kt">Authorization</span></code></pre>
 
                 </div>
               </div>
-            <p>Specifies how <code>EventLoopGroup</code> will be created and establishes lifecycle ownership.</p>
+            <p>HTTP authentication</p>
 
           </div>
         </section>
@@ -137,9 +137,9 @@
                 <li class="item">
                   <div>
                     <code>
-                    <a name="/s:15AsyncHTTPClient0B0C22EventLoopGroupProviderO6sharedyAE3NIO0cdE0_pcAEmF"></a>
-                    <a name="//apple_ref/swift/Element/shared(_:)" class="dashAnchor"></a>
-                    <a class="token" href="#/s:15AsyncHTTPClient0B0C22EventLoopGroupProviderO6sharedyAE3NIO0cdE0_pcAEmF">shared(_:)</a>
+                    <a name="/s:15AsyncHTTPClient0B0C13AuthorizationV5basic8username8passwordAESS_SStFZ"></a>
+                    <a name="//apple_ref/swift/Method/basic(username:password:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B0C13AuthorizationV5basic8username8passwordAESS_SStFZ">basic(username:password:)</a>
                     </code>
                   </div>
                   <div class="height-container">
@@ -147,19 +147,19 @@
                     <section class="section">
                       <div class="pointer"></div>
                       <div class="abstract">
-                        <p><code>EventLoopGroup</code> will be provided by the user. Owner of this group is responsible for its lifecycle.</p>
+                        <p>Undocumented</p>
 
                       </div>
                       <div class="declaration">
                         <h4>Declaration</h4>
                         <div class="language">
                           <p class="aside-title">Swift</p>
-                          <pre class="highlight swift"><code><span class="k">case</span> <span class="nf">shared</span><span class="p">(</span><span class="kt">EventLoopGroup</span><span class="p">)</span></code></pre>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">static</span> <span class="kd">func</span> <span class="nf">basic</span><span class="p">(</span><span class="nv">username</span><span class="p">:</span> <span class="kt">String</span><span class="p">,</span> <span class="nv">password</span><span class="p">:</span> <span class="kt">String</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt"><a href="../../Classes/HTTPClient.html">HTTPClient</a></span><span class="o">.</span><span class="kt">Authorization</span></code></pre>
 
                         </div>
                       </div>
                       <div class="slightly-smaller">
-                        <a href="https://github.com/swift-server/async-http-client/tree/1.0.0-alpha.4/Sources/AsyncHTTPClient/HTTPClient.swift#L356">Show on GitHub</a>
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.0.0-alpha.4/Sources/AsyncHTTPClient/HTTPHandler.swift#L211-L213">Show on GitHub</a>
                       </div>
                     </section>
                   </div>
@@ -167,9 +167,9 @@
                 <li class="item">
                   <div>
                     <code>
-                    <a name="/s:15AsyncHTTPClient0B0C22EventLoopGroupProviderO9createNewyA2EmF"></a>
-                    <a name="//apple_ref/swift/Element/createNew" class="dashAnchor"></a>
-                    <a class="token" href="#/s:15AsyncHTTPClient0B0C22EventLoopGroupProviderO9createNewyA2EmF">createNew</a>
+                    <a name="/s:15AsyncHTTPClient0B0C13AuthorizationV5basic11credentialsAESS_tFZ"></a>
+                    <a name="//apple_ref/swift/Method/basic(credentials:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B0C13AuthorizationV5basic11credentialsAESS_tFZ">basic(credentials:)</a>
                     </code>
                   </div>
                   <div class="height-container">
@@ -177,19 +177,79 @@
                     <section class="section">
                       <div class="pointer"></div>
                       <div class="abstract">
-                        <p><code>EventLoopGroup</code> will be created by the client. When <code>syncShutdown</code> is called, created <code>EventLoopGroup</code> will be shut down as well.</p>
+                        <p>Undocumented</p>
 
                       </div>
                       <div class="declaration">
                         <h4>Declaration</h4>
                         <div class="language">
                           <p class="aside-title">Swift</p>
-                          <pre class="highlight swift"><code><span class="k">case</span> <span class="n">createNew</span></code></pre>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">static</span> <span class="kd">func</span> <span class="nf">basic</span><span class="p">(</span><span class="nv">credentials</span><span class="p">:</span> <span class="kt">String</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt"><a href="../../Classes/HTTPClient.html">HTTPClient</a></span><span class="o">.</span><span class="kt">Authorization</span></code></pre>
 
                         </div>
                       </div>
                       <div class="slightly-smaller">
-                        <a href="https://github.com/swift-server/async-http-client/tree/1.0.0-alpha.4/Sources/AsyncHTTPClient/HTTPClient.swift#L358">Show on GitHub</a>
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.0.0-alpha.4/Sources/AsyncHTTPClient/HTTPHandler.swift#L215-L217">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:15AsyncHTTPClient0B0C13AuthorizationV6bearer6tokensAESS_tFZ"></a>
+                    <a name="//apple_ref/swift/Method/bearer(tokens:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B0C13AuthorizationV6bearer6tokensAESS_tFZ">bearer(tokens:)</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        <p>Undocumented</p>
+
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">static</span> <span class="kd">func</span> <span class="nf">bearer</span><span class="p">(</span><span class="nv">tokens</span><span class="p">:</span> <span class="kt">String</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt"><a href="../../Classes/HTTPClient.html">HTTPClient</a></span><span class="o">.</span><span class="kt">Authorization</span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.0.0-alpha.4/Sources/AsyncHTTPClient/HTTPHandler.swift#L219-L221">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:15AsyncHTTPClient0B0C13AuthorizationV11headerValueSSvp"></a>
+                    <a name="//apple_ref/swift/Property/headerValue" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B0C13AuthorizationV11headerValueSSvp">headerValue</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        <p>Undocumented</p>
+
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="k">var</span> <span class="nv">headerValue</span><span class="p">:</span> <span class="kt">String</span> <span class="p">{</span> <span class="k">get</span> <span class="p">}</span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.0.0-alpha.4/Sources/AsyncHTTPClient/HTTPHandler.swift#L223-L230">Show on GitHub</a>
                       </div>
                     </section>
                   </div>

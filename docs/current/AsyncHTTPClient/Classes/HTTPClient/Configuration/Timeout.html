@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <title>StreamWriter Structure Reference</title>
+    <title>Timeout Structure Reference</title>
     <link rel="stylesheet" type="text/css" href="../../../css/jazzy.css" />
     <link rel="stylesheet" type="text/css" href="../../../css/highlight.css" />
     <meta charset="utf-8">
@@ -14,9 +14,9 @@
   </head>
   <body>
 
-    <a name="//apple_ref/swift/Struct/StreamWriter" class="dashAnchor"></a>
+    <a name="//apple_ref/swift/Struct/Timeout" class="dashAnchor"></a>
 
-    <a title="StreamWriter Structure Reference"></a>
+    <a title="Timeout Structure Reference"></a>
 
     <header class="header">
       <p class="header-col header-col--primary">
@@ -44,7 +44,7 @@
     <p class="breadcrumbs">
       <a class="breadcrumb" href="../../../index.html">AsyncHTTPClient Reference</a>
       <img class="carat" src="../../../img/carat.png" />
-      StreamWriter Structure Reference
+      Timeout Structure Reference
     </p>
 
     <div class="content-wrapper">
@@ -118,14 +118,14 @@
 
         <section class="section">
           <div class="section-content">
-            <h1>StreamWriter</h1>
+            <h1>Timeout</h1>
               <div class="declaration">
                 <div class="language">
-                  <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">struct</span> <span class="kt">StreamWriter</span></code></pre>
+                  <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">struct</span> <span class="kt">Timeout</span></code></pre>
 
                 </div>
               </div>
-            <p>Chunk provider.</p>
+            <p>Timeout configuration</p>
 
           </div>
         </section>
@@ -137,9 +137,9 @@
                 <li class="item">
                   <div>
                     <code>
-                    <a name="/s:15AsyncHTTPClient0B0C4BodyV12StreamWriterV5writey3NIO15EventLoopFutureCyytGAI6IODataOF"></a>
-                    <a name="//apple_ref/swift/Method/write(_:)" class="dashAnchor"></a>
-                    <a class="token" href="#/s:15AsyncHTTPClient0B0C4BodyV12StreamWriterV5writey3NIO15EventLoopFutureCyytGAI6IODataOF">write(_:)</a>
+                    <a name="/s:15AsyncHTTPClient0B0C13ConfigurationV7TimeoutV7connect3NIO10TimeAmountVSgvp"></a>
+                    <a name="//apple_ref/swift/Property/connect" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B0C13ConfigurationV7TimeoutV7connect3NIO10TimeAmountVSgvp">connect</a>
                     </code>
                   </div>
                   <div class="height-container">
@@ -147,14 +147,74 @@
                     <section class="section">
                       <div class="pointer"></div>
                       <div class="abstract">
-                        <p>Write data to server.</p>
+                        <p>Specifies connect timeout.</p>
 
                       </div>
                       <div class="declaration">
                         <h4>Declaration</h4>
                         <div class="language">
                           <p class="aside-title">Swift</p>
-                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">func</span> <span class="nf">write</span><span class="p">(</span><span class="n">_</span> <span class="nv">data</span><span class="p">:</span> <span class="kt">IOData</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">EventLoopFuture</span><span class="o">&lt;</span><span class="kt">Void</span><span class="o">&gt;</span></code></pre>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="k">var</span> <span class="nv">connect</span><span class="p">:</span> <span class="kt">TimeAmount</span><span class="p">?</span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.0.0-alpha.4/Sources/AsyncHTTPClient/HTTPClient.swift#L412">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:15AsyncHTTPClient0B0C13ConfigurationV7TimeoutV4read3NIO10TimeAmountVSgvp"></a>
+                    <a name="//apple_ref/swift/Property/read" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B0C13ConfigurationV7TimeoutV4read3NIO10TimeAmountVSgvp">read</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        <p>Specifies read timeout.</p>
+
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="k">var</span> <span class="nv">read</span><span class="p">:</span> <span class="kt">TimeAmount</span><span class="p">?</span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.0.0-alpha.4/Sources/AsyncHTTPClient/HTTPClient.swift#L414">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:15AsyncHTTPClient0B0C13ConfigurationV7TimeoutV7connect4readAG3NIO10TimeAmountVSg_AMtcfc"></a>
+                    <a name="//apple_ref/swift/Method/init(connect:read:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B0C13ConfigurationV7TimeoutV7connect4readAG3NIO10TimeAmountVSg_AMtcfc">init(connect:read:)</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        <p>Create timeout.</p>
+
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="nf">init</span><span class="p">(</span><span class="nv">connect</span><span class="p">:</span> <span class="kt">TimeAmount</span><span class="p">?</span> <span class="o">=</span> <span class="kc">nil</span><span class="p">,</span> <span class="nv">read</span><span class="p">:</span> <span class="kt">TimeAmount</span><span class="p">?</span> <span class="o">=</span> <span class="kc">nil</span><span class="p">)</span></code></pre>
 
                         </div>
                       </div>
@@ -165,12 +225,24 @@
                             <tr>
                               <td>
                                 <code>
-                                <em>data</em>
+                                <em>connect</em>
                                 </code>
                               </td>
                               <td>
                                 <div>
-                                  <p><code>IOData</code> to write.</p>
+                                  <p><code><a href="../../../Classes/HTTPClient/Configuration/Timeout.html#/s:15AsyncHTTPClient0B0C13ConfigurationV7TimeoutV7connect3NIO10TimeAmountVSgvp">connect</a></code> timeout.</p>
+                                </div>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>
+                                <code>
+                                <em>read</em>
+                                </code>
+                              </td>
+                              <td>
+                                <div>
+                                  <p><code><a href="../../../Classes/HTTPClient/Configuration/Timeout.html#/s:15AsyncHTTPClient0B0C13ConfigurationV7TimeoutV4read3NIO10TimeAmountVSgvp">read</a></code> timeout.</p>
                                 </div>
                               </td>
                             </tr>
@@ -178,7 +250,7 @@
                         </table>
                       </div>
                       <div class="slightly-smaller">
-                        <a href="https://github.com/swift-server/async-http-client/tree/1.0.0-alpha.4/Sources/AsyncHTTPClient/HTTPHandler.swift#L32-L34">Show on GitHub</a>
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.0.0-alpha.4/Sources/AsyncHTTPClient/HTTPClient.swift#L421-L424">Show on GitHub</a>
                       </div>
                     </section>
                   </div>

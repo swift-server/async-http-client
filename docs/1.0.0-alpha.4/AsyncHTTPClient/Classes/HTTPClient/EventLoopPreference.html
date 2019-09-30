@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <title>EventLoopGroupProvider Enumeration Reference</title>
+    <title>EventLoopPreference Structure Reference</title>
     <link rel="stylesheet" type="text/css" href="../../css/jazzy.css" />
     <link rel="stylesheet" type="text/css" href="../../css/highlight.css" />
     <meta charset="utf-8">
@@ -14,9 +14,9 @@
   </head>
   <body>
 
-    <a name="//apple_ref/swift/Enum/EventLoopGroupProvider" class="dashAnchor"></a>
+    <a name="//apple_ref/swift/Struct/EventLoopPreference" class="dashAnchor"></a>
 
-    <a title="EventLoopGroupProvider Enumeration Reference"></a>
+    <a title="EventLoopPreference Structure Reference"></a>
 
     <header class="header">
       <p class="header-col header-col--primary">
@@ -44,7 +44,7 @@
     <p class="breadcrumbs">
       <a class="breadcrumb" href="../../index.html">AsyncHTTPClient Reference</a>
       <img class="carat" src="../../img/carat.png" />
-      EventLoopGroupProvider Enumeration Reference
+      EventLoopPreference Structure Reference
     </p>
 
     <div class="content-wrapper">
@@ -118,14 +118,14 @@
 
         <section class="section">
           <div class="section-content">
-            <h1>EventLoopGroupProvider</h1>
+            <h1>EventLoopPreference</h1>
               <div class="declaration">
                 <div class="language">
-                  <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">enum</span> <span class="kt">EventLoopGroupProvider</span></code></pre>
+                  <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">struct</span> <span class="kt">EventLoopPreference</span></code></pre>
 
                 </div>
               </div>
-            <p>Specifies how <code>EventLoopGroup</code> will be created and establishes lifecycle ownership.</p>
+            <p>Specifies how the library will treat event loop passed by the user.</p>
 
           </div>
         </section>
@@ -137,9 +137,9 @@
                 <li class="item">
                   <div>
                     <code>
-                    <a name="/s:15AsyncHTTPClient0B0C22EventLoopGroupProviderO6sharedyAE3NIO0cdE0_pcAEmF"></a>
-                    <a name="//apple_ref/swift/Element/shared(_:)" class="dashAnchor"></a>
-                    <a class="token" href="#/s:15AsyncHTTPClient0B0C22EventLoopGroupProviderO6sharedyAE3NIO0cdE0_pcAEmF">shared(_:)</a>
+                    <a name="/s:15AsyncHTTPClient0B0C19EventLoopPreferenceV11indifferentAEvpZ"></a>
+                    <a name="//apple_ref/swift/Variable/indifferent" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B0C19EventLoopPreferenceV11indifferentAEvpZ">indifferent</a>
                     </code>
                   </div>
                   <div class="height-container">
@@ -147,19 +147,19 @@
                     <section class="section">
                       <div class="pointer"></div>
                       <div class="abstract">
-                        <p><code>EventLoopGroup</code> will be provided by the user. Owner of this group is responsible for its lifecycle.</p>
+                        <p>Event Loop will be selected by the library.</p>
 
                       </div>
                       <div class="declaration">
                         <h4>Declaration</h4>
                         <div class="language">
                           <p class="aside-title">Swift</p>
-                          <pre class="highlight swift"><code><span class="k">case</span> <span class="nf">shared</span><span class="p">(</span><span class="kt">EventLoopGroup</span><span class="p">)</span></code></pre>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">static</span> <span class="k">let</span> <span class="nv">indifferent</span><span class="p">:</span> <span class="kt"><a href="../../Classes/HTTPClient.html">HTTPClient</a></span><span class="o">.</span><span class="kt">EventLoopPreference</span></code></pre>
 
                         </div>
                       </div>
                       <div class="slightly-smaller">
-                        <a href="https://github.com/swift-server/async-http-client/tree/1.0.0-alpha.4/Sources/AsyncHTTPClient/HTTPClient.swift#L356">Show on GitHub</a>
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.0.0-alpha.4/Sources/AsyncHTTPClient/HTTPClient.swift#L381">Show on GitHub</a>
                       </div>
                     </section>
                   </div>
@@ -167,9 +167,9 @@
                 <li class="item">
                   <div>
                     <code>
-                    <a name="/s:15AsyncHTTPClient0B0C22EventLoopGroupProviderO9createNewyA2EmF"></a>
-                    <a name="//apple_ref/swift/Element/createNew" class="dashAnchor"></a>
-                    <a class="token" href="#/s:15AsyncHTTPClient0B0C22EventLoopGroupProviderO9createNewyA2EmF">createNew</a>
+                    <a name="/s:15AsyncHTTPClient0B0C19EventLoopPreferenceV7prefersyAE3NIO0cD0_pFZ"></a>
+                    <a name="//apple_ref/swift/Method/prefers(_:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B0C19EventLoopPreferenceV7prefersyAE3NIO0cD0_pFZ">prefers(_:)</a>
                     </code>
                   </div>
                   <div class="height-container">
@@ -177,19 +177,87 @@
                     <section class="section">
                       <div class="pointer"></div>
                       <div class="abstract">
-                        <p><code>EventLoopGroup</code> will be created by the client. When <code>syncShutdown</code> is called, created <code>EventLoopGroup</code> will be shut down as well.</p>
+                        <p>Library will try to use provided event loop if possible.</p>
 
                       </div>
                       <div class="declaration">
                         <h4>Declaration</h4>
                         <div class="language">
                           <p class="aside-title">Swift</p>
-                          <pre class="highlight swift"><code><span class="k">case</span> <span class="n">createNew</span></code></pre>
+                          <pre class="highlight swift"><code><span class="kd">@available(*, deprecated, renamed: "delegate(on:﹚")</span>
+<span class="kd">public</span> <span class="kd">static</span> <span class="kd">func</span> <span class="nf">prefers</span><span class="p">(</span><span class="n">_</span> <span class="nv">eventLoop</span><span class="p">:</span> <span class="kt">EventLoop</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">EventLoopPreference</span></code></pre>
 
                         </div>
                       </div>
                       <div class="slightly-smaller">
-                        <a href="https://github.com/swift-server/async-http-client/tree/1.0.0-alpha.4/Sources/AsyncHTTPClient/HTTPClient.swift#L358">Show on GitHub</a>
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.0.0-alpha.4/Sources/AsyncHTTPClient/HTTPClient.swift#L385-L387">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:15AsyncHTTPClient0B0C19EventLoopPreferenceV8delegate2onAE3NIO0cD0_p_tFZ"></a>
+                    <a name="//apple_ref/swift/Method/delegate(on:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B0C19EventLoopPreferenceV8delegate2onAE3NIO0cD0_p_tFZ">delegate(on:)</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        <p>The delegate will be run on the specified EventLoop (and the Channel if possible).</p>
+
+<p>This will call the configured delegate on <code>eventLoop</code> and will try to use a <code>Channel</code> on the same
+<code>EventLoop</code> but will not establish a new network connection just to satisfy the <code>EventLoop</code> preference if
+another existing connection on a different <code>EventLoop</code> is readily available from a connection pool.</p>
+
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">static</span> <span class="kd">func</span> <span class="nf">delegate</span><span class="p">(</span><span class="n">on</span> <span class="nv">eventLoop</span><span class="p">:</span> <span class="kt">EventLoop</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">EventLoopPreference</span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.0.0-alpha.4/Sources/AsyncHTTPClient/HTTPClient.swift#L394-L396">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:15AsyncHTTPClient0B0C19EventLoopPreferenceV18delegateAndChannel2onAE3NIO0cD0_p_tFZ"></a>
+                    <a name="//apple_ref/swift/Method/delegateAndChannel(on:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B0C19EventLoopPreferenceV18delegateAndChannel2onAE3NIO0cD0_p_tFZ">delegateAndChannel(on:)</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        <p>The delegate and the <code>Channel</code> will be run on the specified EventLoop.</p>
+
+<p>Use this for use-cases where you prefer a new connection to be established over re-using an existing
+connection that might be on a different <code>EventLoop</code>.</p>
+
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">static</span> <span class="kd">func</span> <span class="nf">delegateAndChannel</span><span class="p">(</span><span class="n">on</span> <span class="nv">eventLoop</span><span class="p">:</span> <span class="kt">EventLoop</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">EventLoopPreference</span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.0.0-alpha.4/Sources/AsyncHTTPClient/HTTPClient.swift#L402-L404">Show on GitHub</a>
                       </div>
                     </section>
                   </div>
