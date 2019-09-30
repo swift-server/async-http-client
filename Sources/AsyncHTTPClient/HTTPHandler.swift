@@ -824,7 +824,7 @@ internal struct RedirectHandler<ResponseType> {
         case .none:
             nextLimit = .none
         case .count(let left):
-            if left == 0 {
+            guard left > 0 else {
                 return promise.fail(HTTPClientError.redirectLimitReached)
             }
             nextLimit = .count(left: left - 1)
