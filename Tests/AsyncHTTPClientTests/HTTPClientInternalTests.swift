@@ -399,49 +399,4 @@ class HTTPClientInternalTests: XCTestCase {
             XCTFail("wrong message")
         }
     }
-
-    func testDecompressionNoLimit() throws {
-        let channel = EmbeddedChannel()
-        try channel.pipeline.addHandler(HTTPResponseDecompressor(limit: .none)).wait()
-
-        let headers = HTTPHeaders([("Content-Encoding", "deflate"), ("Content-Length", "13")])
-        try channel.writeInbound(HTTPClientResponsePart.head(.init(version: .init(major: 1, minor: 1), status: .ok, headers: headers)))
-
-        let body = ByteBuffer.of(bytes: [120, 156, 75, 76, 28, 5, 200, 0, 0, 248, 66, 103, 17])
-        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.body(body)))
-    }
-
-    func testDecompressionLimitRatio() throws {
-        let channel = EmbeddedChannel()
-        try channel.pipeline.addHandler(HTTPResponseDecompressor(limit: .ratio(10))).wait()
-
-        let headers = HTTPHeaders([("Content-Encoding", "deflate"), ("Content-Length", "13")])
-        try channel.writeInbound(HTTPClientResponsePart.head(.init(version: .init(major: 1, minor: 1), status: .ok, headers: headers)))
-
-        let body = ByteBuffer.of(bytes: [120, 156, 75, 76, 28, 5, 200, 0, 0, 248, 66, 103, 17])
-        do {
-            try channel.writeInbound(HTTPClientResponsePart.body(body))
-        } catch let error as HTTPClientError {
-            XCTAssertEqual(error, .decompressionLimit)
-        } catch {
-            XCTFail("Unexptected error: \(error)")
-        }
-    }
-
-    func testDecompressionLimitSize() throws {
-        let channel = EmbeddedChannel()
-        try channel.pipeline.addHandler(HTTPResponseDecompressor(limit: .size(10))).wait()
-
-        let headers = HTTPHeaders([("Content-Encoding", "deflate"), ("Content-Length", "13")])
-        try channel.writeInbound(HTTPClientResponsePart.head(.init(version: .init(major: 1, minor: 1), status: .ok, headers: headers)))
-
-        let body = ByteBuffer.of(bytes: [120, 156, 75, 76, 28, 5, 200, 0, 0, 248, 66, 103, 17])
-        do {
-            try channel.writeInbound(HTTPClientResponsePart.body(body))
-        } catch let error as HTTPClientError {
-            XCTAssertEqual(error, .decompressionLimit)
-        } catch {
-            XCTFail("Unexptected error: \(error)")
-        }
-    }
 }

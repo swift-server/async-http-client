@@ -16,6 +16,7 @@ import Foundation
 import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
+import NIOHTTPCompression
 import NIOSSL
 
 /// HTTPClient class provides API for request execution.
@@ -257,7 +258,7 @@ public class HTTPClient {
                     case .disabled:
                         return channel.eventLoop.makeSucceededFuture(())
                     case .enabled(let limit):
-                        return channel.pipeline.addHandler(HTTPResponseDecompressor(limit: limit))
+                        return channel.pipeline.addHandler(NIOHTTPResponseDecompressor(limit: limit))
                     }
                 }.flatMap {
                     if let timeout = self.resolve(timeout: self.configuration.timeout.read, deadline: deadline) {
@@ -422,28 +423,7 @@ public class HTTPClient {
         /// Decompression is disabled.
         case disabled
         /// Decompression is enabled.
-        case enabled(limit: DecompressionLimit)
-    }
-
-    /// Specifies how to limit decompression inflation.
-    public enum DecompressionLimit {
-        /// No limit will be set.
-        case none
-        /// Limit will be set on the request body size.
-        case size(Int)
-        /// Limit will be set on a ratio between compressed body size and decompressed result.
-        case ratio(Int)
-
-        func exceeded(compressed: Int, decompressed: Int) -> Bool {
-            switch self {
-            case .none:
-                return false
-            case .size(let allowed):
-                return compressed > allowed
-            case .ratio(let ratio):
-                return decompressed > compressed * ratio
-            }
-        }
+        case enabled(limit: NIOHTTPDecompression.DecompressionLimit)
     }
 }
 

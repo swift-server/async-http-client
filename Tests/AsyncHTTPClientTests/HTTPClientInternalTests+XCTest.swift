@@ -33,9 +33,6 @@ extension HTTPClientInternalTests {
             ("testUploadStreamingBackpressure", testUploadStreamingBackpressure),
             ("testRequestURITrailingSlash", testRequestURITrailingSlash),
             ("testChannelAndDelegateOnDifferentEventLoops", testChannelAndDelegateOnDifferentEventLoops),
-            ("testDecompressionNoLimit", testDecompressionNoLimit),
-            ("testDecompressionLimitRatio", testDecompressionLimitRatio),
-            ("testDecompressionLimitSize", testDecompressionLimitSize),
         ]
     }
 }
