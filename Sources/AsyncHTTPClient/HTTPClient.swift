@@ -221,22 +221,24 @@ public class HTTPClient {
     }
 
     private func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
-                                                               redirectLimit: Configuration.RedirectLimit.Next? = nil,
+                                                               redirectState: Configuration.RedirectPolicy.State? = nil,
                                                                delegate: Delegate,
                                                                eventLoop delegateEL: EventLoop,
                                                                channelEL: EventLoop? = nil,
                                                                deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
         let redirectHandler: RedirectHandler<Delegate.Response>?
-        if let next = redirectLimit ?? self.configuration.followRedirects.next {
-            redirectHandler = RedirectHandler<Delegate.Response>(limit: next, request: request) { newRequest, limit in
+        switch self.configuration.redirects {
+        case .allow(let max, let allowCycles):
+            let state = redirectState ?? .init(count: max, visited: allowCycles ? nil : Set())
+            redirectHandler = RedirectHandler<Delegate.Response>(state: state, request: request) { newRequest, state in
                 self.execute(request: newRequest,
-                             redirectLimit: limit,
+                             redirectState: state,
                              delegate: delegate,
                              eventLoop: delegateEL,
                              channelEL: channelEL,
                              deadline: deadline)
             }
-        } else {
+        case .disallow:
             redirectHandler = nil
         }
 
@@ -319,7 +321,7 @@ public class HTTPClient {
         ///  - `305: Use Proxy`
         ///  - `307: Temporary Redirect`
         ///  - `308: Permanent Redirect`
-        public var followRedirects: FollowRedirects
+        public var redirects: RedirectPolicy
         /// Default client timeout, defaults to no timeouts.
         public var timeout: Timeout
         /// Upstream proxy, defaults to no proxy.
@@ -327,25 +329,25 @@ public class HTTPClient {
         /// Ignore TLS unclean shutdown error, defaults to `false`.
         public var ignoreUncleanSSLShutdown: Bool
 
-        public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: FollowRedirects = .disabled, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
-            self.init(tlsConfiguration: tlsConfiguration, followRedirects: followRedirects, timeout: timeout, proxy: proxy, ignoreUncleanSSLShutdown: false)
+        public init(tlsConfiguration: TLSConfiguration? = nil, redirects: RedirectPolicy = .allow(max: 5, allowCycles: false), timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
+            self.init(tlsConfiguration: tlsConfiguration, redirects: redirects, timeout: timeout, proxy: proxy, ignoreUncleanSSLShutdown: false)
         }
 
-        public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: FollowRedirects = .disabled, timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreUncleanSSLShutdown: Bool = false) {
+        public init(tlsConfiguration: TLSConfiguration? = nil, redirects: RedirectPolicy = .allow(max: 5, allowCycles: false), timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreUncleanSSLShutdown: Bool = false) {
             self.tlsConfiguration = tlsConfiguration
-            self.followRedirects = followRedirects
+            self.redirects = redirects
             self.timeout = timeout
             self.proxy = proxy
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
         }
 
-        public init(certificateVerification: CertificateVerification, followRedirects: FollowRedirects = .disabled, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
-            self.init(certificateVerification: certificateVerification, followRedirects: followRedirects, timeout: timeout, proxy: proxy, ignoreUncleanSSLShutdown: false)
+        public init(certificateVerification: CertificateVerification, redirects: RedirectPolicy = .allow(max: 5, allowCycles: false), timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
+            self.init(certificateVerification: certificateVerification, redirects: redirects, timeout: timeout, proxy: proxy, ignoreUncleanSSLShutdown: false)
         }
 
-        public init(certificateVerification: CertificateVerification, followRedirects: FollowRedirects = .disabled, timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreUncleanSSLShutdown: Bool = false) {
+        public init(certificateVerification: CertificateVerification, redirects: RedirectPolicy = .allow(max: 5, allowCycles: false), timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreUncleanSSLShutdown: Bool = false) {
             self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
-            self.followRedirects = followRedirects
+            self.redirects = redirects
             self.timeout = timeout
             self.proxy = proxy
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
@@ -426,38 +428,16 @@ extension HTTPClient.Configuration {
         }
     }
 
-    /// Specifies redirect limit.
-    public struct RedirectLimit {
-        enum Next {
-            case none
-            case loop(visited: Set<URL>)
-            case count(left: Int)
-        }
-
-        var next: Next
-
-        /// No redirect limit.
-        public static let none = RedirectLimit(next: .none)
-        /// Request execution will be stopped if redirect loop is detected.
-        public static let detectLoop = RedirectLimit(next: .loop(visited: Set()))
-        /// Specifies maximum number of redirects for a single request.
-        public static func count(_ value: Int) -> RedirectLimit { return RedirectLimit(next: .count(left: value)) }
-    }
-
     /// Specifies redirect processing settings.
-    public enum FollowRedirects {
+    public enum RedirectPolicy {
         /// Redirects are not followed.
-        case disabled
-        /// Redirecets are followed with a specified limit.
-        case enabled(limit: RedirectLimit)
+        case disallow
+        /// Redirects are followed with a specified limit. Cycle detection reqiures that all visited URL's are kept in memory.
+        case allow(max: Int, allowCycles: Bool)
 
-        var next: RedirectLimit.Next? {
-            switch self {
-            case .disabled:
-                return nil
-            case .enabled(let limit):
-                return limit.next
-            }
+        struct State {
+            var count: Int
+            var visited: Set<URL>?
         }
     }
 }

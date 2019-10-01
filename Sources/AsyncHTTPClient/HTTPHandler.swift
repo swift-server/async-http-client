@@ -787,9 +787,9 @@ extension TaskHandler: ChannelDuplexHandler {
 // MARK: - RedirectHandler
 
 internal struct RedirectHandler<ResponseType> {
-    let limit: HTTPClient.Configuration.RedirectLimit.Next
+    let state: HTTPClient.Configuration.RedirectPolicy.State
     let request: HTTPClient.Request
-    let execute: (HTTPClient.Request, HTTPClient.Configuration.RedirectLimit.Next) -> HTTPClient.Task<ResponseType>
+    let execute: (HTTPClient.Request, HTTPClient.Configuration.RedirectPolicy.State) -> HTTPClient.Task<ResponseType>
 
     func redirectTarget(status: HTTPResponseStatus, headers: HTTPHeaders) -> URL? {
         switch status {
@@ -819,22 +819,20 @@ internal struct RedirectHandler<ResponseType> {
     }
 
     func redirect(status: HTTPResponseStatus, to redirectURL: URL, promise: EventLoopPromise<ResponseType>) {
-        let nextLimit: HTTPClient.Configuration.RedirectLimit.Next
-        switch self.limit {
-        case .none:
-            nextLimit = .none
-        case .count(let left):
-            guard left > 0 else {
+        var newState = self.state
+        guard newState.count > 0 else {
+            return promise.fail(HTTPClientError.redirectLimitReached)
+        }
+
+        newState.count -= 1
+
+        if var visited = newState.visited {
+            guard !visited.contains(redirectURL) else {
                 return promise.fail(HTTPClientError.redirectLimitReached)
             }
-            nextLimit = .count(left: left - 1)
-        case .loop(let visited):
-            if visited.contains(redirectURL) {
-                return promise.fail(HTTPClientError.redirectLimitReached)
-            }
-            var visited = visited
+
             visited.insert(redirectURL)
-            nextLimit = .loop(visited: visited)
+            newState.visited = visited
         }
 
         let originalRequest = self.request
@@ -866,7 +864,7 @@ internal struct RedirectHandler<ResponseType> {
 
         do {
             let newRequest = try HTTPClient.Request(url: redirectURL, method: method, headers: headers, body: body)
-            return self.execute(newRequest, nextLimit).futureResult.cascade(to: promise)
+            return self.execute(newRequest, newState).futureResult.cascade(to: promise)
         } catch {
             return promise.fail(error)
         }

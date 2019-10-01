@@ -130,7 +130,7 @@ class HTTPClientTests: XCTestCase {
         let httpBin = HTTPBin(ssl: false)
         let httpsBin = HTTPBin(ssl: true)
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
-                                    configuration: HTTPClient.Configuration(certificateVerification: .none, followRedirects: .enabled(limit: .none)))
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none, redirects: .allow(max: 10, allowCycles: true)))
 
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
@@ -148,7 +148,7 @@ class HTTPClientTests: XCTestCase {
     func testHttpHostRedirect() throws {
         let httpBin = HTTPBin(ssl: false)
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
-                                    configuration: HTTPClient.Configuration(certificateVerification: .none, followRedirects: .enabled(limit: .none)))
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none, redirects: .allow(max: 10, allowCycles: true)))
 
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
@@ -525,7 +525,7 @@ class HTTPClientTests: XCTestCase {
         let httpBin = HTTPBin()
         let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 5)
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup),
-                                    configuration: HTTPClient.Configuration(followRedirects: .enabled(limit: .none)))
+                                    configuration: HTTPClient.Configuration(redirects: .allow(max: 10, allowCycles: true)))
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
             XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully())
@@ -567,7 +567,7 @@ class HTTPClientTests: XCTestCase {
     func testLoopDetectionRedirectLimit() throws {
         let httpBin = HTTPBin(ssl: true)
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
-                                    configuration: HTTPClient.Configuration(certificateVerification: .none, followRedirects: .enabled(limit: .detectLoop)))
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none, redirects: .allow(max: 5, allowCycles: false)))
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
             XCTAssertNoThrow(try httpBin.shutdown())
@@ -581,7 +581,7 @@ class HTTPClientTests: XCTestCase {
     func testCountRedirectLimit() throws {
         let httpBin = HTTPBin(ssl: true)
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
-                                    configuration: HTTPClient.Configuration(certificateVerification: .none, followRedirects: .enabled(limit: .count(5))))
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none, redirects: .allow(max: 5, allowCycles: true)))
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
             XCTAssertNoThrow(try httpBin.shutdown())
