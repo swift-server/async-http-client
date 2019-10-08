@@ -486,6 +486,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case contentLengthMissing
         case proxyAuthenticationRequired
         case redirectLimitReached
+        case redirectCycleDetected
     }
 
     private var code: Code
@@ -526,4 +527,6 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let proxyAuthenticationRequired = HTTPClientError(code: .proxyAuthenticationRequired)
     /// Redirect Limit reached.
     public static let redirectLimitReached = HTTPClientError(code: .redirectLimitReached)
+    /// Redirect Cycle detected.
+    public static let redirectCycleDetected = HTTPClientError(code: .redirectCycleDetected)
 }

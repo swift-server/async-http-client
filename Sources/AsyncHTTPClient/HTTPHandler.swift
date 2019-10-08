@@ -837,7 +837,7 @@ internal struct RedirectHandler<ResponseType> {
 
             if var visited = state.visited {
                 guard !visited.contains(redirectURL) else {
-                    return promise.fail(HTTPClientError.redirectLimitReached)
+                    return promise.fail(HTTPClientError.redirectCycleDetected)
                 }
 
                 visited.insert(redirectURL)
