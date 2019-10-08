@@ -16,6 +16,7 @@ import AsyncHTTPClient
 import NIO
 import NIOFoundationCompat
 import NIOHTTP1
+import NIOHTTPCompression
 import NIOSSL
 import XCTest
 
@@ -613,8 +614,14 @@ class HTTPClientTests: XCTestCase {
 
         do {
             _ = try httpClient.execute(request: request).wait()
-        } catch let error as HTTPClientError {
-            XCTAssertEqual(error, .decompressionLimit)
+        } catch let error as NIOHTTPDecompression.DecompressionError {
+            switch error {
+            case .limit:
+                // ok
+                break
+            default:
+                XCTFail("Unexptected error: \(error)")
+            }
         } catch {
             XCTFail("Unexptected error: \(error)")
         }
