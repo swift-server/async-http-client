@@ -221,7 +221,6 @@ public class HTTPClient {
     }
 
     private func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
-                                                               redirectState: Configuration.RedirectPolicy.State? = nil,
                                                                delegate: Delegate,
                                                                eventLoop delegateEL: EventLoop,
                                                                channelEL: EventLoop? = nil,
@@ -229,10 +228,12 @@ public class HTTPClient {
         let redirectHandler: RedirectHandler<Delegate.Response>?
         switch self.configuration.redirects {
         case .allow(let max, let allowCycles):
-            let state = redirectState ?? .init(count: max, visited: allowCycles ? nil : Set())
-            redirectHandler = RedirectHandler<Delegate.Response>(state: state, request: request) { newRequest, state in
+            var request = request
+            if request.redirectState == nil {
+                request.redirectState = .init(count: max, visited: allowCycles ? nil : Set())
+            }
+            redirectHandler = RedirectHandler<Delegate.Response>(request: request) { newRequest in
                 self.execute(request: newRequest,
-                             redirectState: state,
                              delegate: delegate,
                              eventLoop: delegateEL,
                              channelEL: channelEL,
@@ -434,11 +435,6 @@ extension HTTPClient.Configuration {
         case disallow
         /// Redirects are followed with a specified limit. Cycle detection reqiures that all visited URL's are kept in memory.
         case allow(max: Int, allowCycles: Bool)
-
-        struct State {
-            var count: Int
-            var visited: Set<URL>?
-        }
     }
 }
 
