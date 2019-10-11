@@ -226,8 +226,8 @@ public class HTTPClient {
                                                                channelEL: EventLoop? = nil,
                                                                deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
         let redirectHandler: RedirectHandler<Delegate.Response>?
-        switch self.configuration.redirects {
-        case .allow(let max, let allowCycles):
+        switch self.configuration.redirectConfiguration.configuration {
+        case .follow(let max, let allowCycles):
             var request = request
             if request.redirectState == nil {
                 request.redirectState = .init(count: max, visited: allowCycles ? nil : Set())
@@ -322,7 +322,7 @@ public class HTTPClient {
         ///  - `305: Use Proxy`
         ///  - `307: Temporary Redirect`
         ///  - `308: Permanent Redirect`
-        public var redirects: RedirectPolicy
+        public var redirectConfiguration: RedirectConfiguration
         /// Default client timeout, defaults to no timeouts.
         public var timeout: Timeout
         /// Upstream proxy, defaults to no proxy.
@@ -330,25 +330,25 @@ public class HTTPClient {
         /// Ignore TLS unclean shutdown error, defaults to `false`.
         public var ignoreUncleanSSLShutdown: Bool
 
-        public init(tlsConfiguration: TLSConfiguration? = nil, redirects: RedirectPolicy = .allow(max: 5, allowCycles: false), timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
-            self.init(tlsConfiguration: tlsConfiguration, redirects: redirects, timeout: timeout, proxy: proxy, ignoreUncleanSSLShutdown: false)
+        public init(tlsConfiguration: TLSConfiguration? = nil, redirectConfiguration: RedirectConfiguration? = nil, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
+            self.init(tlsConfiguration: tlsConfiguration, redirectConfiguration: redirectConfiguration, timeout: timeout, proxy: proxy, ignoreUncleanSSLShutdown: false)
         }
 
-        public init(tlsConfiguration: TLSConfiguration? = nil, redirects: RedirectPolicy = .allow(max: 5, allowCycles: false), timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreUncleanSSLShutdown: Bool = false) {
+        public init(tlsConfiguration: TLSConfiguration? = nil, redirectConfiguration: RedirectConfiguration? = nil, timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreUncleanSSLShutdown: Bool = false) {
             self.tlsConfiguration = tlsConfiguration
-            self.redirects = redirects
+            self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
             self.timeout = timeout
             self.proxy = proxy
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
         }
 
-        public init(certificateVerification: CertificateVerification, redirects: RedirectPolicy = .allow(max: 5, allowCycles: false), timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
-            self.init(certificateVerification: certificateVerification, redirects: redirects, timeout: timeout, proxy: proxy, ignoreUncleanSSLShutdown: false)
+        public init(certificateVerification: CertificateVerification, redirectConfiguration: RedirectConfiguration? = nil, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
+            self.init(certificateVerification: certificateVerification, redirectConfiguration: redirectConfiguration, timeout: timeout, proxy: proxy, ignoreUncleanSSLShutdown: false)
         }
 
-        public init(certificateVerification: CertificateVerification, redirects: RedirectPolicy = .allow(max: 5, allowCycles: false), timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreUncleanSSLShutdown: Bool = false) {
+        public init(certificateVerification: CertificateVerification, redirectConfiguration: RedirectConfiguration? = nil, timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreUncleanSSLShutdown: Bool = false) {
             self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
-            self.redirects = redirects
+            self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
             self.timeout = timeout
             self.proxy = proxy
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
@@ -430,9 +430,27 @@ extension HTTPClient.Configuration {
     }
 
     /// Specifies redirect processing settings.
-    public enum RedirectPolicy {
+    public struct RedirectConfiguration {
+        enum Configuration {
+            /// Redirects are not followed.
+            case disallow
+            /// Redirects are followed with a specified limit.
+            case follow(max: Int, allowCycles: Bool)
+        }
+
+        var configuration: Configuration
+
+        init() {
+            self.configuration = .follow(max: 5, allowCycles: false)
+        }
+
+        init(configuration: Configuration) {
+            self.configuration = configuration
+        }
+
         /// Redirects are not followed.
-        case disallow
+        public static let disallow = RedirectConfiguration(configuration: .disallow)
+
         /// Redirects are followed with a specified limit.
         ///
         /// - parameters:
@@ -440,7 +458,7 @@ extension HTTPClient.Configuration {
         ///     - allowCycles: Whether cycles are allowed.
         ///
         /// - warning: Cycle detection will keep all visited URLs in memory which means a malicious server could use this as a denial-of-service vector.
-        case allow(max: Int, allowCycles: Bool)
+        public static func follow(max: Int, allowCycles: Bool) -> RedirectConfiguration { return .init(configuration: .follow(max: max, allowCycles: allowCycles)) }
     }
 }
 
