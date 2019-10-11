@@ -433,7 +433,13 @@ extension HTTPClient.Configuration {
     public enum RedirectPolicy {
         /// Redirects are not followed.
         case disallow
-        /// Redirects are followed with a specified limit. Cycle detection reqiures that all visited URL's are kept in memory.
+        /// Redirects are followed with a specified limit.
+        ///
+        /// - parameters:
+        ///     - max: The maximum number of allowed redirects.
+        ///     - allowCycles: Whether cycles are allowed.
+        ///
+        /// - warning: Cycle detection will keep all visited URLs in memory which means a malicious server could use this as a denial-of-service vector.
         case allow(max: Int, allowCycles: Bool)
     }
 }
