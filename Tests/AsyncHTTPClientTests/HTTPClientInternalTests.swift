@@ -242,6 +242,7 @@ class HTTPClientInternalTests: XCTestCase {
         // At this point all other bytes should be delivered.
         XCTAssertEqual(delegate.reads, 4)
     }
+
     func testRequestURITrailingSlash() throws {
         let request1 = try Request(url: "https://someserver.com:8888/some/path?foo=bar#ref")
         XCTAssertEqual(request1.url.uri, "/some/path?foo=bar")
