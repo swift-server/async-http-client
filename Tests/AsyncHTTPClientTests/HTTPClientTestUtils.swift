@@ -305,7 +305,7 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 context.close(promise: nil)
                 return
             case "/custom":
-                context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
+                context.writeAndFlush(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
                 return
             case "/events/10/1": // TODO: parse path
                 context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)

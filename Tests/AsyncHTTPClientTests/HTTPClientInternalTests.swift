@@ -155,17 +155,29 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertThrowsError(try httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait())
     }
 
+    // In order to test backpressure we need to make sure that reads will not happen
+    // until the backpressure promise is succeeded. Since we cannot guarantee when
+    // messages will be delivered to a client pipeline and we need this test to be
+    // fast (no waiting for arbitrary amounts of time), we do the following.
+    // First, we enforce NIO to send us only 1 byte at a time. Then we send a message
+    // of 4 bytes. This will guarantee that if we see first byte of the message, other
+    // bytes a ready to be read as well. This will allow us to test if subsequent reads
+    // are waiting for backpressure promise.
     func testUploadStreamingBackpressure() throws {
         class BackpressureTestDelegate: HTTPClientResponseDelegate {
             typealias Response = Void
 
             var _reads = 0
             let lock: Lock
-            let promise: EventLoopPromise<Void>
+            let backpressurePromise: EventLoopPromise<Void>
+            let optionsApplied: EventLoopPromise<Void>
+            let messageReceived: EventLoopPromise<Void>
 
-            init(promise: EventLoopPromise<Void>) {
+            init(eventLoop: EventLoop) {
                 self.lock = Lock()
-                self.promise = promise
+                self.backpressurePromise = eventLoop.makePromise()
+                self.optionsApplied = eventLoop.makePromise()
+                self.messageReceived = eventLoop.makePromise()
             }
 
             var reads: Int {
@@ -174,18 +186,30 @@ class HTTPClientInternalTests: XCTestCase {
                 }
             }
 
+            func didReceiveHead(task: HTTPClient.Task<Void>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
+                // This is to force NIO to send only 1 byte at a time.
+                let future = task.channel!.setOption(ChannelOptions.maxMessagesPerRead, value: 1).flatMap {
+                    task.channel!.setOption(ChannelOptions.recvAllocator, value: FixedSizeRecvByteBufferAllocator(capacity: 1))
+                }
+                future.cascade(to: self.optionsApplied)
+                return future
+            }
+
             func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+                // We count a number of reads received.
                 self.lock.withLockVoid {
                     self._reads += 1
                 }
-                return self.promise.futureResult
+                // We need to notify the test when first byte of the message is arrived.
+                self.messageReceived.succeed(())
+                return self.backpressurePromise.futureResult
             }
 
             func didFinishRequest(task: HTTPClient.Task<Response>) throws {}
         }
 
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
-        let promise: EventLoopPromise<Channel> = httpClient.eventLoopGroup.next().makePromise()
+        let promise = httpClient.eventLoopGroup.next().makePromise(of: Channel.self)
         let httpBin = HTTPBin(channelPromise: promise)
 
         defer {
@@ -194,27 +218,30 @@ class HTTPClientInternalTests: XCTestCase {
         }
 
         let request = try Request(url: "http://localhost:\(httpBin.port)/custom")
-        let delegate = BackpressureTestDelegate(promise: httpClient.eventLoopGroup.next().makePromise())
+        let delegate = BackpressureTestDelegate(eventLoop: httpClient.eventLoopGroup.next())
         let future = httpClient.execute(request: request, delegate: delegate).futureResult
 
         let channel = try promise.futureResult.wait()
+        // We need to wait for channel options that limit NIO to sending only one byte at a time.
+        try delegate.optionsApplied.futureResult.wait()
 
-        // Send 3 parts, but only one should be received until the future is complete
+        // Send 4 bytes, but only one should be received until the backpressure promise is succeeded.
         let buffer = ByteBuffer.of(string: "1234")
         try channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(buffer))).wait()
-        try channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(buffer))).wait()
-        try channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(buffer))).wait()
 
+        // Now we wait until message is delivered to client channel pipeline
+        try delegate.messageReceived.futureResult.wait()
         XCTAssertEqual(delegate.reads, 1)
 
-        delegate.promise.succeed(())
+        // Succeed the backpressure promise.
+        delegate.backpressurePromise.succeed(())
 
         try channel.writeAndFlush(HTTPServerResponsePart.end(nil)).wait()
         try future.wait()
 
-        XCTAssertEqual(delegate.reads, 3)
+        // At this point all other bytes should be delivered.
+        XCTAssertEqual(delegate.reads, 4)
     }
-
     func testRequestURITrailingSlash() throws {
         let request1 = try Request(url: "https://someserver.com:8888/some/path?foo=bar#ref")
         XCTAssertEqual(request1.url.uri, "/some/path?foo=bar")

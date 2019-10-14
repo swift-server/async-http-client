@@ -456,7 +456,7 @@ extension HTTPClient {
         public let eventLoop: EventLoop
 
         let promise: EventLoopPromise<Response>
-        private var channel: Channel?
+        var channel: Channel?
         private var cancelled: Bool
         private let lock: Lock
 
