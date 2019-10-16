@@ -242,8 +242,6 @@ public class HTTPClient {
         let task = Task<Delegate.Response>(eventLoop: delegateEL)
 
         var bootstrap = ClientBootstrap(group: channelEL ?? delegateEL)
-//            .channelOption(ChannelOptions.maxMessagesPerRead, value: 1)
-//            .channelOption(ChannelOptions.recvAllocator, value: FixedSizeRecvByteBufferAllocator(capacity: 1))
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
             .channelInitializer { channel in
                 let encoder = HTTPRequestEncoder()
