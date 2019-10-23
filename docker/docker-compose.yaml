@@ -21,12 +21,12 @@ services:
 
   sanity:
     <<: *common
-    command: /bin/bash -cl "./scripts/sanity.sh"
+    command: /bin/bash -xcl "./scripts/sanity.sh"
 
   test:
     <<: *common
-    command: /bin/bash -cl "swift test"
+    command: /bin/bash -xcl "swift test $${SANITIZER_ARG-}"
 
   docs:
     <<: *common
-    command: /bin/bash -cl "./scripts/generate_docs.sh"
+    command: /bin/bash -xcl "./scripts/generate_docs.sh"
