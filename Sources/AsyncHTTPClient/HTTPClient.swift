@@ -394,12 +394,6 @@ public class HTTPClient {
         /// Event Loop will be selected by the library.
         public static let indifferent = EventLoopPreference(.indifferent)
 
-        /// Library will try to use provided event loop if possible.
-        @available(*, deprecated, renamed: "delegate(on:)")
-        public static func prefers(_ eventLoop: EventLoop) -> EventLoopPreference {
-            return EventLoopPreference(.delegate(on: eventLoop))
-        }
-
         /// The delegate will be run on the specified EventLoop (and the Channel if possible).
         ///
         /// This will call the configured delegate on `eventLoop` and will try to use a `Channel` on the same

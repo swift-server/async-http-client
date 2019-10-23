@@ -438,11 +438,6 @@ extension HTTPClient {
     /// Response execution context. Will be created by the library and could be used for obtaining
     /// `EventLoopFuture<Response>` of the execution or cancellation of the execution.
     public final class Task<Response> {
-        @available(*, deprecated, renamed: "eventLoop")
-        public var currentEventLoop: EventLoop {
-            return self.eventLoop
-        }
-
         /// The `EventLoop` the delegate will be executed on.
         public let eventLoop: EventLoop
 
