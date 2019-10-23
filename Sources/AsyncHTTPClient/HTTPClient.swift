@@ -227,7 +227,12 @@ public class HTTPClient {
                                                                channelEL: EventLoop? = nil,
                                                                deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
         let redirectHandler: RedirectHandler<Delegate.Response>?
-        if self.configuration.followRedirects {
+        switch self.configuration.redirectConfiguration.configuration {
+        case .follow(let max, let allowCycles):
+            var request = request
+            if request.redirectState == nil {
+                request.redirectState = .init(count: max, visited: allowCycles ? nil : Set())
+            }
             redirectHandler = RedirectHandler<Delegate.Response>(request: request) { newRequest in
                 self.execute(request: newRequest,
                              delegate: delegate,
@@ -235,7 +240,7 @@ public class HTTPClient {
                              channelEL: channelEL,
                              deadline: deadline)
             }
-        } else {
+        case .disallow:
             redirectHandler = nil
         }
 
@@ -325,7 +330,7 @@ public class HTTPClient {
         ///  - `305: Use Proxy`
         ///  - `307: Temporary Redirect`
         ///  - `308: Permanent Redirect`
-        public var followRedirects: Bool
+        public var redirectConfiguration: RedirectConfiguration
         /// Default client timeout, defaults to no timeouts.
         public var timeout: Timeout
         /// Upstream proxy, defaults to no proxy.
@@ -336,13 +341,13 @@ public class HTTPClient {
         public var ignoreUncleanSSLShutdown: Bool
 
         public init(tlsConfiguration: TLSConfiguration? = nil,
-                    followRedirects: Bool = false,
+                    redirectConfiguration: RedirectConfiguration? = nil,
                     timeout: Timeout = Timeout(),
                     proxy: Proxy? = nil,
                     ignoreUncleanSSLShutdown: Bool = false,
                     decompression: Decompression = .disabled) {
             self.tlsConfiguration = tlsConfiguration
-            self.followRedirects = followRedirects
+            self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
             self.timeout = timeout
             self.proxy = proxy
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
@@ -350,13 +355,13 @@ public class HTTPClient {
         }
 
         public init(certificateVerification: CertificateVerification,
-                    followRedirects: Bool = false,
+                    redirectConfiguration: RedirectConfiguration? = nil,
                     timeout: Timeout = Timeout(),
                     proxy: Proxy? = nil,
                     ignoreUncleanSSLShutdown: Bool = false,
                     decompression: Decompression = .disabled) {
             self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
-            self.followRedirects = followRedirects
+            self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
             self.timeout = timeout
             self.proxy = proxy
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
@@ -439,6 +444,38 @@ extension HTTPClient.Configuration {
             self.read = read
         }
     }
+
+    /// Specifies redirect processing settings.
+    public struct RedirectConfiguration {
+        enum Configuration {
+            /// Redirects are not followed.
+            case disallow
+            /// Redirects are followed with a specified limit.
+            case follow(max: Int, allowCycles: Bool)
+        }
+
+        var configuration: Configuration
+
+        init() {
+            self.configuration = .follow(max: 5, allowCycles: false)
+        }
+
+        init(configuration: Configuration) {
+            self.configuration = configuration
+        }
+
+        /// Redirects are not followed.
+        public static let disallow = RedirectConfiguration(configuration: .disallow)
+
+        /// Redirects are followed with a specified limit.
+        ///
+        /// - parameters:
+        ///     - max: The maximum number of allowed redirects.
+        ///     - allowCycles: Whether cycles are allowed.
+        ///
+        /// - warning: Cycle detection will keep all visited URLs in memory which means a malicious server could use this as a denial-of-service vector.
+        public static func follow(max: Int, allowCycles: Bool) -> RedirectConfiguration { return .init(configuration: .follow(max: max, allowCycles: allowCycles)) }
+    }
 }
 
 private extension ChannelPipeline {
@@ -488,6 +525,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case invalidProxyResponse
         case contentLengthMissing
         case proxyAuthenticationRequired
+        case redirectLimitReached
+        case redirectCycleDetected
     }
 
     private var code: Code
@@ -526,4 +565,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let contentLengthMissing = HTTPClientError(code: .contentLengthMissing)
     /// Proxy Authentication Required.
     public static let proxyAuthenticationRequired = HTTPClientError(code: .proxyAuthenticationRequired)
+    /// Redirect Limit reached.
+    public static let redirectLimitReached = HTTPClientError(code: .redirectLimitReached)
+    /// Redirect Cycle detected.
+    public static let redirectCycleDetected = HTTPClientError(code: .redirectCycleDetected)
 }

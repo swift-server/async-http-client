@@ -100,6 +100,13 @@ extension HTTPClient {
         /// Request body, defaults to no body.
         public var body: Body?
 
+        struct RedirectState {
+            var count: Int
+            var visited: Set<URL>?
+        }
+
+        var redirectState: RedirectState?
+
         /// Create HTTP request.
         ///
         /// - parameters:
@@ -152,6 +159,8 @@ extension HTTPClient {
             self.host = host
             self.headers = headers
             self.body = body
+
+            self.redirectState = nil
         }
 
         /// Whether request will be executed using secure socket.
@@ -813,6 +822,26 @@ internal struct RedirectHandler<ResponseType> {
     }
 
     func redirect(status: HTTPResponseStatus, to redirectURL: URL, promise: EventLoopPromise<ResponseType>) {
+        var nextState: HTTPClient.Request.RedirectState?
+        if var state = request.redirectState {
+            guard state.count > 0 else {
+                return promise.fail(HTTPClientError.redirectLimitReached)
+            }
+
+            state.count -= 1
+
+            if var visited = state.visited {
+                guard !visited.contains(redirectURL) else {
+                    return promise.fail(HTTPClientError.redirectCycleDetected)
+                }
+
+                visited.insert(redirectURL)
+                state.visited = visited
+            }
+
+            nextState = state
+        }
+
         let originalRequest = self.request
 
         var convertToGet = false
@@ -841,7 +870,8 @@ internal struct RedirectHandler<ResponseType> {
         }
 
         do {
-            let newRequest = try HTTPClient.Request(url: redirectURL, method: method, headers: headers, body: body)
+            var newRequest = try HTTPClient.Request(url: redirectURL, method: method, headers: headers, body: body)
+            newRequest.redirectState = nextState
             return self.execute(newRequest).futureResult.cascade(to: promise)
         } catch {
             return promise.fail(error)

@@ -59,6 +59,8 @@ extension HTTPClientTests {
             ("testEventLoopArgument", testEventLoopArgument),
             ("testDecompression", testDecompression),
             ("testDecompressionLimit", testDecompressionLimit),
+            ("testLoopDetectionRedirectLimit", testLoopDetectionRedirectLimit),
+            ("testCountRedirectLimit", testCountRedirectLimit),
         ]
     }
 }

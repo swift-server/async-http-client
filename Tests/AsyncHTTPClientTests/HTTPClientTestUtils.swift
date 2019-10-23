@@ -284,6 +284,16 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 headers.add(name: "Location", value: "http://127.0.0.1:\(port)/echohostheader")
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
                 return
+            case "/redirect/infinite1":
+                var headers = HTTPHeaders()
+                headers.add(name: "Location", value: "/redirect/infinite2")
+                self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
+                return
+            case "/redirect/infinite2":
+                var headers = HTTPHeaders()
+                headers.add(name: "Location", value: "/redirect/infinite1")
+                self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
+                return
             // Since this String is taken from URL.path, the percent encoding has been removed
             case "/percent encoded":
                 if req.method != .GET {
