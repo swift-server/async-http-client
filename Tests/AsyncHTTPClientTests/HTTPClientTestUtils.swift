@@ -17,6 +17,7 @@ import Foundation
 import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
+import NIOHTTPCompression
 import NIOSSL
 
 class TestHTTPDelegate: HTTPClientResponseDelegate {
@@ -111,30 +112,40 @@ internal final class HTTPBin {
         return channel.pipeline.addHandler(try! NIOSSLServerHandler(context: context), position: .first)
     }
 
-    init(ssl: Bool = false, simulateProxy: HTTPProxySimulator.Option? = nil, channelPromise: EventLoopPromise<Channel>? = nil) {
+    init(ssl: Bool = false, compress: Bool = false, simulateProxy: HTTPProxySimulator.Option? = nil, channelPromise: EventLoopPromise<Channel>? = nil) {
         self.serverChannel = try! ServerBootstrap(group: self.group)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
             .childChannelInitializer { channel in
-                channel.pipeline.configureHTTPServerPipeline(withPipeliningAssistance: true, withErrorHandling: true).flatMap {
-                    if let simulateProxy = simulateProxy {
-                        let responseEncoder = HTTPResponseEncoder()
-                        let requestDecoder = ByteToMessageHandler(HTTPRequestDecoder(leftOverBytesStrategy: .forwardBytes))
-
-                        return channel.pipeline.addHandlers([responseEncoder, requestDecoder, HTTPProxySimulator(option: simulateProxy, encoder: responseEncoder, decoder: requestDecoder)], position: .first)
-                    } else {
-                        return channel.eventLoop.makeSucceededFuture(())
-                    }
-                }.flatMap {
-                    if ssl {
-                        return HTTPBin.configureTLS(channel: channel).flatMap {
-                            channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise))
+                channel.pipeline.configureHTTPServerPipeline(withPipeliningAssistance: true, withErrorHandling: true)
+                    .flatMap {
+                        if compress {
+                            return channel.pipeline.addHandler(HTTPResponseCompressor())
+                        } else {
+                            return channel.eventLoop.makeSucceededFuture(())
                         }
-                    } else {
-                        return channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise))
                     }
-                }
-            }.bind(host: "127.0.0.1", port: 0).wait()
+                    .flatMap {
+                        if let simulateProxy = simulateProxy {
+                            let responseEncoder = HTTPResponseEncoder()
+                            let requestDecoder = ByteToMessageHandler(HTTPRequestDecoder(leftOverBytesStrategy: .forwardBytes))
+
+                            return channel.pipeline.addHandlers([responseEncoder, requestDecoder, HTTPProxySimulator(option: simulateProxy, encoder: responseEncoder, decoder: requestDecoder)], position: .first)
+                        } else {
+                            return channel.eventLoop.makeSucceededFuture(())
+                        }
+                    }
+                    .flatMap {
+                        if ssl {
+                            return HTTPBin.configureTLS(channel: channel).flatMap {
+                                channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise))
+                            }
+                        } else {
+                            return channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise))
+                        }
+                    }
+            }
+            .bind(host: "127.0.0.1", port: 0).wait()
     }
 
     func shutdown() throws {
@@ -295,7 +306,7 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 context.close(promise: nil)
                 return
             case "/custom":
-                context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
+                context.writeAndFlush(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
                 return
             case "/events/10/1": // TODO: parse path
                 context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
@@ -459,6 +470,12 @@ extension ByteBuffer {
     public static func of(string: String) -> ByteBuffer {
         var buffer = ByteBufferAllocator().buffer(capacity: string.count)
         buffer.writeString(string)
+        return buffer
+    }
+
+    public static func of(bytes: [UInt8]) -> ByteBuffer {
+        var buffer = ByteBufferAllocator().buffer(capacity: bytes.count)
+        buffer.writeBytes(bytes)
         return buffer
     }
 }

@@ -16,6 +16,7 @@ import AsyncHTTPClient
 import NIO
 import NIOFoundationCompat
 import NIOHTTP1
+import NIOHTTPCompression
 import NIOSSL
 import XCTest
 
@@ -562,5 +563,67 @@ class HTTPClientTests: XCTestCase {
         request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/redirect/302")
         response = try httpClient.execute(request: request, delegate: delegate, eventLoop: .delegate(on: eventLoop)).wait()
         XCTAssertEqual(true, response)
+    }
+
+    func testDecompression() throws {
+        let httpBin = HTTPBin(compress: true)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(decompression: .enabled(limit: .none)))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        var body = ""
+        for _ in 1...1000 {
+            body += "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
+        }
+
+        for algorithm in [nil, "gzip", "deflate"] {
+            var request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/post", method: .POST)
+            request.body = .string(body)
+            if let algorithm = algorithm {
+                request.headers.add(name: "Accept-Encoding", value: algorithm)
+            }
+
+            let response = try httpClient.execute(request: request).wait()
+            let bytes = response.body!.getData(at: 0, length: response.body!.readableBytes)!
+            let data = try JSONDecoder().decode(RequestInfo.self, from: bytes)
+
+            XCTAssertEqual(.ok, response.status)
+            XCTAssertGreaterThan(body.count, response.headers["Content-Length"].first.flatMap { Int($0) }!)
+            if let algorithm = algorithm {
+                XCTAssertEqual(algorithm, response.headers["Content-Encoding"].first)
+            } else {
+                XCTAssertEqual("deflate", response.headers["Content-Encoding"].first)
+            }
+            XCTAssertEqual(body, data.data)
+        }
+    }
+
+    func testDecompressionLimit() throws {
+        let httpBin = HTTPBin(compress: true)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(decompression: .enabled(limit: .ratio(10))))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        var request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/post", method: .POST)
+        request.body = .byteBuffer(ByteBuffer.of(bytes: [120, 156, 75, 76, 28, 5, 200, 0, 0, 248, 66, 103, 17]))
+        request.headers.add(name: "Accept-Encoding", value: "deflate")
+
+        do {
+            _ = try httpClient.execute(request: request).wait()
+        } catch let error as NIOHTTPDecompression.DecompressionError {
+            switch error {
+            case .limit:
+                // ok
+                break
+            default:
+                XCTFail("Unexptected error: \(error)")
+            }
+        } catch {
+            XCTFail("Unexptected error: \(error)")
+        }
     }
 }

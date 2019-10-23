@@ -57,6 +57,8 @@ extension HTTPClientTests {
             ("testWrongContentLengthForSSLUncleanShutdown", testWrongContentLengthForSSLUncleanShutdown),
             ("testWrongContentLengthWithIgnoreErrorForSSLUncleanShutdown", testWrongContentLengthWithIgnoreErrorForSSLUncleanShutdown),
             ("testEventLoopArgument", testEventLoopArgument),
+            ("testDecompression", testDecompression),
+            ("testDecompressionLimit", testDecompressionLimit),
         ]
     }
 }

@@ -16,6 +16,7 @@ import Foundation
 import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
+import NIOHTTPCompression
 import NIOSSL
 
 /// HTTPClient class provides API for request execution.
@@ -253,6 +254,13 @@ public class HTTPClient {
                         return channel.pipeline.addProxyHandler(for: request, decoder: decoder, encoder: encoder, tlsConfiguration: self.configuration.tlsConfiguration, proxy: proxy)
                     }
                 }.flatMap {
+                    switch self.configuration.decompression {
+                    case .disabled:
+                        return channel.eventLoop.makeSucceededFuture(())
+                    case .enabled(let limit):
+                        return channel.pipeline.addHandler(NIOHTTPResponseDecompressor(limit: limit))
+                    }
+                }.flatMap {
                     if let timeout = self.resolve(timeout: self.configuration.timeout.read, deadline: deadline) {
                         return channel.pipeline.addHandler(IdleStateHandler(readTimeout: timeout))
                     } else {
@@ -322,31 +330,37 @@ public class HTTPClient {
         public var timeout: Timeout
         /// Upstream proxy, defaults to no proxy.
         public var proxy: Proxy?
+        /// Enables automatic body decompression. Supported algorithms are gzip and deflate.
+        public var decompression: Decompression
         /// Ignore TLS unclean shutdown error, defaults to `false`.
         public var ignoreUncleanSSLShutdown: Bool
 
-        public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
-            self.init(tlsConfiguration: tlsConfiguration, followRedirects: followRedirects, timeout: timeout, proxy: proxy, ignoreUncleanSSLShutdown: false)
-        }
-
-        public init(tlsConfiguration: TLSConfiguration? = nil, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreUncleanSSLShutdown: Bool = false) {
+        public init(tlsConfiguration: TLSConfiguration? = nil,
+                    followRedirects: Bool = false,
+                    timeout: Timeout = Timeout(),
+                    proxy: Proxy? = nil,
+                    ignoreUncleanSSLShutdown: Bool = false,
+                    decompression: Decompression = .disabled) {
             self.tlsConfiguration = tlsConfiguration
             self.followRedirects = followRedirects
             self.timeout = timeout
             self.proxy = proxy
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
+            self.decompression = decompression
         }
 
-        public init(certificateVerification: CertificateVerification, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil) {
-            self.init(certificateVerification: certificateVerification, followRedirects: followRedirects, timeout: timeout, proxy: proxy, ignoreUncleanSSLShutdown: false)
-        }
-
-        public init(certificateVerification: CertificateVerification, followRedirects: Bool = false, timeout: Timeout = Timeout(), proxy: Proxy? = nil, ignoreUncleanSSLShutdown: Bool = false) {
+        public init(certificateVerification: CertificateVerification,
+                    followRedirects: Bool = false,
+                    timeout: Timeout = Timeout(),
+                    proxy: Proxy? = nil,
+                    ignoreUncleanSSLShutdown: Bool = false,
+                    decompression: Decompression = .disabled) {
             self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
             self.followRedirects = followRedirects
             self.timeout = timeout
             self.proxy = proxy
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
+            self.decompression = decompression
         }
     }
 
@@ -402,6 +416,14 @@ public class HTTPClient {
         public static func delegateAndChannel(on eventLoop: EventLoop) -> EventLoopPreference {
             return EventLoopPreference(.delegateAndChannel(on: eventLoop))
         }
+    }
+
+    /// Specifies decompression settings.
+    public enum Decompression {
+        /// Decompression is disabled.
+        case disabled
+        /// Decompression is enabled.
+        case enabled(limit: NIOHTTPDecompression.DecompressionLimit)
     }
 }
 
@@ -508,6 +530,6 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let invalidProxyResponse = HTTPClientError(code: .invalidProxyResponse)
     /// Request does not contain `Content-Length` header.
     public static let contentLengthMissing = HTTPClientError(code: .contentLengthMissing)
-    /// Proxy Authentication Required
+    /// Proxy Authentication Required.
     public static let proxyAuthenticationRequired = HTTPClientError(code: .proxyAuthenticationRequired)
 }

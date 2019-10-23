@@ -447,7 +447,7 @@ extension HTTPClient {
         public let eventLoop: EventLoop
 
         let promise: EventLoopPromise<Response>
-        private var channel: Channel?
+        var channel: Channel?
         private var cancelled: Bool
         private let lock: Lock
 
@@ -677,7 +677,7 @@ extension TaskHandler: ChannelDuplexHandler {
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-        let response = unwrapInboundIn(data)
+        let response = self.unwrapInboundIn(data)
         switch response {
         case .head(let head):
             if let redirectURL = redirectHandler?.redirectTarget(status: head.status, headers: head.headers) {
