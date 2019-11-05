@@ -11,8 +11,8 @@ services:
 
   test:
     image: async-http-client:18.04-5.1
-    environment:
-      - SANITIZER_ARG=--sanitize=thread
+    environment: []
+      #- SANITIZER_ARG=--sanitize=thread
 
   shell:
     image: async-http-client:18.04-5.1
