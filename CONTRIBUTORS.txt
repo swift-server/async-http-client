@@ -7,14 +7,23 @@ needs to be listed here.
 
 ## COPYRIGHT HOLDERS
 
-- Swift Server Working Group
+- Apple Inc. (all contributors with '@apple.com')
 
 ### Contributors
 
+- Andrew Lees <32634907+Andrew-Lees11@users.noreply.github.com>
 - Artem Redkin <aredkin@apple.com>
+- George Barnett <gbarnett@apple.com>
 - Ian Partridge <i.partridge@uk.ibm.com>
+- Joe Smith <yasumoto7@gmail.com>
+- Johannes Weiss <johannesweiss@apple.com>
+- Ludovic Dewailly <me@ldewailly.com>
 - Tanner <me@tanner.xyz>
+- Tobias <t089@users.noreply.github.com>
+- Trevör <adtrevor@users.noreply.github.com>
 - tomer doron <tomer@apple.com>
+- tomer doron <tomerd@apple.com>
+- vkill <vkill.net@gmail.com>
 
 **Updating this list**
 

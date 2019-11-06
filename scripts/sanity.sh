@@ -3,7 +3,7 @@
 ##
 ## This source file is part of the AsyncHTTPClient open source project
 ##
-## Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
+## Copyright (c) 2018-2019 Apple Inc. and the AsyncHTTPClient project authors
 ## Licensed under Apache License v2.0
 ##
 ## See LICENSE.txt for license information
@@ -58,7 +58,7 @@ for language in swift-or-c bash dtrace; do
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
+// Copyright (c) 2018-2019 Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -77,7 +77,7 @@ EOF
 ##
 ## This source file is part of the AsyncHTTPClient open source project
 ##
-## Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
+## Copyright (c) 2018-2019 Apple Inc. and the AsyncHTTPClient project authors
 ## Licensed under Apache License v2.0
 ##
 ## See LICENSE.txt for license information
@@ -96,7 +96,7 @@ EOF
  *
  *  This source file is part of the AsyncHTTPClient open source project
  *
- *  Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
+ *  Copyright (c) 2018-2019 Apple Inc. and the AsyncHTTPClient project authors
  *  Licensed under Apache License v2.0
  *
  *  See LICENSE.txt for license information
