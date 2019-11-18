@@ -18,10 +18,24 @@ import NIOFoundationCompat
 import NIOHTTP1
 import NIOHTTPCompression
 import NIOSSL
+import NIOTestUtils
 import XCTest
 
 class HTTPClientTests: XCTestCase {
     typealias Request = HTTPClient.Request
+
+    var group: EventLoopGroup!
+
+    override func setUp() {
+        XCTAssertNil(self.group)
+        self.group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+    }
+
+    override func tearDown() {
+        XCTAssertNotNil(self.group)
+        XCTAssertNoThrow(try self.group.syncShutdownGracefully())
+        self.group = nil
+    }
 
     func testRequestURI() throws {
         let request1 = try Request(url: "https://someserver.com:8888/some/path?foo=bar")
@@ -656,6 +670,174 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/redirect/infinite1").wait(), "Should fail with redirect limit") { error in
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.redirectLimitReached)
+        }
+    }
+
+    func testWorksWith500Error() {
+        let web = NIOHTTP1TestServer(group: self.group)
+        defer {
+            XCTAssertNoThrow(try web.stop())
+        }
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.group))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+        let result = httpClient.get(url: "http://localhost:\(web.serverPort)/foo")
+
+        XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
+                                                    method: .GET,
+                                                    uri: "/foo",
+                                                    headers: HTTPHeaders([("Host", "localhost"),
+                                                                          // The following line can be removed once we
+                                                                          // have a connection pool.
+                                                                          ("Connection", "close"),
+                                                                          ("Content-Length", "0")]))),
+                                        try web.readInbound()))
+        XCTAssertNoThrow(XCTAssertEqual(.end(nil),
+                                        try web.readInbound()))
+        XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 1),
+                                                           status: .internalServerError))))
+        XCTAssertNoThrow(try web.writeOutbound(.end(nil)))
+
+        var response: HTTPClient.Response?
+        XCTAssertNoThrow(response = try result.wait())
+        XCTAssertEqual(.internalServerError, response?.status)
+        XCTAssertNil(response?.body)
+    }
+
+    func testWorksWithHTTP10Response() {
+        let web = NIOHTTP1TestServer(group: self.group)
+        defer {
+            XCTAssertNoThrow(try web.stop())
+        }
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.group))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+        let result = httpClient.get(url: "http://localhost:\(web.serverPort)/foo")
+
+        XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
+                                                    method: .GET,
+                                                    uri: "/foo",
+                                                    headers: HTTPHeaders([("Host", "localhost"),
+                                                                          // The following line can be removed once we
+                                                                          // have a connection pool.
+                                                                          ("Connection", "close"),
+                                                                          ("Content-Length", "0")]))),
+                                        try web.readInbound()))
+        XCTAssertNoThrow(XCTAssertEqual(.end(nil),
+                                        try web.readInbound()))
+        XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 0),
+                                                           status: .internalServerError))))
+        XCTAssertNoThrow(try web.writeOutbound(.end(nil)))
+
+        var response: HTTPClient.Response?
+        XCTAssertNoThrow(response = try result.wait())
+        XCTAssertEqual(.internalServerError, response?.status)
+        XCTAssertNil(response?.body)
+    }
+
+    func testWorksWhenServerClosesConnectionAfterReceivingRequest() {
+        let web = NIOHTTP1TestServer(group: self.group)
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.group))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+        let result = httpClient.get(url: "http://localhost:\(web.serverPort)/foo")
+
+        XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
+                                                    method: .GET,
+                                                    uri: "/foo",
+                                                    headers: HTTPHeaders([("Host", "localhost"),
+                                                                          // The following line can be removed once we
+                                                                          // have a connection pool.
+                                                                          ("Connection", "close"),
+                                                                          ("Content-Length", "0")]))),
+                                        try web.readInbound()))
+        XCTAssertNoThrow(XCTAssertEqual(.end(nil),
+                                        try web.readInbound()))
+        XCTAssertNoThrow(try web.stop())
+
+        XCTAssertThrowsError(try result.wait()) { error in
+            XCTAssertEqual(HTTPClientError.remoteConnectionClosed, error as? HTTPClientError)
+        }
+    }
+
+    func testSubsequentRequestsWorkWithServerSendingConnectionClose() {
+        let web = NIOHTTP1TestServer(group: self.group)
+        defer {
+            XCTAssertNoThrow(try web.stop())
+        }
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.group))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+
+        for _ in 0..<10 {
+            let result = httpClient.get(url: "http://localhost:\(web.serverPort)/foo")
+
+            XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
+                                                        method: .GET,
+                                                        uri: "/foo",
+                                                        headers: HTTPHeaders([("Host", "localhost"),
+                                                                              // The following line can be removed once
+                                                                              // we have a connection pool.
+                                                                              ("Connection", "close"),
+                                                                              ("Content-Length", "0")]))),
+                                            try web.readInbound()))
+            XCTAssertNoThrow(XCTAssertEqual(.end(nil),
+                                            try web.readInbound()))
+            XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 0),
+                                                               status: .ok,
+                                                               headers: HTTPHeaders([("connection", "close")])))))
+            XCTAssertNoThrow(try web.writeOutbound(.end(nil)))
+
+            var response: HTTPClient.Response?
+            XCTAssertNoThrow(response = try result.wait())
+            XCTAssertEqual(.ok, response?.status)
+            XCTAssertNil(response?.body)
+        }
+    }
+
+    func testSubsequentRequestsWorkWithServerAlternatingBetweenKeepAliveAndClose() {
+        let web = NIOHTTP1TestServer(group: self.group)
+        defer {
+            XCTAssertNoThrow(try web.stop())
+        }
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.group))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+
+        for i in 0..<10 {
+            let result = httpClient.get(url: "http://localhost:\(web.serverPort)/foo")
+
+            XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
+                                                        method: .GET,
+                                                        uri: "/foo",
+                                                        headers: HTTPHeaders([("Host", "localhost"),
+                                                                              // The following line can be removed once
+                                                                              // we have a connection pool.
+                                                                              ("Connection", "close"),
+                                                                              ("Content-Length", "0")]))),
+                                            try web.readInbound()))
+            XCTAssertNoThrow(XCTAssertEqual(.end(nil),
+                                            try web.readInbound()))
+            XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 0),
+                                                               status: .ok,
+                                                               headers: HTTPHeaders([("connection",
+                                                                                      i % 2 == 0 ? "close" : "keep-alive")])))))
+            XCTAssertNoThrow(try web.writeOutbound(.end(nil)))
+
+            var response: HTTPClient.Response?
+            XCTAssertNoThrow(response = try result.wait())
+            XCTAssertEqual(.ok, response?.status)
+            XCTAssertNil(response?.body)
         }
     }
 }
