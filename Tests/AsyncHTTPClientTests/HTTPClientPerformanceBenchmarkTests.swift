@@ -17,7 +17,7 @@ import AsyncHTTPClient
 import Foundation
 import XCTest
 
-private class NIOTestOperation: AsynchronousOperation {
+private class AsyncHTTPClientTestOperation: AsynchronousOperation {
     private let httpClient: HTTPClient
     
     init(httpClient: HTTPClient) {
@@ -41,19 +41,11 @@ private class URLSessionTestOperation: AsynchronousOperation {
     }
 
     override func execute() {
-
         let url = URL(string: "https://swift.org")!
-
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-
-        let task = session.dataTask(with: request) { [weak self] (data, response, error) in
-
-            guard data != nil else {
-                return
-            }
-
-            self?.finish()
+        let task = session.dataTask(with: request) { (_, _, _) in
+            self.finish()
         }
         task.resume()
     }
@@ -86,13 +78,13 @@ final class PerformanceTests: XCTestCase {
         try! httpClient.syncShutdown()
     }
 
-    func testSwiftNIO() {
+    func testAsyncHTTPClient() {
         self.measure {
             var operations: [Operation] = []
             var startDate = Date()
 
             for _ in 0..<K.numberOfOperations {
-                operations.append(NIOTestOperation(httpClient: httpClient))
+                operations.append(AsyncHTTPClientTestOperation(httpClient: httpClient))
             }
 
             operations.last?.completionBlock = {
