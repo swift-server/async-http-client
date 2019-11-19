@@ -18,6 +18,7 @@ import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOHTTPCompression
 import NIOSSL
+
 #if canImport(Network)
 import Network
 import NIOTransportServices
@@ -258,8 +259,20 @@ public class HTTPClient {
 
         let task = Task<Delegate.Response>(eventLoop: delegateEL)
 
-        var bootstrap = ClientBootstrap(group: channelEL ?? delegateEL)
-            .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
+
+        #if canImport(Network)
+        var bootstrap: ClientTransportBootstrap
+
+        if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
+            bootstrap = NIOTSConnectionBootstrap(group: self.eventLoopGroup)
+        } else {
+            bootstrap = ClientBootstrap(group: channelEL ?? delegateEL)
+        }
+        #else
+        bootstrap = ClientBootstrap(group: channelEL ?? delegateEL)
+        #endif
+
+        bootstrap = bootstrap.channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
             .channelInitializer { channel in
                 let encoder = HTTPRequestEncoder()
                 let decoder = ByteToMessageHandler(HTTPResponseDecoder(leftOverBytesStrategy: .forwardBytes))

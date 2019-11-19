@@ -21,6 +21,11 @@ import NIOSSL
 import NIOTestUtils
 import XCTest
 
+#if canImport(Network)
+import Network
+import NIOTransportServices
+#endif
+
 class HTTPClientTests: XCTestCase {
     typealias Request = HTTPClient.Request
 
@@ -79,8 +84,22 @@ class HTTPClientTests: XCTestCase {
 
     func testGetWithDifferentEventLoopBackpressure() throws {
         let httpBin = HTTPBin()
-        let loopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-        let external = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        let loopGroup: EventLoopGroup
+        let external: EventLoopGroup
+
+        #if canImport(Network)
+            if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
+                loopGroup = NIOTSEventLoopGroup()
+                external = NIOTSEventLoopGroup()
+            } else {
+                loopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+                external = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+            }
+        #else
+                loopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+                external = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        #endif
+
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(loopGroup))
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
@@ -538,7 +557,16 @@ class HTTPClientTests: XCTestCase {
 
     func testEventLoopArgument() throws {
         let httpBin = HTTPBin()
-        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 5)
+        let eventLoopGroup: EventLoopGroup
+        #if canImport(Network)
+            if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
+                eventLoopGroup = NIOTSEventLoopGroup()
+            } else {
+                eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 5)
+            }
+        #else
+            eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 5)
+        #endif
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup),
                                     configuration: HTTPClient.Configuration(redirectConfiguration: .follow(max: 10, allowCycles: true)))
         defer {

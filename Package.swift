@@ -21,10 +21,10 @@ let package = Package(
         .library(name: "AsyncHTTPClient", targets: ["AsyncHTTPClient"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.10.1"),
-        .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.0.0"),
-        .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.3.0"),
-        .package(url: "https://github.com/apple/swift-nio-transport-services", from: "1.0.0")
+        .package(url: "https://github.com/Yasumoto/swift-nio.git", .branch("yasumoto-client-bootstrap-protocol")),
+        .package(url: "https://github.com/Yasumoto/swift-nio-ssl.git", .branch("master")),
+        .package(url: "https://github.com/Yasumoto/swift-nio-extras.git", .branch("master")),
+        .package(url: "https://github.com/Yasumoto/swift-nio-transport-services", .branch("yasumoto-ClientTransportBootstrap"))
     ],
     targets: [
         .target(
