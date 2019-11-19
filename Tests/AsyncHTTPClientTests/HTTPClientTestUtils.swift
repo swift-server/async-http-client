@@ -498,7 +498,7 @@ open class AsynchronousOperation: Operation {
 
     // MARK: - Properties
     private let stateQueue = DispatchQueue(
-        label: "com.athletic.operation.state",
+        label: "com.asynchttpclient.operation.state",
         attributes: .concurrent)
 
     private var rawState = OperationState.ready
