@@ -275,7 +275,7 @@ public class HTTPClient {
                     let taskHandler = TaskHandler(task: task, delegate: delegate, redirectHandler: redirectHandler, ignoreUncleanSSLShutdown: self.configuration.ignoreUncleanSSLShutdown)
                     return channel.pipeline.addHandler(taskHandler)
                 }
-        }
+            }
 
         if let timeout = self.resolve(timeout: self.configuration.timeout.connect, deadline: deadline) {
             bootstrap = bootstrap.connectTimeout(timeout)
@@ -285,12 +285,11 @@ public class HTTPClient {
         bootstrap.connect(host: address.host, port: address.port)
             .map { channel in
                 task.setChannel(channel)
-        }
-        .flatMap { channel in
-            channel.writeAndFlush(request)
-        }
-        .cascadeFailure(to: task.promise)
-
+            }
+            .flatMap { channel in
+                channel.writeAndFlush(request)
+            }
+            .cascadeFailure(to: task.promise)
         return task
     }
 

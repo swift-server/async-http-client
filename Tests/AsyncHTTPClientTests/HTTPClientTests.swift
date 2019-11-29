@@ -844,7 +844,7 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 0),
                                                                status: .ok,
                                                                headers: HTTPHeaders([("connection",
-                                                                                      i % 2 == 0 ? "close" : "keep-alive")])))))
+                                                                                     i % 2 == 0 ? "close" : "keep-alive")])))))
             XCTAssertNoThrow(try web.writeOutbound(.end(nil)))
 
             var response: HTTPClient.Response?
