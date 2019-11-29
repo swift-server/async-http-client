@@ -275,7 +275,7 @@ public class HTTPClient {
                     let taskHandler = TaskHandler(task: task, delegate: delegate, redirectHandler: redirectHandler, ignoreUncleanSSLShutdown: self.configuration.ignoreUncleanSSLShutdown)
                     return channel.pipeline.addHandler(taskHandler)
                 }
-            }
+        }
 
         if let timeout = self.resolve(timeout: self.configuration.timeout.connect, deadline: deadline) {
             bootstrap = bootstrap.connectTimeout(timeout)
@@ -285,11 +285,11 @@ public class HTTPClient {
         bootstrap.connect(host: address.host, port: address.port)
             .map { channel in
                 task.setChannel(channel)
-            }
-            .flatMap { channel in
-                channel.writeAndFlush(request)
-            }
-            .cascadeFailure(to: task.promise)
+        }
+        .flatMap { channel in
+            channel.writeAndFlush(request)
+        }
+        .cascadeFailure(to: task.promise)
 
         return task
     }
@@ -501,7 +501,7 @@ private extension ChannelPipeline {
         do {
             let tlsConfiguration = tlsConfiguration ?? TLSConfiguration.forClient()
             let context = try NIOSSLContext(configuration: tlsConfiguration)
-            return self.addHandler(try NIOSSLClientHandler(context: context, serverHostname: request.host),
+            return self.addHandler(try NIOSSLClientHandler(context: context, serverHostname: request.host.isIPAddress ? nil : request.host),
                                    position: .first)
         } catch {
             return self.eventLoop.makeFailedFuture(error)
