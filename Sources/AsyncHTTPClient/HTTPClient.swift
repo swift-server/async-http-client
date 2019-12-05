@@ -72,15 +72,39 @@ public class HTTPClient {
 
     /// Shuts down the client and `EventLoopGroup` if it was created by the client.
     public func syncShutdown() throws {
+        let errorStorageLock = Lock()
+        var errorStorage: Error? = nil
+        let continuation = DispatchWorkItem {}
+        self.shutdownGracefully { error in
+            if let error = error {
+                errorStorageLock.withLock {
+                    errorStorage = error
+                }
+            }
+            continuation.perform()
+        }
+        continuation.wait()
+        try errorStorageLock.withLock {
+            if let error = errorStorage {
+                throw error
+            }
+        }
+    }
+
+    /// Shuts down the client and `EventLoopGroup` if it was created by the client.
+    ///
+    /// - parameters:
+    ///     - callback: Callback to call when shutdown is complete.
+    public func shutdownGracefully(_ callback: @escaping (Error?) -> Void) {
         switch self.eventLoopGroupProvider {
         case .shared:
             self.isShutdown.store(true)
-            return
+            callback(nil)
         case .createNew:
             if self.isShutdown.compareAndExchange(expected: false, desired: true) {
-                try self.eventLoopGroup.syncShutdownGracefully()
+                self.eventLoopGroup.shutdownGracefully(callback)
             } else {
-                throw HTTPClientError.alreadyShutdown
+                callback(nil)
             }
         }
     }
