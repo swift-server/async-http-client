@@ -673,6 +673,66 @@ class HTTPClientTests: XCTestCase {
         }
     }
 
+    func testMultipleConcurrentRequests() throws {
+        let numberOfRequestsPerThread = 100
+        let numberOfParallelWorkers = 5
+
+        final class HTTPServer: ChannelInboundHandler {
+            typealias InboundIn = HTTPServerRequestPart
+            typealias OutboundOut = HTTPServerResponsePart
+
+            func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+                if case .end = self.unwrapInboundIn(data) {
+                    let responseHead = HTTPServerResponsePart.head(.init(version: .init(major: 1, minor: 1),
+                                                                         status: .ok))
+                    context.write(self.wrapOutboundOut(responseHead), promise: nil)
+                    context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+                }
+            }
+        }
+
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 2)
+        defer {
+            XCTAssertNoThrow(try group.syncShutdownGracefully())
+        }
+
+        var server: Channel?
+        XCTAssertNoThrow(server = try ServerBootstrap(group: group)
+            .serverChannelOption(ChannelOptions.socket(.init(SOL_SOCKET), .init(SO_REUSEADDR)), value: 1)
+            .serverChannelOption(ChannelOptions.backlog, value: .init(numberOfParallelWorkers))
+            .childChannelInitializer { channel in
+                channel.pipeline.configureHTTPServerPipeline(withPipeliningAssistance: false,
+                                                             withServerUpgrade: nil,
+                                                             withErrorHandling: false).flatMap {
+                    channel.pipeline.addHandler(HTTPServer())
+                }
+            }
+            .bind(to: .init(ipAddress: "127.0.0.1", port: 0))
+            .wait())
+        defer {
+            XCTAssertNoThrow(try server?.close().wait())
+        }
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(group))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+
+        let g = DispatchGroup()
+        for workerID in 0..<numberOfParallelWorkers {
+            DispatchQueue(label: "\(#file):\(#line):worker-\(workerID)").async(group: g) {
+                func makeRequest() {
+                    let url = "http://127.0.0.1:\(server?.localAddress?.port ?? -1)/hello"
+                    XCTAssertNoThrow(try httpClient.get(url: url).wait())
+                }
+                for _ in 0..<numberOfRequestsPerThread {
+                    makeRequest()
+                }
+            }
+        }
+        g.wait()
+    }
+
     func testWorksWith500Error() {
         let web = NIOHTTP1TestServer(group: self.group)
         defer {
