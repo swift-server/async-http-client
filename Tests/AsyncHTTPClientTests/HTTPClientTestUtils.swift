@@ -95,7 +95,7 @@ internal final class RecordingHandler<Input, Output>: ChannelDuplexHandler {
 internal final class HTTPBin {
     let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
     let serverChannel: Channel
-    let isShutdown: Atomic<Bool> = .init(value: false)
+    let isShutdown: NIOAtomic<Bool> = .makeAtomic(value: false)
 
     var port: Int {
         return Int(self.serverChannel.localAddress!.port!)

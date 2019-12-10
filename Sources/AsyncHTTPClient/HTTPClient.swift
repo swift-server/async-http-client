@@ -48,7 +48,7 @@ public class HTTPClient {
     public let eventLoopGroup: EventLoopGroup
     let eventLoopGroupProvider: EventLoopGroupProvider
     let configuration: Configuration
-    let isShutdown = Atomic<Bool>(value: false)
+    let isShutdown = NIOAtomic<Bool>.makeAtomic(value: false)
 
     /// Create an `HTTPClient` with specified `EventLoopGroup` provider and configuration.
     ///
