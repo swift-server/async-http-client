@@ -16,6 +16,11 @@
 set -eu
 here="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
+function replace_acceptable_years() {
+    # this needs to replace all acceptable forms with 'YEARS'
+    sed -e 's/20[12][0-9]-20[12][0-9]/YEARS/' -e 's/2019/YEARS/' -e 's/2020/YEARS/'
+}
+
 printf "=> Checking linux tests... "
 FIRST_OUT="$(git status --porcelain)"
 ruby "$here/../scripts/generate_linux_tests.rb" > /dev/null
@@ -58,7 +63,7 @@ for language in swift-or-c bash dtrace; do
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2019 Apple Inc. and the AsyncHTTPClient project authors
+// Copyright (c) YEARS Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -77,7 +82,7 @@ EOF
 ##
 ## This source file is part of the AsyncHTTPClient open source project
 ##
-## Copyright (c) 2018-2019 Apple Inc. and the AsyncHTTPClient project authors
+## Copyright (c) YEARS Apple Inc. and the AsyncHTTPClient project authors
 ## Licensed under Apache License v2.0
 ##
 ## See LICENSE.txt for license information
@@ -96,7 +101,7 @@ EOF
  *
  *  This source file is part of the AsyncHTTPClient open source project
  *
- *  Copyright (c) 2018-2019 Apple Inc. and the AsyncHTTPClient project authors
+ *  Copyright (c) YEARS Apple Inc. and the AsyncHTTPClient project authors
  *  Licensed under Apache License v2.0
  *
  *  See LICENSE.txt for license information
@@ -121,9 +126,9 @@ EOF
       \( \! -path './.build/*' -a \
       \( "${matching_files[@]}" \) -a \
       \( \! \( "${exceptions[@]}" \) \) \) | while read line; do
-      if [[ "$(cat "$line" | head -n $expected_lines | shasum)" != "$expected_sha" ]]; then
+      if [[ "$(cat "$line" | replace_acceptable_years | head -n $expected_lines | shasum)" != "$expected_sha" ]]; then
         printf "\033[0;31mmissing headers in file '$line'!\033[0m\n"
-        diff -u <(cat "$line" | head -n $expected_lines) "$tmp"
+        diff -u <(cat "$line" | replace_acceptable_years | head -n $expected_lines) "$tmp"
         exit 1
       fi
     done
