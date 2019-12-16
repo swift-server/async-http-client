@@ -2,7 +2,7 @@
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
+// Copyright (c) 2018-2019 Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -48,7 +48,7 @@ public class HTTPClient {
     public let eventLoopGroup: EventLoopGroup
     let eventLoopGroupProvider: EventLoopGroupProvider
     let configuration: Configuration
-    let isShutdown = Atomic<Bool>(value: false)
+    let isShutdown = NIOAtomic<Bool>.makeAtomic(value: false)
 
     /// Create an `HTTPClient` with specified `EventLoopGroup` provider and configuration.
     ///
@@ -290,7 +290,6 @@ public class HTTPClient {
                 channel.writeAndFlush(request)
             }
             .cascadeFailure(to: task.promise)
-
         return task
     }
 
@@ -501,7 +500,7 @@ private extension ChannelPipeline {
         do {
             let tlsConfiguration = tlsConfiguration ?? TLSConfiguration.forClient()
             let context = try NIOSSLContext(configuration: tlsConfiguration)
-            return self.addHandler(try NIOSSLClientHandler(context: context, serverHostname: request.host),
+            return self.addHandler(try NIOSSLClientHandler(context: context, serverHostname: request.host.isIPAddress ? nil : request.host),
                                    position: .first)
         } catch {
             return self.eventLoop.makeFailedFuture(error)

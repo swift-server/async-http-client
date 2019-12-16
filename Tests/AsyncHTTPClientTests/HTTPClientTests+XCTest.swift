@@ -2,7 +2,7 @@
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
+// Copyright (c) 2018-2019 Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -32,6 +32,7 @@ extension HTTPClientTests {
             ("testGetWithDifferentEventLoopBackpressure", testGetWithDifferentEventLoopBackpressure),
             ("testPost", testPost),
             ("testGetHttps", testGetHttps),
+            ("testGetHttpsWithIP", testGetHttpsWithIP),
             ("testPostHttps", testPostHttps),
             ("testHttpRedirect", testHttpRedirect),
             ("testHttpHostRedirect", testHttpHostRedirect),
@@ -61,6 +62,13 @@ extension HTTPClientTests {
             ("testDecompressionLimit", testDecompressionLimit),
             ("testLoopDetectionRedirectLimit", testLoopDetectionRedirectLimit),
             ("testCountRedirectLimit", testCountRedirectLimit),
+            ("testMultipleConcurrentRequests", testMultipleConcurrentRequests),
+            ("testWorksWith500Error", testWorksWith500Error),
+            ("testWorksWithHTTP10Response", testWorksWithHTTP10Response),
+            ("testWorksWhenServerClosesConnectionAfterReceivingRequest", testWorksWhenServerClosesConnectionAfterReceivingRequest),
+            ("testSubsequentRequestsWorkWithServerSendingConnectionClose", testSubsequentRequestsWorkWithServerSendingConnectionClose),
+            ("testSubsequentRequestsWorkWithServerAlternatingBetweenKeepAliveAndClose", testSubsequentRequestsWorkWithServerAlternatingBetweenKeepAliveAndClose),
+            ("testRepeatedRequestsWorkWhenServerAlwaysCloses", testRepeatedRequestsWorkWhenServerAlwaysCloses),
         ]
     }
 }
