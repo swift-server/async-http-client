@@ -122,6 +122,19 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(.ok, response.status)
     }
 
+    func testGetHttpsWithIP() throws {
+        let httpBin = HTTPBin(ssl: true)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        let response = try httpClient.get(url: "https://127.0.0.1:\(httpBin.port)/get").wait()
+        XCTAssertEqual(.ok, response.status)
+    }
+
     func testPostHttps() throws {
         let httpBin = HTTPBin(ssl: true)
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,

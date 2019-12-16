@@ -15,6 +15,32 @@
 import NIO
 import NIOHTTP1
 
+#if canImport(Network)
+    import Network
+
+    internal extension String {
+        var isIPAddress: Bool {
+            if IPv4Address(self) != nil || IPv6Address(self) != nil {
+                return true
+            }
+            return false
+        }
+    }
+
+#else
+    internal extension String {
+        var isIPAddress: Bool {
+            var ipv4Addr = in_addr()
+            var ipv6Addr = in6_addr()
+
+            return self.withCString { ptr in
+                inet_pton(AF_INET, ptr, &ipv4Addr) == 1 ||
+                    inet_pton(AF_INET6, ptr, &ipv6Addr) == 1
+            }
+        }
+    }
+#endif
+
 public final class HTTPClientCopyingDelegate: HTTPClientResponseDelegate {
     public typealias Response = Void
 
