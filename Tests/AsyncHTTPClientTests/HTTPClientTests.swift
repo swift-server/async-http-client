@@ -913,4 +913,40 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNil(response?.body)
         }
     }
+
+    func testRepeatedRequestsWorkWhenServerAlwaysCloses() {
+        let web = NIOHTTP1TestServer(group: self.group)
+        defer {
+            XCTAssertNoThrow(try web.stop())
+        }
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.group))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+
+        for _ in 0..<10 {
+            let result = httpClient.get(url: "http://localhost:\(web.serverPort)/foo")
+            XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
+                                                        method: .GET,
+                                                        uri: "/foo",
+                                                        headers: HTTPHeaders([("Host", "localhost"),
+                                                                              // The following line can be removed once
+                                                                              // we have a connection pool.
+                                                                              ("Connection", "close"),
+                                                                              ("Content-Length", "0")]))),
+                                            try web.readInbound()))
+            XCTAssertNoThrow(XCTAssertEqual(.end(nil),
+                                            try web.readInbound()))
+            XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 1),
+                                                               status: .ok,
+                                                               headers: HTTPHeaders([("CoNnEcTiOn", "cLoSe")])))))
+            XCTAssertNoThrow(try web.writeOutbound(.end(nil)))
+
+            var response: HTTPClient.Response?
+            XCTAssertNoThrow(response = try result.wait())
+            XCTAssertEqual(.ok, response?.status)
+            XCTAssertNil(response?.body)
+        }
+    }
 }
