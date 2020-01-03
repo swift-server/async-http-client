@@ -2,7 +2,7 @@
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
+// Copyright (c) 2018-2019 Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -18,10 +18,24 @@ import NIOFoundationCompat
 import NIOHTTP1
 import NIOHTTPCompression
 import NIOSSL
+import NIOTestUtils
 import XCTest
 
 class HTTPClientTests: XCTestCase {
     typealias Request = HTTPClient.Request
+
+    var group: EventLoopGroup!
+
+    override func setUp() {
+        XCTAssertNil(self.group)
+        self.group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+    }
+
+    override func tearDown() {
+        XCTAssertNotNil(self.group)
+        XCTAssertNoThrow(try self.group.syncShutdownGracefully())
+        self.group = nil
+    }
 
     func testRequestURI() throws {
         let request1 = try Request(url: "https://someserver.com:8888/some/path?foo=bar")
@@ -105,6 +119,19 @@ class HTTPClientTests: XCTestCase {
         }
 
         let response = try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()
+        XCTAssertEqual(.ok, response.status)
+    }
+
+    func testGetHttpsWithIP() throws {
+        let httpBin = HTTPBin(ssl: true)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        let response = try httpClient.get(url: "https://127.0.0.1:\(httpBin.port)/get").wait()
         XCTAssertEqual(.ok, response.status)
     }
 
@@ -656,6 +683,270 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/redirect/infinite1").wait(), "Should fail with redirect limit") { error in
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.redirectLimitReached)
+        }
+    }
+
+    func testMultipleConcurrentRequests() throws {
+        let numberOfRequestsPerThread = 100
+        let numberOfParallelWorkers = 5
+
+        final class HTTPServer: ChannelInboundHandler {
+            typealias InboundIn = HTTPServerRequestPart
+            typealias OutboundOut = HTTPServerResponsePart
+
+            func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+                if case .end = self.unwrapInboundIn(data) {
+                    let responseHead = HTTPServerResponsePart.head(.init(version: .init(major: 1, minor: 1),
+                                                                         status: .ok))
+                    context.write(self.wrapOutboundOut(responseHead), promise: nil)
+                    context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+                }
+            }
+        }
+
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 2)
+        defer {
+            XCTAssertNoThrow(try group.syncShutdownGracefully())
+        }
+
+        var server: Channel?
+        XCTAssertNoThrow(server = try ServerBootstrap(group: group)
+            .serverChannelOption(ChannelOptions.socket(.init(SOL_SOCKET), .init(SO_REUSEADDR)), value: 1)
+            .serverChannelOption(ChannelOptions.backlog, value: .init(numberOfParallelWorkers))
+            .childChannelInitializer { channel in
+                channel.pipeline.configureHTTPServerPipeline(withPipeliningAssistance: false,
+                                                             withServerUpgrade: nil,
+                                                             withErrorHandling: false).flatMap {
+                    channel.pipeline.addHandler(HTTPServer())
+                }
+            }
+            .bind(to: .init(ipAddress: "127.0.0.1", port: 0))
+            .wait())
+        defer {
+            XCTAssertNoThrow(try server?.close().wait())
+        }
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(group))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+
+        let g = DispatchGroup()
+        for workerID in 0..<numberOfParallelWorkers {
+            DispatchQueue(label: "\(#file):\(#line):worker-\(workerID)").async(group: g) {
+                func makeRequest() {
+                    let url = "http://127.0.0.1:\(server?.localAddress?.port ?? -1)/hello"
+                    XCTAssertNoThrow(try httpClient.get(url: url).wait())
+                }
+                for _ in 0..<numberOfRequestsPerThread {
+                    makeRequest()
+                }
+            }
+        }
+        g.wait()
+    }
+
+    func testWorksWith500Error() {
+        let web = NIOHTTP1TestServer(group: self.group)
+        defer {
+            XCTAssertNoThrow(try web.stop())
+        }
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.group))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+        let result = httpClient.get(url: "http://localhost:\(web.serverPort)/foo")
+
+        XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
+                                                    method: .GET,
+                                                    uri: "/foo",
+                                                    headers: HTTPHeaders([("Host", "localhost"),
+                                                                          // The following line can be removed once we
+                                                                          // have a connection pool.
+                                                                          ("Connection", "close"),
+                                                                          ("Content-Length", "0")]))),
+                                        try web.readInbound()))
+        XCTAssertNoThrow(XCTAssertEqual(.end(nil),
+                                        try web.readInbound()))
+        XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 1),
+                                                           status: .internalServerError))))
+        XCTAssertNoThrow(try web.writeOutbound(.end(nil)))
+
+        var response: HTTPClient.Response?
+        XCTAssertNoThrow(response = try result.wait())
+        XCTAssertEqual(.internalServerError, response?.status)
+        XCTAssertNil(response?.body)
+    }
+
+    func testWorksWithHTTP10Response() {
+        let web = NIOHTTP1TestServer(group: self.group)
+        defer {
+            XCTAssertNoThrow(try web.stop())
+        }
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.group))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+        let result = httpClient.get(url: "http://localhost:\(web.serverPort)/foo")
+
+        XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
+                                                    method: .GET,
+                                                    uri: "/foo",
+                                                    headers: HTTPHeaders([("Host", "localhost"),
+                                                                          // The following line can be removed once we
+                                                                          // have a connection pool.
+                                                                          ("Connection", "close"),
+                                                                          ("Content-Length", "0")]))),
+                                        try web.readInbound()))
+        XCTAssertNoThrow(XCTAssertEqual(.end(nil),
+                                        try web.readInbound()))
+        XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 0),
+                                                           status: .internalServerError))))
+        XCTAssertNoThrow(try web.writeOutbound(.end(nil)))
+
+        var response: HTTPClient.Response?
+        XCTAssertNoThrow(response = try result.wait())
+        XCTAssertEqual(.internalServerError, response?.status)
+        XCTAssertNil(response?.body)
+    }
+
+    func testWorksWhenServerClosesConnectionAfterReceivingRequest() {
+        let web = NIOHTTP1TestServer(group: self.group)
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.group))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+        let result = httpClient.get(url: "http://localhost:\(web.serverPort)/foo")
+
+        XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
+                                                    method: .GET,
+                                                    uri: "/foo",
+                                                    headers: HTTPHeaders([("Host", "localhost"),
+                                                                          // The following line can be removed once we
+                                                                          // have a connection pool.
+                                                                          ("Connection", "close"),
+                                                                          ("Content-Length", "0")]))),
+                                        try web.readInbound()))
+        XCTAssertNoThrow(XCTAssertEqual(.end(nil),
+                                        try web.readInbound()))
+        XCTAssertNoThrow(try web.stop())
+
+        XCTAssertThrowsError(try result.wait()) { error in
+            XCTAssertEqual(HTTPClientError.remoteConnectionClosed, error as? HTTPClientError)
+        }
+    }
+
+    func testSubsequentRequestsWorkWithServerSendingConnectionClose() {
+        let web = NIOHTTP1TestServer(group: self.group)
+        defer {
+            XCTAssertNoThrow(try web.stop())
+        }
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.group))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+
+        for _ in 0..<10 {
+            let result = httpClient.get(url: "http://localhost:\(web.serverPort)/foo")
+
+            XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
+                                                        method: .GET,
+                                                        uri: "/foo",
+                                                        headers: HTTPHeaders([("Host", "localhost"),
+                                                                              // The following line can be removed once
+                                                                              // we have a connection pool.
+                                                                              ("Connection", "close"),
+                                                                              ("Content-Length", "0")]))),
+                                            try web.readInbound()))
+            XCTAssertNoThrow(XCTAssertEqual(.end(nil),
+                                            try web.readInbound()))
+            XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 0),
+                                                               status: .ok,
+                                                               headers: HTTPHeaders([("connection", "close")])))))
+            XCTAssertNoThrow(try web.writeOutbound(.end(nil)))
+
+            var response: HTTPClient.Response?
+            XCTAssertNoThrow(response = try result.wait())
+            XCTAssertEqual(.ok, response?.status)
+            XCTAssertNil(response?.body)
+        }
+    }
+
+    func testSubsequentRequestsWorkWithServerAlternatingBetweenKeepAliveAndClose() {
+        let web = NIOHTTP1TestServer(group: self.group)
+        defer {
+            XCTAssertNoThrow(try web.stop())
+        }
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.group))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+
+        for i in 0..<10 {
+            let result = httpClient.get(url: "http://localhost:\(web.serverPort)/foo")
+
+            XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
+                                                        method: .GET,
+                                                        uri: "/foo",
+                                                        headers: HTTPHeaders([("Host", "localhost"),
+                                                                              // The following line can be removed once
+                                                                              // we have a connection pool.
+                                                                              ("Connection", "close"),
+                                                                              ("Content-Length", "0")]))),
+                                            try web.readInbound()))
+            XCTAssertNoThrow(XCTAssertEqual(.end(nil),
+                                            try web.readInbound()))
+            XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 0),
+                                                               status: .ok,
+                                                               headers: HTTPHeaders([("connection",
+                                                                                      i % 2 == 0 ? "close" : "keep-alive")])))))
+            XCTAssertNoThrow(try web.writeOutbound(.end(nil)))
+
+            var response: HTTPClient.Response?
+            XCTAssertNoThrow(response = try result.wait())
+            XCTAssertEqual(.ok, response?.status)
+            XCTAssertNil(response?.body)
+        }
+    }
+
+    func testRepeatedRequestsWorkWhenServerAlwaysCloses() {
+        let web = NIOHTTP1TestServer(group: self.group)
+        defer {
+            XCTAssertNoThrow(try web.stop())
+        }
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.group))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+
+        for _ in 0..<10 {
+            let result = httpClient.get(url: "http://localhost:\(web.serverPort)/foo")
+            XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
+                                                        method: .GET,
+                                                        uri: "/foo",
+                                                        headers: HTTPHeaders([("Host", "localhost"),
+                                                                              // The following line can be removed once
+                                                                              // we have a connection pool.
+                                                                              ("Connection", "close"),
+                                                                              ("Content-Length", "0")]))),
+                                            try web.readInbound()))
+            XCTAssertNoThrow(XCTAssertEqual(.end(nil),
+                                            try web.readInbound()))
+            XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 1),
+                                                               status: .ok,
+                                                               headers: HTTPHeaders([("CoNnEcTiOn", "cLoSe")])))))
+            XCTAssertNoThrow(try web.writeOutbound(.end(nil)))
+
+            var response: HTTPClient.Response?
+            XCTAssertNoThrow(response = try result.wait())
+            XCTAssertEqual(.ok, response?.status)
+            XCTAssertNil(response?.body)
         }
     }
 }

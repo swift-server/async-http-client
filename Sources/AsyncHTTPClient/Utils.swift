@@ -2,7 +2,7 @@
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
+// Copyright (c) 2018-2019 Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -14,6 +14,18 @@
 
 import NIO
 import NIOHTTP1
+
+internal extension String {
+    var isIPAddress: Bool {
+        var ipv4Addr = in_addr()
+        var ipv6Addr = in6_addr()
+
+        return self.withCString { ptr in
+            inet_pton(AF_INET, ptr, &ipv4Addr) == 1 ||
+                inet_pton(AF_INET6, ptr, &ipv6Addr) == 1
+        }
+    }
+}
 
 public final class HTTPClientCopyingDelegate: HTTPClientResponseDelegate {
     public typealias Response = Void

@@ -2,7 +2,7 @@
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
+// Copyright (c) 2018-2019 Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -15,6 +15,7 @@
 import Foundation
 import NIO
 import NIOConcurrencyHelpers
+import NIOFoundationCompat
 import NIOHTTP1
 import NIOSSL
 
@@ -758,11 +759,12 @@ extension TaskHandler: ChannelDuplexHandler {
         switch self.state {
         case .end:
             break
-        default:
+        case .body, .head, .idle, .redirected, .sent:
             self.state = .end
             let error = HTTPClientError.remoteConnectionClosed
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
         }
+        context.fireChannelInactive()
     }
 
     func errorCaught(context: ChannelHandlerContext, error: Error) {

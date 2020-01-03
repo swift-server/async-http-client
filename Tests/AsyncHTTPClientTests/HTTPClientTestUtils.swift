@@ -2,7 +2,7 @@
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2019 Swift Server Working Group and the AsyncHTTPClient project authors
+// Copyright (c) 2018-2019 Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -95,7 +95,7 @@ internal final class RecordingHandler<Input, Output>: ChannelDuplexHandler {
 internal final class HTTPBin {
     let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
     let serverChannel: Channel
-    let isShutdown: Atomic<Bool> = .init(value: false)
+    let isShutdown: NIOAtomic<Bool> = .makeAtomic(value: false)
 
     var port: Int {
         return Int(self.serverChannel.localAddress!.port!)
