@@ -282,15 +282,15 @@ public class HTTPClient {
         }
 
         let eventLoopChannel: EventLoopFuture<Channel>
-        if request.scheme == "file" {
-            eventLoopChannel = bootstrap.connect(unixDomainSocketPath: request.url.path)
+        if request.scheme == "file", let baseURL = request.url.baseURL {
+            eventLoopChannel = bootstrap.connect(unixDomainSocketPath: baseURL.path)
         } else {
             let address = self.resolveAddress(request: request, proxy: self.configuration.proxy)
             eventLoopChannel = bootstrap.connect(host: address.host, port: address.port)
         }
 
         eventLoopChannel.map { channel in
-            task.setChannel(channel)
+              task.setChannel(channel)
             }
             .flatMap { channel in
                 channel.writeAndFlush(request)
