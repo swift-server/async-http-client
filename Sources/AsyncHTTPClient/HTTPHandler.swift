@@ -89,17 +89,39 @@ extension HTTPClient {
     /// Represent HTTP request.
     public struct Request {
         /// Request HTTP method, defaults to `GET`.
-        public let method: HTTPMethod
+        public var method: HTTPMethod {
+            return value.method
+        }
         /// Remote URL.
-        public let url: URL
+        public var url: URL {
+            return value.url
+        }
         /// Remote HTTP scheme, resolved from `URL`.
-        public let scheme: String
+        public var scheme: String {
+            return value.scheme
+        }
         /// Remote host, resolved from `URL`.
-        public let host: String
+        public var host: String {
+            return value.host
+        }
         /// Request custom HTTP Headers, defaults to no headers.
-        public var headers: HTTPHeaders
+        public var headers: HTTPHeaders {
+            get {
+                return value.headers
+            }
+            set {
+                value.headers = newValue
+            }
+        }
         /// Request body, defaults to no body.
-        public var body: Body?
+        public var body: Body? {
+            get {
+                return value.body
+            }
+            set {
+                value.body = newValue
+            }
+        }
 
         struct RedirectState {
             var count: Int
@@ -107,6 +129,7 @@ extension HTTPClient {
         }
 
         var redirectState: RedirectState?
+        private var value: HTTPRequest
 
         /// Create HTTP request.
         ///
@@ -142,25 +165,11 @@ extension HTTPClient {
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
-            guard let scheme = url.scheme?.lowercased() else {
-                throw HTTPClientError.emptyScheme
+            if url.isFileURL {
+                self.value = try UnixDomainRequest(url: url, method: method, headers: headers, body: body)
+            } else {
+                self.value = try HostRequest(url: url, method: method, headers: headers, body: body)
             }
-
-            guard Request.isSchemeSupported(scheme: scheme) else {
-                throw HTTPClientError.unsupportedScheme(scheme)
-            }
-
-            guard let host = url.host else {
-                throw HTTPClientError.emptyHost
-            }
-
-            self.method = method
-            self.url = url
-            self.scheme = scheme
-            self.host = host
-            self.headers = headers
-            self.body = body
-
             self.redirectState = nil
         }
 
@@ -174,9 +183,112 @@ extension HTTPClient {
             return self.url.port ?? (self.useTLS ? 443 : 80)
         }
 
+        func isSchemeSupported(scheme: String) -> Bool {
+            return type(of: self.value).isSchemeSupported(scheme: scheme)
+        }
+    }
+
+    /// Represent HTTP request.
+    public struct HostRequest: HTTPRequest {
+        /// Request HTTP method, defaults to `GET`.
+        public let method: HTTPMethod
+        /// Remote URL.
+        public let url: URL
+        /// Remote HTTP scheme, resolved from `URL`.
+        public let scheme: String
+        /// Remote host, resolved from `URL`.
+        public let host: String
+        /// Request custom HTTP Headers, defaults to no headers.
+        public var headers: HTTPHeaders
+        /// Request body, defaults to no body.
+        public var body: Body?
+
+        /// Create an HTTP `Request`.
+        ///
+        /// - parameters:
+        ///     - url: Remote `URL`.
+        ///     - version: HTTP version.
+        ///     - method: HTTP method.
+        ///     - headers: Custom HTTP headers.
+        ///     - body: Request body.
+        /// - throws:
+        ///     - `emptyScheme` if URL does not contain HTTP scheme.
+        ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
+        ///     - `emptyHost` if URL does not contains a host.
+        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+            guard let scheme = url.scheme?.lowercased() else {
+                throw HTTPClientError.emptyScheme
+            }
+
+            guard Self.isSchemeSupported(scheme: scheme) else {
+                throw HTTPClientError.unsupportedScheme(scheme)
+            }
+
+            guard let host = url.host else {
+                throw HTTPClientError.emptyHost
+            }
+
+            self.method = method
+            self.url = url
+            self.scheme = scheme
+            self.host = host
+            self.headers = headers
+            self.body = body
+        }
+
         static func isSchemeSupported(scheme: String) -> Bool {
             return scheme == "http" || scheme == "https"
         }
+    }
+
+    /// Represent UNIX Domain Socket HTTP request.
+    public struct UnixDomainRequest: HTTPRequest {
+        /// Request HTTP method, defaults to `GET`.
+        public let method: HTTPMethod
+        /// UNIX Domain Socket file URL.
+        public let url: URL
+        /// Remote HTTP scheme, resolved from `URL`. Unused.
+        public let scheme: String
+        /// Remote host, resolved from `URL`. Unused.
+        public let host: String
+        /// Request custom HTTP Headers, defaults to no headers.
+        public var headers: HTTPHeaders
+        /// Request body, defaults to no body.
+        public var body: Body?
+
+        /// Create an HTTP `Request`.
+        ///
+        /// - parameters:
+        ///     - url: UNIX Domain Socket `URL`.
+        ///     - version: HTTP version.
+        ///     - method: HTTP method.
+        ///     - headers: Custom HTTP headers.
+        ///     - body: Request body.
+        /// - throws:
+        ///     - `emptyScheme` if URL does not contain HTTP scheme.
+        ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
+        ///     - `emptyHost` if URL does not contains a host.
+        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+            guard url.isFileURL else {
+                throw HTTPClientError.invalidURL
+            }
+
+            guard let scheme = url.scheme?.lowercased() else {
+                throw HTTPClientError.emptyScheme
+            }
+
+            self.method = method
+            self.url = url
+            self.scheme = scheme
+            self.host = ""
+            self.headers = headers
+            self.body = body
+        }
+
+        static func isSchemeSupported(scheme: String) -> Bool {
+            return scheme == "file"
+        }
+
     }
 
     /// Represent HTTP response.
@@ -812,7 +924,7 @@ internal struct RedirectHandler<ResponseType> {
             return nil
         }
 
-        guard HTTPClient.Request.isSchemeSupported(scheme: self.request.scheme) else {
+        guard request.isSchemeSupported(scheme: self.request.scheme) else {
             return nil
         }
 

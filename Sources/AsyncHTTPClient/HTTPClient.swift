@@ -281,15 +281,22 @@ public class HTTPClient {
             bootstrap = bootstrap.connectTimeout(timeout)
         }
 
-        let address = self.resolveAddress(request: request, proxy: self.configuration.proxy)
-        bootstrap.connect(host: address.host, port: address.port)
-            .map { channel in
-                task.setChannel(channel)
+        let eventLoopChannel: EventLoopFuture<Channel>
+        if request.scheme == "file" {
+            eventLoopChannel = bootstrap.connect(unixDomainSocketPath: request.url.path)
+        } else {
+            let address = self.resolveAddress(request: request, proxy: self.configuration.proxy)
+            eventLoopChannel = bootstrap.connect(host: address.host, port: address.port)
+        }
+
+        eventLoopChannel.map { channel in
+            task.setChannel(channel)
             }
             .flatMap { channel in
                 channel.writeAndFlush(request)
             }
             .cascadeFailure(to: task.promise)
+
         return task
     }
 
