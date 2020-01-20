@@ -165,7 +165,7 @@ extension HTTPClient {
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
-            if url.isFileURL {
+          if url.scheme?.lowercased() == "unix" {
                 self.value = try UnixDomainRequest(url: url, method: method, headers: headers, body: body)
             } else {
                 self.value = try HostRequest(url: url, method: method, headers: headers, body: body)
@@ -269,12 +269,12 @@ extension HTTPClient {
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
-            guard url.isFileURL else {
-                throw HTTPClientError.invalidURL
+            guard let scheme = url.scheme?.lowercased() else {
+              throw HTTPClientError.emptyScheme
             }
 
-            guard let scheme = url.scheme?.lowercased() else {
-                throw HTTPClientError.emptyScheme
+            guard scheme == "unix" else {
+                throw HTTPClientError.invalidURL
             }
 
             self.method = method
@@ -286,7 +286,7 @@ extension HTTPClient {
         }
 
         static func isSchemeSupported(scheme: String) -> Bool {
-            return scheme == "file"
+            return scheme == "unix"
         }
 
     }

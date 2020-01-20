@@ -48,7 +48,7 @@ class HTTPClientTests: XCTestCase {
         let request2 = try Request(url: "https://someserver.com")
         XCTAssertEqual(request2.url.path, "")
 
-        let request3 = try Request(url: "file:///tmp/file")
+        let request3 = try Request(url: "unix:///tmp/file")
         XCTAssertNil(request3.url.host)
         XCTAssertEqual(request3.host, "")
         XCTAssertEqual(request3.url.path, "/tmp/file")
@@ -70,7 +70,7 @@ class HTTPClientTests: XCTestCase {
 
     func testSchemaCasing() throws {
         XCTAssertNoThrow(try Request(url: "hTTpS://someserver.com:8888/some/path?foo=bar"))
-        XCTAssertNoThrow(try Request(url: "File://someserver.com:8888/some/path?foo=bar"))
+        XCTAssertNoThrow(try Request(url: "uNIx:///some/path"))
     }
 
     func testGet() throws {
