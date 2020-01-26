@@ -282,7 +282,7 @@ public class HTTPClient {
         }
 
         let eventLoopChannel: EventLoopFuture<Channel>
-        if request.scheme == "unix", let baseURL = request.url.baseURL {
+        if request.kind == .unixSocket, let baseURL = request.url.baseURL {
             eventLoopChannel = bootstrap.connect(unixDomainSocketPath: baseURL.path)
         } else {
             let address = self.resolveAddress(request: request, proxy: self.configuration.proxy)

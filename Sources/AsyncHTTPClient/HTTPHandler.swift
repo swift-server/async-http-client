@@ -88,40 +88,36 @@ extension HTTPClient {
 
     /// Represent HTTP request.
     public struct Request {
+
+        /// Represent kind of Request
+        enum Kind {
+            /// Remote host request.
+            case host
+            /// UNIX Domain Socket HTTP request.
+            case unixSocket
+
+            func isSchemeSupported(scheme: String) -> Bool {
+                switch self {
+                case .host:
+                    return scheme == "http" || scheme == "https"
+                case .unixSocket:
+                    return scheme == "unix"
+                }
+            }
+        }
+
         /// Request HTTP method, defaults to `GET`.
-        public var method: HTTPMethod {
-            return value.method
-        }
+        public var method: HTTPMethod
         /// Remote URL.
-        public var url: URL {
-            return value.url
-        }
+        public var url: URL
         /// Remote HTTP scheme, resolved from `URL`.
-        public var scheme: String {
-            return value.scheme
-        }
+        public var scheme: String
         /// Remote host, resolved from `URL`.
-        public var host: String {
-            return value.host
-        }
+        public var host: String
         /// Request custom HTTP Headers, defaults to no headers.
-        public var headers: HTTPHeaders {
-            get {
-                return value.headers
-            }
-            set {
-                value.headers = newValue
-            }
-        }
+        public var headers: HTTPHeaders
         /// Request body, defaults to no body.
-        public var body: Body? {
-            get {
-                return value.body
-            }
-            set {
-                value.body = newValue
-            }
-        }
+        public var body: Body?
 
         struct RedirectState {
             var count: Int
@@ -129,7 +125,7 @@ extension HTTPClient {
         }
 
         var redirectState: RedirectState?
-        private var value: HTTPRequest
+        let kind: Kind
 
         /// Create HTTP request.
         ///
@@ -156,7 +152,6 @@ extension HTTPClient {
         ///
         /// - parameters:
         ///     - url: Remote `URL`.
-        ///     - version: HTTP version.
         ///     - method: HTTP method.
         ///     - headers: Custom HTTP headers.
         ///     - body: Request body.
@@ -165,12 +160,30 @@ extension HTTPClient {
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
-          if url.scheme?.lowercased() == "unix" {
-                self.value = try UnixDomainRequest(url: url, method: method, headers: headers, body: body)
-            } else {
-                self.value = try HostRequest(url: url, method: method, headers: headers, body: body)
+            guard let scheme = url.scheme?.lowercased() else {
+                throw HTTPClientError.emptyScheme
             }
+
+            if Kind.host.isSchemeSupported(scheme: scheme) {
+                self.kind = .host
+                guard let host = url.host else {
+                    throw HTTPClientError.emptyHost
+                }
+
+                self.host = host
+            } else if Kind.unixSocket.isSchemeSupported(scheme: scheme) {
+                self.kind = .unixSocket
+                self.host = ""
+            } else {
+                throw HTTPClientError.unsupportedScheme(scheme)
+            }
+
             self.redirectState = nil
+            self.url = url
+            self.method = method
+            self.scheme = scheme
+            self.headers = headers
+            self.body = body
         }
 
         /// Whether request will be executed using secure socket.
@@ -184,111 +197,8 @@ extension HTTPClient {
         }
 
         func isSchemeSupported(scheme: String) -> Bool {
-            return type(of: self.value).isSchemeSupported(scheme: scheme)
+            return kind.isSchemeSupported(scheme: scheme)
         }
-    }
-
-    /// Represent HTTP request.
-    public struct HostRequest: HTTPRequest {
-        /// Request HTTP method, defaults to `GET`.
-        public let method: HTTPMethod
-        /// Remote URL.
-        public let url: URL
-        /// Remote HTTP scheme, resolved from `URL`.
-        public let scheme: String
-        /// Remote host, resolved from `URL`.
-        public let host: String
-        /// Request custom HTTP Headers, defaults to no headers.
-        public var headers: HTTPHeaders
-        /// Request body, defaults to no body.
-        public var body: Body?
-
-        /// Create an HTTP `Request`.
-        ///
-        /// - parameters:
-        ///     - url: Remote `URL`.
-        ///     - version: HTTP version.
-        ///     - method: HTTP method.
-        ///     - headers: Custom HTTP headers.
-        ///     - body: Request body.
-        /// - throws:
-        ///     - `emptyScheme` if URL does not contain HTTP scheme.
-        ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
-        ///     - `emptyHost` if URL does not contains a host.
-        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
-            guard let scheme = url.scheme?.lowercased() else {
-                throw HTTPClientError.emptyScheme
-            }
-
-            guard Self.isSchemeSupported(scheme: scheme) else {
-                throw HTTPClientError.unsupportedScheme(scheme)
-            }
-
-            guard let host = url.host else {
-                throw HTTPClientError.emptyHost
-            }
-
-            self.method = method
-            self.url = url
-            self.scheme = scheme
-            self.host = host
-            self.headers = headers
-            self.body = body
-        }
-
-        static func isSchemeSupported(scheme: String) -> Bool {
-            return scheme == "http" || scheme == "https"
-        }
-    }
-
-    /// Represent UNIX Domain Socket HTTP request.
-    public struct UnixDomainRequest: HTTPRequest {
-        /// Request HTTP method, defaults to `GET`.
-        public let method: HTTPMethod
-        /// UNIX Domain Socket file URL.
-        public let url: URL
-        /// Remote HTTP scheme, resolved from `URL`. Unused.
-        public let scheme: String
-        /// Remote host, resolved from `URL`. Unused.
-        public let host: String
-        /// Request custom HTTP Headers, defaults to no headers.
-        public var headers: HTTPHeaders
-        /// Request body, defaults to no body.
-        public var body: Body?
-
-        /// Create an HTTP `Request`.
-        ///
-        /// - parameters:
-        ///     - url: UNIX Domain Socket `URL`.
-        ///     - version: HTTP version.
-        ///     - method: HTTP method.
-        ///     - headers: Custom HTTP headers.
-        ///     - body: Request body.
-        /// - throws:
-        ///     - `emptyScheme` if URL does not contain HTTP scheme.
-        ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
-        ///     - `emptyHost` if URL does not contains a host.
-        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
-            guard let scheme = url.scheme?.lowercased() else {
-              throw HTTPClientError.emptyScheme
-            }
-
-            guard scheme == "unix" else {
-                throw HTTPClientError.invalidURL
-            }
-
-            self.method = method
-            self.url = url
-            self.scheme = scheme
-            self.host = ""
-            self.headers = headers
-            self.body = body
-        }
-
-        static func isSchemeSupported(scheme: String) -> Bool {
-            return scheme == "unix"
-        }
-
     }
 
     /// Represent HTTP response.
