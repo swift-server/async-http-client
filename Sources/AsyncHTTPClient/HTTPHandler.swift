@@ -137,7 +137,7 @@ extension HTTPClient {
         /// Remote HTTP scheme, resolved from `URL`.
         public var scheme: String
         /// Remote host, resolved from `URL`.
-        public var host: String
+        public let host: String
         /// Request custom HTTP Headers, defaults to no headers.
         public var headers: HTTPHeaders
         /// Request body, defaults to no body.
@@ -213,7 +213,7 @@ extension HTTPClient {
     /// Represent HTTP response.
     public struct Response {
         /// Remote host of the request.
-        public let host: String
+        public var host: String
         /// Response HTTP status.
         public var status: HTTPResponseStatus
         /// Reponse HTTP headers.
