@@ -88,12 +88,54 @@ extension HTTPClient {
 
     /// Represent HTTP request.
     public struct Request {
+        /// Represent kind of Request
+        enum Kind {
+            /// Remote host request.
+            case host
+            /// UNIX Domain Socket HTTP request.
+            case unixSocket
+
+            private static var hostSchemes = ["http", "https"]
+            private static var unixSchemes = ["unix"]
+
+            init(forScheme scheme: String) throws {
+                if Kind.host.supports(scheme: scheme) {
+                    self = .host
+                } else if Kind.unixSocket.supports(scheme: scheme) {
+                    self = .unixSocket
+                } else {
+                    throw HTTPClientError.unsupportedScheme(scheme)
+                }
+            }
+
+            func hostFromURL(_ url: URL) throws -> String {
+                switch self {
+                case .host:
+                    guard let host = url.host else {
+                        throw HTTPClientError.emptyHost
+                    }
+                    return host
+                case .unixSocket:
+                    return ""
+                }
+            }
+
+            func supports(scheme: String) -> Bool {
+                switch self {
+                case .host:
+                    return Kind.hostSchemes.contains(scheme)
+                case .unixSocket:
+                    return Kind.unixSchemes.contains(scheme)
+                }
+            }
+        }
+
         /// Request HTTP method, defaults to `GET`.
-        public let method: HTTPMethod
+        public var method: HTTPMethod
         /// Remote URL.
-        public let url: URL
+        public var url: URL
         /// Remote HTTP scheme, resolved from `URL`.
-        public let scheme: String
+        public var scheme: String
         /// Remote host, resolved from `URL`.
         public let host: String
         /// Request custom HTTP Headers, defaults to no headers.
@@ -107,6 +149,7 @@ extension HTTPClient {
         }
 
         var redirectState: RedirectState?
+        let kind: Kind
 
         /// Create HTTP request.
         ///
@@ -133,7 +176,6 @@ extension HTTPClient {
         ///
         /// - parameters:
         ///     - url: Remote `URL`.
-        ///     - version: HTTP version.
         ///     - method: HTTP method.
         ///     - headers: Custom HTTP headers.
         ///     - body: Request body.
@@ -146,22 +188,15 @@ extension HTTPClient {
                 throw HTTPClientError.emptyScheme
             }
 
-            guard Request.isSchemeSupported(scheme: scheme) else {
-                throw HTTPClientError.unsupportedScheme(scheme)
-            }
-
-            guard let host = url.host else {
-                throw HTTPClientError.emptyHost
-            }
-
-            self.method = method
-            self.url = url
-            self.scheme = scheme
-            self.host = host
-            self.headers = headers
-            self.body = body
+            self.kind = try Kind(forScheme: scheme)
+            self.host = try self.kind.hostFromURL(url)
 
             self.redirectState = nil
+            self.url = url
+            self.method = method
+            self.scheme = scheme
+            self.headers = headers
+            self.body = body
         }
 
         /// Whether request will be executed using secure socket.
@@ -172,10 +207,6 @@ extension HTTPClient {
         /// Resolved port.
         public var port: Int {
             return self.url.port ?? (self.useTLS ? 443 : 80)
-        }
-
-        static func isSchemeSupported(scheme: String) -> Bool {
-            return scheme == "http" || scheme == "https"
         }
     }
 
@@ -812,7 +843,7 @@ internal struct RedirectHandler<ResponseType> {
             return nil
         }
 
-        guard HTTPClient.Request.isSchemeSupported(scheme: self.request.scheme) else {
+        guard self.request.kind.supports(scheme: self.request.scheme) else {
             return nil
         }
 

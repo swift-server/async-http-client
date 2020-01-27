@@ -47,14 +47,21 @@ class HTTPClientTests: XCTestCase {
 
         let request2 = try Request(url: "https://someserver.com")
         XCTAssertEqual(request2.url.path, "")
+
+        let request3 = try Request(url: "unix:///tmp/file")
+        XCTAssertNil(request3.url.host)
+        XCTAssertEqual(request3.host, "")
+        XCTAssertEqual(request3.url.path, "/tmp/file")
+        XCTAssertEqual(request3.port, 80)
+        XCTAssertFalse(request3.useTLS)
     }
 
     func testBadRequestURI() throws {
         XCTAssertThrowsError(try Request(url: "some/path"), "should throw") { error in
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.emptyScheme)
         }
-        XCTAssertThrowsError(try Request(url: "file://somewhere/some/path?foo=bar"), "should throw") { error in
-            XCTAssertEqual(error as! HTTPClientError, HTTPClientError.unsupportedScheme("file"))
+        XCTAssertThrowsError(try Request(url: "app://somewhere/some/path?foo=bar"), "should throw") { error in
+            XCTAssertEqual(error as! HTTPClientError, HTTPClientError.unsupportedScheme("app"))
         }
         XCTAssertThrowsError(try Request(url: "https:/foo"), "should throw") { error in
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.emptyHost)
@@ -63,6 +70,7 @@ class HTTPClientTests: XCTestCase {
 
     func testSchemaCasing() throws {
         XCTAssertNoThrow(try Request(url: "hTTpS://someserver.com:8888/some/path?foo=bar"))
+        XCTAssertNoThrow(try Request(url: "uNIx:///some/path"))
     }
 
     func testGet() throws {

@@ -281,15 +281,22 @@ public class HTTPClient {
             bootstrap = bootstrap.connectTimeout(timeout)
         }
 
-        let address = self.resolveAddress(request: request, proxy: self.configuration.proxy)
-        bootstrap.connect(host: address.host, port: address.port)
-            .map { channel in
-                task.setChannel(channel)
-            }
-            .flatMap { channel in
-                channel.writeAndFlush(request)
-            }
-            .cascadeFailure(to: task.promise)
+        let eventLoopChannel: EventLoopFuture<Channel>
+        if request.kind == .unixSocket, let baseURL = request.url.baseURL {
+            eventLoopChannel = bootstrap.connect(unixDomainSocketPath: baseURL.path)
+        } else {
+            let address = self.resolveAddress(request: request, proxy: self.configuration.proxy)
+            eventLoopChannel = bootstrap.connect(host: address.host, port: address.port)
+        }
+
+        eventLoopChannel.map { channel in
+            task.setChannel(channel)
+        }
+        .flatMap { channel in
+            channel.writeAndFlush(request)
+        }
+        .cascadeFailure(to: task.promise)
+
         return task
     }
 
@@ -481,12 +488,12 @@ private extension ChannelPipeline {
     func addProxyHandler(for request: HTTPClient.Request, decoder: ByteToMessageHandler<HTTPResponseDecoder>, encoder: HTTPRequestEncoder, tlsConfiguration: TLSConfiguration?, proxy: HTTPClient.Configuration.Proxy?) -> EventLoopFuture<Void> {
         let handler = HTTPClientProxyHandler(host: request.host, port: request.port, authorization: proxy?.authorization, onConnect: { channel in
             channel.pipeline.removeHandler(decoder).flatMap {
-                return channel.pipeline.addHandler(
+                channel.pipeline.addHandler(
                     ByteToMessageHandler(HTTPResponseDecoder(leftOverBytesStrategy: .forwardBytes)),
                     position: .after(encoder)
                 )
             }.flatMap {
-                return channel.pipeline.addSSLHandlerIfNeeded(for: request, tlsConfiguration: tlsConfiguration)
+                channel.pipeline.addSSLHandlerIfNeeded(for: request, tlsConfiguration: tlsConfiguration)
             }
         })
         return self.addHandler(handler)
