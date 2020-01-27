@@ -213,7 +213,7 @@ extension HTTPClient {
     /// Represent HTTP response.
     public struct Response {
         /// Remote host of the request.
-        public var host: String
+        public let host: String
         /// Response HTTP status.
         public var status: HTTPResponseStatus
         /// Reponse HTTP headers.
