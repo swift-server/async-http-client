@@ -273,7 +273,7 @@ extension HTTPClient {
     }
 }
 
-internal class ResponseAccumulator: HTTPClientResponseDelegate {
+public class ResponseAccumulator: HTTPClientResponseDelegate {
     public typealias Response = HTTPClient.Response
 
     enum State {
@@ -287,11 +287,11 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
     var state = State.idle
     let request: HTTPClient.Request
 
-    init(request: HTTPClient.Request) {
+    public init(request: HTTPClient.Request) {
         self.request = request
     }
 
-    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
+    public func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         switch self.state {
         case .idle:
             self.state = .head(head)
@@ -307,7 +307,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         return task.eventLoop.makeSucceededFuture(())
     }
 
-    func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void> {
+    public func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void> {
         switch self.state {
         case .idle:
             preconditionFailure("no head received before body")
@@ -325,11 +325,11 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         return task.eventLoop.makeSucceededFuture(())
     }
 
-    func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
+    public func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
         self.state = .error(error)
     }
 
-    func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
+    public func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
         switch self.state {
         case .idle:
             preconditionFailure("no head received before end")
