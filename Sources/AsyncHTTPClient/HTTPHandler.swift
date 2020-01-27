@@ -99,9 +99,9 @@ extension HTTPClient {
             private static var unixSchemes = ["unix"]
 
             init(forScheme scheme: String) throws {
-                if Self.host.supports(scheme: scheme) {
+                if Kind.host.supports(scheme: scheme) {
                     self = .host
-                } else if Self.unixSocket.supports(scheme: scheme) {
+                } else if Kind.unixSocket.supports(scheme: scheme) {
                     self = .unixSocket
                 } else {
                     throw HTTPClientError.unsupportedScheme(scheme)
@@ -123,9 +123,9 @@ extension HTTPClient {
             func supports(scheme: String) -> Bool {
                 switch self {
                 case .host:
-                    return Self.hostSchemes.contains(scheme)
+                    return Kind.hostSchemes.contains(scheme)
                 case .unixSocket:
-                    return Self.unixSchemes.contains(scheme)
+                    return Kind.unixSchemes.contains(scheme)
                 }
             }
         }
