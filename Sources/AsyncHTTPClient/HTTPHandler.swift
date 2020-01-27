@@ -96,12 +96,37 @@ extension HTTPClient {
             /// UNIX Domain Socket HTTP request.
             case unixSocket
 
-            func isSchemeSupported(scheme: String) -> Bool {
+            private static var hostSchemes = ["http", "https"]
+            private static var unixSchemes = ["unix"]
+
+            init(forScheme scheme: String) throws {
+                if Self.host.supports(scheme: scheme) {
+                    self = .host
+                } else if Self.unixSocket.supports(scheme: scheme) {
+                    self = .unixSocket
+                } else {
+                    throw HTTPClientError.unsupportedScheme(scheme)
+                }
+            }
+
+            func hostFromURL(_ url: URL) throws -> String {
+                switch self {
+                    case .host:
+                        guard let host = url.host else {
+                            throw HTTPClientError.emptyHost
+                        }
+                        return host
+                    case .unixSocket:
+                        return ""
+                }
+            }
+
+            func supports(scheme: String) -> Bool {
                 switch self {
                 case .host:
-                    return scheme == "http" || scheme == "https"
+                    return Self.hostSchemes.contains(scheme)
                 case .unixSocket:
-                    return scheme == "unix"
+                    return Self.unixSchemes.contains(scheme)
                 }
             }
         }
@@ -164,19 +189,8 @@ extension HTTPClient {
                 throw HTTPClientError.emptyScheme
             }
 
-            if Kind.host.isSchemeSupported(scheme: scheme) {
-                self.kind = .host
-                guard let host = url.host else {
-                    throw HTTPClientError.emptyHost
-                }
-
-                self.host = host
-            } else if Kind.unixSocket.isSchemeSupported(scheme: scheme) {
-                self.kind = .unixSocket
-                self.host = ""
-            } else {
-                throw HTTPClientError.unsupportedScheme(scheme)
-            }
+            self.kind = try Kind(forScheme: scheme)
+            self.host = try self.kind.hostFromURL(url)
 
             self.redirectState = nil
             self.url = url
@@ -194,10 +208,6 @@ extension HTTPClient {
         /// Resolved port.
         public var port: Int {
             return self.url.port ?? (self.useTLS ? 443 : 80)
-        }
-
-        func isSchemeSupported(scheme: String) -> Bool {
-            return kind.isSchemeSupported(scheme: scheme)
         }
     }
 
@@ -834,7 +844,7 @@ internal struct RedirectHandler<ResponseType> {
             return nil
         }
 
-        guard request.isSchemeSupported(scheme: self.request.scheme) else {
+        guard request.kind.supports(scheme: self.request.scheme) else {
             return nil
         }
 
