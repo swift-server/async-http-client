@@ -88,7 +88,6 @@ extension HTTPClient {
 
     /// Represent HTTP request.
     public struct Request {
-
         /// Represent kind of Request
         enum Kind {
             /// Remote host request.
@@ -111,13 +110,13 @@ extension HTTPClient {
 
             func hostFromURL(_ url: URL) throws -> String {
                 switch self {
-                    case .host:
-                        guard let host = url.host else {
-                            throw HTTPClientError.emptyHost
-                        }
-                        return host
-                    case .unixSocket:
-                        return ""
+                case .host:
+                    guard let host = url.host else {
+                        throw HTTPClientError.emptyHost
+                    }
+                    return host
+                case .unixSocket:
+                    return ""
                 }
             }
 
@@ -844,7 +843,7 @@ internal struct RedirectHandler<ResponseType> {
             return nil
         }
 
-        guard request.kind.supports(scheme: self.request.scheme) else {
+        guard self.request.kind.supports(scheme: self.request.scheme) else {
             return nil
         }
 
