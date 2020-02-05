@@ -922,6 +922,52 @@ class HTTPClientTests: XCTestCase {
         }
     }
 
+    func testManyConcurrentRequestsWork() {
+        let numberOfWorkers = 20
+        let numberOfRequestsPerWorkers = 20
+        let allWorkersReady = DispatchSemaphore(value: 0)
+        let allWorkersGo = DispatchSemaphore(value: 0)
+        let allDone = DispatchGroup()
+
+        let httpBin = HTTPBin()
+        defer {
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+
+        let url = "http://localhost:\(httpBin.port)/get"
+        XCTAssertNoThrow(XCTAssertEqual(.ok, try httpClient.get(url: url).wait().status))
+
+        for w in 0..<numberOfWorkers {
+            let q = DispatchQueue(label: "worker \(w)")
+            q.async(group: allDone) {
+                func go() {
+                    allWorkersReady.signal() // tell the driver we're ready
+                    allWorkersGo.wait() // wait for the driver to let us go
+
+                    for _ in 0..<numberOfRequestsPerWorkers {
+                        XCTAssertNoThrow(XCTAssertEqual(.ok, try httpClient.get(url: url).wait().status))
+                    }
+                }
+                go()
+            }
+        }
+
+        for _ in 0..<numberOfWorkers {
+            allWorkersReady.wait()
+        }
+        // now all workers should be waiting for the go signal
+
+        for _ in 0..<numberOfWorkers {
+            allWorkersGo.signal()
+        }
+        // all workers should be running, let's wait for them to finish
+        allDone.wait()
+    }
+
     func testRepeatedRequestsWorkWhenServerAlwaysCloses() {
         let web = NIOHTTP1TestServer(group: self.group)
         defer {
