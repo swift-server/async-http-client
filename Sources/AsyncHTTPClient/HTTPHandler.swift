@@ -26,6 +26,14 @@ extension HTTPClient {
         public struct StreamWriter {
             let closure: (IOData) -> EventLoopFuture<Void>
 
+            /// Create new StreamWriter
+            ///
+            /// - parameters:
+            ///     - closure: function that will be called to write actual bytes to the channel.
+            public init(closure: @escaping (IOData) -> EventLoopFuture<Void>) {
+                self.closure = closure
+            }
+
             /// Write data to server.
             ///
             /// - parameters:
