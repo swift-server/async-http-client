@@ -139,11 +139,11 @@ extension HTTPClient {
         }
 
         /// Request HTTP method, defaults to `GET`.
-        public var method: HTTPMethod
+        public let method: HTTPMethod
         /// Remote URL.
-        public var url: URL
+        public let url: URL
         /// Remote HTTP scheme, resolved from `URL`.
-        public var scheme: String
+        public let scheme: String
         /// Remote host, resolved from `URL`.
         public let host: String
         /// Request custom HTTP Headers, defaults to no headers.
