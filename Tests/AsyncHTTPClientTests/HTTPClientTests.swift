@@ -1003,4 +1003,49 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNil(response?.body)
         }
     }
+
+    func testUDSBasic() {
+        // This tests just connecting to a URL where the whole URL is the UNIX domain socket path like
+        //     unix:///this/is/my/socket.sock
+        // We don't really have a path component, so we'll have to use "/"
+        XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
+            let httpBin = HTTPBin(bindTarget: .unixDomainSocket(path))
+            defer {
+                XCTAssertNoThrow(try httpBin.shutdown())
+            }
+            let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+            defer {
+                XCTAssertNoThrow(try httpClient.syncShutdown())
+            }
+
+            let target = "unix://\(path)"
+            XCTAssertNoThrow(XCTAssertEqual(["Yes"[...]],
+                                            try httpClient.get(url: target).wait().headers[canonicalForm: "X-Is-This-Slash"]))
+        })
+    }
+
+    func testUDSSocketAndPath() {
+        // Here, we're testing a URL that's encoding two different paths:
+        //
+        //  1. a "base path" which is the path to the UNIX domain socket
+        //  2. an actual path which is the normal path in a regular URL like https://example.com/this/is/the/path
+        XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
+            let httpBin = HTTPBin(bindTarget: .unixDomainSocket(path))
+            defer {
+                XCTAssertNoThrow(try httpBin.shutdown())
+            }
+            let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+            defer {
+                XCTAssertNoThrow(try httpClient.syncShutdown())
+            }
+
+            guard let target = URL(string: "/echo-uri", relativeTo: URL(string: "unix://\(path)")),
+                let request = try? Request(url: target) else {
+                XCTFail("couldn't build URL for request")
+                return
+            }
+            XCTAssertNoThrow(XCTAssertEqual(["/echo-uri"[...]],
+                                            try httpClient.execute(request: request).wait().headers[canonicalForm: "X-Calling-URI"]))
+        })
+    }
 }
