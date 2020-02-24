@@ -272,7 +272,11 @@ public class HTTPClient {
                         return channel.eventLoop.makeSucceededFuture(())
                     }
                 }.flatMap {
-                    let taskHandler = TaskHandler(task: task, delegate: delegate, redirectHandler: redirectHandler, ignoreUncleanSSLShutdown: self.configuration.ignoreUncleanSSLShutdown)
+                    let taskHandler = TaskHandler(task: task,
+                                                  kind: request.kind,
+                                                  delegate: delegate,
+                                                  redirectHandler: redirectHandler,
+                                                  ignoreUncleanSSLShutdown: self.configuration.ignoreUncleanSSLShutdown)
                     return channel.pipeline.addHandler(taskHandler)
                 }
             }
@@ -282,9 +286,11 @@ public class HTTPClient {
         }
 
         let eventLoopChannel: EventLoopFuture<Channel>
-        if request.kind == .unixSocket, let baseURL = request.url.baseURL {
-            eventLoopChannel = bootstrap.connect(unixDomainSocketPath: baseURL.path)
-        } else {
+        switch request.kind {
+        case .unixSocket:
+            let socketPath = request.url.baseURL?.path ?? request.url.path
+            eventLoopChannel = bootstrap.connect(unixDomainSocketPath: socketPath)
+        case .host:
             let address = self.resolveAddress(request: request, proxy: self.configuration.proxy)
             eventLoopChannel = bootstrap.connect(host: address.host, port: address.port)
         }

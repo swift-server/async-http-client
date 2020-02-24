@@ -70,6 +70,8 @@ extension HTTPClientTests {
             ("testSubsequentRequestsWorkWithServerAlternatingBetweenKeepAliveAndClose", testSubsequentRequestsWorkWithServerAlternatingBetweenKeepAliveAndClose),
             ("testManyConcurrentRequestsWork", testManyConcurrentRequestsWork),
             ("testRepeatedRequestsWorkWhenServerAlwaysCloses", testRepeatedRequestsWorkWhenServerAlwaysCloses),
+            ("testUDSBasic", testUDSBasic),
+            ("testUDSSocketAndPath", testUDSSocketAndPath),
         ]
     }
 }

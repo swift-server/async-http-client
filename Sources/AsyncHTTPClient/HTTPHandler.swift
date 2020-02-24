@@ -559,12 +559,18 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate> {
     var state: State = .idle
     var pendingRead = false
     var mayRead = true
+    let kind: HTTPClient.Request.Kind
 
-    init(task: HTTPClient.Task<Delegate.Response>, delegate: Delegate, redirectHandler: RedirectHandler<Delegate.Response>?, ignoreUncleanSSLShutdown: Bool) {
+    init(task: HTTPClient.Task<Delegate.Response>,
+         kind: HTTPClient.Request.Kind,
+         delegate: Delegate,
+         redirectHandler: RedirectHandler<Delegate.Response>?,
+         ignoreUncleanSSLShutdown: Bool) {
         self.task = task
         self.delegate = delegate
         self.redirectHandler = redirectHandler
         self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
+        self.kind = kind
     }
 }
 
@@ -653,7 +659,19 @@ extension TaskHandler: ChannelDuplexHandler {
         self.state = .idle
         let request = unwrapOutboundIn(data)
 
-        var head = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: request.method, uri: request.url.uri)
+        let uri: String
+        switch (self.kind, request.url.baseURL) {
+        case (.host, _):
+            uri = request.url.uri
+        case (.unixSocket, .none):
+            uri = "/" // we don't have a real path, the path we have is the path of the UNIX Domain Socket.
+        case (.unixSocket, .some(_)):
+            uri = request.url.uri
+        }
+
+        var head = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1),
+                                   method: request.method,
+                                   uri: uri)
         var headers = request.headers
 
         if !request.headers.contains(name: "Host") {
