@@ -33,6 +33,7 @@ extension HTTPClientInternalTests {
             ("testUploadStreamingBackpressure", testUploadStreamingBackpressure),
             ("testRequestURITrailingSlash", testRequestURITrailingSlash),
             ("testChannelAndDelegateOnDifferentEventLoops", testChannelAndDelegateOnDifferentEventLoops),
+            ("testResponseConnectionCloseGet", testResponseConnectionCloseGet),
         ]
     }
 }
