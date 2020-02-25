@@ -272,7 +272,11 @@ public class HTTPClient {
                         return channel.eventLoop.makeSucceededFuture(())
                     }
                 }.flatMap {
-                    let taskHandler = TaskHandler(task: task, delegate: delegate, redirectHandler: redirectHandler, ignoreUncleanSSLShutdown: self.configuration.ignoreUncleanSSLShutdown)
+                    let taskHandler = TaskHandler(task: task,
+                                                  kind: request.kind,
+                                                  delegate: delegate,
+                                                  redirectHandler: redirectHandler,
+                                                  ignoreUncleanSSLShutdown: self.configuration.ignoreUncleanSSLShutdown)
                     return channel.pipeline.addHandler(taskHandler)
                 }
             }
@@ -281,15 +285,24 @@ public class HTTPClient {
             bootstrap = bootstrap.connectTimeout(timeout)
         }
 
-        let address = self.resolveAddress(request: request, proxy: self.configuration.proxy)
-        bootstrap.connect(host: address.host, port: address.port)
-            .map { channel in
-                task.setChannel(channel)
-            }
-            .flatMap { channel in
-                channel.writeAndFlush(request)
-            }
-            .cascadeFailure(to: task.promise)
+        let eventLoopChannel: EventLoopFuture<Channel>
+        switch request.kind {
+        case .unixSocket:
+            let socketPath = request.url.baseURL?.path ?? request.url.path
+            eventLoopChannel = bootstrap.connect(unixDomainSocketPath: socketPath)
+        case .host:
+            let address = self.resolveAddress(request: request, proxy: self.configuration.proxy)
+            eventLoopChannel = bootstrap.connect(host: address.host, port: address.port)
+        }
+
+        eventLoopChannel.map { channel in
+            task.setChannel(channel)
+        }
+        .flatMap { channel in
+            channel.writeAndFlush(request)
+        }
+        .cascadeFailure(to: task.promise)
+
         return task
     }
 
@@ -481,12 +494,12 @@ private extension ChannelPipeline {
     func addProxyHandler(for request: HTTPClient.Request, decoder: ByteToMessageHandler<HTTPResponseDecoder>, encoder: HTTPRequestEncoder, tlsConfiguration: TLSConfiguration?, proxy: HTTPClient.Configuration.Proxy?) -> EventLoopFuture<Void> {
         let handler = HTTPClientProxyHandler(host: request.host, port: request.port, authorization: proxy?.authorization, onConnect: { channel in
             channel.pipeline.removeHandler(decoder).flatMap {
-                return channel.pipeline.addHandler(
+                channel.pipeline.addHandler(
                     ByteToMessageHandler(HTTPResponseDecoder(leftOverBytesStrategy: .forwardBytes)),
                     position: .after(encoder)
                 )
             }.flatMap {
-                return channel.pipeline.addSSLHandlerIfNeeded(for: request, tlsConfiguration: tlsConfiguration)
+                channel.pipeline.addSSLHandlerIfNeeded(for: request, tlsConfiguration: tlsConfiguration)
             }
         })
         return self.addHandler(handler)

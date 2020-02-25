@@ -26,6 +26,14 @@ extension HTTPClient {
         public struct StreamWriter {
             let closure: (IOData) -> EventLoopFuture<Void>
 
+            /// Create new StreamWriter
+            ///
+            /// - parameters:
+            ///     - closure: function that will be called to write actual bytes to the channel.
+            public init(closure: @escaping (IOData) -> EventLoopFuture<Void>) {
+                self.closure = closure
+            }
+
             /// Write data to server.
             ///
             /// - parameters:
@@ -88,6 +96,48 @@ extension HTTPClient {
 
     /// Represent HTTP request.
     public struct Request {
+        /// Represent kind of Request
+        enum Kind {
+            /// Remote host request.
+            case host
+            /// UNIX Domain Socket HTTP request.
+            case unixSocket
+
+            private static var hostSchemes = ["http", "https"]
+            private static var unixSchemes = ["unix"]
+
+            init(forScheme scheme: String) throws {
+                if Kind.host.supports(scheme: scheme) {
+                    self = .host
+                } else if Kind.unixSocket.supports(scheme: scheme) {
+                    self = .unixSocket
+                } else {
+                    throw HTTPClientError.unsupportedScheme(scheme)
+                }
+            }
+
+            func hostFromURL(_ url: URL) throws -> String {
+                switch self {
+                case .host:
+                    guard let host = url.host else {
+                        throw HTTPClientError.emptyHost
+                    }
+                    return host
+                case .unixSocket:
+                    return ""
+                }
+            }
+
+            func supports(scheme: String) -> Bool {
+                switch self {
+                case .host:
+                    return Kind.hostSchemes.contains(scheme)
+                case .unixSocket:
+                    return Kind.unixSchemes.contains(scheme)
+                }
+            }
+        }
+
         /// Request HTTP method, defaults to `GET`.
         public let method: HTTPMethod
         /// Remote URL.
@@ -107,6 +157,7 @@ extension HTTPClient {
         }
 
         var redirectState: RedirectState?
+        let kind: Kind
 
         /// Create HTTP request.
         ///
@@ -133,7 +184,6 @@ extension HTTPClient {
         ///
         /// - parameters:
         ///     - url: Remote `URL`.
-        ///     - version: HTTP version.
         ///     - method: HTTP method.
         ///     - headers: Custom HTTP headers.
         ///     - body: Request body.
@@ -146,22 +196,15 @@ extension HTTPClient {
                 throw HTTPClientError.emptyScheme
             }
 
-            guard Request.isSchemeSupported(scheme: scheme) else {
-                throw HTTPClientError.unsupportedScheme(scheme)
-            }
-
-            guard let host = url.host else {
-                throw HTTPClientError.emptyHost
-            }
-
-            self.method = method
-            self.url = url
-            self.scheme = scheme
-            self.host = host
-            self.headers = headers
-            self.body = body
+            self.kind = try Kind(forScheme: scheme)
+            self.host = try self.kind.hostFromURL(url)
 
             self.redirectState = nil
+            self.url = url
+            self.method = method
+            self.scheme = scheme
+            self.headers = headers
+            self.body = body
         }
 
         /// Whether request will be executed using secure socket.
@@ -172,10 +215,6 @@ extension HTTPClient {
         /// Resolved port.
         public var port: Int {
             return self.url.port ?? (self.useTLS ? 443 : 80)
-        }
-
-        static func isSchemeSupported(scheme: String) -> Bool {
-            return scheme == "http" || scheme == "https"
         }
     }
 
@@ -241,7 +280,7 @@ extension HTTPClient {
     }
 }
 
-internal class ResponseAccumulator: HTTPClientResponseDelegate {
+public class ResponseAccumulator: HTTPClientResponseDelegate {
     public typealias Response = HTTPClient.Response
 
     enum State {
@@ -255,11 +294,11 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
     var state = State.idle
     let request: HTTPClient.Request
 
-    init(request: HTTPClient.Request) {
+    public init(request: HTTPClient.Request) {
         self.request = request
     }
 
-    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
+    public func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         switch self.state {
         case .idle:
             self.state = .head(head)
@@ -275,7 +314,7 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         return task.eventLoop.makeSucceededFuture(())
     }
 
-    func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void> {
+    public func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void> {
         switch self.state {
         case .idle:
             preconditionFailure("no head received before body")
@@ -293,11 +332,11 @@ internal class ResponseAccumulator: HTTPClientResponseDelegate {
         return task.eventLoop.makeSucceededFuture(())
     }
 
-    func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
+    public func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
         self.state = .error(error)
     }
 
-    func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
+    public func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
         switch self.state {
         case .idle:
             preconditionFailure("no head received before end")
@@ -520,12 +559,18 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate> {
     var state: State = .idle
     var pendingRead = false
     var mayRead = true
+    let kind: HTTPClient.Request.Kind
 
-    init(task: HTTPClient.Task<Delegate.Response>, delegate: Delegate, redirectHandler: RedirectHandler<Delegate.Response>?, ignoreUncleanSSLShutdown: Bool) {
+    init(task: HTTPClient.Task<Delegate.Response>,
+         kind: HTTPClient.Request.Kind,
+         delegate: Delegate,
+         redirectHandler: RedirectHandler<Delegate.Response>?,
+         ignoreUncleanSSLShutdown: Bool) {
         self.task = task
         self.delegate = delegate
         self.redirectHandler = redirectHandler
         self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
+        self.kind = kind
     }
 }
 
@@ -614,7 +659,19 @@ extension TaskHandler: ChannelDuplexHandler {
         self.state = .idle
         let request = unwrapOutboundIn(data)
 
-        var head = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: request.method, uri: request.url.uri)
+        let uri: String
+        switch (self.kind, request.url.baseURL) {
+        case (.host, _):
+            uri = request.url.uri
+        case (.unixSocket, .none):
+            uri = "/" // we don't have a real path, the path we have is the path of the UNIX Domain Socket.
+        case (.unixSocket, .some(_)):
+            uri = request.url.uri
+        }
+
+        var head = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1),
+                                   method: request.method,
+                                   uri: uri)
         var headers = request.headers
 
         if !request.headers.contains(name: "Host") {
@@ -812,7 +869,7 @@ internal struct RedirectHandler<ResponseType> {
             return nil
         }
 
-        guard HTTPClient.Request.isSchemeSupported(scheme: self.request.scheme) else {
+        guard self.request.kind.supports(scheme: self.request.scheme) else {
             return nil
         }
 

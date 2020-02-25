@@ -92,10 +92,86 @@ internal final class RecordingHandler<Input, Output>: ChannelDuplexHandler {
     }
 }
 
+enum TemporaryFileHelpers {
+    private static var temporaryDirectory: String {
+        #if targetEnvironment(simulator)
+            // Simulator temp directories are so long (and contain the user name) that they're not usable
+            // for UNIX Domain Socket paths (which are limited to 103 bytes).
+            return "/tmp"
+        #else
+            #if os(Android)
+                return "/data/local/tmp"
+            #elseif os(Linux)
+                return "/tmp"
+            #else
+                if #available(macOS 10.12, iOS 10, tvOS 10, watchOS 3, *) {
+                    return FileManager.default.temporaryDirectory.path
+                } else {
+                    return "/tmp"
+                }
+            #endif // os
+        #endif // targetEnvironment
+    }
+
+    private static func openTemporaryFile() -> (CInt, String) {
+        let template = "\(temporaryDirectory)/ahc_XXXXXX"
+        var templateBytes = template.utf8 + [0]
+        let templateBytesCount = templateBytes.count
+        let fd = templateBytes.withUnsafeMutableBufferPointer { ptr in
+            ptr.baseAddress!.withMemoryRebound(to: Int8.self, capacity: templateBytesCount) { ptr in
+                mkstemp(ptr)
+            }
+        }
+        templateBytes.removeLast()
+        return (fd, String(decoding: templateBytes, as: Unicode.UTF8.self))
+    }
+
+    /// This function creates a filename that can be used for a temporary UNIX domain socket path.
+    ///
+    /// If the temporary directory is too long to store a UNIX domain socket path, it will `chdir` into the temporary
+    /// directory and return a short-enough path. The iOS simulator is known to have too long paths.
+    internal static func withTemporaryUnixDomainSocketPathName<T>(directory: String = temporaryDirectory,
+                                                                  _ body: (String) throws -> T) throws -> T {
+        // this is racy but we're trying to create the shortest possible path so we can't add a directory...
+        let (fd, path) = self.openTemporaryFile()
+        close(fd)
+        try! FileManager.default.removeItem(atPath: path)
+
+        let saveCurrentDirectory = FileManager.default.currentDirectoryPath
+        let restoreSavedCWD: Bool
+        let shortEnoughPath: String
+        do {
+            _ = try SocketAddress(unixDomainSocketPath: path)
+            // this seems to be short enough for a UDS
+            shortEnoughPath = path
+            restoreSavedCWD = false
+        } catch SocketAddressError.unixDomainSocketPathTooLong {
+            FileManager.default.changeCurrentDirectoryPath(URL(fileURLWithPath: path).deletingLastPathComponent().absoluteString)
+            shortEnoughPath = URL(fileURLWithPath: path).lastPathComponent
+            restoreSavedCWD = true
+            print("WARNING: Path '\(path)' could not be used as UNIX domain socket path, using chdir & '\(shortEnoughPath)'")
+        }
+        defer {
+            if FileManager.default.fileExists(atPath: path) {
+                try? FileManager.default.removeItem(atPath: path)
+            }
+            if restoreSavedCWD {
+                FileManager.default.changeCurrentDirectoryPath(saveCurrentDirectory)
+            }
+        }
+        return try body(shortEnoughPath)
+    }
+}
+
 internal final class HTTPBin {
     let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
     let serverChannel: Channel
     let isShutdown: NIOAtomic<Bool> = .makeAtomic(value: false)
+
+    enum BindTarget {
+        case unixDomainSocket(String)
+        case localhostIPv4RandomPort
+    }
 
     var port: Int {
         return Int(self.serverChannel.localAddress!.port!)
@@ -112,7 +188,18 @@ internal final class HTTPBin {
         return channel.pipeline.addHandler(try! NIOSSLServerHandler(context: context), position: .first)
     }
 
-    init(ssl: Bool = false, compress: Bool = false, simulateProxy: HTTPProxySimulator.Option? = nil, channelPromise: EventLoopPromise<Channel>? = nil) {
+    init(ssl: Bool = false,
+         compress: Bool = false,
+         bindTarget: BindTarget = .localhostIPv4RandomPort,
+         simulateProxy: HTTPProxySimulator.Option? = nil,
+         channelPromise: EventLoopPromise<Channel>? = nil) {
+        let socketAddress: SocketAddress
+        switch bindTarget {
+        case .localhostIPv4RandomPort:
+            socketAddress = try! SocketAddress(ipAddress: "127.0.0.1", port: 0)
+        case .unixDomainSocket(let path):
+            socketAddress = try! SocketAddress(unixDomainSocketPath: path)
+        }
         self.serverChannel = try! ServerBootstrap(group: self.group)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
@@ -145,7 +232,7 @@ internal final class HTTPBin {
                         }
                     }
             }
-            .bind(host: "127.0.0.1", port: 0).wait()
+            .bind(to: socketAddress).wait()
     }
 
     func shutdown() throws {
@@ -250,6 +337,16 @@ internal final class HttpBinHandler: ChannelInboundHandler {
         case .head(let req):
             let url = URL(string: req.uri)!
             switch url.path {
+            case "/":
+                var headers = HTTPHeaders()
+                headers.add(name: "X-Is-This-Slash", value: "Yes")
+                self.resps.append(HTTPResponseBuilder(status: .ok, headers: headers))
+                return
+            case "/echo-uri":
+                var headers = HTTPHeaders()
+                headers.add(name: "X-Calling-URI", value: req.uri)
+                self.resps.append(HTTPResponseBuilder(status: .ok, headers: headers))
+                return
             case "/ok":
                 self.resps.append(HTTPResponseBuilder(status: .ok))
                 return

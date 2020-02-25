@@ -47,14 +47,21 @@ class HTTPClientTests: XCTestCase {
 
         let request2 = try Request(url: "https://someserver.com")
         XCTAssertEqual(request2.url.path, "")
+
+        let request3 = try Request(url: "unix:///tmp/file")
+        XCTAssertNil(request3.url.host)
+        XCTAssertEqual(request3.host, "")
+        XCTAssertEqual(request3.url.path, "/tmp/file")
+        XCTAssertEqual(request3.port, 80)
+        XCTAssertFalse(request3.useTLS)
     }
 
     func testBadRequestURI() throws {
         XCTAssertThrowsError(try Request(url: "some/path"), "should throw") { error in
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.emptyScheme)
         }
-        XCTAssertThrowsError(try Request(url: "file://somewhere/some/path?foo=bar"), "should throw") { error in
-            XCTAssertEqual(error as! HTTPClientError, HTTPClientError.unsupportedScheme("file"))
+        XCTAssertThrowsError(try Request(url: "app://somewhere/some/path?foo=bar"), "should throw") { error in
+            XCTAssertEqual(error as! HTTPClientError, HTTPClientError.unsupportedScheme("app"))
         }
         XCTAssertThrowsError(try Request(url: "https:/foo"), "should throw") { error in
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.emptyHost)
@@ -63,6 +70,7 @@ class HTTPClientTests: XCTestCase {
 
     func testSchemaCasing() throws {
         XCTAssertNoThrow(try Request(url: "hTTpS://someserver.com:8888/some/path?foo=bar"))
+        XCTAssertNoThrow(try Request(url: "uNIx:///some/path"))
     }
 
     func testGet() throws {
@@ -914,6 +922,52 @@ class HTTPClientTests: XCTestCase {
         }
     }
 
+    func testManyConcurrentRequestsWork() {
+        let numberOfWorkers = 20
+        let numberOfRequestsPerWorkers = 20
+        let allWorkersReady = DispatchSemaphore(value: 0)
+        let allWorkersGo = DispatchSemaphore(value: 0)
+        let allDone = DispatchGroup()
+
+        let httpBin = HTTPBin()
+        defer {
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+
+        let url = "http://localhost:\(httpBin.port)/get"
+        XCTAssertNoThrow(XCTAssertEqual(.ok, try httpClient.get(url: url).wait().status))
+
+        for w in 0..<numberOfWorkers {
+            let q = DispatchQueue(label: "worker \(w)")
+            q.async(group: allDone) {
+                func go() {
+                    allWorkersReady.signal() // tell the driver we're ready
+                    allWorkersGo.wait() // wait for the driver to let us go
+
+                    for _ in 0..<numberOfRequestsPerWorkers {
+                        XCTAssertNoThrow(XCTAssertEqual(.ok, try httpClient.get(url: url).wait().status))
+                    }
+                }
+                go()
+            }
+        }
+
+        for _ in 0..<numberOfWorkers {
+            allWorkersReady.wait()
+        }
+        // now all workers should be waiting for the go signal
+
+        for _ in 0..<numberOfWorkers {
+            allWorkersGo.signal()
+        }
+        // all workers should be running, let's wait for them to finish
+        allDone.wait()
+    }
+
     func testRepeatedRequestsWorkWhenServerAlwaysCloses() {
         let web = NIOHTTP1TestServer(group: self.group)
         defer {
@@ -948,5 +1002,50 @@ class HTTPClientTests: XCTestCase {
             XCTAssertEqual(.ok, response?.status)
             XCTAssertNil(response?.body)
         }
+    }
+
+    func testUDSBasic() {
+        // This tests just connecting to a URL where the whole URL is the UNIX domain socket path like
+        //     unix:///this/is/my/socket.sock
+        // We don't really have a path component, so we'll have to use "/"
+        XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
+            let httpBin = HTTPBin(bindTarget: .unixDomainSocket(path))
+            defer {
+                XCTAssertNoThrow(try httpBin.shutdown())
+            }
+            let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+            defer {
+                XCTAssertNoThrow(try httpClient.syncShutdown())
+            }
+
+            let target = "unix://\(path)"
+            XCTAssertNoThrow(XCTAssertEqual(["Yes"[...]],
+                                            try httpClient.get(url: target).wait().headers[canonicalForm: "X-Is-This-Slash"]))
+        })
+    }
+
+    func testUDSSocketAndPath() {
+        // Here, we're testing a URL that's encoding two different paths:
+        //
+        //  1. a "base path" which is the path to the UNIX domain socket
+        //  2. an actual path which is the normal path in a regular URL like https://example.com/this/is/the/path
+        XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
+            let httpBin = HTTPBin(bindTarget: .unixDomainSocket(path))
+            defer {
+                XCTAssertNoThrow(try httpBin.shutdown())
+            }
+            let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+            defer {
+                XCTAssertNoThrow(try httpClient.syncShutdown())
+            }
+
+            guard let target = URL(string: "/echo-uri", relativeTo: URL(string: "unix://\(path)")),
+                let request = try? Request(url: target) else {
+                XCTFail("couldn't build URL for request")
+                return
+            }
+            XCTAssertNoThrow(XCTAssertEqual(["/echo-uri"[...]],
+                                            try httpClient.execute(request: request).wait().headers[canonicalForm: "X-Calling-URI"]))
+        })
     }
 }
