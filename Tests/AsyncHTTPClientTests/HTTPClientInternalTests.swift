@@ -44,7 +44,6 @@ class HTTPClientInternalTests: XCTestCase {
         head.headers.add(name: "X-Test-Header", value: "X-Test-Value")
         head.headers.add(name: "Host", value: "localhost")
         head.headers.add(name: "Content-Length", value: "4")
-        head.headers.add(name: "Connection", value: "close")
         XCTAssertEqual(HTTPClientRequestPart.head(head), recorder.writes[0])
         let buffer = ByteBuffer.of(string: "1234")
         XCTAssertEqual(HTTPClientRequestPart.body(.byteBuffer(buffer)), recorder.writes[1])
@@ -107,7 +106,7 @@ class HTTPClientInternalTests: XCTestCase {
         let httpBin = HTTPBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
         defer {
-            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
             XCTAssertNoThrow(try httpBin.shutdown())
         }
 
@@ -137,7 +136,7 @@ class HTTPClientInternalTests: XCTestCase {
         let httpBin = HTTPBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
         defer {
-            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
             XCTAssertNoThrow(try httpBin.shutdown())
         }
 
@@ -197,8 +196,8 @@ class HTTPClientInternalTests: XCTestCase {
 
             func didReceiveHead(task: HTTPClient.Task<Void>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
                 // This is to force NIO to send only 1 byte at a time.
-                let future = task.channel!.setOption(ChannelOptions.maxMessagesPerRead, value: 1).flatMap {
-                    task.channel!.setOption(ChannelOptions.recvAllocator, value: FixedSizeRecvByteBufferAllocator(capacity: 1))
+                let future = task.connection!.channel.setOption(ChannelOptions.maxMessagesPerRead, value: 1).flatMap {
+                    task.connection!.channel.setOption(ChannelOptions.recvAllocator, value: FixedSizeRecvByteBufferAllocator(capacity: 1))
                 }
                 future.cascade(to: self.optionsApplied)
                 return future
@@ -222,7 +221,7 @@ class HTTPClientInternalTests: XCTestCase {
         let httpBin = HTTPBin(channelPromise: promise)
 
         defer {
-            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
             XCTAssertNoThrow(try httpBin.shutdown())
         }
 
@@ -231,6 +230,7 @@ class HTTPClientInternalTests: XCTestCase {
         let future = httpClient.execute(request: request, delegate: delegate).futureResult
 
         let channel = try promise.futureResult.wait()
+
         // We need to wait for channel options that limit NIO to sending only one byte at a time.
         try delegate.optionsApplied.futureResult.wait()
 
@@ -363,7 +363,7 @@ class HTTPClientInternalTests: XCTestCase {
         let promise: EventLoopPromise<Channel> = httpClient.eventLoopGroup.next().makePromise()
         let httpBin = HTTPBin(channelPromise: promise)
         defer {
-            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
             XCTAssertNoThrow(try httpBin.shutdown())
         }
 
@@ -435,5 +435,22 @@ class HTTPClientInternalTests: XCTestCase {
         default:
             XCTFail("wrong message")
         }
+    }
+
+    func testResponseConnectionCloseGet() throws {
+        let httpBin = HTTPBin(ssl: false)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        let req = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get", method: .GET, headers: ["Connection": "close"], body: nil)
+        _ = try! httpClient.execute(request: req).wait()
+        let el = httpClient.eventLoopGroup.next()
+        try! el.scheduleTask(in: .milliseconds(500)) {
+            XCTAssertEqual(httpClient.pool.connectionProviderCount, 0)
+        }.futureResult.wait()
     }
 }

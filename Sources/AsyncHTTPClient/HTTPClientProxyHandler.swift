@@ -69,6 +69,7 @@ internal final class HTTPClientProxyHandler: ChannelDuplexHandler, RemovableChan
         case awaitingResponse
         case connecting
         case connected
+        case failed
     }
 
     private let host: String
@@ -102,6 +103,7 @@ internal final class HTTPClientProxyHandler: ChannelDuplexHandler, RemovableChan
                     // blank line that concludes the successful response's header section
                     break
                 case 407:
+                    self.readState = .failed
                     context.fireErrorCaught(HTTPClientError.proxyAuthenticationRequired)
                 default:
                     // Any response other than a successful response
@@ -119,6 +121,8 @@ internal final class HTTPClientProxyHandler: ChannelDuplexHandler, RemovableChan
             self.readBuffer.append(data)
         case .connected:
             context.fireChannelRead(data)
+        case .failed:
+            break
         }
     }
 
