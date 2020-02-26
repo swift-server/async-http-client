@@ -321,18 +321,16 @@ public class HTTPClient {
 
         connection.flatMap { connection -> EventLoopFuture<Void> in
             let channel = connection.channel
+            let addedFuture: EventLoopFuture<Void>
+            switch self.configuration.decompression {
+            case .disabled:
+                addedFuture = channel.eventLoop.makeSucceededFuture(())
+            case .enabled(let limit):
+                let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
+                addedFuture = channel.pipeline.addHandler(decompressHandler)
+            }
 
-            return connection.removeHandler(IdleStateHandler.self).flatMap {
-                connection.removeHandler(IdlePoolConnectionHandler.self)
-            }.flatMap {
-                switch self.configuration.decompression {
-                case .disabled:
-                    return channel.eventLoop.makeSucceededFuture(())
-                case .enabled(let limit):
-                    let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
-                    return channel.pipeline.addHandler(decompressHandler)
-                }
-            }.flatMap {
+            return addedFuture.flatMap {
                 if let timeout = self.resolve(timeout: self.configuration.timeout.read, deadline: deadline) {
                     return channel.pipeline.addHandler(IdleStateHandler(readTimeout: timeout))
                 } else {
