@@ -1634,7 +1634,7 @@ class HTTPClientTests: XCTestCase {
 
     func testPoolClosesIdleConnections() {
         let httpBin = HTTPBin()
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(poolingTimeout: .milliseconds(100)))
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(maximumAllowedIdleTimeInConnectionPool: .milliseconds(100)))
         defer {
             XCTAssertNoThrow(try httpBin.shutdown())
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
@@ -1646,7 +1646,7 @@ class HTTPClientTests: XCTestCase {
 
     func testRacePoolIdleConnectionsAndGet() {
         let httpBin = HTTPBin()
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(poolingTimeout: .milliseconds(10)))
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(maximumAllowedIdleTimeInConnectionPool: .milliseconds(10)))
         defer {
             XCTAssertNoThrow(try httpBin.shutdown())
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
