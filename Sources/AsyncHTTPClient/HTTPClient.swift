@@ -531,6 +531,19 @@ public class HTTPClient {
         public static func delegateAndChannel(on eventLoop: EventLoop) -> EventLoopPreference {
             return EventLoopPreference(.delegateAndChannel(on: eventLoop))
         }
+
+        var bestEventLoop: EventLoop? {
+            switch self.preference {
+            case .delegate(on: let el):
+                return el
+            case .delegateAndChannel(on: let el):
+                return el
+            case .testOnly_exact(channelOn: let el, delegateOn: _):
+                return el
+            case .indifferent:
+                return nil
+            }
+        }
     }
 
     /// Specifies decompression settings.
