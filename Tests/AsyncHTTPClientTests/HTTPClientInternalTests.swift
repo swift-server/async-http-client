@@ -589,6 +589,9 @@ class HTTPClientInternalTests: XCTestCase {
         var maybeServersAndChannels: [(HTTPBin, Channel)]?
         XCTAssertNoThrow(maybeServersAndChannels = try (0..<10).map { _ in
             let web = HTTPBin()
+            defer {
+                XCTAssertNoThrow(try web.shutdown())
+            }
 
             let req = try! HTTPClient.Request(url: "http://localhost:\(web.serverChannel.localAddress!.port!)/get",
                                               method: .GET,
