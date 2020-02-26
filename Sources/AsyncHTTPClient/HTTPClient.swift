@@ -305,7 +305,7 @@ public class HTTPClient {
             redirectHandler = nil
         }
 
-        let task = Task<Delegate.Response>(eventLoop: taskEL)
+        let task = Task<Delegate.Response>(eventLoop: taskEL, poolingTimeout: self.configuration.poolingTimeout)
         self.stateLock.withLock {
             self.tasks[task.id] = task
         }
@@ -321,17 +321,18 @@ public class HTTPClient {
 
         connection.flatMap { connection -> EventLoopFuture<Void> in
             let channel = connection.channel
-            let addedFuture: EventLoopFuture<Void>
 
-            switch self.configuration.decompression {
-            case .disabled:
-                addedFuture = channel.eventLoop.makeSucceededFuture(())
-            case .enabled(let limit):
-                let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
-                addedFuture = channel.pipeline.addHandler(decompressHandler)
-            }
-
-            return addedFuture.flatMap {
+            return connection.removeHandler(IdleStateHandler.self).flatMap {
+                connection.removeHandler(IdlePoolConnectionHandler.self)
+            }.flatMap {
+                switch self.configuration.decompression {
+                case .disabled:
+                    return channel.eventLoop.makeSucceededFuture(())
+                case .enabled(let limit):
+                    let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
+                    return channel.pipeline.addHandler(decompressHandler)
+                }
+            }.flatMap {
                 if let timeout = self.resolve(timeout: self.configuration.timeout.read, deadline: deadline) {
                     return channel.pipeline.addHandler(IdleStateHandler(readTimeout: timeout))
                 } else {
@@ -408,6 +409,8 @@ public class HTTPClient {
         public var redirectConfiguration: RedirectConfiguration
         /// Default client timeout, defaults to no timeouts.
         public var timeout: Timeout
+        /// Timeout of pooled connections
+        public var poolingTimeout: TimeAmount?
         /// Upstream proxy, defaults to no proxy.
         public var proxy: Proxy?
         /// Enables automatic body decompression. Supported algorithms are gzip and deflate.
@@ -418,12 +421,47 @@ public class HTTPClient {
         public init(tlsConfiguration: TLSConfiguration? = nil,
                     redirectConfiguration: RedirectConfiguration? = nil,
                     timeout: Timeout = Timeout(),
+                    poolingTimeout: TimeAmount,
                     proxy: Proxy? = nil,
                     ignoreUncleanSSLShutdown: Bool = false,
                     decompression: Decompression = .disabled) {
             self.tlsConfiguration = tlsConfiguration
             self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
             self.timeout = timeout
+            self.poolingTimeout = poolingTimeout
+            self.proxy = proxy
+            self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
+            self.decompression = decompression
+        }
+
+        public init(tlsConfiguration: TLSConfiguration? = nil,
+                    redirectConfiguration: RedirectConfiguration? = nil,
+                    timeout: Timeout = Timeout(),
+                    proxy: Proxy? = nil,
+                    ignoreUncleanSSLShutdown: Bool = false,
+                    decompression: Decompression = .disabled) {
+            self.init(
+                tlsConfiguration: tlsConfiguration,
+                redirectConfiguration: redirectConfiguration,
+                timeout: timeout,
+                poolingTimeout: .seconds(60),
+                proxy: proxy,
+                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
+                decompression: decompression
+            )
+        }
+
+        public init(certificateVerification: CertificateVerification,
+                    redirectConfiguration: RedirectConfiguration? = nil,
+                    timeout: Timeout = Timeout(),
+                    poolingTimeout: TimeAmount = .seconds(60),
+                    proxy: Proxy? = nil,
+                    ignoreUncleanSSLShutdown: Bool = false,
+                    decompression: Decompression = .disabled) {
+            self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
+            self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
+            self.timeout = timeout
+            self.poolingTimeout = poolingTimeout
             self.proxy = proxy
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
             self.decompression = decompression
@@ -435,12 +473,15 @@ public class HTTPClient {
                     proxy: Proxy? = nil,
                     ignoreUncleanSSLShutdown: Bool = false,
                     decompression: Decompression = .disabled) {
-            self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
-            self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
-            self.timeout = timeout
-            self.proxy = proxy
-            self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
-            self.decompression = decompression
+            self.init(
+                certificateVerification: certificateVerification,
+                redirectConfiguration: redirectConfiguration,
+                timeout: timeout,
+                poolingTimeout: .seconds(60),
+                proxy: proxy,
+                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
+                decompression: decompression
+            )
         }
     }
 

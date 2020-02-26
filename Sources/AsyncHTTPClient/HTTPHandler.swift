@@ -497,13 +497,15 @@ extension HTTPClient {
         var cancelled: Bool
         let lock: Lock
         let id = UUID()
+        let poolingTimeout: TimeAmount?
 
-        init(eventLoop: EventLoop) {
+        init(eventLoop: EventLoop, poolingTimeout: TimeAmount? = nil) {
             self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.completion = self.promise.futureResult.map { _ in }
             self.cancelled = false
             self.lock = Lock()
+            self.poolingTimeout = poolingTimeout
         }
 
         static func failedTask(eventLoop: EventLoop, error: Error) -> Task<Response> {
@@ -571,6 +573,19 @@ extension HTTPClient {
                     connection.removeHandler(IdleStateHandler.self)
                 }.flatMap {
                     connection.removeHandler(TaskHandler<Delegate>.self)
+                }.flatMap {
+                    connection.channel.pipeline.addHandlers([
+                        IdleStateHandler(writeTimeout: self.poolingTimeout),
+                        IdlePoolConnectionHandler(),
+                    ])
+                }.flatMapError { error in
+                    if let error = error as? ChannelError, error == .ioOnClosedChannel {
+                        // We may get this error if channel is released because it is
+                        // closed, it is safe to ignore it
+                        return connection.channel.eventLoop.makeSucceededFuture(())
+                    } else {
+                        return connection.channel.eventLoop.makeFailedFuture(error)
+                    }
                 }.map {
                     connection.release()
                 }.flatMapError { error in
@@ -1005,6 +1020,15 @@ internal struct RedirectHandler<ResponseType> {
             }
         } catch {
             promise.fail(error)
+        }
+    }
+}
+
+class IdlePoolConnectionHandler: ChannelInboundHandler, RemovableChannelHandler {
+    typealias InboundIn = NIOAny
+    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+        if let idleEvent = event as? IdleStateHandler.IdleStateEvent, idleEvent == .write {
+            context.close(promise: nil)
         }
     }
 }

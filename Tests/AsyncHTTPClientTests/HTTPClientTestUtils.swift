@@ -167,6 +167,11 @@ internal final class HTTPBin {
     let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
     let serverChannel: Channel
     let isShutdown: NIOAtomic<Bool> = .makeAtomic(value: false)
+    var connectionCount: NIOAtomic<Int> = .makeAtomic(value: 0)
+    private let activeConnCounterHandler: CountActiveConnectionsHandler
+    var activeConnections: Int {
+        return self.activeConnCounterHandler.currentlyActiveConnections
+    }
 
     enum BindTarget {
         case unixDomainSocket(String)
@@ -204,10 +209,15 @@ internal final class HTTPBin {
             socketAddress = try! SocketAddress(unixDomainSocketPath: path)
         }
 
+        let activeConnCounterHandler = CountActiveConnectionsHandler()
+        self.activeConnCounterHandler = activeConnCounterHandler
+
         self.serverChannel = try! ServerBootstrap(group: self.group)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
-            .childChannelInitializer { channel in
+            .serverChannelInitializer { channel in
+                channel.pipeline.addHandler(activeConnCounterHandler)
+            }.childChannelInitializer { channel in
                 guard !refusesConnections else {
                     return channel.eventLoop.makeFailedFuture(HTTPBinError.refusedConnection)
                 }
@@ -534,6 +544,27 @@ internal final class HttpBinHandler: ChannelInboundHandler {
             }
         }
         fatalError("parameter \(key) is missing from query: \(query)")
+    }
+}
+
+final class CountActiveConnectionsHandler: ChannelInboundHandler {
+    typealias InboundIn = Channel
+
+    private let activeConns = NIOAtomic<Int>.makeAtomic(value: 0)
+
+    public var currentlyActiveConnections: Int {
+        return self.activeConns.load()
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        let channel = self.unwrapInboundIn(data)
+
+        _ = self.activeConns.add(1)
+        channel.closeFuture.whenComplete { _ in
+            _ = self.activeConns.sub(1)
+        }
+
+        context.fireChannelRead(data)
     }
 }
 
