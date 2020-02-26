@@ -34,6 +34,7 @@ extension HTTPClientInternalTests {
             ("testRequestURITrailingSlash", testRequestURITrailingSlash),
             ("testChannelAndDelegateOnDifferentEventLoops", testChannelAndDelegateOnDifferentEventLoops),
             ("testResponseConnectionCloseGet", testResponseConnectionCloseGet),
+            ("testWeNoticeRemoteClosuresEvenWhenConnectionIsIdleInPool", testWeNoticeRemoteClosuresEvenWhenConnectionIsIdleInPool),
         ]
     }
 }
