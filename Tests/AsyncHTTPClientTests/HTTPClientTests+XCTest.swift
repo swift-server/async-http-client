@@ -92,6 +92,7 @@ extension HTTPClientTests {
             ("testUDSBasic", testUDSBasic),
             ("testUDSSocketAndPath", testUDSSocketAndPath),
             ("testUseExistingConnectionOnDifferentEL", testUseExistingConnectionOnDifferentEL),
+            ("testWeRecoverFromServerThatClosesTheConnectionOnUs", testWeRecoverFromServerThatClosesTheConnectionOnUs),
         ]
     }
 }

@@ -14,6 +14,7 @@
 
 @testable import AsyncHTTPClient
 import NIO
+import NIOConcurrencyHelpers
 import NIOFoundationCompat
 import NIOHTTP1
 import NIOHTTPCompression
@@ -1545,5 +1546,89 @@ class HTTPClientTests: XCTestCase {
                 XCTAssertNoThrow(try httpClient.execute(request: closingRequest, eventLoop: .indifferent).wait())
             }
         }
+    }
+
+    func testWeRecoverFromServerThatClosesTheConnectionOnUs() {
+        final class ServerThatAcceptsThenRejects: ChannelInboundHandler {
+            typealias InboundIn = HTTPServerRequestPart
+            typealias OutboundOut = HTTPServerResponsePart
+
+            let requestNumber: NIOAtomic<Int>
+            let connectionNumber: NIOAtomic<Int>
+
+            init(requestNumber: NIOAtomic<Int>, connectionNumber: NIOAtomic<Int>) {
+                self.requestNumber = requestNumber
+                self.connectionNumber = connectionNumber
+            }
+
+            func channelActive(context: ChannelHandlerContext) {
+                _ = self.connectionNumber.add(1)
+            }
+
+            func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+                let req = self.unwrapInboundIn(data)
+
+                switch req {
+                case .head, .body:
+                    ()
+                case .end:
+                    let last = self.requestNumber.add(1)
+                    switch last {
+                    case 0, 2:
+                        context.write(self.wrapOutboundOut(.head(.init(version: .init(major: 1, minor: 1), status: .ok))),
+                                      promise: nil)
+                        context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+                    case 1:
+                        context.close(promise: nil)
+                    default:
+                        XCTFail("did not expect request \(last + 1)")
+                    }
+                }
+            }
+        }
+
+        let requestNumber = NIOAtomic<Int>.makeAtomic(value: 0)
+        let connectionNumber = NIOAtomic<Int>.makeAtomic(value: 0)
+        let sharedStateServerHandler = ServerThatAcceptsThenRejects(requestNumber: requestNumber,
+                                                                    connectionNumber: connectionNumber)
+        var maybeServer: Channel?
+        XCTAssertNoThrow(maybeServer = try ServerBootstrap(group: self.group)
+            .serverChannelOption(ChannelOptions.socket(.init(SOL_SOCKET), .init(SO_REUSEADDR)), value: 1)
+            .childChannelInitializer { channel in
+                channel.pipeline.configureHTTPServerPipeline().flatMap {
+                    // We're deliberately adding a handler which is shared between multiple channels. This is normally
+                    // very verboten but this handler is specially crafted to tolerate this.
+                    channel.pipeline.addHandler(sharedStateServerHandler)
+                }
+            }
+            .bind(host: "127.0.0.1", port: 0)
+            .wait())
+        guard let server = maybeServer else {
+            XCTFail("couldn't create server")
+            return
+        }
+        defer {
+            XCTAssertNoThrow(try server.close().wait())
+        }
+
+        let url = "http://127.0.0.1:\(server.localAddress!.port!)"
+        let client = HTTPClient(eventLoopGroupProvider: .shared(self.group))
+        defer {
+            XCTAssertNoThrow(try client.syncShutdown())
+        }
+
+        XCTAssertEqual(0, sharedStateServerHandler.connectionNumber.load())
+        XCTAssertEqual(0, sharedStateServerHandler.requestNumber.load())
+        XCTAssertNoThrow(XCTAssertEqual(.ok, try client.get(url: url).wait().status))
+        XCTAssertEqual(1, sharedStateServerHandler.connectionNumber.load())
+        XCTAssertEqual(1, sharedStateServerHandler.requestNumber.load())
+        XCTAssertThrowsError(try client.get(url: url).wait().status) { error in
+            XCTAssertEqual(.remoteConnectionClosed, error as? HTTPClientError)
+        }
+        XCTAssertEqual(1, sharedStateServerHandler.connectionNumber.load())
+        XCTAssertEqual(2, sharedStateServerHandler.requestNumber.load())
+        XCTAssertNoThrow(XCTAssertEqual(.ok, try client.get(url: url).wait().status))
+        XCTAssertEqual(2, sharedStateServerHandler.connectionNumber.load())
+        XCTAssertEqual(3, sharedStateServerHandler.requestNumber.load())
     }
 }
