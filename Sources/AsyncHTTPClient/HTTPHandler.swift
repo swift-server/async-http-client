@@ -1029,6 +1029,8 @@ class IdlePoolConnectionHandler: ChannelInboundHandler, RemovableChannelHandler 
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
         if let idleEvent = event as? IdleStateHandler.IdleStateEvent, idleEvent == .write {
             context.close(promise: nil)
+        } else {
+            context.fireUserInboundEventTriggered(event)
         }
     }
 }
