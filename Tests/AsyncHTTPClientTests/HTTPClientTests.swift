@@ -1634,14 +1634,13 @@ class HTTPClientTests: XCTestCase {
 
     func testPoolClosesIdleConnections() {
         let httpBin = HTTPBin()
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(poolingTimeout: .seconds(1)))
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(poolingTimeout: .milliseconds(100)))
         defer {
             XCTAssertNoThrow(try httpBin.shutdown())
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
         }
         XCTAssertNoThrow(try httpClient.get(url: "http://localhost:\(httpBin.port)/get").wait())
-        XCTAssertEqual(httpBin.activeConnections, 1)
-        Thread.sleep(forTimeInterval: 2)
+        Thread.sleep(forTimeInterval: 0.2)
         XCTAssertEqual(httpBin.activeConnections, 0)
     }
 }
