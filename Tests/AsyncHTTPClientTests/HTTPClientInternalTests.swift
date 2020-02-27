@@ -581,4 +581,46 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertEqual(2, sharedStateServerHandler.connectionNumber.load())
         XCTAssertEqual(2, sharedStateServerHandler.requestNumber.load())
     }
+
+    func testWeTolerateConnectionsGoingAwayWhilstPoolIsShuttingDown() {
+        struct NoChannelError: Error {}
+
+        let client = HTTPClient(eventLoopGroupProvider: .createNew)
+        var maybeServersAndChannels: [(HTTPBin, Channel)]?
+        XCTAssertNoThrow(maybeServersAndChannels = try (0..<10).map { _ in
+            let web = HTTPBin()
+            defer {
+                XCTAssertNoThrow(try web.shutdown())
+            }
+
+            let req = try! HTTPClient.Request(url: "http://localhost:\(web.serverChannel.localAddress!.port!)/get",
+                                              method: .GET,
+                                              body: nil)
+            var maybeConnection: ConnectionPool.Connection?
+            XCTAssertNoThrow(try maybeConnection = client.pool.getConnection(for: req,
+                                                                             preference: .indifferent,
+                                                                             on: client.eventLoopGroup.next(),
+                                                                             deadline: nil).wait())
+            guard let connection = maybeConnection else {
+                XCTFail("couldn't make connection")
+                throw NoChannelError()
+            }
+
+            let channel = connection.channel
+            client.pool.release(connection)
+            return (web, channel)
+        })
+
+        guard let serversAndChannels = maybeServersAndChannels else {
+            XCTFail("couldn't open servers")
+            return
+        }
+
+        DispatchQueue.global().async {
+            serversAndChannels.forEach { serverAndChannel in
+                serverAndChannel.1.close(promise: nil)
+            }
+        }
+        XCTAssertNoThrow(try client.syncShutdown())
+    }
 }

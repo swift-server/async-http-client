@@ -437,7 +437,6 @@ final class ConnectionPool {
             assert(MultiThreadedEventLoopGroup.currentEventLoop == nil,
                    "HTTPClient shutdown on EventLoop unsupported") // calls .wait() so it would crash later anyway
             let (waitersFutures, closeFutures) = self.stateLock.withLock { () -> ([EventLoopFuture<Connection>], [EventLoopFuture<Void>]) in
-                assert(self.state.activity == .opened, "Invalid activity: \(self.state.activity)")
                 // Fail waiters
                 let waitersCopy = self.state.waiters
                 self.state.waiters.removeAll()
