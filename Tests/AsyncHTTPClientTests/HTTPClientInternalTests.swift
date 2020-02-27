@@ -623,4 +623,92 @@ class HTTPClientInternalTests: XCTestCase {
         }
         XCTAssertNoThrow(try client.syncShutdown())
     }
+
+    func testRaceBetweenAsynchronousCloseAndChannelUsabilityDetection() {
+        final class DelayChannelCloseUntilToldHandler: ChannelOutboundHandler {
+            typealias OutboundIn = Any
+
+            enum State {
+                case idling
+                case delayedClose
+                case closeDone
+            }
+
+            var state: State = .idling
+            let doTheCloseNowFuture: EventLoopFuture<Void>
+
+            init(doTheCloseNowFuture: EventLoopFuture<Void>) {
+                self.doTheCloseNowFuture = doTheCloseNowFuture
+            }
+
+            func handlerRemoved(context: ChannelHandlerContext) {
+                XCTAssertEqual(.closeDone, self.state)
+            }
+
+            func close(context: ChannelHandlerContext, mode: CloseMode, promise: EventLoopPromise<Void>?) {
+                XCTAssertEqual(.idling, self.state)
+                self.state = .delayedClose
+                // let's hold the close until the future's complete
+                self.doTheCloseNowFuture.whenSuccess {
+                    context.close(mode: mode).map {
+                        XCTAssertEqual(.delayedClose, self.state)
+                        self.state = .closeDone
+                    }.cascade(to: promise)
+                }
+            }
+        }
+        let web = HTTPBin()
+        defer {
+            XCTAssertNoThrow(try web.shutdown())
+        }
+
+        let client = HTTPClient(eventLoopGroupProvider: .createNew)
+        defer {
+            XCTAssertNoThrow(try client.syncShutdown())
+        }
+
+        let req = try! HTTPClient.Request(url: "http://localhost:\(web.serverChannel.localAddress!.port!)/get",
+                                          method: .GET,
+                                          body: nil)
+
+        // Let's start by getting a connection so we can mess with the Channel :).
+        var maybeConnection: ConnectionPool.Connection?
+        XCTAssertNoThrow(try maybeConnection = client.pool.getConnection(for: req,
+                                                                         preference: .indifferent,
+                                                                         on: client.eventLoopGroup.next(),
+                                                                         deadline: nil).wait())
+        guard let connection = maybeConnection else {
+            XCTFail("couldn't make connection")
+            return
+        }
+
+        let channel = connection.channel
+        let doActualCloseNowPromise = channel.eventLoop.makePromise(of: Void.self)
+
+        XCTAssertNoThrow(try channel.pipeline.addHandler(DelayChannelCloseUntilToldHandler(doTheCloseNowFuture: doActualCloseNowPromise.futureResult),
+                                                         position: .first).wait())
+        client.pool.release(connection)
+
+        // Okay, now the Channel is back in the pool, let's just start the close...
+        channel.close(promise: nil)
+
+        // The Channel should still be active though because we delayed the close through our handler above.
+        XCTAssertTrue(channel.isActive)
+
+        // When asking for a connection again, we should _not_ get the same one back because we did most of the close,
+        // similar to what the SSLHandler would do.
+        XCTAssertNoThrow(try maybeConnection = client.pool.getConnection(for: req,
+                                                                         preference: .indifferent,
+                                                                         on: client.eventLoopGroup.next(),
+                                                                         deadline: nil).wait())
+        doActualCloseNowPromise.succeed(())
+        guard let connection2 = maybeConnection else {
+            XCTFail("couldn't get second connection")
+            return
+        }
+
+        XCTAssert(connection !== connection2)
+        client.pool.release(connection2)
+        XCTAssertTrue(connection2.channel.isActive)
+    }
 }
