@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <title>Timeout Structure Reference</title>
+    <title>RedirectConfiguration Structure Reference</title>
     <link rel="stylesheet" type="text/css" href="../../../css/jazzy.css" />
     <link rel="stylesheet" type="text/css" href="../../../css/highlight.css" />
     <meta charset="utf-8">
@@ -14,9 +14,9 @@
   </head>
   <body>
 
-    <a name="//apple_ref/swift/Struct/Timeout" class="dashAnchor"></a>
+    <a name="//apple_ref/swift/Struct/RedirectConfiguration" class="dashAnchor"></a>
 
-    <a title="Timeout Structure Reference"></a>
+    <a title="RedirectConfiguration Structure Reference"></a>
 
     <header class="header">
       <p class="header-col header-col--primary">
@@ -50,7 +50,7 @@
     <p class="breadcrumbs">
       <a class="breadcrumb" href="../../../index.html">AsyncHTTPClient Reference</a>
       <img class="carat" src="../../../img/carat.png" />
-      Timeout Structure Reference
+      RedirectConfiguration Structure Reference
     </p>
 
     <div class="content-wrapper">
@@ -122,14 +122,14 @@
 
         <section class="section">
           <div class="section-content top-matter">
-            <h1>Timeout</h1>
+            <h1>RedirectConfiguration</h1>
               <div class="declaration">
                 <div class="language">
-                  <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">struct</span> <span class="kt">Timeout</span></code></pre>
+                  <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">struct</span> <span class="kt">RedirectConfiguration</span></code></pre>
 
                 </div>
               </div>
-            <p>Timeout configuration</p>
+            <p>Specifies redirect processing settings.</p>
 
           </div>
         </section>
@@ -141,9 +141,9 @@
                 <li class="item">
                   <div>
                     <code>
-                    <a name="/s:15AsyncHTTPClient0B0C13ConfigurationV7TimeoutV7connect3NIO10TimeAmountVSgvp"></a>
-                    <a name="//apple_ref/swift/Property/connect" class="dashAnchor"></a>
-                    <a class="token" href="#/s:15AsyncHTTPClient0B0C13ConfigurationV7TimeoutV7connect3NIO10TimeAmountVSgvp">connect</a>
+                    <a name="/s:15AsyncHTTPClient0B0C13ConfigurationV08RedirectC0V8disallowAGvpZ"></a>
+                    <a name="//apple_ref/swift/Variable/disallow" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B0C13ConfigurationV08RedirectC0V8disallowAGvpZ">disallow</a>
                     </code>
                   </div>
                   <div class="height-container">
@@ -151,19 +151,19 @@
                     <section class="section">
                       <div class="pointer"></div>
                       <div class="abstract">
-                        <p>Specifies connect timeout.</p>
+                        <p>Redirects are not followed.</p>
 
                       </div>
                       <div class="declaration">
                         <h4>Declaration</h4>
                         <div class="language">
                           <p class="aside-title">Swift</p>
-                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="k">var</span> <span class="nv">connect</span><span class="p">:</span> <span class="kt">TimeAmount</span><span class="p">?</span></code></pre>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">static</span> <span class="k">let</span> <span class="nv">disallow</span><span class="p">:</span> <span class="kt"><a href="../../../Classes/HTTPClient.html">HTTPClient</a></span><span class="o">.</span><span class="kt"><a href="../../../Classes/HTTPClient/Configuration.html">Configuration</a></span><span class="o">.</span><span class="kt">RedirectConfiguration</span></code></pre>
 
                         </div>
                       </div>
                       <div class="slightly-smaller">
-                        <a href="https://github.com/swift-server/async-http-client/tree/1.1.0/Sources/AsyncHTTPClient/HTTPClient.swift#L514">Show on GitHub</a>
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.1.0/Sources/AsyncHTTPClient/HTTPClient.swift#L549">Show on GitHub</a>
                       </div>
                     </section>
                   </div>
@@ -171,9 +171,9 @@
                 <li class="item">
                   <div>
                     <code>
-                    <a name="/s:15AsyncHTTPClient0B0C13ConfigurationV7TimeoutV4read3NIO10TimeAmountVSgvp"></a>
-                    <a name="//apple_ref/swift/Property/read" class="dashAnchor"></a>
-                    <a class="token" href="#/s:15AsyncHTTPClient0B0C13ConfigurationV7TimeoutV4read3NIO10TimeAmountVSgvp">read</a>
+                    <a name="/s:15AsyncHTTPClient0B0C13ConfigurationV08RedirectC0V6follow3max11allowCyclesAGSi_SbtFZ"></a>
+                    <a name="//apple_ref/swift/Method/follow(max:allowCycles:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B0C13ConfigurationV08RedirectC0V6follow3max11allowCyclesAGSi_SbtFZ">follow(max:allowCycles:)</a>
                     </code>
                   </div>
                   <div class="height-container">
@@ -181,44 +181,19 @@
                     <section class="section">
                       <div class="pointer"></div>
                       <div class="abstract">
-                        <p>Specifies read timeout.</p>
+                        <p>Redirects are followed with a specified limit.</p>
+<div class="aside aside-warning">
+    <p class="aside-title">Warning</p>
+    <p>Cycle detection will keep all visited URLs in memory which means a malicious server could use this as a denial-of-service vector.</p>
+
+</div>
 
                       </div>
                       <div class="declaration">
                         <h4>Declaration</h4>
                         <div class="language">
                           <p class="aside-title">Swift</p>
-                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="k">var</span> <span class="nv">read</span><span class="p">:</span> <span class="kt">TimeAmount</span><span class="p">?</span></code></pre>
-
-                        </div>
-                      </div>
-                      <div class="slightly-smaller">
-                        <a href="https://github.com/swift-server/async-http-client/tree/1.1.0/Sources/AsyncHTTPClient/HTTPClient.swift#L516">Show on GitHub</a>
-                      </div>
-                    </section>
-                  </div>
-                </li>
-                <li class="item">
-                  <div>
-                    <code>
-                    <a name="/s:15AsyncHTTPClient0B0C13ConfigurationV7TimeoutV7connect4readAG3NIO10TimeAmountVSg_AMtcfc"></a>
-                    <a name="//apple_ref/swift/Method/init(connect:read:)" class="dashAnchor"></a>
-                    <a class="token" href="#/s:15AsyncHTTPClient0B0C13ConfigurationV7TimeoutV7connect4readAG3NIO10TimeAmountVSg_AMtcfc">init(connect:read:)</a>
-                    </code>
-                  </div>
-                  <div class="height-container">
-                    <div class="pointer-container"></div>
-                    <section class="section">
-                      <div class="pointer"></div>
-                      <div class="abstract">
-                        <p>Create timeout.</p>
-
-                      </div>
-                      <div class="declaration">
-                        <h4>Declaration</h4>
-                        <div class="language">
-                          <p class="aside-title">Swift</p>
-                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="nf">init</span><span class="p">(</span><span class="nv">connect</span><span class="p">:</span> <span class="kt">TimeAmount</span><span class="p">?</span> <span class="o">=</span> <span class="kc">nil</span><span class="p">,</span> <span class="nv">read</span><span class="p">:</span> <span class="kt">TimeAmount</span><span class="p">?</span> <span class="o">=</span> <span class="kc">nil</span><span class="p">)</span></code></pre>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">static</span> <span class="kd">func</span> <span class="nf">follow</span><span class="p">(</span><span class="nv">max</span><span class="p">:</span> <span class="kt">Int</span><span class="p">,</span> <span class="nv">allowCycles</span><span class="p">:</span> <span class="kt">Bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">RedirectConfiguration</span></code></pre>
 
                         </div>
                       </div>
@@ -229,24 +204,24 @@
                             <tr>
                               <td>
                                 <code>
-                                <em>connect</em>
+                                <em>max</em>
                                 </code>
                               </td>
                               <td>
                                 <div>
-                                  <p><code><a href="../../../Classes/HTTPClient/Configuration/Timeout.html#/s:15AsyncHTTPClient0B0C13ConfigurationV7TimeoutV7connect3NIO10TimeAmountVSgvp">connect</a></code> timeout.</p>
+                                  <p>The maximum number of allowed redirects.</p>
                                 </div>
                               </td>
                             </tr>
                             <tr>
                               <td>
                                 <code>
-                                <em>read</em>
+                                <em>allowCycles</em>
                                 </code>
                               </td>
                               <td>
                                 <div>
-                                  <p><code><a href="../../../Classes/HTTPClient/Configuration/Timeout.html#/s:15AsyncHTTPClient0B0C13ConfigurationV7TimeoutV4read3NIO10TimeAmountVSgvp">read</a></code> timeout.</p>
+                                  <p>Whether cycles are allowed.</p>
                                 </div>
                               </td>
                             </tr>
@@ -254,7 +229,7 @@
                         </table>
                       </div>
                       <div class="slightly-smaller">
-                        <a href="https://github.com/swift-server/async-http-client/tree/1.1.0/Sources/AsyncHTTPClient/HTTPClient.swift#L523-L526">Show on GitHub</a>
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.1.0/Sources/AsyncHTTPClient/HTTPClient.swift#L558">Show on GitHub</a>
                       </div>
                     </section>
                   </div>
