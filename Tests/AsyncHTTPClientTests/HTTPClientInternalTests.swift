@@ -707,13 +707,14 @@ class HTTPClientInternalTests: XCTestCase {
         // The Channel should still be active though because we delayed the close through our handler above.
         XCTAssertTrue(channel.isActive)
 
+        doActualCloseNowPromise.succeed(())
         // When asking for a connection again, we should _not_ get the same one back because we did most of the close,
         // similar to what the SSLHandler would do.
         XCTAssertNoThrow(try maybeConnection = client.pool.getConnection(for: req,
                                                                          preference: .indifferent,
                                                                          on: client.eventLoopGroup.next(),
                                                                          deadline: nil).wait())
-        doActualCloseNowPromise.succeed(())
+
         guard let connection2 = maybeConnection else {
             XCTFail("couldn't get second connection")
             return

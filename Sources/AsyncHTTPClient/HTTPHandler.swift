@@ -574,10 +574,10 @@ extension HTTPClient {
                 }.flatMap {
                     connection.removeHandler(TaskHandler<Delegate>.self)
                 }.flatMap {
-                    connection.channel.pipeline.addHandlers([
-                        IdleStateHandler(writeTimeout: self.poolingTimeout),
-                        IdlePoolConnectionHandler(),
-                    ])
+                    let idlePoolConnectionHandler = IdlePoolConnectionHandler()
+                    return connection.channel.pipeline.addHandler(idlePoolConnectionHandler, position: .last).flatMap {
+                        connection.channel.pipeline.addHandler(IdleStateHandler(writeTimeout: self.poolingTimeout), position: .before(idlePoolConnectionHandler))
+                    }
                 }.flatMapError { error in
                     if let error = error as? ChannelError, error == .ioOnClosedChannel {
                         // We may get this error if channel is released because it is
@@ -1026,8 +1026,10 @@ internal struct RedirectHandler<ResponseType> {
 
 class IdlePoolConnectionHandler: ChannelInboundHandler, RemovableChannelHandler {
     typealias InboundIn = NIOAny
+    let timeoutClosed: NIOAtomic<Bool> = .makeAtomic(value: false)
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
         if let idleEvent = event as? IdleStateHandler.IdleStateEvent, idleEvent == .write {
+            self.timeoutClosed.store(true)
             context.close(promise: nil)
         } else {
             context.fireUserInboundEventTriggered(event)

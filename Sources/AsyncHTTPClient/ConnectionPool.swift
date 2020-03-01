@@ -227,10 +227,24 @@ final class ConnectionPool {
 
         func removeIdleConnectionHandlersForLease() -> EventLoopFuture<Connection> {
             return self.channel.eventLoop.flatSubmit {
-                self.removeHandler(IdleStateHandler.self).flatMap {
-                    self.removeHandler(IdlePoolConnectionHandler.self)
-                }.flatMap {
-                    if self.channel.isActive {
+                self.removeHandler(IdleStateHandler.self).flatMap { () -> EventLoopFuture<Bool> in
+                    self.channel.pipeline.handler(type: IdlePoolConnectionHandler.self).flatMap { idleHandler -> EventLoopFuture<Bool> in
+
+                        self.channel.pipeline.removeHandler(idleHandler).flatMapError { error in
+                            fatalError("\(error)")
+                            return self.channel.eventLoop.makeSucceededFuture(())
+                        }.map {
+                            idleHandler.timeoutClosed.load()
+                        }
+                    }.flatMapError { error in
+                        if let channelError = error as? ChannelPipelineError, channelError == .notFound {
+                            return self.channel.eventLoop.makeSucceededFuture(!self.channel.isActive)
+                        } else {
+                            return self.channel.eventLoop.makeFailedFuture(error)
+                        }
+                    }
+                }.flatMap { timeoutClosed in
+                    if timeoutClosed == false {
                         return self.channel.eventLoop.makeSucceededFuture(self)
                     } else {
                         return self.channel.eventLoop.makeFailedFuture(IdleCloseError())
