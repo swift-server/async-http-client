@@ -235,6 +235,8 @@ final class ConnectionPool {
                             idleHandler.timeoutClosed.load()
                         }
                     }.flatMapError { error in
+                        // These handlers are only added on connection release, they are not added
+                        // when a connection is made to be instantly leased, so we ignore this error
                         if let channelError = error as? ChannelPipelineError, channelError == .notFound {
                             return self.channel.eventLoop.makeSucceededFuture(!self.channel.isActive)
                         } else {
