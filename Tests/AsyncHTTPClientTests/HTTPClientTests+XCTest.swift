@@ -93,6 +93,8 @@ extension HTTPClientTests {
             ("testUDSSocketAndPath", testUDSSocketAndPath),
             ("testUseExistingConnectionOnDifferentEL", testUseExistingConnectionOnDifferentEL),
             ("testWeRecoverFromServerThatClosesTheConnectionOnUs", testWeRecoverFromServerThatClosesTheConnectionOnUs),
+            ("testPoolClosesIdleConnections", testPoolClosesIdleConnections),
+            ("testRacePoolIdleConnectionsAndGet", testRacePoolIdleConnectionsAndGet),
         ]
     }
 }

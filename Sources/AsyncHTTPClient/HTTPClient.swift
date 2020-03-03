@@ -305,7 +305,7 @@ public class HTTPClient {
             redirectHandler = nil
         }
 
-        let task = Task<Delegate.Response>(eventLoop: taskEL)
+        let task = Task<Delegate.Response>(eventLoop: taskEL, poolingTimeout: self.configuration.maximumAllowedIdleTimeInConnectionPool)
         self.stateLock.withLock {
             self.tasks[task.id] = task
         }
@@ -322,7 +322,6 @@ public class HTTPClient {
         connection.flatMap { connection -> EventLoopFuture<Void> in
             let channel = connection.channel
             let addedFuture: EventLoopFuture<Void>
-
             switch self.configuration.decompression {
             case .disabled:
                 addedFuture = channel.eventLoop.makeSucceededFuture(())
@@ -408,6 +407,8 @@ public class HTTPClient {
         public var redirectConfiguration: RedirectConfiguration
         /// Default client timeout, defaults to no timeouts.
         public var timeout: Timeout
+        /// Timeout of pooled connections
+        public var maximumAllowedIdleTimeInConnectionPool: TimeAmount?
         /// Upstream proxy, defaults to no proxy.
         public var proxy: Proxy?
         /// Enables automatic body decompression. Supported algorithms are gzip and deflate.
@@ -418,12 +419,47 @@ public class HTTPClient {
         public init(tlsConfiguration: TLSConfiguration? = nil,
                     redirectConfiguration: RedirectConfiguration? = nil,
                     timeout: Timeout = Timeout(),
+                    maximumAllowedIdleTimeInConnectionPool: TimeAmount,
                     proxy: Proxy? = nil,
                     ignoreUncleanSSLShutdown: Bool = false,
                     decompression: Decompression = .disabled) {
             self.tlsConfiguration = tlsConfiguration
             self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
             self.timeout = timeout
+            self.maximumAllowedIdleTimeInConnectionPool = maximumAllowedIdleTimeInConnectionPool
+            self.proxy = proxy
+            self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
+            self.decompression = decompression
+        }
+
+        public init(tlsConfiguration: TLSConfiguration? = nil,
+                    redirectConfiguration: RedirectConfiguration? = nil,
+                    timeout: Timeout = Timeout(),
+                    proxy: Proxy? = nil,
+                    ignoreUncleanSSLShutdown: Bool = false,
+                    decompression: Decompression = .disabled) {
+            self.init(
+                tlsConfiguration: tlsConfiguration,
+                redirectConfiguration: redirectConfiguration,
+                timeout: timeout,
+                maximumAllowedIdleTimeInConnectionPool: .seconds(60),
+                proxy: proxy,
+                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
+                decompression: decompression
+            )
+        }
+
+        public init(certificateVerification: CertificateVerification,
+                    redirectConfiguration: RedirectConfiguration? = nil,
+                    timeout: Timeout = Timeout(),
+                    maximumAllowedIdleTimeInConnectionPool: TimeAmount = .seconds(60),
+                    proxy: Proxy? = nil,
+                    ignoreUncleanSSLShutdown: Bool = false,
+                    decompression: Decompression = .disabled) {
+            self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
+            self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
+            self.timeout = timeout
+            self.maximumAllowedIdleTimeInConnectionPool = maximumAllowedIdleTimeInConnectionPool
             self.proxy = proxy
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
             self.decompression = decompression
@@ -435,12 +471,15 @@ public class HTTPClient {
                     proxy: Proxy? = nil,
                     ignoreUncleanSSLShutdown: Bool = false,
                     decompression: Decompression = .disabled) {
-            self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
-            self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
-            self.timeout = timeout
-            self.proxy = proxy
-            self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
-            self.decompression = decompression
+            self.init(
+                certificateVerification: certificateVerification,
+                redirectConfiguration: redirectConfiguration,
+                timeout: timeout,
+                maximumAllowedIdleTimeInConnectionPool: .seconds(60),
+                proxy: proxy,
+                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
+                decompression: decompression
+            )
         }
     }
 
@@ -489,6 +528,19 @@ public class HTTPClient {
         /// connection that might be on a different `EventLoop`.
         public static func delegateAndChannel(on eventLoop: EventLoop) -> EventLoopPreference {
             return EventLoopPreference(.delegateAndChannel(on: eventLoop))
+        }
+
+        var bestEventLoop: EventLoop? {
+            switch self.preference {
+            case .delegate(on: let el):
+                return el
+            case .delegateAndChannel(on: let el):
+                return el
+            case .testOnly_exact(channelOn: let el, delegateOn: _):
+                return el
+            case .indifferent:
+                return nil
+            }
         }
     }
 

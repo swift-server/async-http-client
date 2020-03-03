@@ -1631,4 +1631,29 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(2, sharedStateServerHandler.connectionNumber.load())
         XCTAssertEqual(3, sharedStateServerHandler.requestNumber.load())
     }
+
+    func testPoolClosesIdleConnections() {
+        let httpBin = HTTPBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(maximumAllowedIdleTimeInConnectionPool: .milliseconds(100)))
+        defer {
+            XCTAssertNoThrow(try httpBin.shutdown())
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+        }
+        XCTAssertNoThrow(try httpClient.get(url: "http://localhost:\(httpBin.port)/get").wait())
+        Thread.sleep(forTimeInterval: 0.2)
+        XCTAssertEqual(httpBin.activeConnections, 0)
+    }
+
+    func testRacePoolIdleConnectionsAndGet() {
+        let httpBin = HTTPBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: .init(maximumAllowedIdleTimeInConnectionPool: .milliseconds(10)))
+        defer {
+            XCTAssertNoThrow(try httpBin.shutdown())
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+        }
+        for _ in 1...500 {
+            XCTAssertNoThrow(try httpClient.get(url: "http://localhost:\(httpBin.port)/get").wait())
+            Thread.sleep(forTimeInterval: 0.01 + .random(in: -0.05...0.05))
+        }
+    }
 }

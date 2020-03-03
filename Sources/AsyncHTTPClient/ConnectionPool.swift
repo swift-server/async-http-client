@@ -224,6 +224,36 @@ final class ConnectionPool {
         fileprivate var closePromise: EventLoopPromise<Void>
 
         var closeFuture: EventLoopFuture<Void>
+
+        func removeIdleConnectionHandlersForLease() -> EventLoopFuture<Connection> {
+            return self.channel.eventLoop.flatSubmit {
+                self.removeHandler(IdleStateHandler.self).flatMap { () -> EventLoopFuture<Bool> in
+                    self.channel.pipeline.handler(type: IdlePoolConnectionHandler.self).flatMap { idleHandler in
+                        self.channel.pipeline.removeHandler(idleHandler).flatMapError { _ in
+                            self.channel.eventLoop.makeSucceededFuture(())
+                        }.map {
+                            idleHandler.hasNotSentClose && self.channel.isActive
+                        }
+                    }.flatMapError { error in
+                        // These handlers are only added on connection release, they are not added
+                        // when a connection is made to be instantly leased, so we ignore this error
+                        if let channelError = error as? ChannelPipelineError, channelError == .notFound {
+                            return self.channel.eventLoop.makeSucceededFuture(self.channel.isActive)
+                        } else {
+                            return self.channel.eventLoop.makeFailedFuture(error)
+                        }
+                    }
+                }.flatMap { channelIsUsable in
+                    if channelIsUsable {
+                        return self.channel.eventLoop.makeSucceededFuture(self)
+                    } else {
+                        return self.channel.eventLoop.makeFailedFuture(InactiveChannelError())
+                    }
+                }
+            }
+        }
+
+        struct InactiveChannelError: Error {}
     }
 
     /// A connection provider of `HTTP/1.1` connections with a given `Key` (host, scheme, port)
@@ -294,7 +324,14 @@ final class ConnectionPool {
             let action = self.stateLock.withLock { self.state.connectionAction(for: preference) }
             switch action {
             case .leaseConnection(let connection):
-                return connection.channel.eventLoop.makeSucceededFuture(connection)
+                return connection.removeIdleConnectionHandlersForLease().flatMapError { _ in
+                    connection.closeFuture.flatMap { // We ensure close actions are run first
+                        let defaultEventLoop = self.stateLock.withLock {
+                            self.state.defaultEventLoop
+                        }
+                        return self.makeConnection(on: preference.bestEventLoop ?? defaultEventLoop)
+                    }
+                }
             case .makeConnection(let eventLoop):
                 return self.makeConnection(on: eventLoop)
             case .leaseFutureConnection(let futureConnection):
@@ -453,7 +490,7 @@ final class ConnectionPool {
 
         fileprivate struct State {
             /// The default `EventLoop` to use for this `HTTP1ConnectionProvider`
-            private let defaultEventLoop: EventLoop
+            let defaultEventLoop: EventLoop
 
             /// The maximum number of connections to a certain (host, scheme, port) tuple.
             private let maximumConcurrentConnections: Int = 8
@@ -476,7 +513,11 @@ final class ConnectionPool {
 
             fileprivate var activity: Activity = .opened
 
-            fileprivate var pending: Int = 0
+            fileprivate var pending: Int = 0 {
+                didSet {
+                    assert(self.pending >= 0)
+                }
+            }
 
             private let parentPool: ConnectionPool
 
