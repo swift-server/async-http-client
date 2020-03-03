@@ -232,28 +232,28 @@ final class ConnectionPool {
                         self.channel.pipeline.removeHandler(idleHandler).flatMapError { _ in
                             self.channel.eventLoop.makeSucceededFuture(())
                         }.map {
-                            idleHandler.timeoutClosed.load() || !self.channel.isActive
+                            idleHandler.hasNotSentClose && self.channel.isActive
                         }
                     }.flatMapError { error in
                         // These handlers are only added on connection release, they are not added
                         // when a connection is made to be instantly leased, so we ignore this error
                         if let channelError = error as? ChannelPipelineError, channelError == .notFound {
-                            return self.channel.eventLoop.makeSucceededFuture(!self.channel.isActive)
+                            return self.channel.eventLoop.makeSucceededFuture(self.channel.isActive)
                         } else {
                             return self.channel.eventLoop.makeFailedFuture(error)
                         }
                     }
-                }.flatMap { timeoutClosed in
-                    if timeoutClosed == false {
+                }.flatMap { channelIsUsable in
+                    if channelIsUsable {
                         return self.channel.eventLoop.makeSucceededFuture(self)
                     } else {
-                        return self.channel.eventLoop.makeFailedFuture(IdleCloseError())
+                        return self.channel.eventLoop.makeFailedFuture(InactiveChannelError())
                     }
                 }
             }
         }
 
-        struct IdleCloseError: Error {}
+        struct InactiveChannelError: Error {}
     }
 
     /// A connection provider of `HTTP/1.1` connections with a given `Key` (host, scheme, port)

@@ -1026,10 +1026,15 @@ internal struct RedirectHandler<ResponseType> {
 
 class IdlePoolConnectionHandler: ChannelInboundHandler, RemovableChannelHandler {
     typealias InboundIn = NIOAny
-    let timeoutClosed: NIOAtomic<Bool> = .makeAtomic(value: false)
+
+    let _hasNotSentClose: NIOAtomic<Bool> = .makeAtomic(value: true)
+    var hasNotSentClose: Bool {
+        return self._hasNotSentClose.load()
+    }
+
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
         if let idleEvent = event as? IdleStateHandler.IdleStateEvent, idleEvent == .write {
-            self.timeoutClosed.store(true)
+            self._hasNotSentClose.store(false)
             context.close(promise: nil)
         } else {
             context.fireUserInboundEventTriggered(event)
