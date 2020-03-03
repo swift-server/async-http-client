@@ -232,7 +232,7 @@ final class ConnectionPool {
                         self.channel.pipeline.removeHandler(idleHandler).flatMapError { _ in
                             self.channel.eventLoop.makeSucceededFuture(())
                         }.map {
-                            idleHandler.timeoutClosed.load()
+                            idleHandler.timeoutClosed.load() || !self.channel.isActive
                         }
                     }.flatMapError { error in
                         // These handlers are only added on connection release, they are not added
