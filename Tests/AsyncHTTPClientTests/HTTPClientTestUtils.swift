@@ -164,7 +164,7 @@ enum TemporaryFileHelpers {
 }
 
 internal final class HTTPBin {
-    let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+    let group = MultiThreadedEventLoopGroup(numberOfThreads: 3)
     let serverChannel: Channel
     let isShutdown: NIOAtomic<Bool> = .makeAtomic(value: false)
     var connectionCount: NIOAtomic<Int> = .makeAtomic(value: 0)
@@ -569,7 +569,7 @@ final class CountActiveConnectionsHandler: ChannelInboundHandler {
 }
 
 internal class HttpBinForSSLUncleanShutdown {
-    let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+    let group = MultiThreadedEventLoopGroup(numberOfThreads: 3)
     let serverChannel: Channel
 
     var port: Int {

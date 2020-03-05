@@ -29,7 +29,7 @@ class HTTPClientTests: XCTestCase {
 
     override func setUp() {
         XCTAssertNil(self.group)
-        self.group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        self.group = MultiThreadedEventLoopGroup(numberOfThreads: 3)
     }
 
     override func tearDown() {
