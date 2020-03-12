@@ -625,10 +625,10 @@ extension ChannelPipeline {
         return addHandlers([encoder, decoder, handler])
     }
 
-    func addSSLHandlerIfNeeded(for key: ConnectionPool.Key, tlsConfiguration: TLSConfiguration?, handshakePromise: EventLoopPromise<Void>) -> EventLoopFuture<Void> {
+    func addSSLHandlerIfNeeded(for key: ConnectionPool.Key, tlsConfiguration: TLSConfiguration?, handshakePromise: EventLoopPromise<Void>) {
         guard key.scheme == .https else {
             handshakePromise.succeed(())
-            return self.eventLoop.makeSucceededFuture(())
+            return
         }
 
         do {
@@ -638,10 +638,9 @@ extension ChannelPipeline {
                 try NIOSSLClientHandler(context: context, serverHostname: key.host.isIPAddress ? nil : key.host),
                 TLSEventsHandler(completionPromise: handshakePromise),
             ]
-
-            return self.addHandlers(handlers)
+            self.addHandlers(handlers).cascadeFailure(to: handshakePromise)
         } catch {
-            return self.eventLoop.makeFailedFuture(error)
+            handshakePromise.fail(error)
         }
     }
 }

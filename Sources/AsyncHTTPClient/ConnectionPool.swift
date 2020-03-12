@@ -383,32 +383,33 @@ final class ConnectionPool {
             }
 
             return channel.flatMap { channel -> EventLoopFuture<ConnectionPool.Connection> in
-                channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, handshakePromise: handshakePromise).flatMap {
+                channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, handshakePromise: handshakePromise)
+                return handshakePromise.futureResult.flatMap {
                     channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
                 }.map {
                     let connection = Connection(key: self.key, channel: channel, parentPool: self.parentPool)
                     connection.isLeased = true
                     return connection
                 }
-            }.flatMap { connection in
-                handshakePromise.futureResult.map {
-                    self.configureCloseCallback(of: connection)
-                    return connection
-                }.flatMapError { error in
-                    connection.closePromise.succeed(())
-                    let action = self.parentPool.connectionProvidersLock.withLock {
-                        self.stateLock.withLock {
-                            self.state.failedConnectionAction()
-                        }
+            }.map { connection in
+                self.configureCloseCallback(of: connection)
+                return connection
+            }.flatMapError { error in
+                // This promise may not have been completed if we reach this
+                // so we fail it to avoid any leak
+                handshakePromise.fail(error)
+                let action = self.parentPool.connectionProvidersLock.withLock {
+                    self.stateLock.withLock {
+                        self.state.failedConnectionAction()
                     }
-                    switch action {
-                    case .makeConnectionAndComplete(let el, let promise):
-                        self.makeConnection(on: el).cascade(to: promise)
-                    case .none:
-                        break
-                    }
-                    return self.eventLoop.makeFailedFuture(error)
                 }
+                switch action {
+                case .makeConnectionAndComplete(let el, let promise):
+                    self.makeConnection(on: el).cascade(to: promise)
+                case .none:
+                    break
+                }
+                return self.eventLoop.makeFailedFuture(error)
             }
         }
 
