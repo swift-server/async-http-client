@@ -1656,4 +1656,21 @@ class HTTPClientTests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.01 + .random(in: -0.05...0.05))
         }
     }
+
+    func testAvoidLeakingTLSHandshakeCompletionPromise() {
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        let httpBin = HTTPBin()
+        let port = httpBin.port
+        XCTAssertNoThrow(try httpBin.shutdown())
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+        }
+
+        XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(port)").wait()) { error in
+            guard error is NIOConnectionError else {
+                XCTFail("Unexpected error: \(error)")
+                return
+            }
+        }
+    }
 }
