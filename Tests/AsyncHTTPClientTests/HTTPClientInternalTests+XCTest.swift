@@ -29,6 +29,7 @@ extension HTTPClientInternalTests {
             ("testBadHTTPRequest", testBadHTTPRequest),
             ("testHTTPPartsHandlerMultiBody", testHTTPPartsHandlerMultiBody),
             ("testProxyStreaming", testProxyStreaming),
+            ("testProxyStreamingNoDeadlock", testProxyStreamingNoDeadlock),
             ("testProxyStreamingFailure", testProxyStreamingFailure),
             ("testUploadStreamingBackpressure", testUploadStreamingBackpressure),
             ("testRequestURITrailingSlash", testRequestURITrailingSlash),
