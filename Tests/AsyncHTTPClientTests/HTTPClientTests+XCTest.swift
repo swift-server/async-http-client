@@ -95,6 +95,7 @@ extension HTTPClientTests {
             ("testWeRecoverFromServerThatClosesTheConnectionOnUs", testWeRecoverFromServerThatClosesTheConnectionOnUs),
             ("testPoolClosesIdleConnections", testPoolClosesIdleConnections),
             ("testRacePoolIdleConnectionsAndGet", testRacePoolIdleConnectionsAndGet),
+            ("testAvoidLeakingTLSHandshakeCompletionPromise", testAvoidLeakingTLSHandshakeCompletionPromise),
         ]
     }
 }
