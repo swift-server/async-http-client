@@ -100,8 +100,7 @@ let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
 ```
 or on a per-request basis:
 ```swift
-let timeout = HTTPClient.Timeout(connect: .seconds(1), read: .seconds(1))
-httpClient.execute(request: request, timeout: timeout)
+httpClient.execute(request: request, deadline: .now() + .milliseconds(1))
 ```
 
 ### Streaming

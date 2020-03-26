@@ -16,6 +16,7 @@
 import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
+import NIOTestUtils
 import XCTest
 
 class HTTPClientInternalTests: XCTestCase {
@@ -28,7 +29,11 @@ class HTTPClientInternalTests: XCTestCase {
         let task = Task<Void>(eventLoop: channel.eventLoop)
 
         try channel.pipeline.addHandler(recorder).wait()
-        try channel.pipeline.addHandler(TaskHandler(task: task, delegate: TestHTTPDelegate(), redirectHandler: nil, ignoreUncleanSSLShutdown: false)).wait()
+        try channel.pipeline.addHandler(TaskHandler(task: task,
+                                                    kind: .host,
+                                                    delegate: TestHTTPDelegate(),
+                                                    redirectHandler: nil,
+                                                    ignoreUncleanSSLShutdown: false)).wait()
 
         var request = try Request(url: "http://localhost/get")
         request.headers.add(name: "X-Test-Header", value: "X-Test-Value")
@@ -40,7 +45,6 @@ class HTTPClientInternalTests: XCTestCase {
         head.headers.add(name: "X-Test-Header", value: "X-Test-Value")
         head.headers.add(name: "Host", value: "localhost")
         head.headers.add(name: "Content-Length", value: "4")
-        head.headers.add(name: "Connection", value: "close")
         XCTAssertEqual(HTTPClientRequestPart.head(head), recorder.writes[0])
         let buffer = ByteBuffer.of(string: "1234")
         XCTAssertEqual(HTTPClientRequestPart.body(.byteBuffer(buffer)), recorder.writes[1])
@@ -56,6 +60,7 @@ class HTTPClientInternalTests: XCTestCase {
 
         XCTAssertNoThrow(try channel.pipeline.addHandler(recorder).wait())
         XCTAssertNoThrow(try channel.pipeline.addHandler(TaskHandler(task: task,
+                                                                     kind: .host,
                                                                      delegate: TestHTTPDelegate(),
                                                                      redirectHandler: nil,
                                                                      ignoreUncleanSSLShutdown: false)).wait())
@@ -74,7 +79,11 @@ class HTTPClientInternalTests: XCTestCase {
         let channel = EmbeddedChannel()
         let delegate = TestHTTPDelegate()
         let task = Task<Void>(eventLoop: channel.eventLoop)
-        let handler = TaskHandler(task: task, delegate: delegate, redirectHandler: nil, ignoreUncleanSSLShutdown: false)
+        let handler = TaskHandler(task: task,
+                                  kind: .host,
+                                  delegate: delegate,
+                                  redirectHandler: nil,
+                                  ignoreUncleanSSLShutdown: false)
 
         try channel.pipeline.addHandler(handler).wait()
 
@@ -98,7 +107,7 @@ class HTTPClientInternalTests: XCTestCase {
         let httpBin = HTTPBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
         defer {
-            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
             XCTAssertNoThrow(try httpBin.shutdown())
         }
 
@@ -128,7 +137,7 @@ class HTTPClientInternalTests: XCTestCase {
         let httpBin = HTTPBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
         defer {
-            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
             XCTAssertNoThrow(try httpBin.shutdown())
         }
 
@@ -188,8 +197,8 @@ class HTTPClientInternalTests: XCTestCase {
 
             func didReceiveHead(task: HTTPClient.Task<Void>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
                 // This is to force NIO to send only 1 byte at a time.
-                let future = task.channel!.setOption(ChannelOptions.maxMessagesPerRead, value: 1).flatMap {
-                    task.channel!.setOption(ChannelOptions.recvAllocator, value: FixedSizeRecvByteBufferAllocator(capacity: 1))
+                let future = task.connection!.channel.setOption(ChannelOptions.maxMessagesPerRead, value: 1).flatMap {
+                    task.connection!.channel.setOption(ChannelOptions.recvAllocator, value: FixedSizeRecvByteBufferAllocator(capacity: 1))
                 }
                 future.cascade(to: self.optionsApplied)
                 return future
@@ -213,7 +222,7 @@ class HTTPClientInternalTests: XCTestCase {
         let httpBin = HTTPBin(channelPromise: promise)
 
         defer {
-            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
             XCTAssertNoThrow(try httpBin.shutdown())
         }
 
@@ -222,6 +231,7 @@ class HTTPClientInternalTests: XCTestCase {
         let future = httpClient.execute(request: request, delegate: delegate).futureResult
 
         let channel = try promise.futureResult.wait()
+
         // We need to wait for channel options that limit NIO to sending only one byte at a time.
         try delegate.optionsApplied.futureResult.wait()
 
@@ -354,7 +364,7 @@ class HTTPClientInternalTests: XCTestCase {
         let promise: EventLoopPromise<Channel> = httpClient.eventLoopGroup.next().makePromise()
         let httpBin = HTTPBin(channelPromise: promise)
         defer {
-            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
             XCTAssertNoThrow(try httpBin.shutdown())
         }
 
@@ -426,5 +436,293 @@ class HTTPClientInternalTests: XCTestCase {
         default:
             XCTFail("wrong message")
         }
+    }
+
+    func testResponseConnectionCloseGet() throws {
+        let httpBin = HTTPBin(ssl: false)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        let req = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get", method: .GET, headers: ["Connection": "close"], body: nil)
+        _ = try! httpClient.execute(request: req).wait()
+        let el = httpClient.eventLoopGroup.next()
+        try! el.scheduleTask(in: .milliseconds(500)) {
+            XCTAssertEqual(httpClient.pool.connectionProviderCount, 0)
+        }.futureResult.wait()
+    }
+
+    func testWeNoticeRemoteClosuresEvenWhenConnectionIsIdleInPool() {
+        final class ServerThatRespondsThenJustCloses: ChannelInboundHandler {
+            typealias InboundIn = HTTPServerRequestPart
+            typealias OutboundOut = HTTPServerResponsePart
+
+            let requestNumber: NIOAtomic<Int>
+            let connectionNumber: NIOAtomic<Int>
+
+            init(requestNumber: NIOAtomic<Int>, connectionNumber: NIOAtomic<Int>) {
+                self.requestNumber = requestNumber
+                self.connectionNumber = connectionNumber
+            }
+
+            func channelActive(context: ChannelHandlerContext) {
+                _ = self.connectionNumber.add(1)
+            }
+
+            func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+                let req = self.unwrapInboundIn(data)
+
+                switch req {
+                case .head, .body:
+                    ()
+                case .end:
+                    let last = self.requestNumber.add(1)
+                    switch last {
+                    case 0:
+                        context.write(self.wrapOutboundOut(.head(.init(version: .init(major: 1, minor: 1), status: .ok))),
+                                      promise: nil)
+                        context.writeAndFlush(self.wrapOutboundOut(.end(nil))).whenComplete { _ in
+                            context.eventLoop.scheduleTask(in: .milliseconds(10)) {
+                                context.close(promise: nil)
+                            }
+                        }
+                    case 1:
+                        context.write(self.wrapOutboundOut(.head(.init(version: .init(major: 1, minor: 1), status: .ok))),
+                                      promise: nil)
+                        context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+                    default:
+                        XCTFail("did not expect request \(last + 1)")
+                    }
+                }
+            }
+        }
+
+        final class ObserveWhenClosedHandler: ChannelInboundHandler {
+            typealias InboundIn = Any
+
+            let channelInactivePromise: EventLoopPromise<Void>
+
+            init(channelInactivePromise: EventLoopPromise<Void>) {
+                self.channelInactivePromise = channelInactivePromise
+            }
+
+            func channelInactive(context: ChannelHandlerContext) {
+                context.fireChannelInactive()
+                self.channelInactivePromise.succeed(())
+            }
+        }
+
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer {
+            XCTAssertNoThrow(try group.syncShutdownGracefully())
+        }
+        let requestNumber = NIOAtomic<Int>.makeAtomic(value: 0)
+        let connectionNumber = NIOAtomic<Int>.makeAtomic(value: 0)
+        let sharedStateServerHandler = ServerThatRespondsThenJustCloses(requestNumber: requestNumber,
+                                                                        connectionNumber: connectionNumber)
+        var maybeServer: Channel?
+        XCTAssertNoThrow(maybeServer = try ServerBootstrap(group: group)
+            .serverChannelOption(ChannelOptions.socket(.init(SOL_SOCKET), .init(SO_REUSEADDR)), value: 1)
+            .childChannelInitializer { channel in
+                channel.pipeline.configureHTTPServerPipeline().flatMap {
+                    // We're deliberately adding a handler which is shared between multiple channels. This is normally
+                    // very verboten but this handler is specially crafted to tolerate this.
+                    channel.pipeline.addHandler(sharedStateServerHandler)
+                }
+            }
+            .bind(host: "127.0.0.1", port: 0)
+            .wait())
+        guard let server = maybeServer else {
+            XCTFail("couldn't create server")
+            return
+        }
+        defer {
+            XCTAssertNoThrow(try server.close().wait())
+        }
+
+        let url = "http://127.0.0.1:\(server.localAddress!.port!)"
+        let client = HTTPClient(eventLoopGroupProvider: .shared(group))
+        defer {
+            XCTAssertNoThrow(try client.syncShutdown())
+        }
+
+        var maybeConnection: ConnectionPool.Connection?
+        // This is pretty evil but we literally just get hold of a connection to get to the channel to be able to
+        // observe when the server closing the connection is known to the client.
+        XCTAssertNoThrow(maybeConnection = try client.pool.getConnection(for: .init(url: url),
+                                                                         preference: .indifferent,
+                                                                         on: group.next(),
+                                                                         deadline: nil).wait())
+        guard let connection = maybeConnection else {
+            XCTFail("couldn't get connection")
+            return
+        }
+
+        // And let's also give the connection back :).
+        client.pool.release(connection)
+
+        XCTAssertEqual(0, sharedStateServerHandler.requestNumber.load())
+        XCTAssertEqual(1, client.pool.connectionProviderCount)
+        XCTAssertTrue(connection.channel.isActive)
+        XCTAssertNoThrow(XCTAssertEqual(.ok, try client.get(url: url).wait().status))
+        XCTAssertEqual(1, sharedStateServerHandler.connectionNumber.load())
+        XCTAssertEqual(1, sharedStateServerHandler.requestNumber.load())
+
+        // We have received the first response and we know the remote end will now close the connection.
+        // Let's wait until we see the closure in the client's channel.
+        XCTAssertNoThrow(try connection.channel.closeFuture.wait())
+
+        // Now that we should have learned that the connection is dead, a subsequent request should work and use a new
+        // connection
+        XCTAssertNoThrow(XCTAssertEqual(.ok, try client.get(url: url).wait().status))
+        XCTAssertEqual(2, sharedStateServerHandler.connectionNumber.load())
+        XCTAssertEqual(2, sharedStateServerHandler.requestNumber.load())
+    }
+
+    func testWeTolerateConnectionsGoingAwayWhilstPoolIsShuttingDown() {
+        struct NoChannelError: Error {}
+
+        let client = HTTPClient(eventLoopGroupProvider: .createNew)
+        var maybeServersAndChannels: [(HTTPBin, Channel)]?
+        XCTAssertNoThrow(maybeServersAndChannels = try (0..<10).map { _ in
+            let web = HTTPBin()
+            defer {
+                XCTAssertNoThrow(try web.shutdown())
+            }
+
+            let req = try! HTTPClient.Request(url: "http://localhost:\(web.serverChannel.localAddress!.port!)/get",
+                                              method: .GET,
+                                              body: nil)
+            var maybeConnection: ConnectionPool.Connection?
+            XCTAssertNoThrow(try maybeConnection = client.pool.getConnection(for: req,
+                                                                             preference: .indifferent,
+                                                                             on: client.eventLoopGroup.next(),
+                                                                             deadline: nil).wait())
+            guard let connection = maybeConnection else {
+                XCTFail("couldn't make connection")
+                throw NoChannelError()
+            }
+
+            let channel = connection.channel
+            client.pool.release(connection)
+            return (web, channel)
+        })
+
+        guard let serversAndChannels = maybeServersAndChannels else {
+            XCTFail("couldn't open servers")
+            return
+        }
+
+        DispatchQueue.global().async {
+            serversAndChannels.forEach { serverAndChannel in
+                serverAndChannel.1.close(promise: nil)
+            }
+        }
+        XCTAssertNoThrow(try client.syncShutdown())
+    }
+
+    func testRaceBetweenAsynchronousCloseAndChannelUsabilityDetection() {
+        final class DelayChannelCloseUntilToldHandler: ChannelOutboundHandler {
+            typealias OutboundIn = Any
+
+            enum State {
+                case idling
+                case delayedClose
+                case closeDone
+            }
+
+            var state: State = .idling
+            let doTheCloseNowFuture: EventLoopFuture<Void>
+            let sawTheClosePromise: EventLoopPromise<Void>
+
+            init(doTheCloseNowFuture: EventLoopFuture<Void>,
+                 sawTheClosePromise: EventLoopPromise<Void>) {
+                self.doTheCloseNowFuture = doTheCloseNowFuture
+                self.sawTheClosePromise = sawTheClosePromise
+            }
+
+            func handlerRemoved(context: ChannelHandlerContext) {
+                XCTAssertEqual(.closeDone, self.state)
+            }
+
+            func close(context: ChannelHandlerContext, mode: CloseMode, promise: EventLoopPromise<Void>?) {
+                XCTAssertEqual(.idling, self.state)
+                self.state = .delayedClose
+                self.sawTheClosePromise.succeed(())
+                // let's hold the close until the future's complete
+                self.doTheCloseNowFuture.whenSuccess {
+                    context.close(mode: mode).map {
+                        XCTAssertEqual(.delayedClose, self.state)
+                        self.state = .closeDone
+                    }.cascade(to: promise)
+                }
+            }
+        }
+
+        let web = HTTPBin()
+        defer {
+            XCTAssertNoThrow(try web.shutdown())
+        }
+
+        let client = HTTPClient(eventLoopGroupProvider: .createNew)
+        defer {
+            XCTAssertNoThrow(try client.syncShutdown())
+        }
+
+        let req = try! HTTPClient.Request(url: "http://localhost:\(web.serverChannel.localAddress!.port!)/get",
+                                          method: .GET,
+                                          body: nil)
+
+        // Let's start by getting a connection so we can mess with the Channel :).
+        var maybeConnection: ConnectionPool.Connection?
+        XCTAssertNoThrow(try maybeConnection = client.pool.getConnection(for: req,
+                                                                         preference: .indifferent,
+                                                                         on: client.eventLoopGroup.next(),
+                                                                         deadline: nil).wait())
+        guard let connection = maybeConnection else {
+            XCTFail("couldn't make connection")
+            return
+        }
+
+        let channel = connection.channel
+        let doActualCloseNowPromise = channel.eventLoop.makePromise(of: Void.self)
+        let sawTheClosePromise = channel.eventLoop.makePromise(of: Void.self)
+
+        XCTAssertNoThrow(try channel.pipeline.addHandler(DelayChannelCloseUntilToldHandler(doTheCloseNowFuture: doActualCloseNowPromise.futureResult,
+                                                                                           sawTheClosePromise: sawTheClosePromise),
+                                                         position: .first).wait())
+        client.pool.release(connection)
+
+        XCTAssertNoThrow(try client.execute(request: req).wait())
+
+        // Now, let's pretend the timeout happened
+        channel.pipeline.fireUserInboundEventTriggered(IdleStateHandler.IdleStateEvent.write)
+
+        // The Channel's closure should have already been initialised now but still, let's make sure the close
+        // was initiated
+        XCTAssertNoThrow(try sawTheClosePromise.futureResult.wait())
+        // The Channel should still be active though because we delayed the close through our handler above.
+        XCTAssertTrue(channel.isActive)
+
+        // When asking for a connection again, we should _not_ get the same one back because we did most of the close,
+        // similar to what the SSLHandler would do.
+        let connection2Future = client.pool.getConnection(for: req,
+                                                          preference: .indifferent,
+                                                          on: client.eventLoopGroup.next(),
+                                                          deadline: nil)
+        doActualCloseNowPromise.succeed(())
+
+        XCTAssertNoThrow(try maybeConnection = connection2Future.wait())
+        guard let connection2 = maybeConnection else {
+            XCTFail("couldn't get second connection")
+            return
+        }
+
+        XCTAssert(connection !== connection2)
+        client.pool.release(connection2)
+        XCTAssertTrue(connection2.channel.isActive)
     }
 }
