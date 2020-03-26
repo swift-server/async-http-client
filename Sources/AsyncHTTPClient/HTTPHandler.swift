@@ -239,7 +239,7 @@ extension HTTPClient {
         ///     - status: Response HTTP status.
         ///     - headers: Reponse HTTP headers.
         ///     - body: Response body.
-        @available(*, deprecated, message: "please use init(host:status:version:headers:body:) instead")
+        @available(*, deprecated, renamed: "init(host:status:version:headers:body:)")
         public init(host: String, status: HTTPResponseStatus, headers: HTTPHeaders, body: ByteBuffer?) {
             self.host = host
             self.status = status
