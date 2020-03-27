@@ -1673,4 +1673,17 @@ class HTTPClientTests: XCTestCase {
             }
         }
     }
+
+    func testAsyncShutdown() {
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
+        let promise = eventLoopGroup.next().makePromise(of: Void.self)
+        eventLoopGroup.next().execute {
+            httpClient.shutdown { error in
+                XCTAssertNil(error)
+                promise.succeed(())
+            }
+        }
+        XCTAssertNoThrow(try promise.futureResult.wait())
+    }
 }
