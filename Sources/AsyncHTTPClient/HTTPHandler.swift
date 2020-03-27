@@ -225,6 +225,8 @@ extension HTTPClient {
         public var host: String
         /// Response HTTP status.
         public var status: HTTPResponseStatus
+        /// Response HTTP version.
+        public var version: HTTPVersion
         /// Reponse HTTP headers.
         public var headers: HTTPHeaders
         /// Response body.
@@ -237,9 +239,27 @@ extension HTTPClient {
         ///     - status: Response HTTP status.
         ///     - headers: Reponse HTTP headers.
         ///     - body: Response body.
+        @available(*, deprecated, renamed: "init(host:status:version:headers:body:)")
         public init(host: String, status: HTTPResponseStatus, headers: HTTPHeaders, body: ByteBuffer?) {
             self.host = host
             self.status = status
+            self.version = HTTPVersion(major: 1, minor: 1)
+            self.headers = headers
+            self.body = body
+        }
+
+        /// Create HTTP `Response`.
+        ///
+        /// - parameters:
+        ///     - host: Remote host of the request.
+        ///     - status: Response HTTP status.
+        ///     - version: Response HTTP version.
+        ///     - headers: Reponse HTTP headers.
+        ///     - body: Response body.
+        public init(host: String, status: HTTPResponseStatus, version: HTTPVersion, headers: HTTPHeaders, body: ByteBuffer?) {
+            self.host = host
+            self.status = status
+            self.version = version
             self.headers = headers
             self.body = body
         }
@@ -342,9 +362,9 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
         case .idle:
             preconditionFailure("no head received before end")
         case .head(let head):
-            return Response(host: self.request.host, status: head.status, headers: head.headers, body: nil)
+            return Response(host: self.request.host, status: head.status, version: head.version, headers: head.headers, body: nil)
         case .body(let head, let body):
-            return Response(host: self.request.host, status: head.status, headers: head.headers, body: body)
+            return Response(host: self.request.host, status: head.status, version: head.version, headers: head.headers, body: body)
         case .end:
             preconditionFailure("request already processed")
         case .error(let error):
