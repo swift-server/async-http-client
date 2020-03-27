@@ -1679,7 +1679,7 @@ class HTTPClientTests: XCTestCase {
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
         let promise = eventLoopGroup.next().makePromise(of: Void.self)
         eventLoopGroup.next().execute {
-            httpClient.shutdown { error in
+            httpClient.shutdown(queue: DispatchQueue(label: "testAsyncShutdown")) { error in
                 XCTAssertNil(error)
                 promise.succeed(())
             }
