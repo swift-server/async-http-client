@@ -103,7 +103,7 @@ public class HTTPClient {
         let errorStorageLock = Lock()
         var errorStorage: Error?
         let continuation = DispatchWorkItem {}
-        self.shutdown(requiresCleanClose: requiresCleanClose, queue: .global()) { error in
+        self.shutdown(requiresCleanClose: requiresCleanClose, queue: DispatchQueue(label: "async-http-client.shutdown")) { error in
             if let error = error {
                 errorStorageLock.withLock {
                     errorStorage = error
@@ -123,10 +123,6 @@ public class HTTPClient {
     /// callback instead of an EventLoopFuture. The reason for that is that NIO's EventLoopFutures will call back on an event loop.
     /// The virtue of this function is to shut the event loop down. To work around that we call back on a DispatchQueue
     /// instead.
-    public func shutdown(_ callback: @escaping (Error?) -> Void) {
-        self.shutdown(requiresCleanClose: false, queue: .global(), callback)
-    }
-
     public func shutdown(queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
         self.shutdown(requiresCleanClose: false, queue: queue, callback)
     }
