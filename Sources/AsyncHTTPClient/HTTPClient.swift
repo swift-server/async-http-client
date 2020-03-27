@@ -131,68 +131,68 @@ public class HTTPClient {
         self.shutdown(requiresCleanClose: false, queue: queue, callback)
     }
 
-    private func shutdown(requiresCleanClose: Bool, queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
-        let tasks: Dictionary<UUID, TaskProtocol>.Values
-        do {
-            tasks = try self.stateLock.withLock {
-                if self.state != .upAndRunning {
-                    throw HTTPClientError.alreadyShutdown
-                }
-
-                self.state = .shuttingDown
-                return self.tasks.values
-            }
-        } catch {
-            callback(error)
-            return
+    private func cancelTasks(_ tasks: Dictionary<UUID, TaskProtocol>.Values) -> EventLoopFuture<Void> {
+        for task in tasks {
+            task.cancel()
         }
 
-        self.pool.prepareForClose(on: self.eventLoopGroup.next())
-            .flatMapThrowing { () -> Dictionary<UUID, TaskProtocol>.Values in
-                if !tasks.isEmpty, requiresCleanClose {
-                    throw HTTPClientError.uncleanShutdown
-                }
+        return EventLoopFuture.andAllComplete(tasks.map { $0.completion }, on: self.eventLoopGroup.next())
+    }
 
-                for task in tasks {
-                    task.cancel()
+    private func shutdownEventLoop(queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
+        self.stateLock.withLock {
+            switch self.eventLoopGroupProvider {
+            case .shared:
+                self.state = .shutDown
+                callback(nil)
+            case .createNew:
+                switch self.state {
+                case .shuttingDown:
+                    self.state = .shutDown
+                    self.eventLoopGroup.shutdownGracefully(queue: queue, callback)
+                case .shutDown, .upAndRunning:
+                    assertionFailure("The only valid state at this point is \(State.shutDown)")
                 }
-
-                return tasks
             }
-            .flatMap { tasks in EventLoopFuture.andAllComplete((tasks.map { $0.completion }), on: self.eventLoopGroup.next()) }
-            .flatMap { self.pool.close(on: self.eventLoopGroup.next()) }
-            .whenComplete { result in
+        }
+    }
+
+    private func shutdown(requiresCleanClose: Bool, queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
+        let result: Result<Dictionary<UUID, TaskProtocol>.Values, Error> = self.stateLock.withLock {
+            if self.state != .upAndRunning {
+                return .failure(HTTPClientError.alreadyShutdown)
+            } else {
+                self.state = .shuttingDown
+                return .success(self.tasks.values)
+            }
+        }
+
+        switch result {
+        case .failure(let error):
+            callback(error)
+        case .success(let tasks):
+            self.pool.prepareForClose(on: self.eventLoopGroup.next()).whenComplete { _ in
                 var closeError: Error?
-                switch result {
-                case .failure(let error):
-                    closeError = error
-                case .success:
-                    break
+                if !tasks.isEmpty, requiresCleanClose {
+                    closeError = HTTPClientError.uncleanShutdown
                 }
 
-                self.stateLock.withLock {
-                    switch self.eventLoopGroupProvider {
-                    case .shared:
-                        self.state = .shutDown
-                        callback(closeError)
-                    case .createNew:
-                        switch self.state {
-                        case .shuttingDown:
-                            self.state = .shutDown
-                            self.eventLoopGroup.shutdownGracefully(queue: queue) { eventLoopError in
-                                // we ignore event loop close error in favour of closeError
-                                if let error = closeError {
-                                    callback(error)
-                                } else {
-                                    callback(eventLoopError)
-                                }
+                // we ignore errors here
+                self.cancelTasks(tasks).whenComplete { _ in
+                    // we ignore errors here
+                    self.pool.close(on: self.eventLoopGroup.next()).whenComplete { _ in
+                        self.shutdownEventLoop(queue: queue) { eventLoopError in
+                            // we prioritise .uncleanShutdown here
+                            if let error = closeError {
+                                callback(error)
+                            } else {
+                                callback(eventLoopError)
                             }
-                        case .shutDown, .upAndRunning:
-                            assertionFailure("The only valid state at this point is \(State.shutDown)")
                         }
                     }
                 }
             }
+        }
     }
 
     /// Execute `GET` request using specified URL.

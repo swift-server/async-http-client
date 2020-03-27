@@ -452,8 +452,6 @@ final class ConnectionPool {
 
         /// Removes and fails all `waiters`, remove existing `availableConnections` and sets `state.activity` to `.closing`
         func prepareForClose() -> EventLoopFuture<Void> {
-            assert(MultiThreadedEventLoopGroup.currentEventLoop == nil,
-                   "HTTPClient shutdown on EventLoop unsupported") // calls .wait() so it would crash later anyway
             let (waitersFutures, closeFutures) = self.stateLock.withLock { () -> ([EventLoopFuture<Connection>], [EventLoopFuture<Void>]) in
                 // Fail waiters
                 let waitersCopy = self.state.waiters
