@@ -93,55 +93,106 @@ public class HTTPClient {
     /// this indicate shutdown was called too early before tasks were completed or explicitly canceled.
     /// In general, setting this parameter to `true` should make it easier and faster to catch related programming errors.
     internal func syncShutdown(requiresCleanClose: Bool) throws {
-        var closeError: Error?
-
-        let tasks = try self.stateLock.withLock { () -> Dictionary<UUID, TaskProtocol>.Values in
-            if self.state != .upAndRunning {
-                throw HTTPClientError.alreadyShutdown
+        if let eventLoop = MultiThreadedEventLoopGroup.currentEventLoop {
+            preconditionFailure("""
+            BUG DETECTED: syncShutdown() must not be called when on an EventLoop.
+            Calling syncShutdown() on any EventLoop can lead to deadlocks.
+            Current eventLoop: \(eventLoop)
+            """)
+        }
+        let errorStorageLock = Lock()
+        var errorStorage: Error? = nil
+        let continuation = DispatchWorkItem {}
+        self.shutdown(requiresCleanClose: requiresCleanClose, queue: .global()) { error in
+            if let error = error {
+                errorStorageLock.withLock {
+                    errorStorage = error
+                }
             }
-            self.state = .shuttingDown
-            return self.tasks.values
+            continuation.perform()
         }
-
-        self.pool.prepareForClose()
-
-        if !tasks.isEmpty, requiresCleanClose {
-            closeError = HTTPClientError.uncleanShutdown
+        continuation.wait()
+        try errorStorageLock.withLock {
+            if let error = errorStorage {
+                throw error
+            }
         }
+    }
 
-        for task in tasks {
-            task.cancel()
-        }
+    /// Shuts down the client and event loop gracefully. This function is clearly an outlier in that it uses a completion
+    /// callback instead of an EventLoopFuture. The reason for that is that NIO's EventLoopFutures will call back on an event loop.
+    /// The virtue of this function is to shut the event loop down. To work around that we call back on a DispatchQueue
+    /// instead.
+    public func shutdown( _ callback: @escaping (Error?) -> Void) {
+        self.shutdown(requiresCleanClose: false, queue: .global(), callback)
+    }
 
-        try? EventLoopFuture.andAllComplete((tasks.map { $0.completion }), on: self.eventLoopGroup.next()).wait()
+    public func shutdown(queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
+        self.shutdown(requiresCleanClose: false, queue: queue, callback)
+    }
 
-        self.pool.syncClose()
-
+    private func shutdown(requiresCleanClose: Bool, queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
+        let tasks: Dictionary<UUID, TaskProtocol>.Values
         do {
-            try self.stateLock.withLock {
-                switch self.eventLoopGroupProvider {
-                case .shared:
-                    self.state = .shutDown
-                    return
-                case .createNew:
-                    switch self.state {
-                    case .shuttingDown:
+            tasks = try self.stateLock.withLock {
+                if self.state != .upAndRunning {
+                    throw HTTPClientError.alreadyShutdown
+                }
+
+                self.state = .shuttingDown
+                return self.tasks.values
+            }
+        } catch {
+            callback(error)
+            return
+        }
+
+        self.pool.prepareForClose(on: self.eventLoopGroup.next())
+            .flatMapThrowing { () -> Dictionary<UUID, TaskProtocol>.Values in
+                if !tasks.isEmpty, requiresCleanClose {
+                    throw HTTPClientError.uncleanShutdown
+                }
+
+                for task in tasks {
+                    task.cancel()
+                }
+
+                return tasks
+            }
+            .flatMap { tasks in EventLoopFuture.andAllComplete((tasks.map { $0.completion }), on: self.eventLoopGroup.next()) }
+            .flatMap { self.pool.close(on: self.eventLoopGroup.next()) }
+            .whenComplete { result in
+                var closeError: Error?
+                switch result {
+                case .failure(let error):
+                    closeError = error
+                case .success:
+                    break
+                }
+
+                self.stateLock.withLock {
+                    switch self.eventLoopGroupProvider {
+                    case .shared:
                         self.state = .shutDown
-                        try self.eventLoopGroup.syncShutdownGracefully()
-                    case .shutDown, .upAndRunning:
-                        assertionFailure("The only valid state at this point is \(State.shutDown)")
+                        callback(closeError)
+                    case .createNew:
+                        switch self.state {
+                        case .shuttingDown:
+                            self.state = .shutDown
+                            self.eventLoopGroup.shutdownGracefully(queue: queue) { eventLoopError in
+                                // we ignore event loop close error in favour of closeError
+                                if let error = closeError {
+                                    callback(error)
+                                } else {
+                                    callback(eventLoopError)
+                                }
+                            }
+                        case .shutDown, .upAndRunning:
+                            assertionFailure("The only valid state at this point is \(State.shutDown)")
+                        }
                     }
                 }
             }
-        } catch {
-            if closeError == nil {
-                closeError = error
-            }
-        }
-
-        if let closeError = closeError {
-            throw closeError
-        }
     }
 
     /// Execute `GET` request using specified URL.
