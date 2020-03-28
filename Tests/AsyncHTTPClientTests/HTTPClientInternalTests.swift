@@ -356,7 +356,7 @@ class HTTPClientInternalTests: XCTestCase {
             }
         }
 
-        let group = MultiThreadedEventLoopGroup(numberOfThreads: 3)
+        let group = getDefaultEventLoopGroup(numberOfThreads: 3)
         defer {
             XCTAssertNoThrow(try group.syncShutdownGracefully())
         }
@@ -549,7 +549,11 @@ class HTTPClientInternalTests: XCTestCase {
         }
 
         let url = "http://127.0.0.1:\(server.localAddress!.port!)"
-        let client = HTTPClient(eventLoopGroupProvider: .shared(group))
+        let elg = getDefaultEventLoopGroup(numberOfThreads: 1)
+        defer {
+            XCTAssertNoThrow(try elg.syncShutdownGracefully())
+        }
+        let client = HTTPClient(eventLoopGroupProvider: .shared(elg))
         defer {
             XCTAssertNoThrow(try client.syncShutdown())
         }

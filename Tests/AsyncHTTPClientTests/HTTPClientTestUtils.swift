@@ -19,6 +19,17 @@ import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOHTTPCompression
 import NIOSSL
+import NIOTransportServices
+
+func getDefaultEventLoopGroup(numberOfThreads: Int) -> EventLoopGroup {
+    #if canImport(Network)
+    if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *),
+    ProcessInfo.processInfo.environment["ENABLE_TS_TESTS"] != nil {
+        return NIOTSEventLoopGroup(loopCount: numberOfThreads, defaultQoS: .default)
+    }
+    #endif
+    return MultiThreadedEventLoopGroup(numberOfThreads: numberOfThreads)
+}
 
 class TestHTTPDelegate: HTTPClientResponseDelegate {
     typealias Response = Void
