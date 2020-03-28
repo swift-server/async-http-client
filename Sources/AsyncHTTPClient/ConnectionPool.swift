@@ -376,7 +376,7 @@ final class ConnectionPool {
         private func makeNonTSBootstrap(on eventLoop: EventLoop) throws -> NIOClientTCPBootstrap {
             let tlsConfiguration = configuration.tlsConfiguration ?? TLSConfiguration.forClient()
             let sslContext = try NIOSSLContext(configuration: tlsConfiguration)
-            let tlsProvider = try NIOSSLClientTLSProvider<ClientBootstrap>(context: sslContext, serverHostname: key.host.isIPAddress ? nil : key.host)
+            let tlsProvider = try NIOSSLClientTLSProvider<ClientBootstrap>(context: sslContext, serverHostname: (key.scheme == .unix || key.host.isIPAddress) ? nil : key.host)
             return NIOClientTCPBootstrap(ClientBootstrap(group: eventLoop), tls: tlsProvider)
         }
         
@@ -423,6 +423,7 @@ final class ConnectionPool {
             do {
                 bootstrap = try makeHTTPClientBootstrapBase(on: eventLoop)
             } catch {
+                handshakePromise.fail(error)
                 return eventLoop.makeFailedFuture(error)
             }
 
@@ -436,7 +437,6 @@ final class ConnectionPool {
 
             return channel.flatMap { channel -> EventLoopFuture<ConnectionPool.Connection> in
                 handshakePromise.succeed(())
-//                channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, handshakePromise: handshakePromise)
                 return handshakePromise.futureResult.flatMap {
                     channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
                 }.map {
