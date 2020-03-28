@@ -18,6 +18,7 @@ import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOHTTPCompression
 import NIOSSL
+import NIOTransportServices
 import NIOTLS
 
 /// HTTPClient class provides API for request execution.
@@ -65,7 +66,15 @@ public class HTTPClient {
         case .shared(let group):
             self.eventLoopGroup = group
         case .createNew:
+            #if canImport(Network)
+            if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
+                self.eventLoopGroup = NIOTSEventLoopGroup()
+            } else {
+                self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+            }
+            #else
             self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+            #endif
         }
         self.configuration = configuration
         self.pool = ConnectionPool(configuration: configuration)

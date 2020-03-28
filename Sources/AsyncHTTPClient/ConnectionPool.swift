@@ -16,6 +16,8 @@ import Foundation
 import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
+import NIOSSL
+import NIOTransportServices
 import NIOTLS
 
 /// A connection pool that manages and creates new connections to hosts respecting the specified preferences
@@ -371,11 +373,58 @@ final class ConnectionPool {
             }
         }
 
+        private func makeNonTSBootstrap(on eventLoop: EventLoop) throws -> NIOClientTCPBootstrap {
+            let tlsConfiguration = configuration.tlsConfiguration ?? TLSConfiguration.forClient()
+            let sslContext = try NIOSSLContext(configuration: tlsConfiguration)
+            let tlsProvider = try NIOSSLClientTLSProvider<ClientBootstrap>(context: sslContext, serverHostname: key.host.isIPAddress ? nil : key.host)
+            return NIOClientTCPBootstrap(ClientBootstrap(group: eventLoop), tls: tlsProvider)
+        }
+        
+        /// create a TCP Bootstrap based off what type of `EventLoop` has been passed to the function.
+        private func makeBootstrap(on eventLoop: EventLoop) throws -> NIOClientTCPBootstrap {
+            let bootstrap: NIOClientTCPBootstrap
+            #if canImport(Network)
+            if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), eventLoop is NIOTSEventLoop {
+                let tlsProvider = NIOTSClientTLSProvider(tlsOptions: .init())
+                bootstrap = NIOClientTCPBootstrap(NIOTSConnectionBootstrap(group: eventLoop), tls: tlsProvider)
+            } else {
+                bootstrap = try makeNonTSBootstrap(on: eventLoop)
+            }
+            #else
+            bootstrap = try makeNonTSBootstrap(on: eventLoop)
+            #endif
+
+            if key.scheme == .https {
+                return bootstrap.enableTLS()
+            }
+            return bootstrap
+        }
+        
+        private func makeHTTPClientBootstrapBase(on eventLoop: EventLoop) throws -> NIOClientTCPBootstrap {
+            return try makeBootstrap(on: eventLoop)
+                .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
+                .channelInitializer { channel in
+                    let channelAddedFuture: EventLoopFuture<Void>
+                    switch self.configuration.proxy {
+                    case .none:
+                        channelAddedFuture = eventLoop.makeSucceededFuture(())
+                    case .some:
+                        channelAddedFuture = channel.pipeline.addProxyHandler(host: self.key.host, port: self.key.port, authorization: self.configuration.proxy?.authorization)
+                    }
+                    return channelAddedFuture
+                }
+        }
+        
         private func makeConnection(on eventLoop: EventLoop) -> EventLoopFuture<Connection> {
             self.activityPrecondition(expected: [.opened])
             let handshakePromise = eventLoop.makePromise(of: Void.self)
-            let bootstrap = ClientBootstrap.makeHTTPClientBootstrapBase(group: eventLoop, host: self.key.host, port: self.key.port, configuration: self.configuration)
             let address = HTTPClient.resolveAddress(host: self.key.host, port: self.key.port, proxy: self.configuration.proxy)
+            let bootstrap : NIOClientTCPBootstrap
+            do {
+                bootstrap = try makeHTTPClientBootstrapBase(on: eventLoop)
+            } catch {
+                return eventLoop.makeFailedFuture(error)
+            }
 
             let channel: EventLoopFuture<Channel>
             switch self.key.scheme {
@@ -386,7 +435,8 @@ final class ConnectionPool {
             }
 
             return channel.flatMap { channel -> EventLoopFuture<ConnectionPool.Connection> in
-                channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, handshakePromise: handshakePromise)
+                handshakePromise.succeed(())
+//                channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, handshakePromise: handshakePromise)
                 return handshakePromise.futureResult.flatMap {
                     channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
                 }.map {

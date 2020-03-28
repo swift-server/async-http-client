@@ -217,7 +217,9 @@ class HTTPClientInternalTests: XCTestCase {
             func didFinishRequest(task: HTTPClient.Task<Response>) throws {}
         }
 
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        // cannot test with NIOTS as `maxMessagesPerRead` is not supported
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
         let promise = httpClient.eventLoopGroup.next().makePromise(of: Channel.self)
         let httpBin = HTTPBin(channelPromise: promise)
 

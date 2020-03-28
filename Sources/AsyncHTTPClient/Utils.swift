@@ -46,26 +46,6 @@ public final class HTTPClientCopyingDelegate: HTTPClientResponseDelegate {
     }
 }
 
-extension ClientBootstrap {
-    static func makeHTTPClientBootstrapBase(group: EventLoopGroup, host: String, port: Int, configuration: HTTPClient.Configuration, channelInitializer: ((Channel) -> EventLoopFuture<Void>)? = nil) -> ClientBootstrap {
-        return ClientBootstrap(group: group)
-            .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
-
-            .channelInitializer { channel in
-                let channelAddedFuture: EventLoopFuture<Void>
-                switch configuration.proxy {
-                case .none:
-                    channelAddedFuture = group.next().makeSucceededFuture(())
-                case .some:
-                    channelAddedFuture = channel.pipeline.addProxyHandler(host: host, port: port, authorization: configuration.proxy?.authorization)
-                }
-                return channelAddedFuture.flatMap { (_: Void) -> EventLoopFuture<Void> in
-                    channelInitializer?(channel) ?? group.next().makeSucceededFuture(())
-                }
-            }
-    }
-}
-
 extension CircularBuffer {
     @discardableResult
     mutating func swapWithFirstAndRemove(at index: Index) -> Element? {
