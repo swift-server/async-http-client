@@ -23,6 +23,19 @@ class HTTPClientInternalTests: XCTestCase {
     typealias Request = HTTPClient.Request
     typealias Task = HTTPClient.Task
 
+    var clientGroup: EventLoopGroup!
+
+    override func setUp() {
+        XCTAssertNil(self.clientGroup)
+        self.clientGroup = getDefaultEventLoopGroup(numberOfThreads: 1)
+    }
+
+    override func tearDown() {
+        XCTAssertNotNil(self.clientGroup)
+        XCTAssertNoThrow(try self.clientGroup.syncShutdownGracefully())
+        self.clientGroup = nil
+    }
+
     func testHTTPPartsHandler() throws {
         let channel = EmbeddedChannel()
         let recorder = RecordingHandler<HTTPClientResponsePart, HTTPClientRequestPart>()
@@ -105,7 +118,7 @@ class HTTPClientInternalTests: XCTestCase {
 
     func testProxyStreaming() throws {
         let httpBin = HTTPBin()
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
             XCTAssertNoThrow(try httpBin.shutdown())
@@ -135,7 +148,7 @@ class HTTPClientInternalTests: XCTestCase {
 
     func testProxyStreamingFailure() throws {
         let httpBin = HTTPBin()
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
             XCTAssertNoThrow(try httpBin.shutdown())
@@ -445,7 +458,7 @@ class HTTPClientInternalTests: XCTestCase {
 
     func testResponseConnectionCloseGet() throws {
         let httpBin = HTTPBin(ssl: false)
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
@@ -549,11 +562,7 @@ class HTTPClientInternalTests: XCTestCase {
         }
 
         let url = "http://127.0.0.1:\(server.localAddress!.port!)"
-        let elg = getDefaultEventLoopGroup(numberOfThreads: 1)
-        defer {
-            XCTAssertNoThrow(try elg.syncShutdownGracefully())
-        }
-        let client = HTTPClient(eventLoopGroupProvider: .shared(elg))
+        let client = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
         defer {
             XCTAssertNoThrow(try client.syncShutdown())
         }
@@ -594,7 +603,7 @@ class HTTPClientInternalTests: XCTestCase {
     func testWeTolerateConnectionsGoingAwayWhilstPoolIsShuttingDown() {
         struct NoChannelError: Error {}
 
-        let client = HTTPClient(eventLoopGroupProvider: .createNew)
+        let client = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
         var maybeServersAndChannels: [(HTTPBin, Channel)]?
         XCTAssertNoThrow(maybeServersAndChannels = try (0..<10).map { _ in
             let web = HTTPBin()
@@ -676,7 +685,7 @@ class HTTPClientInternalTests: XCTestCase {
             XCTAssertNoThrow(try web.shutdown())
         }
 
-        let client = HTTPClient(eventLoopGroupProvider: .createNew)
+        let client = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
         defer {
             XCTAssertNoThrow(try client.syncShutdown())
         }
