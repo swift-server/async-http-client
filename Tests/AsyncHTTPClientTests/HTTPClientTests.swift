@@ -1101,9 +1101,11 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testStressGetClose() throws {
-        guard !(self.clientGroup is NIOTSEventLoopGroup) else {
-            XCTFail("Disabled test as it crashes");
-            return
+        if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
+            guard !(self.clientGroup is NIOTSEventLoopGroup) else {
+                XCTFail("Disabled test as it crashes");
+                return
+            }
         }
         let httpBin = HTTPBin(ssl: false)
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),

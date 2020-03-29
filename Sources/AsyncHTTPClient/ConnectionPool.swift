@@ -417,13 +417,11 @@ final class ConnectionPool {
         
         private func makeConnection(on eventLoop: EventLoop) -> EventLoopFuture<Connection> {
             self.activityPrecondition(expected: [.opened])
-            let handshakePromise = eventLoop.makePromise(of: Void.self)
             let address = HTTPClient.resolveAddress(host: self.key.host, port: self.key.port, proxy: self.configuration.proxy)
             let bootstrap : NIOClientTCPBootstrap
             do {
                 bootstrap = try makeHTTPClientBootstrapBase(on: eventLoop)
             } catch {
-                handshakePromise.fail(error)
                 return eventLoop.makeFailedFuture(error)
             }
 
@@ -436,10 +434,8 @@ final class ConnectionPool {
             }
 
             return channel.flatMap { channel -> EventLoopFuture<ConnectionPool.Connection> in
-                handshakePromise.succeed(())
-                return handshakePromise.futureResult.flatMap {
-                    channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
-                }.map {
+                
+                channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes).map {
                     let connection = Connection(key: self.key, channel: channel, parentPool: self.parentPool)
                     connection.isLeased = true
                     return connection
@@ -448,9 +444,6 @@ final class ConnectionPool {
                 self.configureCloseCallback(of: connection)
                 return connection
             }.flatMapError { error in
-                // This promise may not have been completed if we reach this
-                // so we fail it to avoid any leak
-                handshakePromise.fail(error)
                 let action = self.parentPool.connectionProvidersLock.withLock {
                     self.stateLock.withLock {
                         self.state.failedConnectionAction()
