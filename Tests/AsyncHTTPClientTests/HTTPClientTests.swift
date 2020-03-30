@@ -13,6 +13,9 @@
 //===----------------------------------------------------------------------===//
 
 @testable import AsyncHTTPClient
+#if canImport(Network)
+import Network
+#endif
 import NIO
 import NIOConcurrencyHelpers
 import NIOFoundationCompat
@@ -1021,6 +1024,18 @@ class HTTPClientTests: XCTestCase {
                 XCTFail("Shouldn't succeed")
                 continue
             case .failure(let error):
+                #if canImport(Network)
+                if isTestingNIOTS() {
+                    if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
+                        guard let clientError = error as? NWError, case NWError.tls(let status) = clientError else {
+                            XCTFail("Unexpected error: \(error)")
+                            continue
+                        }
+                        XCTAssertEqual(status, errSSLHandshakeFail)
+                    }
+                    continue
+                }
+                #endif
                 guard let clientError = error as? NIOSSLError, case NIOSSLError.handshakeFailed = clientError else {
                     XCTFail("Unexpected error: \(error)")
                     continue
