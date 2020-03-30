@@ -140,12 +140,8 @@ extension HTTPClient {
 }
 
 extension HTTPClient.Response {
-    var cookieHeaders: [HTTPHeaders.Element] {
-        return headers.filter { $0.name.lowercased() == "set-cookie" }
-    }
-
     /// List of HTTP cookies returned by the server.
     public var cookies: [HTTPClient.Cookie] {
-        return self.cookieHeaders.compactMap { HTTPClient.Cookie(header: $0.value, defaultDomain: self.host) }
+        return self.headers["set-cookie"].compactMap { HTTPClient.Cookie(header: $0, defaultDomain: self.host) }
     }
 }
