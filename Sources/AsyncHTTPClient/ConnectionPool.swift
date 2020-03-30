@@ -93,20 +93,23 @@ final class ConnectionPool {
         }
     }
 
-    func prepareForClose() {
-        let connectionProviders = self.connectionProvidersLock.withLock { self.connectionProviders.values }
-        for connectionProvider in connectionProviders {
-            connectionProvider.prepareForClose()
+    func prepareForClose(on eventLoop: EventLoop) -> EventLoopFuture<Void> {
+        let connectionProviders = self.connectionProvidersLock.withLock {
+            self.connectionProviders.values
         }
+
+        return EventLoopFuture<Void>.andAllComplete(connectionProviders.map { $0.prepareForClose() }, on: eventLoop)
     }
 
-    func syncClose() {
-        let connectionProviders = self.connectionProvidersLock.withLock { self.connectionProviders.values }
-        for connectionProvider in connectionProviders {
-            connectionProvider.syncClose()
+    func close(on eventLoop: EventLoop) -> EventLoopFuture<Void> {
+        let connectionProviders = self.connectionProvidersLock.withLock {
+            self.connectionProviders.values
         }
-        self.connectionProvidersLock.withLock {
-            assert(self.connectionProviders.count == 0, "left-overs: \(self.connectionProviders)")
+
+        return EventLoopFuture.andAllComplete(connectionProviders.map { $0.close() }, on: eventLoop).map {
+            self.connectionProvidersLock.withLock {
+                assert(self.connectionProviders.count == 0, "left-overs: \(self.connectionProviders)")
+            }
         }
     }
 
@@ -448,9 +451,7 @@ final class ConnectionPool {
         }
 
         /// Removes and fails all `waiters`, remove existing `availableConnections` and sets `state.activity` to `.closing`
-        func prepareForClose() {
-            assert(MultiThreadedEventLoopGroup.currentEventLoop == nil,
-                   "HTTPClient shutdown on EventLoop unsupported") // calls .wait() so it would crash later anyway
+        func prepareForClose() -> EventLoopFuture<Void> {
             let (waitersFutures, closeFutures) = self.stateLock.withLock { () -> ([EventLoopFuture<Connection>], [EventLoopFuture<Void>]) in
                 // Fail waiters
                 let waitersCopy = self.state.waiters
@@ -461,26 +462,29 @@ final class ConnectionPool {
                 let closeFutures = self.state.availableConnections.map { $0.close() }
                 return (waitersFutures, closeFutures)
             }
-            try? EventLoopFuture<Connection>.andAllComplete(waitersFutures, on: self.eventLoop).wait()
-            try? EventLoopFuture<Void>.andAllComplete(closeFutures, on: self.eventLoop).wait()
 
-            self.stateLock.withLock {
-                if self.state.leased == 0, self.state.availableConnections.isEmpty {
-                    self.state.activity = .closed
-                } else {
-                    self.state.activity = .closing
+            return EventLoopFuture<Connection>.andAllComplete(waitersFutures, on: self.eventLoop)
+                .flatMap {
+                    EventLoopFuture<Void>.andAllComplete(closeFutures, on: self.eventLoop)
                 }
-            }
+                .map { _ in
+                    self.stateLock.withLock {
+                        if self.state.leased == 0, self.state.availableConnections.isEmpty {
+                            self.state.activity = .closed
+                        } else {
+                            self.state.activity = .closing
+                        }
+                    }
+                }
         }
 
-        func syncClose() {
-            assert(MultiThreadedEventLoopGroup.currentEventLoop == nil,
-                   "HTTPClient shutdown on EventLoop unsupported") // calls .wait() so it would crash later anyway
+        func close() -> EventLoopFuture<Void> {
             let availableConnections = self.stateLock.withLock { () -> CircularBuffer<ConnectionPool.Connection> in
                 assert(self.state.activity == .closing)
                 return self.state.availableConnections
             }
-            try? EventLoopFuture<Void>.andAllComplete(availableConnections.map { $0.close() }, on: self.eventLoop).wait()
+
+            return EventLoopFuture<Void>.andAllComplete(availableConnections.map { $0.close() }, on: self.eventLoop)
         }
 
         private func activityPrecondition(expected: Set<State.Activity>) {

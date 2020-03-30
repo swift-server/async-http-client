@@ -93,54 +93,101 @@ public class HTTPClient {
     /// this indicate shutdown was called too early before tasks were completed or explicitly canceled.
     /// In general, setting this parameter to `true` should make it easier and faster to catch related programming errors.
     internal func syncShutdown(requiresCleanClose: Bool) throws {
-        var closeError: Error?
-
-        let tasks = try self.stateLock.withLock { () -> Dictionary<UUID, TaskProtocol>.Values in
-            if self.state != .upAndRunning {
-                throw HTTPClientError.alreadyShutdown
+        if let eventLoop = MultiThreadedEventLoopGroup.currentEventLoop {
+            preconditionFailure("""
+            BUG DETECTED: syncShutdown() must not be called when on an EventLoop.
+            Calling syncShutdown() on any EventLoop can lead to deadlocks.
+            Current eventLoop: \(eventLoop)
+            """)
+        }
+        let errorStorageLock = Lock()
+        var errorStorage: Error?
+        let continuation = DispatchWorkItem {}
+        self.shutdown(requiresCleanClose: requiresCleanClose, queue: DispatchQueue(label: "async-http-client.shutdown")) { error in
+            if let error = error {
+                errorStorageLock.withLock {
+                    errorStorage = error
+                }
             }
-            self.state = .shuttingDown
-            return self.tasks.values
+            continuation.perform()
         }
-
-        self.pool.prepareForClose()
-
-        if !tasks.isEmpty, requiresCleanClose {
-            closeError = HTTPClientError.uncleanShutdown
+        continuation.wait()
+        try errorStorageLock.withLock {
+            if let error = errorStorage {
+                throw error
+            }
         }
+    }
 
+    /// Shuts down the client and event loop gracefully. This function is clearly an outlier in that it uses a completion
+    /// callback instead of an EventLoopFuture. The reason for that is that NIO's EventLoopFutures will call back on an event loop.
+    /// The virtue of this function is to shut the event loop down. To work around that we call back on a DispatchQueue
+    /// instead.
+    public func shutdown(queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
+        self.shutdown(requiresCleanClose: false, queue: queue, callback)
+    }
+
+    private func cancelTasks(_ tasks: Dictionary<UUID, TaskProtocol>.Values) -> EventLoopFuture<Void> {
         for task in tasks {
             task.cancel()
         }
 
-        try? EventLoopFuture.andAllComplete((tasks.map { $0.completion }), on: self.eventLoopGroup.next()).wait()
+        return EventLoopFuture.andAllComplete(tasks.map { $0.completion }, on: self.eventLoopGroup.next())
+    }
 
-        self.pool.syncClose()
-
-        do {
-            try self.stateLock.withLock {
-                switch self.eventLoopGroupProvider {
-                case .shared:
+    private func shutdownEventLoop(queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
+        self.stateLock.withLock {
+            switch self.eventLoopGroupProvider {
+            case .shared:
+                self.state = .shutDown
+                callback(nil)
+            case .createNew:
+                switch self.state {
+                case .shuttingDown:
                     self.state = .shutDown
-                    return
-                case .createNew:
-                    switch self.state {
-                    case .shuttingDown:
-                        self.state = .shutDown
-                        try self.eventLoopGroup.syncShutdownGracefully()
-                    case .shutDown, .upAndRunning:
-                        assertionFailure("The only valid state at this point is \(State.shutDown)")
-                    }
+                    self.eventLoopGroup.shutdownGracefully(queue: queue, callback)
+                case .shutDown, .upAndRunning:
+                    assertionFailure("The only valid state at this point is \(State.shutDown)")
                 }
             }
-        } catch {
-            if closeError == nil {
-                closeError = error
+        }
+    }
+
+    private func shutdown(requiresCleanClose: Bool, queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
+        let result: Result<Dictionary<UUID, TaskProtocol>.Values, Error> = self.stateLock.withLock {
+            if self.state != .upAndRunning {
+                return .failure(HTTPClientError.alreadyShutdown)
+            } else {
+                self.state = .shuttingDown
+                return .success(self.tasks.values)
             }
         }
 
-        if let closeError = closeError {
-            throw closeError
+        switch result {
+        case .failure(let error):
+            callback(error)
+        case .success(let tasks):
+            self.pool.prepareForClose(on: self.eventLoopGroup.next()).whenComplete { _ in
+                var closeError: Error?
+                if !tasks.isEmpty, requiresCleanClose {
+                    closeError = HTTPClientError.uncleanShutdown
+                }
+
+                // we ignore errors here
+                self.cancelTasks(tasks).whenComplete { _ in
+                    // we ignore errors here
+                    self.pool.close(on: self.eventLoopGroup.next()).whenComplete { _ in
+                        self.shutdownEventLoop(queue: queue) { eventLoopError in
+                            // we prioritise .uncleanShutdown here
+                            if let error = closeError {
+                                callback(error)
+                            } else {
+                                callback(eventLoopError)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
