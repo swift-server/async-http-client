@@ -373,54 +373,12 @@ final class ConnectionPool {
             }
         }
 
-        private func makeNonTSBootstrap(on eventLoop: EventLoop) throws -> NIOClientTCPBootstrap {
-            let tlsConfiguration = configuration.tlsConfiguration ?? TLSConfiguration.forClient()
-            let sslContext = try NIOSSLContext(configuration: tlsConfiguration)
-            let tlsProvider = try NIOSSLClientTLSProvider<ClientBootstrap>(context: sslContext, serverHostname: (key.scheme == .unix || key.host.isIPAddress) ? nil : key.host)
-            return NIOClientTCPBootstrap(ClientBootstrap(group: eventLoop), tls: tlsProvider)
-        }
-        
-        /// create a TCP Bootstrap based off what type of `EventLoop` has been passed to the function.
-        private func makeBootstrap(on eventLoop: EventLoop) throws -> NIOClientTCPBootstrap {
-            let bootstrap: NIOClientTCPBootstrap
-            #if canImport(Network)
-            if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), eventLoop is NIOTSEventLoop {
-                let tlsProvider = NIOTSClientTLSProvider(tlsOptions: .init())
-                bootstrap = NIOClientTCPBootstrap(NIOTSConnectionBootstrap(group: eventLoop), tls: tlsProvider)
-            } else {
-                bootstrap = try makeNonTSBootstrap(on: eventLoop)
-            }
-            #else
-            bootstrap = try makeNonTSBootstrap(on: eventLoop)
-            #endif
-
-            if key.scheme == .https {
-                return bootstrap.enableTLS()
-            }
-            return bootstrap
-        }
-        
-        private func makeHTTPClientBootstrapBase(on eventLoop: EventLoop) throws -> NIOClientTCPBootstrap {
-            return try makeBootstrap(on: eventLoop)
-                .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
-                .channelInitializer { channel in
-                    let channelAddedFuture: EventLoopFuture<Void>
-                    switch self.configuration.proxy {
-                    case .none:
-                        channelAddedFuture = eventLoop.makeSucceededFuture(())
-                    case .some:
-                        channelAddedFuture = channel.pipeline.addProxyHandler(host: self.key.host, port: self.key.port, authorization: self.configuration.proxy?.authorization)
-                    }
-                    return channelAddedFuture
-                }
-        }
-        
         private func makeConnection(on eventLoop: EventLoop) -> EventLoopFuture<Connection> {
             self.activityPrecondition(expected: [.opened])
             let address = HTTPClient.resolveAddress(host: self.key.host, port: self.key.port, proxy: self.configuration.proxy)
             let bootstrap : NIOClientTCPBootstrap
             do {
-                bootstrap = try makeHTTPClientBootstrapBase(on: eventLoop)
+                bootstrap = try NIOClientTCPBootstrap.makeHTTPClientBootstrapBase(on: eventLoop, host: key.host, port: key.port, requiresTLS: self.key.scheme == .https, configuration: self.configuration)
             } catch {
                 return eventLoop.makeFailedFuture(error)
             }

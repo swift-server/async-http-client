@@ -15,6 +15,8 @@
 import NIO
 import NIOHTTP1
 import NIOHTTPCompression
+import NIOSSL
+import NIOTransportServices
 
 internal extension String {
     var isIPAddress: Bool {
@@ -43,6 +45,52 @@ public final class HTTPClientCopyingDelegate: HTTPClientResponseDelegate {
 
     public func didFinishRequest(task: HTTPClient.Task<Void>) throws {
         return ()
+    }
+}
+
+extension ClientBootstrap {
+    fileprivate static func makeBootstrap(on eventLoop: EventLoop, host: String, requiresTLS: Bool, configuration: HTTPClient.Configuration) throws -> NIOClientTCPBootstrap {
+        let tlsConfiguration = configuration.tlsConfiguration ?? TLSConfiguration.forClient()
+        let sslContext = try NIOSSLContext(configuration: tlsConfiguration)
+        let tlsProvider = try NIOSSLClientTLSProvider<ClientBootstrap>(context: sslContext, serverHostname: (!requiresTLS || host.isIPAddress) ? nil : host)
+        return NIOClientTCPBootstrap(ClientBootstrap(group: eventLoop), tls: tlsProvider)
+    }
+}
+
+extension NIOClientTCPBootstrap {
+    /// create a TCP Bootstrap based off what type of `EventLoop` has been passed to the function.
+    fileprivate static func makeBootstrap(on eventLoop: EventLoop, host: String, requiresTLS: Bool, configuration: HTTPClient.Configuration) throws -> NIOClientTCPBootstrap {
+        let bootstrap: NIOClientTCPBootstrap
+        #if canImport(Network)
+        if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), eventLoop is NIOTSEventLoop {
+            let tlsProvider = NIOTSClientTLSProvider(tlsOptions: .init())
+            bootstrap = NIOClientTCPBootstrap(NIOTSConnectionBootstrap(group: eventLoop), tls: tlsProvider)
+        } else {
+            bootstrap = try ClientBootstrap.makeBootstrap(on: eventLoop, host: host, requiresTLS: requiresTLS, configuration: configuration)
+        }
+        #else
+        bootstrap = try ClientBootstrap.makeBootstrap(on: eventLoop, host: host, requiresTLS: requiresTLS, configuration: configuration)
+        #endif
+
+        if requiresTLS {
+            return bootstrap.enableTLS()
+        }
+        return bootstrap
+    }
+    
+    static func makeHTTPClientBootstrapBase(on eventLoop: EventLoop, host: String, port: Int, requiresTLS: Bool, configuration: HTTPClient.Configuration) throws -> NIOClientTCPBootstrap {
+        return try makeBootstrap(on: eventLoop, host: host, requiresTLS: requiresTLS, configuration: configuration)
+            .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
+            .channelInitializer { channel in
+                let channelAddedFuture: EventLoopFuture<Void>
+                switch configuration.proxy {
+                case .none:
+                    channelAddedFuture = eventLoop.makeSucceededFuture(())
+                case .some:
+                    channelAddedFuture = channel.pipeline.addProxyHandler(host: host, port: port, authorization: configuration.proxy?.authorization)
+                }
+                return channelAddedFuture
+            }
     }
 }
 
