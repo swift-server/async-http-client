@@ -419,11 +419,8 @@ final class ConnectionPool {
             }
 
             return channel.flatMap { channel -> EventLoopFuture<ConnectionPool.Connection> in
-                if self.requiresSSLHandler(on: eventLoop) {
-                    channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, handshakePromise: handshakePromise)
-                } else {
-                    handshakePromise.succeed(())
-                }
+                    
+                channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, addSSLClient: self.requiresSSLHandler(on: eventLoop), handshakePromise: handshakePromise)
                 return handshakePromise.futureResult.flatMap {
                    channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
                 }.map {
