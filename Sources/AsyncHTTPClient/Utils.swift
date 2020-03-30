@@ -49,22 +49,40 @@ public final class HTTPClientCopyingDelegate: HTTPClientResponseDelegate {
 }
 
 extension ClientBootstrap {
-    fileprivate static func makeBootstrap(on eventLoop: EventLoop, host: String, requiresTLS: Bool, configuration: HTTPClient.Configuration) throws -> NIOClientTCPBootstrap {
+    fileprivate static func makeBootstrap(
+        on eventLoop: EventLoop,
+        host: String,
+        requiresTLS: Bool,
+        configuration: HTTPClient.Configuration
+    ) throws -> NIOClientTCPBootstrap {
         let tlsConfiguration = configuration.tlsConfiguration ?? TLSConfiguration.forClient()
         let sslContext = try NIOSSLContext(configuration: tlsConfiguration)
-        let tlsProvider = try NIOSSLClientTLSProvider<ClientBootstrap>(context: sslContext, serverHostname: (!requiresTLS || host.isIPAddress) ? nil : host)
+        let hostname = (!requiresTLS || host.isIPAddress) ? nil : host
+        let tlsProvider = try NIOSSLClientTLSProvider<ClientBootstrap>(context: sslContext, serverHostname: hostname)
         return NIOClientTCPBootstrap(ClientBootstrap(group: eventLoop), tls: tlsProvider)
     }
 }
 
 extension NIOClientTCPBootstrap {
     /// create a TCP Bootstrap based off what type of `EventLoop` has been passed to the function.
-    fileprivate static func makeBootstrap(on eventLoop: EventLoop, host: String, requiresTLS: Bool, configuration: HTTPClient.Configuration) throws -> NIOClientTCPBootstrap {
+    fileprivate static func makeBootstrap(
+        on eventLoop: EventLoop,
+        host: String,
+        requiresTLS: Bool,
+        configuration: HTTPClient.Configuration
+    ) throws -> NIOClientTCPBootstrap {
         let bootstrap: NIOClientTCPBootstrap
         #if canImport(Network)
         if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), eventLoop is NIOTSEventLoop {
-            let tlsProvider = NIOTSClientTLSProvider(tlsOptions: .init())
-            bootstrap = NIOClientTCPBootstrap(NIOTSConnectionBootstrap(group: eventLoop), tls: tlsProvider)
+            if configuration.proxy != nil, requiresTLS {
+                let tlsConfiguration = configuration.tlsConfiguration ?? TLSConfiguration.forClient()
+                let sslContext = try NIOSSLContext(configuration: tlsConfiguration)
+                let hostname = (!requiresTLS || host.isIPAddress) ? nil : host
+                bootstrap = try NIOClientTCPBootstrap(NIOTSConnectionBootstrap(group: eventLoop), tls: NIOSSLClientTLSProvider(context: sslContext, serverHostname: hostname))
+            } else {
+                let tlsProvider = NIOTSClientTLSProvider(tlsOptions: .init())
+                bootstrap = NIOClientTCPBootstrap(NIOTSConnectionBootstrap(group: eventLoop), tls: tlsProvider)
+            }
         } else {
             bootstrap = try ClientBootstrap.makeBootstrap(on: eventLoop, host: host, requiresTLS: requiresTLS, configuration: configuration)
         }
@@ -72,13 +90,20 @@ extension NIOClientTCPBootstrap {
         bootstrap = try ClientBootstrap.makeBootstrap(on: eventLoop, host: host, requiresTLS: requiresTLS, configuration: configuration)
         #endif
 
-        if requiresTLS {
+        // don't enable TLS if we have a proxy, this will be enabled later on
+        if requiresTLS, configuration.proxy == nil {
             return bootstrap.enableTLS()
         }
         return bootstrap
     }
     
-    static func makeHTTPClientBootstrapBase(on eventLoop: EventLoop, host: String, port: Int, requiresTLS: Bool, configuration: HTTPClient.Configuration) throws -> NIOClientTCPBootstrap {
+    static func makeHTTPClientBootstrapBase(
+        on eventLoop: EventLoop,
+        host: String,
+        port: Int,
+        requiresTLS: Bool,
+        configuration: HTTPClient.Configuration
+    ) throws -> NIOClientTCPBootstrap {
         return try makeBootstrap(on: eventLoop, host: host, requiresTLS: requiresTLS, configuration: configuration)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
             .channelInitializer { channel in

@@ -396,9 +396,6 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testProxyTLS() throws {
-        XCTFail("Disabled test as it crashes");
-        return
-
         let httpBin = HTTPBin(simulateProxy: .tls)
         let httpClient = HTTPClient(
             eventLoopGroupProvider: .shared(self.clientGroup),

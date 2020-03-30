@@ -373,15 +373,42 @@ final class ConnectionPool {
             }
         }
 
+        // if the configuration includes a proxy and requires TLS, TLS will not have been enabled yet. This
+        // returns whether we need to call addSSLHandlerIfNeeded().
+        private func requiresSSLHandler(on eventLoop: EventLoop) -> Bool {
+            // if a proxy is not set return false, otherwise for non-TS situation return true, if TS is available and
+            // either we don't have an NIOTSEventLoop or the scheme is HTTPS then return true
+            if self.configuration.proxy != nil {
+                #if canImport(Network)
+                if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *)
+                {
+                    if !(eventLoop is NIOTSEventLoop) {
+                        return true
+                    }
+                    if self.key.scheme == .https {
+                        return true
+                    }
+                } else {
+                    return true
+                }
+                #else
+                return true
+                #endif
+            }
+            return false
+        }
+        
         private func makeConnection(on eventLoop: EventLoop) -> EventLoopFuture<Connection> {
             self.activityPrecondition(expected: [.opened])
             let address = HTTPClient.resolveAddress(host: self.key.host, port: self.key.port, proxy: self.configuration.proxy)
+            let requiresTLS = self.key.scheme == .https
             let bootstrap : NIOClientTCPBootstrap
             do {
-                bootstrap = try NIOClientTCPBootstrap.makeHTTPClientBootstrapBase(on: eventLoop, host: key.host, port: key.port, requiresTLS: self.key.scheme == .https, configuration: self.configuration)
+                bootstrap = try NIOClientTCPBootstrap.makeHTTPClientBootstrapBase(on: eventLoop, host: key.host, port: key.port, requiresTLS: requiresTLS, configuration: self.configuration)
             } catch {
                 return eventLoop.makeFailedFuture(error)
             }
+            let handshakePromise = eventLoop.makePromise(of: Void.self)
 
             let channel: EventLoopFuture<Channel>
             switch self.key.scheme {
@@ -392,16 +419,25 @@ final class ConnectionPool {
             }
 
             return channel.flatMap { channel -> EventLoopFuture<ConnectionPool.Connection> in
-                
-                channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes).map {
-                    let connection = Connection(key: self.key, channel: channel, parentPool: self.parentPool)
-                    connection.isLeased = true
-                    return connection
+                if self.requiresSSLHandler(on: eventLoop) {
+                    channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, handshakePromise: handshakePromise)
+                } else {
+                    handshakePromise.succeed(())
+                }
+                return handshakePromise.futureResult.flatMap {
+                   channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
+                }.map {
+                   let connection = Connection(key: self.key, channel: channel, parentPool: self.parentPool)
+                   connection.isLeased = true
+                   return connection
                 }
             }.map { connection in
                 self.configureCloseCallback(of: connection)
                 return connection
             }.flatMapError { error in
+                // This promise may not have been completed if we reach this
+                // so we fail it to avoid any leak
+                handshakePromise.fail(error)
                 let action = self.parentPool.connectionProvidersLock.withLock {
                     self.stateLock.withLock {
                         self.state.failedConnectionAction()
