@@ -21,10 +21,15 @@ import NIOHTTPCompression
 import NIOSSL
 import NIOTransportServices
 
+/// Are we testing NIO Transport services
+func isTestingNIOTS() -> Bool {
+    return ProcessInfo.processInfo.environment["ENABLE_TS_TESTS"] == "true"
+}
+
 func getDefaultEventLoopGroup(numberOfThreads: Int) -> EventLoopGroup {
     #if canImport(Network)
     if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *),
-    ProcessInfo.processInfo.environment["ENABLE_TS_TESTS"] == "true" {
+        isTestingNIOTS() {
         return NIOTSEventLoopGroup(loopCount: numberOfThreads, defaultQoS: .default)
     }
     #endif

@@ -398,7 +398,7 @@ class HTTPClientTests: XCTestCase {
     func testProxyTLS() throws {
         XCTFail("Disabled test as it crashes");
         return
-        
+
         let httpBin = HTTPBin(simulateProxy: .tls)
         let httpClient = HTTPClient(
             eventLoopGroupProvider: .shared(self.clientGroup),
@@ -1101,11 +1101,9 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testStressGetClose() throws {
-        if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
-            guard !(self.clientGroup is NIOTSEventLoopGroup) else {
-                XCTFail("Disabled test as it crashes");
-                return
-            }
+        guard !isTestingNIOTS() else {
+            XCTFail("Disabled test as it crashes");
+            return
         }
         let httpBin = HTTPBin(ssl: false)
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
@@ -1679,15 +1677,29 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testAsyncShutdown() {
-        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
-        let promise = eventLoopGroup.next().makePromise(of: Void.self)
-        eventLoopGroup.next().execute {
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        let promise = self.clientGroup.next().makePromise(of: Void.self)
+        self.clientGroup.next().execute {
             httpClient.shutdown(queue: DispatchQueue(label: "testAsyncShutdown")) { error in
                 XCTAssertNil(error)
                 promise.succeed(())
             }
         }
         XCTAssertNoThrow(try promise.futureResult.wait())
+    }
+
+
+    func testCorrectEventLoopGroup() {
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+        #if canImport(Network)
+        if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
+            XCTAssertTrue(httpClient.eventLoopGroup is NIOTSEventLoopGroup)
+            return
+        }
+        #endif
+        XCTAssertTrue(httpClient.eventLoopGroup is MultiThreadedEventLoopGroup)
     }
 }

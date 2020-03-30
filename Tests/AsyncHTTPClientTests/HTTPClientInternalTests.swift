@@ -239,6 +239,7 @@ class HTTPClientInternalTests: XCTestCase {
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
             XCTAssertNoThrow(try httpBin.shutdown())
+            XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully())
         }
 
         let request = try Request(url: "http://localhost:\(httpBin.port)/custom")
