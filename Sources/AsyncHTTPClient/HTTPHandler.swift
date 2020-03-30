@@ -843,11 +843,11 @@ internal struct RedirectHandler<ResponseType> {
             return nil
         }
 
-        guard let location = headers.first(where: { $0.name == "Location" }) else {
+        guard let location = headers.first(name: "Location") else {
             return nil
         }
 
-        guard let url = URL(string: location.value, relativeTo: request.url) else {
+        guard let url = URL(string: location, relativeTo: request.url) else {
             return nil
         }
 
