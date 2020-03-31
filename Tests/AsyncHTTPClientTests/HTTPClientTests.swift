@@ -1681,6 +1681,15 @@ class HTTPClientTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(port)").wait()) { error in
+            #if canImport(Network)
+            if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), isTestingNIOTS() {
+                guard let nwError = error as? NWError, case NWError.posix(let posixErrorCode) = nwError, posixErrorCode == .ECONNREFUSED else {
+                    XCTFail("Unexpected error: \(error)")
+                    return
+                }
+                return
+            }
+            #endif
             guard error is NIOConnectionError else {
                 XCTFail("Unexpected error: \(error)")
                 return
