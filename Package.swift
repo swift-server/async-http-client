@@ -24,7 +24,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.13.1"),
         .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.7.0"),
         .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.3.0"),
-        .package(url: "https://github.com/adam-fowler/swift-nio-transport-services.git", .branch("master")),
+        .package(url: "https://github.com/adam-fowler/swift-nio-transport-services.git", .branch("public-niots-eventloop")),
     ],
     targets: [
         .target(
