@@ -16,7 +16,6 @@ import Foundation
 import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
-import NIOSSL
 import NIOTransportServices
 import NIOTLS
 
@@ -373,31 +372,6 @@ final class ConnectionPool {
             }
         }
 
-        // if the configuration includes a proxy and requires TLS, TLS will not have been enabled yet. This
-        // returns whether we need to call addSSLHandlerIfNeeded().
-        private func requiresSSLHandler(on eventLoop: EventLoop) -> Bool {
-            // if a proxy is not set return false, otherwise for non-TS situation return true, if TS is available and
-            // either we don't have an NIOTSEventLoop or the scheme is HTTPS then return true
-            if self.configuration.proxy != nil {
-                #if canImport(Network)
-                if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *)
-                {
-                    if !(eventLoop is NIOTSEventLoop) {
-                        return true
-                    }
-                    if self.key.scheme == .https {
-                        return true
-                    }
-                } else {
-                    return true
-                }
-                #else
-                return true
-                #endif
-            }
-            return false
-        }
-        
         private func makeConnection(on eventLoop: EventLoop) -> EventLoopFuture<Connection> {
             self.activityPrecondition(expected: [.opened])
             let address = HTTPClient.resolveAddress(host: self.key.host, port: self.key.port, proxy: self.configuration.proxy)
@@ -419,8 +393,8 @@ final class ConnectionPool {
             }
 
             return channel.flatMap { channel -> EventLoopFuture<ConnectionPool.Connection> in
-                    
-                channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, addSSLClient: self.requiresSSLHandler(on: eventLoop), handshakePromise: handshakePromise)
+                let requiresSSLHandler = self.configuration.proxy != nil && self.key.scheme == .https
+                channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, addSSLClient: requiresSSLHandler, handshakePromise: handshakePromise)
                 return handshakePromise.futureResult.flatMap {
                    channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
                 }.map {
