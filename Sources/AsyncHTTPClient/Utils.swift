@@ -115,15 +115,16 @@ extension NIOClientTCPBootstrap {
         let bootstrap: NIOClientTCPBootstrap
         #if canImport(Network)
         if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), eventLoop is NIOTSEventLoop {
+            let tsBootstrap = NIOTSConnectionBootstrap(group: eventLoop).channelOption(NIOTSChannelOptions.waitForActivity, value: false)
             if configuration.proxy != nil, requiresTLS {
                 let tlsConfiguration = configuration.tlsConfiguration ?? TLSConfiguration.forClient()
                 let sslContext = try NIOSSLContext(configuration: tlsConfiguration)
                 let hostname = (!requiresTLS || host.isIPAddress) ? nil : host
-                bootstrap = try NIOClientTCPBootstrap(NIOTSConnectionBootstrap(group: eventLoop), tls: NIOSSLClientTLSProvider(context: sslContext, serverHostname: hostname))
+                bootstrap = try NIOClientTCPBootstrap(tsBootstrap, tls: NIOSSLClientTLSProvider(context: sslContext, serverHostname: hostname))
             } else {
                 let parameters = NIOClientTCPBootstrap.getTLSOptions(tlsConfiguration: configuration.tlsConfiguration, queue: tlsDispatchQueue)
                 let tlsProvider = NIOTSClientTLSProvider(tlsOptions: parameters)
-                bootstrap = NIOClientTCPBootstrap(NIOTSConnectionBootstrap(group: eventLoop), tls: tlsProvider)
+                bootstrap = NIOClientTCPBootstrap(tsBootstrap, tls: tlsProvider)
             }
         } else {
             bootstrap = try ClientBootstrap.makeBootstrap(on: eventLoop, host: host, requiresTLS: requiresTLS, configuration: configuration)
