@@ -425,7 +425,7 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 return
             case "/redirect/302":
                 var headers = HTTPHeaders()
-                headers.add(name: "Location", value: "/ok")
+                headers.add(name: "location", value: "/ok")
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
                 return
             case "/redirect/https":
