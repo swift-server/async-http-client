@@ -771,7 +771,7 @@ extension TaskHandler: ChannelDuplexHandler {
         }
 
         do {
-            try headers.validate(body: request.body)
+            try headers.validate(method: request.method, body: request.body)
         } catch {
             promise?.fail(error)
             context.fireErrorCaught(error)

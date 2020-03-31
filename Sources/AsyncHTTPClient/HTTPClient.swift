@@ -754,6 +754,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case redirectLimitReached
         case redirectCycleDetected
         case uncleanShutdown
+        case traceRequestWithBody
     }
 
     private var code: Code
@@ -798,4 +799,6 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let redirectCycleDetected = HTTPClientError(code: .redirectCycleDetected)
     /// Unclean shutdown
     public static let uncleanShutdown = HTTPClientError(code: .uncleanShutdown)
+    /// A body was sent in a request with method TRACE
+    public static let traceRequestWithBody = HTTPClientError(code: .traceRequestWithBody)
 }

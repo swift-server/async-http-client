@@ -29,5 +29,6 @@ import XCTest
         testCase(HTTPClientCookieTests.allTests),
         testCase(HTTPClientInternalTests.allTests),
         testCase(HTTPClientTests.allTests),
+        testCase(RequestValidationTests.allTests),
     ])
 #endif
