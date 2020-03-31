@@ -755,6 +755,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case redirectCycleDetected
         case uncleanShutdown
         case traceRequestWithBody
+        case invalidHeaderFieldNames([String])
     }
 
     private var code: Code
@@ -801,4 +802,6 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let uncleanShutdown = HTTPClientError(code: .uncleanShutdown)
     /// A body was sent in a request with method TRACE
     public static let traceRequestWithBody = HTTPClientError(code: .traceRequestWithBody)
+    /// Header field names contain invalid characters
+    public static func invalidHeaderFieldNames(_ names: [String]) -> HTTPClientError { return HTTPClientError(code: .invalidHeaderFieldNames(names)) }
 }

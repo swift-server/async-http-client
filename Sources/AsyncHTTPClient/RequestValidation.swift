@@ -2,7 +2,7 @@
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2019 Apple Inc. and the AsyncHTTPClient project authors
+// Copyright (c) 2018-2020 Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -28,6 +28,8 @@ extension HTTPHeaders {
 
         self.remove(name: "Transfer-Encoding")
         self.remove(name: "Content-Length")
+
+        try self.validateFieldNames()
 
         guard let body = body else {
             // if we don't have a body we might not need to send the Content-Length field
@@ -79,6 +81,42 @@ extension HTTPHeaders {
             // A sender MUST NOT send a Content-Length header field in any message
             // that contains a Transfer-Encoding header field.
             self.add(name: "Content-Length", value: String(length))
+        }
+    }
+
+    func validateFieldNames() throws {
+        let invalidFieldNames = self.compactMap { (name, _) -> String? in
+            let satisfy = name.utf8.allSatisfy { (char) -> Bool in
+                switch char {
+                case UInt8(ascii: "a")...UInt8(ascii: "z"),
+                     UInt8(ascii: "A")...UInt8(ascii: "Z"),
+                     UInt8(ascii: "0")...UInt8(ascii: "9"),
+                     UInt8(ascii: "!"),
+                     UInt8(ascii: "#"),
+                     UInt8(ascii: "$"),
+                     UInt8(ascii: "%"),
+                     UInt8(ascii: "&"),
+                     UInt8(ascii: "'"),
+                     UInt8(ascii: "*"),
+                     UInt8(ascii: "+"),
+                     UInt8(ascii: "-"),
+                     UInt8(ascii: "."),
+                     UInt8(ascii: "^"),
+                     UInt8(ascii: "_"),
+                     UInt8(ascii: "`"),
+                     UInt8(ascii: "|"),
+                     UInt8(ascii: "~"):
+                    return true
+                default:
+                    return false
+                }
+            }
+
+            return satisfy ? nil : name
+        }
+
+        guard invalidFieldNames.count == 0 else {
+            throw HTTPClientError.invalidHeaderFieldNames(invalidFieldNames)
         }
     }
 }
