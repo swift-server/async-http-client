@@ -740,7 +740,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testLoopDetectionRedirectLimit() throws {
-        let httpBin = HTTPBin()
+        let httpBin = HTTPBin(ssl: true)
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: HTTPClient.Configuration(certificateVerification: .none, redirectConfiguration: .follow(max: 5, allowCycles: false)))
 
@@ -749,13 +749,13 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try httpBin.shutdown())
         }
 
-        XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(httpBin.port)/redirect/infinite1").wait(), "Should fail with redirect limit") { error in
+        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/redirect/infinite1").wait(), "Should fail with redirect limit") { error in
             XCTAssertEqual(error as? HTTPClientError, HTTPClientError.redirectCycleDetected)
         }
     }
 
     func testCountRedirectLimit() throws {
-        let httpBin = HTTPBin()
+        let httpBin = HTTPBin(ssl: true)
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: HTTPClient.Configuration(certificateVerification: .none, redirectConfiguration: .follow(max: 1000, allowCycles: true)))
 
@@ -764,7 +764,7 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try httpBin.shutdown())
         }
 
-        XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(httpBin.port)/redirect/infinite1").wait(), "Should fail with redirect limit") { error in
+        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/redirect/infinite1").wait(), "Should fail with redirect limit") { error in
             XCTAssertEqual(error as? HTTPClientError, HTTPClientError.redirectLimitReached)
         }
     }
