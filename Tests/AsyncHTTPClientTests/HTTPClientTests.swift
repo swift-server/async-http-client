@@ -830,8 +830,7 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
                                                     method: .GET,
                                                     uri: "/foo",
-                                                    headers: HTTPHeaders([("Host", "localhost"),
-                                                                          ("Content-Length", "0")]))),
+                                                    headers: HTTPHeaders([("Host", "localhost")]))),
                                         try web.readInbound()))
         XCTAssertNoThrow(XCTAssertEqual(.end(nil),
                                         try web.readInbound()))
@@ -860,8 +859,7 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
                                                     method: .GET,
                                                     uri: "/foo",
-                                                    headers: HTTPHeaders([("Host", "localhost"),
-                                                                          ("Content-Length", "0")]))),
+                                                    headers: HTTPHeaders([("Host", "localhost")]))),
                                         try web.readInbound()))
         XCTAssertNoThrow(XCTAssertEqual(.end(nil),
                                         try web.readInbound()))
@@ -887,8 +885,7 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
                                                     method: .GET,
                                                     uri: "/foo",
-                                                    headers: HTTPHeaders([("Host", "localhost"),
-                                                                          ("Content-Length", "0")]))),
+                                                    headers: HTTPHeaders([("Host", "localhost")]))),
                                         try web.readInbound()))
         XCTAssertNoThrow(XCTAssertEqual(.end(nil),
                                         try web.readInbound()))
@@ -916,8 +913,7 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
                                                         method: .GET,
                                                         uri: "/foo",
-                                                        headers: HTTPHeaders([("Host", "localhost"),
-                                                                              ("Content-Length", "0")]))),
+                                                        headers: HTTPHeaders([("Host", "localhost")]))),
                                             try web.readInbound()))
             XCTAssertNoThrow(XCTAssertEqual(.end(nil),
                                             try web.readInbound()))
@@ -950,8 +946,7 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
                                                         method: .GET,
                                                         uri: "/foo",
-                                                        headers: HTTPHeaders([("Host", "localhost"),
-                                                                              ("Content-Length", "0")]))),
+                                                        headers: HTTPHeaders([("Host", "localhost")]))),
                                             try web.readInbound()))
             XCTAssertNoThrow(XCTAssertEqual(.end(nil),
                                             try web.readInbound()))
@@ -1166,8 +1161,7 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
                                                         method: .GET,
                                                         uri: "/foo",
-                                                        headers: HTTPHeaders([("Host", "localhost"),
-                                                                              ("Content-Length", "0")]))),
+                                                        headers: HTTPHeaders([("Host", "localhost")]))),
                                             try web.readInbound()))
             XCTAssertNoThrow(XCTAssertEqual(.end(nil),
                                             try web.readInbound()))
