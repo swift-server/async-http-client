@@ -2,7 +2,7 @@
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2019 Apple Inc. and the AsyncHTTPClient project authors
+// Copyright (c) 2018-2020 Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -67,45 +67,7 @@ extension ClientBootstrap {
     }
 }
 
-// Used by temporary code below
-let tlsDispatchQueue = DispatchQueue(label: "TLSDispatch")
-
 extension NIOClientTCPBootstrap {
-    
-    // TEMPORARY: This is temporary code and an extended version of this should really be in NIOTransportServices. But this allows us to run tests and get results back
-    // for the TLS tests
-    #if canImport(Network)
-    @available (macOS 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *)
-    fileprivate static func getTLSOptions(tlsConfiguration: TLSConfiguration?, queue: DispatchQueue) -> NWProtocolTLS.Options {
-        guard let tlsConfiguration = tlsConfiguration else { return .init() }
-        let options = NWProtocolTLS.Options()
-        
-        sec_protocol_options_set_verify_block(options.securityProtocolOptions, { (sec_protocol_metadata, sec_trust, sec_protocol_verify_complete) in
-            let trust = sec_trust_copy_ref(sec_trust).takeRetainedValue()
-            
-            var error: CFError?
-            if SecTrustEvaluateWithError(trust, &error) {
-                sec_protocol_verify_complete(true)
-            } else {
-                // check error
-                var errorCode: CFIndex = 0
-                if let userInfo = CFErrorCopyUserInfo(error) {
-                    let userInfoDictionary = userInfo as NSDictionary
-                    let underlyingError = userInfoDictionary[kCFErrorUnderlyingErrorKey!] as! CFError
-                    errorCode = CFErrorGetCode(underlyingError)
-                }
-                if tlsConfiguration.certificateVerification == .none ||
-                    (tlsConfiguration.certificateVerification == .noHostnameVerification && errorCode == errSecNotTrusted) {
-                    sec_protocol_verify_complete(true)
-                } else {
-                    sec_protocol_verify_complete(false)
-                }
-            }
-        }, queue)
-          
-        return options
-    }
-    #endif
     
     /// create a TCP Bootstrap based off what type of `EventLoop` has been passed to the function.
     fileprivate static func makeBootstrap(
@@ -116,15 +78,19 @@ extension NIOClientTCPBootstrap {
     ) throws -> NIOClientTCPBootstrap {
         let bootstrap: NIOClientTCPBootstrap
         #if canImport(Network)
+        // if eventLoop is compatible with NIOTransportServices create a NIOTSConnectionBootstrap
         if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), eventLoop is NIOTSEventLoop {
             let tsBootstrap = NIOTSConnectionBootstrap(group: eventLoop).channelOption(NIOTSChannelOptions.waitForActivity, value: false)
+            let tlsConfiguration = configuration.tlsConfiguration ?? TLSConfiguration.forClient()
+            
+            // if we have a proxy and require TLS then use NIOSSL tls support
             if configuration.proxy != nil, requiresTLS {
-                let tlsConfiguration = configuration.tlsConfiguration ?? TLSConfiguration.forClient()
                 let sslContext = try NIOSSLContext(configuration: tlsConfiguration)
                 let hostname = (!requiresTLS || host.isIPAddress) ? nil : host
                 bootstrap = try NIOClientTCPBootstrap(tsBootstrap, tls: NIOSSLClientTLSProvider(context: sslContext, serverHostname: hostname))
             } else {
-                let parameters = NIOClientTCPBootstrap.getTLSOptions(tlsConfiguration: configuration.tlsConfiguration, queue: tlsDispatchQueue)
+                // create NIOClientTCPBootstrap with NIOTS TLS provider
+                let parameters = tlsConfiguration.getNWProtocolTLSOptions()
                 let tlsProvider = NIOTSClientTLSProvider(tlsOptions: parameters)
                 bootstrap = NIOClientTCPBootstrap(tsBootstrap, tls: tlsProvider)
             }
@@ -141,7 +107,7 @@ extension NIOClientTCPBootstrap {
         }
         return bootstrap
     }
-    
+
     static func makeHTTPClientBootstrapBase(
         on eventLoop: EventLoop,
         host: String,
