@@ -550,7 +550,7 @@ class HTTPClientTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/noresponse").wait(), "Should fail") { error in
-            guard case let error = error as? NIOSSLError, error == .uncleanShutdown else {
+            guard case let sslError = error as? NIOSSLError, sslError == .uncleanShutdown else {
                 return XCTFail("Should fail with NIOSSLError.uncleanShutdown")
             }
         }
@@ -567,7 +567,7 @@ class HTTPClientTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/noresponse").wait(), "Should fail") { error in
-            guard case let error = error as? NIOSSLError, error == .uncleanShutdown else {
+            guard case let sslError = error as? NIOSSLError, sslError == .uncleanShutdown else {
                 return XCTFail("Should fail with NIOSSLError.uncleanShutdown")
             }
         }
@@ -584,7 +584,7 @@ class HTTPClientTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/wrongcontentlength").wait(), "Should fail") { error in
-            guard case let error = error as? NIOSSLError, error == .uncleanShutdown else {
+            guard case let sslError = error as? NIOSSLError, sslError == .uncleanShutdown else {
                 return XCTFail("Should fail with NIOSSLError.uncleanShutdown")
             }
         }
@@ -1024,21 +1024,19 @@ class HTTPClientTests: XCTestCase {
                 XCTFail("Shouldn't succeed")
                 continue
             case .failure(let error):
-                #if canImport(Network)
                 if isTestingNIOTS() {
-                    if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
-                        guard let clientError = error as? NWError, case NWError.tls(let status) = clientError else {
-                            XCTFail("Unexpected error: \(error)")
-                            continue
-                        }
-                        XCTAssertEqual(status, errSSLHandshakeFail)
+                    #if canImport(Network)
+                    guard let clientError = error as? NWTLSError else {
+                        XCTFail("Unexpected error: \(error)")
+                        continue
                     }
-                    continue
-                }
-                #endif
-                guard let clientError = error as? NIOSSLError, case NIOSSLError.handshakeFailed = clientError else {
-                    XCTFail("Unexpected error: \(error)")
-                    continue
+                    XCTAssertEqual(clientError.status, errSSLHandshakeFail)
+                    #endif
+                } else {
+                    guard let clientError = error as? NIOSSLError, case NIOSSLError.handshakeFailed = clientError else {
+                        XCTFail("Unexpected error: \(error)")
+                        continue
+                    }
                 }
             }
         }
@@ -1681,15 +1679,13 @@ class HTTPClientTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(port)").wait()) { error in
-            #if canImport(Network)
-            if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), isTestingNIOTS() {
-                guard let nwError = error as? NWError, case NWError.posix(let posixErrorCode) = nwError, posixErrorCode == .ECONNREFUSED else {
+            if isTestingNIOTS() {
+                guard let ioError = error as? IOError, ioError.errnoCode == ECONNREFUSED else {
                     XCTFail("Unexpected error: \(error)")
                     return
                 }
                 return
             }
-            #endif
             guard error is NIOConnectionError else {
                 XCTFail("Unexpected error: \(error)")
                 return
@@ -1707,20 +1703,5 @@ class HTTPClientTests: XCTestCase {
             }
         }
         XCTAssertNoThrow(try promise.futureResult.wait())
-    }
-
-
-    func testCorrectEventLoopGroup() {
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
-        defer {
-            XCTAssertNoThrow(try httpClient.syncShutdown())
-        }
-        #if canImport(Network)
-        if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
-            XCTAssertTrue(httpClient.eventLoopGroup is NIOTSEventLoopGroup)
-            return
-        }
-        #endif
-        XCTAssertTrue(httpClient.eventLoopGroup is MultiThreadedEventLoopGroup)
     }
 }

@@ -397,6 +397,13 @@ final class ConnectionPool {
                 channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, addSSLClient: requiresSSLHandler, handshakePromise: handshakePromise)
                 return handshakePromise.futureResult.flatMap {
                    channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
+                }.flatMap {
+                    #if canImport(Network)
+                    if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), bootstrap.underlyingBootstrap is NIOTSConnectionBootstrap {
+                        return channel.pipeline.addHandler(NWErrorHandler(), position: .first)
+                    }
+                    #endif
+                    return eventLoop.makeSucceededFuture(())
                 }.map {
                    let connection = Connection(key: self.key, channel: channel, parentPool: self.parentPool)
                    connection.isLeased = true
@@ -406,6 +413,12 @@ final class ConnectionPool {
                 self.configureCloseCallback(of: connection)
                 return connection
             }.flatMapError { error in
+                var error = error
+                #if canImport(Network)
+                if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), bootstrap.underlyingBootstrap is NIOTSConnectionBootstrap {
+                    error = NWErrorHandler.translateError(error)
+                }
+                #endif
                 // This promise may not have been completed if we reach this
                 // so we fail it to avoid any leak
                 handshakePromise.fail(error)
