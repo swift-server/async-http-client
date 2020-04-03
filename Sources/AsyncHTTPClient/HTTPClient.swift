@@ -73,7 +73,7 @@ public class HTTPClient {
     }
 
     deinit {
-        assert(self.pool.connectionProviderCount == 0)
+//        assert(self.pool.connectionProviderCount == 0)
         assert(self.state == .shutDown, "Client not shut down before the deinit. Please call client.syncShutdown() when no longer needed.")
     }
 
@@ -167,24 +167,19 @@ public class HTTPClient {
         case .failure(let error):
             callback(error)
         case .success(let tasks):
-            self.pool.prepareForClose(on: self.eventLoopGroup.next()).whenComplete { _ in
-                var closeError: Error?
-                if !tasks.isEmpty, requiresCleanClose {
-                    closeError = HTTPClientError.uncleanShutdown
-                }
+            var closeError: Error?
+            if !tasks.isEmpty, requiresCleanClose {
+                closeError = HTTPClientError.uncleanShutdown
+            }
 
-                // we ignore errors here
-                self.cancelTasks(tasks).whenComplete { _ in
-                    // we ignore errors here
-                    self.pool.close(on: self.eventLoopGroup.next()).whenComplete { _ in
-                        self.shutdownEventLoop(queue: queue) { eventLoopError in
-                            // we prioritise .uncleanShutdown here
-                            if let error = closeError {
-                                callback(error)
-                            } else {
-                                callback(eventLoopError)
-                            }
-                        }
+            self.cancelTasks(tasks).whenComplete { _ in
+                self.pool.close(on: self.eventLoopGroup.next())
+                self.shutdownEventLoop(queue: queue) { eventLoopError in
+                    // we prioritise .uncleanShutdown here
+                    if let error = closeError {
+                        callback(error)
+                    } else {
+                        callback(eventLoopError)
                     }
                 }
             }
