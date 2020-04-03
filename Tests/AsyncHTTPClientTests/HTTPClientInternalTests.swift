@@ -455,6 +455,22 @@ class HTTPClientInternalTests: XCTestCase {
         }.futureResult.wait()
     }
 
+    func _testProviderEmptyAfterIdle() throws {
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+                                    configuration: .init(maximumAllowedIdleTimeInConnectionPool: .milliseconds(50)))
+        let web = NIOHTTP1TestServer(group: httpClient.eventLoopGroup)
+
+        defer {
+            XCTAssertNoThrow(try web.stop())
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+        }
+
+        //let result = try httpClient.get(url: "http://localhost:\(web.serverPort)/foo").wait()
+        //Thread.sleep(forTimeInterval: 100)
+        XCTFail("Not implemented yet")
+        //XCTAssert(httpClient.pool.)
+    }
+
     func testWeNoticeRemoteClosuresEvenWhenConnectionIsIdleInPool() {
         final class ServerThatRespondsThenJustCloses: ChannelInboundHandler {
             typealias InboundIn = HTTPServerRequestPart

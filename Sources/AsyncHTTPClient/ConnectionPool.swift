@@ -234,6 +234,12 @@ final class ConnectionPool {
     /// of concurrent requests as it has built-in politeness regarding the maximum number
     /// of concurrent requests to the server.
     class HTTP1ConnectionProvider: CustomStringConvertible {
+        enum Action {
+            case lease(Connection, Waiter)
+            case create(Waiter)
+            case none
+        }
+
         /// The client configuration used to bootstrap new requests
         private let configuration: HTTPClient.Configuration
 
@@ -295,68 +301,86 @@ final class ConnectionPool {
             return "HTTP1ConnectionProvider { key: \(self.key) }"
         }
 
-        func getConnection(preference: HTTPClient.EventLoopPreference) -> EventLoopFuture<Connection> {
-            let promise = self.eventLoop.makePromise(of: Connection.self)
+        func execute(_ action: Action) {
+            switch action {
+            case .lease(let connection, let waiter):
+                // check if we can vend this connection to caller
+                connection.cancelIdleTimeout().flatMapError { error in
+                    if error is Connection.InactiveChannelError {
+                        return self.makeConnection(on: waiter.preference.bestEventLoop ?? self.eventLoop)
+                    }
+                    return connection.channel.eventLoop.makeFailedFuture(error)
+                }
+                .cascade(to: waiter.promise)
+            case .create(let waiter):
+                self.makeConnection(on: waiter.preference.bestEventLoop ?? self.eventLoop).cascade(to: waiter.promise)
+            case .none:
+                break
+            }
+        }
 
-            self.lock.withLockVoid {
+        func getConnection(preference: HTTPClient.EventLoopPreference) -> EventLoopFuture<Connection> {
+            let waiter = Waiter(promise: self.eventLoop.makePromise(), preference: preference)
+
+            let action: Action = self.lock.withLock {
                 if let connection = self.availableConnections.popFirst() {
                     connection.isLeased = true
-                    // check if we can vend this connection to caller
-                    connection.cancelIdleTimeout().flatMapError { error in
-                        if error is Connection.InactiveChannelError {
-                            return self.makeConnection(on: preference.bestEventLoop ?? self.eventLoop)
-                        }
-                        return connection.channel.eventLoop.makeFailedFuture(error)
-                    }
-                    .cascade(to: promise)
+                    return .lease(connection, waiter)
                 } else if self.openedConnectionsCount < self.maximumConcurrentConnections {
                     self.openedConnectionsCount += 1
-                    self.makeConnection(on: preference.bestEventLoop ?? self.eventLoop).cascade(to: promise)
+                    return .create(waiter)
                 } else {
-                    self.waiters.append(.init(promise: promise, preference: preference))
+                    self.waiters.append(waiter)
+                    return .none
                 }
             }
 
-            return promise.futureResult
+            self.execute(action)
+
+            return waiter.promise.futureResult
         }
 
         func release(connection: Connection) {
-            self.lock.withLock {
+            let action: Action = self.lock.withLock {
                 if connection.isActiveEstimation { // If connection is alive, we can give to a next waiter
                     if let waiter = self.waiters.popFirst() {
-                        // TODO:
-                        connection.channel.eventLoop.execute {
-                            connection.cancelIdleTimeout().flatMapError { error in
-                                if error is Connection.InactiveChannelError {
-                                    return self.makeConnection(on: waiter.preference.bestEventLoop ?? self.eventLoop)
-                                }
-                                return connection.channel.eventLoop.makeFailedFuture(error)
-                            }
-                            .cascade(to: waiter.promise)
-                        }
+                        connection.isLeased = true
+                        return .lease(connection, waiter)
                     } else {
                         connection.isLeased = false
                         self.availableConnections.append(connection)
+                        return .none
                     }
                 } else {
+                    // TODO: close here is probably not ok
                     connection.close()
                     self.openedConnectionsCount -= 1
 
                     if let waiter = self.waiters.popFirst() {
                         self.openedConnectionsCount += 1
-                        self.makeConnection(on: waiter.preference.bestEventLoop ?? self.eventLoop).cascade(to: waiter.promise)
+                        return .create(waiter)
                     }
+
+                    return .none
                 }
+            }
+
+            // TODO: is this correct?
+            connection.channel.eventLoop.execute {
+                self.execute(action)
             }
         }
 
         private func processNextWaiter() {
-            self.lock.withLock {
+            let action: Action = self.lock.withLock {
                 if let waiter = self.waiters.popFirst() {
                     self.openedConnectionsCount += 1
-                    self.makeConnection(on: waiter.preference.bestEventLoop ?? self.eventLoop).cascade(to: waiter.promise)
+                    return .create(waiter)
                 }
+                return .none
             }
+
+            self.execute(action)
         }
 
         private func makeConnection(on eventLoop: EventLoop) -> EventLoopFuture<Connection> {
@@ -387,6 +411,7 @@ final class ConnectionPool {
                 handshakePromise.fail(error)
 
                 // there is no connection here anymore, we need to bootstrap next waiter
+                // TODO: this is done out of lock, most likely incorrect
                 self.openedConnectionsCount -= 1
                 self.processNextWaiter()
                 return self.eventLoop.makeFailedFuture(error)
@@ -394,15 +419,21 @@ final class ConnectionPool {
         }
 
         func close() {
-            self.lock.withLockVoid {
-                self.waiters.forEach { $0.promise.fail(HTTPClientError.cancelled) }
+            let waiters: CircularBuffer<Waiter> = self.lock.withLock {
+                let copy = self.waiters
                 self.waiters.removeAll()
+                return copy
             }
 
-            self.lock.withLock {
-                self.availableConnections.forEach { $0.close() }
+            waiters.forEach { $0.promise.fail(HTTPClientError.cancelled) }
+
+            let connections: CircularBuffer<Connection> = self.lock.withLock {
+                let copy = self.availableConnections
                 self.availableConnections.removeAll()
+                return copy
             }
+
+            connections.forEach { $0.close() }
         }
 
         private func resolvePreference(_ preference: HTTPClient.EventLoopPreference) -> (EventLoop, Bool) {
