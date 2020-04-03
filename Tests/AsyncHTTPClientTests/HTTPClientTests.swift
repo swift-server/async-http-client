@@ -83,20 +83,6 @@ class HTTPClientTests: XCTestCase {
         }
 
         let response = try httpClient.get(url: "http://localhost:\(httpBin.port)/get").wait()
-        try EventLoopFuture.andAllSucceed([
-            httpClient.get(url: "http://localhost:\(httpBin.port)/get"),
-            httpClient.get(url: "http://localhost:\(httpBin.port)/get"),
-            httpClient.get(url: "http://localhost:\(httpBin.port)/get"),
-            httpClient.get(url: "http://localhost:\(httpBin.port)/get"),
-            httpClient.get(url: "http://localhost:\(httpBin.port)/get"),
-            httpClient.get(url: "http://localhost:\(httpBin.port)/get"),
-            httpClient.get(url: "http://localhost:\(httpBin.port)/get"),
-            httpClient.get(url: "http://localhost:\(httpBin.port)/get"),
-            httpClient.get(url: "http://localhost:\(httpBin.port)/get"),
-            httpClient.get(url: "http://localhost:\(httpBin.port)/get"),
-            httpClient.get(url: "http://localhost:\(httpBin.port)/get"),
-            httpClient.get(url: "http://localhost:\(httpBin.port)/get")
-        ], on: httpClient.eventLoopGroup.next()).wait()
         XCTAssertEqual(.ok, response.status)
     }
 
