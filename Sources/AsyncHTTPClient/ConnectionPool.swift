@@ -290,11 +290,9 @@ final class ConnectionPool {
         }
 
         deinit {
-            // TODO:
-//            assert(self.state.activity == .closed, "Non closed on deinit")
-//            assert(self.state.availableConnections.isEmpty, "Available connections should be empty before deinit")
-//            assert(self.state.leased == 0, "All leased connections should have been returned before deinit")
-//            assert(self.state.waiters.count == 0, "Waiters on deinit: \(self.state.waiters)")
+            assert(self.waiters.isEmpty)
+            assert(self.availableConnections.isEmpty)
+            assert(self.openedConnectionsCount == 0)
         }
 
         var description: String {
