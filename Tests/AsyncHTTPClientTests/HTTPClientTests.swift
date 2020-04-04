@@ -1111,10 +1111,6 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testStressGetClose() throws {
-        guard !isTestingNIOTS() else {
-            XCTFail("Disabled test as it crashes");
-            return
-        }
         let httpBin = HTTPBin(ssl: false)
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
