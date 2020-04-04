@@ -57,10 +57,9 @@ class HTTPClientNIOTSTests: XCTestCase {
         do {
             _ = try httpClient.get(url: "http://dnsfail/").wait()
             XCTFail("This should have failed")
-        } catch let error as NWDNSError {
-            XCTAssertEqual(error.errorType, DNSServiceErrorType(kDNSServiceErr_NoSuchRecord))
+        } catch NWDNSError.noSuchRecord {
         } catch {
-            XCTFail("Error should have been NWDSNError not \(type(of:error))")
+            XCTFail("Error should have been NWDSNError.noSuchRecord not \(error)")
         }
     }
     
