@@ -35,6 +35,22 @@ internal extension TLSVersion {
     }
 }
 
+internal extension TLSVersion {
+    /// return as SSL protocol
+    var sslProtocol: SSLProtocol {
+        switch self {
+        case .tlsv1:
+            return .tlsProtocol1
+        case .tlsv11:
+            return .tlsProtocol11
+        case .tlsv12:
+            return .tlsProtocol12
+        case .tlsv13:
+            return .tlsProtocol13
+        }
+    }
+}
+
 @available (macOS 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *)
 internal extension TLSConfiguration {
     
@@ -51,6 +67,8 @@ internal extension TLSConfiguration {
         // minimum TLS protocol
         if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
             sec_protocol_options_set_min_tls_protocol_version(options.securityProtocolOptions, self.minimumTLSVersion.nwTLSProtocolVersion)
+        } else {
+            sec_protocol_options_set_tls_min_version(options.securityProtocolOptions, self.minimumTLSVersion.sslProtocol)
         }
         
         // maximum TLS protocol
@@ -58,21 +76,16 @@ internal extension TLSConfiguration {
             if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
                 sec_protocol_options_set_max_tls_protocol_version(options.securityProtocolOptions, maximumTLSVersion.nwTLSProtocolVersion)
             } else {
-                precondition(self.maximumTLSVersion != nil, "TLSConfiguration.maximumTLSVersion is not supported")
+                sec_protocol_options_set_tls_max_version(options.securityProtocolOptions, maximumTLSVersion.sslProtocol)
             }
         }
 
         // application protocols
-        if self.applicationProtocols.count > 0 {
-            preconditionFailure("TLSConfiguration.applicationProtocols is not supported")
-        }
-        /*for applicationProtocol in self.applicationProtocols {
-            applicationProtocol.utf8.withContiguousStorageIfAvailable { buffer in
-                guard let opaquePointer = OpaquePointer(buffer.baseAddress) else { return }
-                let int8Pointer = UnsafePointer<Int8>(opaquePointer)
-                sec_protocol_options_add_tls_application_protocol(options.securityProtocolOptions, int8Pointer)
+        for applicationProtocol in self.applicationProtocols {
+            applicationProtocol.withCString { buffer in
+                sec_protocol_options_add_tls_application_protocol(options.securityProtocolOptions, buffer)
             }
-        }*/
+        }
 
         // the certificate chain
         if self.certificateChain.count > 0 {
