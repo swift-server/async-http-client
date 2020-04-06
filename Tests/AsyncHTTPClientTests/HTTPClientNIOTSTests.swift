@@ -57,9 +57,9 @@ class HTTPClientNIOTSTests: XCTestCase {
         do {
             _ = try httpClient.get(url: "http://dnsfail/").wait()
             XCTFail("This should have failed")
-        } catch NWDNSError.noSuchRecord {
+        } catch ChannelError.connectTimeout {
         } catch {
-            XCTFail("Error should have been NWDSNError.noSuchRecord not \(error)")
+            XCTFail("Error should have been ChannelError.connectTimeout not \(error)")
         }
     }
     
@@ -95,10 +95,9 @@ class HTTPClientNIOTSTests: XCTestCase {
         do {
             _ = try httpClient.get(url: "https://localhost:\(port)/get").wait()
             XCTFail("This should have failed")
-        } catch let error as NWPOSIXError {
-            XCTAssertEqual(error.errorCode, .ECONNREFUSED)
+        } catch ChannelError.connectTimeout {
         } catch {
-            XCTFail("Error should have been NWPOSIXError not \(type(of:error))")
+            XCTFail("Error should have been ChannelError.connectTimeout not \(type(of:error))")
         }
     }
     

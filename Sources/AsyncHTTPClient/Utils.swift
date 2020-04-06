@@ -58,11 +58,16 @@ extension ClientBootstrap {
         requiresTLS: Bool,
         configuration: HTTPClient.Configuration
     ) throws -> NIOClientTCPBootstrap {
-        let tlsConfiguration = configuration.tlsConfiguration ?? TLSConfiguration.forClient()
-        let sslContext = try NIOSSLContext(configuration: tlsConfiguration)
-        let hostname = (!requiresTLS || host.isIPAddress) ? nil : host
-        let tlsProvider = try NIOSSLClientTLSProvider<ClientBootstrap>(context: sslContext, serverHostname: hostname)
-        return NIOClientTCPBootstrap(self, tls: tlsProvider)
+        // if there is a proxy don't create TLS provider as it will be added at a later point
+        if configuration.proxy != nil {
+            return NIOClientTCPBootstrap(self, tls: NIOInsecureNoTLS())
+        } else {
+            let tlsConfiguration = configuration.tlsConfiguration ?? TLSConfiguration.forClient()
+            let sslContext = try NIOSSLContext(configuration: tlsConfiguration)
+            let hostname = (!requiresTLS || host.isIPAddress) ? nil : host
+            let tlsProvider = try NIOSSLClientTLSProvider<ClientBootstrap>(context: sslContext, serverHostname: hostname)
+            return NIOClientTCPBootstrap(self, tls: tlsProvider)
+        }
     }
 }
 
@@ -79,15 +84,11 @@ extension NIOClientTCPBootstrap {
         #if canImport(Network)
         // if eventLoop is compatible with NIOTransportServices create a NIOTSConnectionBootstrap
         if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *),
-            var tsBootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoop) {
-            
-            tsBootstrap = tsBootstrap.channelOption(NIOTSChannelOptions.waitForActivity, value: false)
+            let tsBootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoop) {
             let tlsConfiguration = configuration.tlsConfiguration ?? TLSConfiguration.forClient()
-            // if we have a proxy and require TLS then use NIOSSL tls support
-            if configuration.proxy != nil, requiresTLS {
-                let sslContext = try NIOSSLContext(configuration: tlsConfiguration)
-                let hostname = (!requiresTLS || host.isIPAddress) ? nil : host
-                bootstrap = try NIOClientTCPBootstrap(tsBootstrap, tls: NIOSSLClientTLSProvider(context: sslContext, serverHostname: hostname))
+            // if there is a proxy don't create TLS provider as it will be added at a later point
+            if configuration.proxy != nil {
+                bootstrap = NIOClientTCPBootstrap(tsBootstrap, tls: NIOInsecureNoTLS())
             } else {
                 // create NIOClientTCPBootstrap with NIOTS TLS provider
                 let parameters = tlsConfiguration.getNWProtocolTLSOptions()

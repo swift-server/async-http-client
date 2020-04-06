@@ -471,6 +471,9 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testNoContentLengthForSSLUncleanShutdown() throws {
+        // NIOTS deals with ssl unclean shutdown internally
+        guard !isTestingNIOTS() else { return }
+
         let httpBin = HttpBinForSSLUncleanShutdown()
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
@@ -488,6 +491,9 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testNoContentLengthWithIgnoreErrorForSSLUncleanShutdown() throws {
+        // NIOTS deals with ssl unclean shutdown internally
+        guard !isTestingNIOTS() else { return }
+
         let httpBin = HttpBinForSSLUncleanShutdown()
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: HTTPClient.Configuration(certificateVerification: .none, ignoreUncleanSSLShutdown: true))
@@ -506,6 +512,9 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testCorrectContentLengthForSSLUncleanShutdown() throws {
+        // NIOTS deals with ssl unclean shutdown internally
+        guard !isTestingNIOTS() else { return }
+
         let httpBin = HttpBinForSSLUncleanShutdown()
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
@@ -524,6 +533,9 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testNoContentForSSLUncleanShutdown() throws {
+        // NIOTS deals with ssl unclean shutdown internally
+        guard !isTestingNIOTS() else { return }
+
         let httpBin = HttpBinForSSLUncleanShutdown()
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
@@ -540,6 +552,9 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testNoResponseForSSLUncleanShutdown() throws {
+        // NIOTS deals with ssl unclean shutdown internally
+        guard !isTestingNIOTS() else { return }
+
         let httpBin = HttpBinForSSLUncleanShutdown()
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
@@ -557,6 +572,9 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testNoResponseWithIgnoreErrorForSSLUncleanShutdown() throws {
+        // NIOTS deals with ssl unclean shutdown internally
+        guard !isTestingNIOTS() else { return }
+
         let httpBin = HttpBinForSSLUncleanShutdown()
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: HTTPClient.Configuration(certificateVerification: .none, ignoreUncleanSSLShutdown: true))
@@ -574,6 +592,9 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testWrongContentLengthForSSLUncleanShutdown() throws {
+        // NIOTS deals with ssl unclean shutdown internally
+        guard !isTestingNIOTS() else { return }
+
         let httpBin = HttpBinForSSLUncleanShutdown()
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
@@ -591,6 +612,9 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testWrongContentLengthWithIgnoreErrorForSSLUncleanShutdown() throws {
+        // NIOTS deals with ssl unclean shutdown internally
+        guard !isTestingNIOTS() else { return }
+
         let httpBin = HttpBinForSSLUncleanShutdown()
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: HTTPClient.Configuration(certificateVerification: .none, ignoreUncleanSSLShutdown: true))
@@ -1675,18 +1699,16 @@ class HTTPClientTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(port)").wait()) { error in
-            #if canImport(Network)
             if isTestingNIOTS() {
-                guard let ioError = error as? NWPOSIXError, ioError.errorCode == .ECONNREFUSED else {
+                guard case ChannelError.connectTimeout = error else {
+                   XCTFail("Unexpected error: \(error)")
+                   return
+               }
+            } else {
+                guard error is NIOConnectionError else {
                     XCTFail("Unexpected error: \(error)")
                     return
                 }
-                return
-            }
-            #endif
-            guard error is NIOConnectionError else {
-                XCTFail("Unexpected error: \(error)")
-                return
             }
         }
     }
