@@ -109,7 +109,7 @@ extension NIOClientTCPBootstrap {
         #endif
         
         // don't enable TLS if we have a proxy, this will be enabled later on
-        if requiresTLS, configuration.proxy == nil {
+        if requiresTLS && configuration.proxy == nil {
             return bootstrap.enableTLS()
         }
         return bootstrap

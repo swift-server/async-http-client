@@ -2,7 +2,7 @@
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2020 Apple Inc. and the AsyncHTTPClient project authors
+// Copyright (c) 2020 Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -94,16 +94,17 @@ internal extension TLSConfiguration {
         
         // cipher suites
         if self.cipherSuites.count > 0 {
-            //preconditionFailure("TLSConfiguration.cipherSuites is not supported")
+            // TODO: Requires NIOSSL to provide list of cipher values before we can continue
+            // https://github.com/apple/swift-nio-ssl/issues/207
         }
         
         // key log callback
-        if let _ = self.keyLogCallback {
+        if self.keyLogCallback != nil {
             preconditionFailure("TLSConfiguration.keyLogCallback is not supported")
         }
         
         // private key
-        if let _ = self.privateKey {
+        if self.privateKey != nil {
             preconditionFailure("TLSConfiguration.privateKey is not supported")
         }
         
@@ -120,9 +121,6 @@ internal extension TLSConfiguration {
         case .none:
             // add verify block to control certificate verification
             sec_protocol_options_set_verify_block(options.securityProtocolOptions, { (sec_protocol_metadata, sec_trust, sec_protocol_verify_complete) in
-                //let trust = sec_trust_copy_ref(sec_trust).takeRetainedValue()
-                //var error: CFError?
-                //if SecTrustEvaluateWithError(trust, &error) {                
                 sec_protocol_verify_complete(true)
             }, TLSConfiguration.tlsDispatchQueue)
 
