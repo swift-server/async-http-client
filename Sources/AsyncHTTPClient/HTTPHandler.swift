@@ -464,7 +464,7 @@ extension URL {
         if self.path.isEmpty {
             return "/"
         }
-        return self.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? self.path
+        return URLComponents(url: self, resolvingAgainstBaseURL: false)?.percentEncodedPath ?? self.path
     }
 
     var pathHasTrailingSlash: Bool {
