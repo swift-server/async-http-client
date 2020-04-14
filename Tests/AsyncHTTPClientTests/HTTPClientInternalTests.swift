@@ -286,6 +286,9 @@ class HTTPClientInternalTests: XCTestCase {
 
         let request11 = try Request(url: "https://someserver.com/some%20path")
         XCTAssertEqual(request11.url.uri, "/some%20path")
+
+        let request12 = try Request(url: "https://someserver.com/some%2Fpathsegment1/pathsegment2")
+        XCTAssertEqual(request12.url.uri, "/some%2Fpathsegment1/pathsegment2")
     }
 
     func testChannelAndDelegateOnDifferentEventLoops() throws {
