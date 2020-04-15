@@ -464,33 +464,11 @@ extension URL {
         if self.path.isEmpty {
             return "/"
         }
-        return self.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? self.path
-    }
-
-    var pathHasTrailingSlash: Bool {
-        if #available(OSX 10.11, iOS 9.0, tvOS 9.0, watchOS 2.0, *) {
-            return self.hasDirectoryPath
-        } else {
-            // Most platforms should use `self.hasDirectoryPath`, but on older darwin platforms
-            // we have this approximation instead.
-            let url = self.absoluteString
-
-            var pathEndIndex = url.index(before: url.endIndex)
-            if let queryIndex = url.firstIndex(of: "?") {
-                pathEndIndex = url.index(before: queryIndex)
-            } else if let fragmentIndex = url.suffix(from: url.firstIndex(of: "@") ?? url.startIndex).lastIndex(of: "#") {
-                pathEndIndex = url.index(before: fragmentIndex)
-            }
-
-            return url[pathEndIndex] == "/"
-        }
+        return URLComponents(url: self, resolvingAgainstBaseURL: false)?.percentEncodedPath ?? self.path
     }
 
     var uri: String {
         var uri = self.percentEncodedPath
-        if self.pathHasTrailingSlash, uri != "/" {
-            uri += "/"
-        }
 
         if let query = self.query {
             uri += "?" + query
