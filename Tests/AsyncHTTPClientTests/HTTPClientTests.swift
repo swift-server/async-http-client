@@ -218,6 +218,18 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(.ok, response.status)
     }
 
+    func testPercentEncodedBackslash() throws {
+        let httpBin = HTTPBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        let response = try httpClient.get(url: "http://localhost:\(httpBin.port)/percent%2Fencoded/hello").wait()
+        XCTAssertEqual(.ok, response.status)
+    }
+
     func testMultipleContentLengthHeaders() throws {
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
         defer {
