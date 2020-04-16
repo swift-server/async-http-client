@@ -394,8 +394,8 @@ internal final class HttpBinHandler: ChannelInboundHandler {
         switch self.unwrapInboundIn(data) {
         case .head(let req):
             self.parseAndSetOptions(from: req)
-            let url = URL(string: req.uri)!
-            switch url.path {
+            let urlComponents = URLComponents(string: req.uri)!
+            switch urlComponents.percentEncodedPath {
             case "/":
                 var headers = HTTPHeaders()
                 headers.add(name: "X-Is-This-Slash", value: "Yes")
@@ -429,13 +429,13 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
                 return
             case "/redirect/https":
-                let port = self.value(for: "port", from: url.query!)
+                let port = self.value(for: "port", from: urlComponents.query!)
                 var headers = HTTPHeaders()
                 headers.add(name: "Location", value: "https://localhost:\(port)/ok")
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
                 return
             case "/redirect/loopback":
-                let port = self.value(for: "port", from: url.query!)
+                let port = self.value(for: "port", from: urlComponents.query!)
                 var headers = HTTPHeaders()
                 headers.add(name: "Location", value: "http://127.0.0.1:\(port)/echohostheader")
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
@@ -450,8 +450,14 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 headers.add(name: "Location", value: "/redirect/infinite1")
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
                 return
-            // Since this String is taken from URL.path, the percent encoding has been removed
-            case "/percent encoded":
+            case "/percent%20encoded":
+                if req.method != .GET {
+                    self.resps.append(HTTPResponseBuilder(status: .methodNotAllowed))
+                    return
+                }
+                self.resps.append(HTTPResponseBuilder(status: .ok))
+                return
+            case "/percent%2Fencoded/hello":
                 if req.method != .GET {
                     self.resps.append(HTTPResponseBuilder(status: .methodNotAllowed))
                     return

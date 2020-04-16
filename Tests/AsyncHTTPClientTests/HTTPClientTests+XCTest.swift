@@ -37,6 +37,7 @@ extension HTTPClientTests {
             ("testHttpRedirect", testHttpRedirect),
             ("testHttpHostRedirect", testHttpHostRedirect),
             ("testPercentEncoded", testPercentEncoded),
+            ("testPercentEncodedBackslash", testPercentEncodedBackslash),
             ("testMultipleContentLengthHeaders", testMultipleContentLengthHeaders),
             ("testStreaming", testStreaming),
             ("testRemoteClose", testRemoteClose),
