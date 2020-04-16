@@ -66,7 +66,7 @@ final class ConnectionPool {
         let key = Key(request)
 
         let provider: HTTP1ConnectionProvider = self.lock.withLock {
-            if let existing = self.providers[key] {
+            if let existing = self.providers[key], existing.isActive {
                 return existing
             } else {
                 let http1Provider = HTTP1ConnectionProvider(key: key, eventLoop: eventLoop, configuration: self.configuration, pool: self)
@@ -85,6 +85,12 @@ final class ConnectionPool {
 
         if let connectionProvider = connectionProvider {
             connectionProvider.release(connection: connection)
+        }
+    }
+
+    func delete(_ provider: HTTP1ConnectionProvider) {
+        self.lock.withLockVoid {
+            self.providers[provider.key] = nil
         }
     }
 
@@ -165,9 +171,6 @@ final class ConnectionPool {
         /// for removing the specific handlers they added to the `Channel` pipeline before releasing it to the pool.
         let channel: Channel
 
-        /// Wether the connection is currently leased or not
-        var isLeased: Bool = false
-
         /// Indicates that this connection is about to close
         var isClosing: Bool = false
 
@@ -247,7 +250,7 @@ final class ConnectionPool {
         private let pool: ConnectionPool
 
         /// The key associated with this provider
-        private let key: ConnectionPool.Key
+        let key: ConnectionPool.Key
 
         /// The default `EventLoop` for this provider
         ///
@@ -255,13 +258,15 @@ final class ConnectionPool {
         /// for which the `EventLoopPreference` is set to `.indifferent`
         let eventLoop: EventLoop
 
-        /// The lock used to access and modify the `state` property
+        /// The lock used to access and modify the provider state - `availableConnections`, `waiters` and `openedConnectionsCount`.
         ///
-        /// - Warning: This lock should always be acquired *after* `ConnectionPool`s `connectionProvidersLock` if used in combination with it.
+        /// - Warning: This lock should always be acquired *after* `ConnectionPool`s `lock` if used in combination with it.
         private let lock = Lock()
 
         /// The maximum number of concurrent connections to a given (host, scheme, port)
         private let maximumConcurrentConnections: Int = 8
+
+        private var active: Bool = true
 
         /// Opened connections that are available
         var availableConnections: CircularBuffer<Connection> = .init(initialCapacity: 8)
@@ -272,7 +277,7 @@ final class ConnectionPool {
         /// as soon as possible by the provider, in FIFO order.
         var waiters: CircularBuffer<Waiter> = .init(initialCapacity: 8)
 
-        // TODO: description
+        /// Number of opened or opening connections, used to keep track of all connections and enforcing `maximumConcurrentConnections` limit.
         var openedConnectionsCount: Int = 0
 
         /// Creates a new `HTTP1ConnectionProvider`
@@ -299,12 +304,20 @@ final class ConnectionPool {
             return "HTTP1ConnectionProvider { key: \(self.key) }"
         }
 
+        var isActive: Bool {
+            self.lock.withLock {
+                self.active
+            }
+        }
+
         func execute(_ action: Action) {
             switch action {
             case .lease(let connection, let waiter):
                 // check if we can vend this connection to caller
                 connection.cancelIdleTimeout().flatMapError { error in
+                    // if connection is already inactive, we create a new one.
                     if error is Connection.InactiveChannelError {
+                        self.openedConnectionsCount += 1
                         return self.makeConnection(on: waiter.preference.bestEventLoop ?? self.eventLoop)
                     }
                     return connection.channel.eventLoop.makeFailedFuture(error)
@@ -322,7 +335,6 @@ final class ConnectionPool {
 
             let action: Action = self.lock.withLock {
                 if let connection = self.availableConnections.popFirst() {
-                    connection.isLeased = true
                     return .lease(connection, waiter)
                 } else if self.openedConnectionsCount < self.maximumConcurrentConnections {
                     self.openedConnectionsCount += 1
@@ -342,18 +354,12 @@ final class ConnectionPool {
             let action: Action = self.lock.withLock {
                 if connection.isActiveEstimation { // If connection is alive, we can give to a next waiter
                     if let waiter = self.waiters.popFirst() {
-                        connection.isLeased = true
                         return .lease(connection, waiter)
                     } else {
-                        connection.isLeased = false
                         self.availableConnections.append(connection)
                         return .none
                     }
                 } else {
-                    // TODO: close here is probably not ok
-                    connection.close()
-                    self.openedConnectionsCount -= 1
-
                     if let waiter = self.waiters.popFirst() {
                         self.openedConnectionsCount += 1
                         return .create(waiter)
@@ -363,9 +369,26 @@ final class ConnectionPool {
                 }
             }
 
-            // TODO: is this correct?
+            // This is needed to start a new stack, otherwise, since this is called on a previous
+            // future completion handler chain, it will be growing indefinitely until the connection is closed.
+            // We might revisit this when https://github.com/apple/swift-nio/issues/970 is resolved.
             connection.channel.eventLoop.execute {
                 self.execute(action)
+            }
+        }
+
+        func delete(connection: Connection) {
+            self.lock.withLock {
+                self.openedConnectionsCount -= 1
+                self.availableConnections.removeAll { $0 === connection }
+
+                if self.openedConnectionsCount == 0 {
+                    self.active = false
+                }
+            }
+
+            if !self.active {
+                self.pool.delete(self)
             }
         }
 
@@ -400,17 +423,23 @@ final class ConnectionPool {
                     channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
                 }.map {
                     let connection = Connection(key: self.key, channel: channel, pool: self.pool)
-                    connection.isLeased = true
+
+                    channel.closeFuture.whenComplete { _ in
+                        self.delete(connection: connection)
+                    }
+
                     return connection
                 }
             }.flatMapError { error in
-                // This promise may not have been completed if we reach this
-                // so we fail it to avoid any leak
+                // This promise may not have been completed if we reach this so we fail it to avoid any leak
                 handshakePromise.fail(error)
 
+                // since we failed to create a connection, we need to decrease opened connection count
+                self.lock.withLockVoid {
+                    self.openedConnectionsCount -= 1
+                }
+
                 // there is no connection here anymore, we need to bootstrap next waiter
-                // TODO: this is done out of lock, most likely incorrect
-                self.openedConnectionsCount -= 1
                 self.processNextWaiter()
                 return self.eventLoop.makeFailedFuture(error)
             }
