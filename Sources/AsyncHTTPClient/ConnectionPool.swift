@@ -305,7 +305,7 @@ final class ConnectionPool {
         }
 
         var isActive: Bool {
-            self.lock.withLock {
+            return self.lock.withLock {
                 self.active
             }
         }
@@ -387,7 +387,7 @@ final class ConnectionPool {
                 }
             }
 
-            if !self.active {
+            if !self.isActive {
                 self.pool.delete(self)
             }
         }
