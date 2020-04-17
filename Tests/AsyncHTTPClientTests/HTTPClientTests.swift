@@ -1733,7 +1733,7 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try httpClient.syncShutdown())
         }
         // create random block of text
-        let uint8Array = Array<Int8>(repeating: 0, count: 16384).map { _ in Int8.random(in: 32...127)}
+        let uint8Array = [Int8](repeating: 0, count: 16384).map { _ in Int8.random(in: 32...127)}
         let asciiString = String(utf8String: uint8Array)!
         let asciiData = Data(asciiString.utf8)
 
@@ -1755,7 +1755,6 @@ class HTTPClientTests: XCTestCase {
             let bytes = response.body.flatMap { $0.getData(at: 0, length: $0.readableBytes) }
             let responseData = try JSONDecoder().decode(RequestInfo.self, from: bytes!)
             XCTAssertEqual(String(data: asciiData[4190..<12745], encoding: .utf8)!, responseData.data)
-            
         } catch {
             XCTFail("\(error)")
         }
