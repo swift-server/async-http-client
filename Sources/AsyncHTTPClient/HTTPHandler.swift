@@ -60,6 +60,16 @@ extension HTTPClient {
             }
         }
 
+        /// Create and stream body using `FileRegion`.
+        ///
+        /// - parameters:
+        ///     - buffer: Body `FileRegion` representation.
+        public static func fileRegion(_ fileRegion: FileRegion) -> Body {
+            return Body(length: fileRegion.readableBytes) { writer in
+                writer.write(.fileRegion(fileRegion))
+            }
+        }
+
         /// Create and stream body using `StreamWriter`.
         ///
         /// - parameters:

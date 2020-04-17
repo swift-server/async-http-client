@@ -1724,4 +1724,40 @@ class HTTPClientTests: XCTestCase {
         }
         XCTAssertNoThrow(try promise.futureResult.wait())
     }
+
+    func testFileRegion() {
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(group))
+        let httpBin = HTTPBin()
+        defer {
+            XCTAssertNoThrow(try httpBin.shutdown())
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+        // create random block of text
+        let uint8Array = Array<Int8>(repeating: 0, count: 16384).map { _ in Int8.random(in: 32...127)}
+        let asciiString = String(utf8String: uint8Array)!
+        let asciiData = Data(asciiString.utf8)
+
+        let filename = "randomfile"
+        FileManager.default.createFile(atPath: filename, contents: asciiData, attributes: nil)
+        defer {
+            XCTAssertNoThrow(try FileManager.default.removeItem(atPath: filename))
+        }
+
+        do {
+            let handle = try! NIOFileHandle(path: filename)
+            defer {
+                XCTAssertNoThrow(try handle.close())
+            }
+            let region = FileRegion(fileHandle: handle, readerIndex: 4190, endIndex: 12745)
+            let request = try Request(url: "http://localhost:\(httpBin.port)/post", method: .POST, body: .fileRegion(region))
+
+            let response = try httpClient.execute(request: request).wait()
+            let bytes = response.body.flatMap { $0.getData(at: 0, length: $0.readableBytes) }
+            let responseData = try JSONDecoder().decode(RequestInfo.self, from: bytes!)
+            XCTAssertEqual(String(data: asciiData[4190..<12745], encoding: .utf8)!, responseData.data)
+            
+        } catch {
+            XCTFail("\(error)")
+        }
+    }
 }
