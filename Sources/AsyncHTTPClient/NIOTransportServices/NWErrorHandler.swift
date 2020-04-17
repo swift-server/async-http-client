@@ -35,7 +35,7 @@
                 self.errorCode = errorCode
                 self.reason = reason
             }
-            
+
             public var description: String { return self.reason }
         }
 
