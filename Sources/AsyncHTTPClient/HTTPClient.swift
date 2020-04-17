@@ -18,8 +18,8 @@ import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOHTTPCompression
 import NIOSSL
-import NIOTransportServices
 import NIOTLS
+import NIOTransportServices
 
 /// HTTPClient class provides API for request execution.
 ///
@@ -67,13 +67,13 @@ public class HTTPClient {
             self.eventLoopGroup = group
         case .createNew:
             #if canImport(Network)
-            if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
-                self.eventLoopGroup = NIOTSEventLoopGroup()
-            } else {
-                self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-            }
+                if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
+                    self.eventLoopGroup = NIOTSEventLoopGroup()
+                } else {
+                    self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+                }
             #else
-            self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+                self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
             #endif
         }
         self.configuration = configuration
@@ -694,7 +694,7 @@ extension ChannelPipeline {
                 let context = try NIOSSLContext(configuration: tlsConfiguration)
                 handlers = [
                     try NIOSSLClientHandler(context: context, serverHostname: key.host.isIPAddress ? nil : key.host),
-                    TLSEventsHandler(completionPromise: handshakePromise)
+                    TLSEventsHandler(completionPromise: handshakePromise),
                 ]
             } else {
                 handlers = [TLSEventsHandler(completionPromise: handshakePromise)]

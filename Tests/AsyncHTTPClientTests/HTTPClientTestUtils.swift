@@ -28,10 +28,10 @@ func isTestingNIOTS() -> Bool {
 
 func getDefaultEventLoopGroup(numberOfThreads: Int) -> EventLoopGroup {
     #if canImport(Network)
-    if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *),
-        isTestingNIOTS() {
-        return NIOTSEventLoopGroup(loopCount: numberOfThreads, defaultQoS: .default)
-    }
+        if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *),
+            isTestingNIOTS() {
+            return NIOTSEventLoopGroup(loopCount: numberOfThreads, defaultQoS: .default)
+        }
     #endif
     return MultiThreadedEventLoopGroup(numberOfThreads: numberOfThreads)
 }

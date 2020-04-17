@@ -14,7 +14,7 @@
 
 @testable import AsyncHTTPClient
 #if canImport(Network)
-import Network
+    import Network
 #endif
 import NIO
 import NIOConcurrencyHelpers
@@ -1050,11 +1050,11 @@ class HTTPClientTests: XCTestCase {
             case .failure(let error):
                 if isTestingNIOTS() {
                     #if canImport(Network)
-                    guard let clientError = error as? NWTLSError else {
-                        XCTFail("Unexpected error: \(error)")
-                        continue
-                    }
-                    XCTAssertEqual(clientError.status, errSSLHandshakeFail)
+                        guard let clientError = error as? NWTLSError else {
+                            XCTFail("Unexpected error: \(error)")
+                            continue
+                        }
+                        XCTAssertEqual(clientError.status, errSSLHandshakeFail)
                     #endif
                 } else {
                     guard let clientError = error as? NIOSSLError, case NIOSSLError.handshakeFailed = clientError else {
@@ -1701,9 +1701,9 @@ class HTTPClientTests: XCTestCase {
         XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(port)").wait()) { error in
             if isTestingNIOTS() {
                 guard case ChannelError.connectTimeout = error else {
-                   XCTFail("Unexpected error: \(error)")
-                   return
-               }
+                    XCTFail("Unexpected error: \(error)")
+                    return
+                }
             } else {
                 guard error is NIOConnectionError else {
                     XCTFail("Unexpected error: \(error)")

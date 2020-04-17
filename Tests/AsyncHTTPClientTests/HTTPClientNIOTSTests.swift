@@ -14,7 +14,7 @@
 
 @testable import AsyncHTTPClient
 #if canImport(Network)
-import Network
+    import Network
 #endif
 import NIO
 import NIOSSL
@@ -41,10 +41,10 @@ class HTTPClientNIOTSTests: XCTestCase {
             XCTAssertNoThrow(try httpClient.syncShutdown())
         }
         #if canImport(Network)
-        if #available(macOS 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
-            XCTAssertTrue(httpClient.eventLoopGroup is NIOTSEventLoopGroup)
-            return
-        }
+            if #available(macOS 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
+                XCTAssertTrue(httpClient.eventLoopGroup is NIOTSEventLoopGroup)
+                return
+            }
         #endif
         XCTAssertTrue(httpClient.eventLoopGroup is MultiThreadedEventLoopGroup)
     }
@@ -52,24 +52,24 @@ class HTTPClientNIOTSTests: XCTestCase {
     func testTLSFailError() {
         guard isTestingNIOTS() else { return }
         #if canImport(Network)
-        let httpBin = HTTPBin(ssl: true)
-        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
-        defer {
-            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
-            XCTAssertNoThrow(try httpBin.shutdown())
-        }
+            let httpBin = HTTPBin(ssl: true)
+            let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+            defer {
+                XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+                XCTAssertNoThrow(try httpBin.shutdown())
+            }
 
-        do {
-            _ = try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()
-            XCTFail("This should have failed")
-        } catch let error as NWTLSError {
-            XCTAssertEqual(error.status, errSSLHandshakeFail)
-        } catch {
-            XCTFail("Error should have been NWTLSError not \(type(of:error))")
-        }
+            do {
+                _ = try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()
+                XCTFail("This should have failed")
+            } catch let error as NWTLSError {
+                XCTAssertEqual(error.status, errSSLHandshakeFail)
+            } catch {
+                XCTFail("Error should have been NWTLSError not \(type(of: error))")
+            }
         #endif
     }
-    
+
     func testConnectionFailError() {
         guard isTestingNIOTS() else { return }
         let httpBin = HTTPBin(ssl: true)
@@ -85,31 +85,31 @@ class HTTPClientNIOTSTests: XCTestCase {
             XCTFail("This should have failed")
         } catch ChannelError.connectTimeout {
         } catch {
-            XCTFail("Error should have been ChannelError.connectTimeout not \(type(of:error))")
+            XCTFail("Error should have been ChannelError.connectTimeout not \(type(of: error))")
         }
     }
-    
+
     func testTLSVersionError() {
         guard isTestingNIOTS() else { return }
         #if canImport(Network)
-        let httpBin = HTTPBin(ssl: true)
-        let httpClient = HTTPClient(
-            eventLoopGroupProvider: .shared(self.clientGroup),
-            configuration: .init(tlsConfiguration: TLSConfiguration.forClient(minimumTLSVersion: .tlsv11, maximumTLSVersion: .tlsv1, certificateVerification: .none))
-        )
-        defer {
-            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
-            XCTAssertNoThrow(try httpBin.shutdown())
-        }
+            let httpBin = HTTPBin(ssl: true)
+            let httpClient = HTTPClient(
+                eventLoopGroupProvider: .shared(self.clientGroup),
+                configuration: .init(tlsConfiguration: TLSConfiguration.forClient(minimumTLSVersion: .tlsv11, maximumTLSVersion: .tlsv1, certificateVerification: .none))
+            )
+            defer {
+                XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+                XCTAssertNoThrow(try httpBin.shutdown())
+            }
 
-        do {
-            _ = try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()
-            XCTFail("This should have failed")
-        } catch let error as NWTLSError {
-            XCTAssertEqual(error.status, errSSLHandshakeFail)
-        } catch {
-            XCTFail("Error should have been NWTLSError not \(type(of:error))")
-        }
+            do {
+                _ = try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()
+                XCTFail("This should have failed")
+            } catch let error as NWTLSError {
+                XCTAssertEqual(error.status, errSSLHandshakeFail)
+            } catch {
+                XCTFail("Error should have been NWTLSError not \(type(of: error))")
+            }
         #endif
     }
 }
