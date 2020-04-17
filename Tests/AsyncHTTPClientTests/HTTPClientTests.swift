@@ -1050,7 +1050,7 @@ class HTTPClientTests: XCTestCase {
             case .failure(let error):
                 if isTestingNIOTS() {
                     #if canImport(Network)
-                        guard let clientError = error as? NWTLSError else {
+                        guard let clientError = error as? HTTPClient.NWTLSError else {
                             XCTFail("Unexpected error: \(error)")
                             continue
                         }

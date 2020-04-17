@@ -400,7 +400,7 @@ final class ConnectionPool {
                 }.flatMap {
                     #if canImport(Network)
                         if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), bootstrap.underlyingBootstrap is NIOTSConnectionBootstrap {
-                            return channel.pipeline.addHandler(NWErrorHandler(), position: .first)
+                            return channel.pipeline.addHandler(HTTPClient.NWErrorHandler(), position: .first)
                         }
                     #endif
                     return eventLoop.makeSucceededFuture(())
@@ -416,7 +416,7 @@ final class ConnectionPool {
                 var error = error
                 #if canImport(Network)
                     if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), bootstrap.underlyingBootstrap is NIOTSConnectionBootstrap {
-                        error = NWErrorHandler.translateError(error)
+                        error = HTTPClient.NWErrorHandler.translateError(error)
                     }
                 #endif
                 // This promise may not have been completed if we reach this
