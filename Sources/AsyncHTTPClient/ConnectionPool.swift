@@ -17,6 +17,7 @@ import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOTLS
+import NIOTransportServices
 
 /// A connection pool that manages and creates new connections to hosts respecting the specified preferences
 ///
@@ -373,9 +374,15 @@ final class ConnectionPool {
 
         private func makeConnection(on eventLoop: EventLoop) -> EventLoopFuture<Connection> {
             self.activityPrecondition(expected: [.opened])
-            let handshakePromise = eventLoop.makePromise(of: Void.self)
-            let bootstrap = ClientBootstrap.makeHTTPClientBootstrapBase(group: eventLoop, host: self.key.host, port: self.key.port, configuration: self.configuration)
             let address = HTTPClient.resolveAddress(host: self.key.host, port: self.key.port, proxy: self.configuration.proxy)
+            let requiresTLS = self.key.scheme == .https
+            let bootstrap: NIOClientTCPBootstrap
+            do {
+                bootstrap = try NIOClientTCPBootstrap.makeHTTPClientBootstrapBase(on: eventLoop, host: self.key.host, port: self.key.port, requiresTLS: requiresTLS, configuration: self.configuration)
+            } catch {
+                return eventLoop.makeFailedFuture(error)
+            }
+            let handshakePromise = eventLoop.makePromise(of: Void.self)
 
             let channel: EventLoopFuture<Channel>
             switch self.key.scheme {
@@ -386,9 +393,17 @@ final class ConnectionPool {
             }
 
             return channel.flatMap { channel -> EventLoopFuture<ConnectionPool.Connection> in
-                channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, handshakePromise: handshakePromise)
+                let requiresSSLHandler = self.configuration.proxy != nil && self.key.scheme == .https
+                channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, addSSLClient: requiresSSLHandler, handshakePromise: handshakePromise)
                 return handshakePromise.futureResult.flatMap {
                     channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
+                }.flatMap {
+                    #if canImport(Network)
+                        if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), bootstrap.underlyingBootstrap is NIOTSConnectionBootstrap {
+                            return channel.pipeline.addHandler(HTTPClient.NWErrorHandler(), position: .first)
+                        }
+                    #endif
+                    return eventLoop.makeSucceededFuture(())
                 }.map {
                     let connection = Connection(key: self.key, channel: channel, parentPool: self.parentPool)
                     connection.isLeased = true
@@ -398,6 +413,12 @@ final class ConnectionPool {
                 self.configureCloseCallback(of: connection)
                 return connection
             }.flatMapError { error in
+                var error = error
+                #if canImport(Network)
+                    if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), bootstrap.underlyingBootstrap is NIOTSConnectionBootstrap {
+                        error = HTTPClient.NWErrorHandler.translateError(error)
+                    }
+                #endif
                 // This promise may not have been completed if we reach this
                 // so we fail it to avoid any leak
                 handshakePromise.fail(error)
