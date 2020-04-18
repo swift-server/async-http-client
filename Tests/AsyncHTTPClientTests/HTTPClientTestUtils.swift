@@ -23,7 +23,11 @@ import NIOTransportServices
 
 /// Are we testing NIO Transport services
 func isTestingNIOTS() -> Bool {
-    return ProcessInfo.processInfo.environment["DISABLE_TS_TESTS"] != "true"
+    #if canImport(Network)
+        return ProcessInfo.processInfo.environment["DISABLE_TS_TESTS"] != "true"
+    #else
+        return false
+    #endif
 }
 
 func getDefaultEventLoopGroup(numberOfThreads: Int) -> EventLoopGroup {
