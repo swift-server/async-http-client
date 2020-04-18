@@ -1733,8 +1733,9 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try httpClient.syncShutdown())
         }
         // create random block of text
-        let uint8Array = [Int8](repeating: 0, count: 16384).map { _ in Int8.random(in: 32...127)}
-        let asciiString = String(utf8String: uint8Array)!
+        let asciiString = String(decoding: Array(repeating: UInt8(0), count: 16384).map { _ in
+            UInt8.random(in: .init(ascii: "A") ... .init(ascii: "z"))
+        }, as: UTF8.self)
         let asciiData = Data(asciiString.utf8)
 
         let filename = "randomfile"
