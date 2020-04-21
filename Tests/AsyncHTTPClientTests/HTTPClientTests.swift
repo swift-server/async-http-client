@@ -1726,7 +1726,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testFileRegion() {
-        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(group))
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
         let httpBin = HTTPBin()
         defer {
             XCTAssertNoThrow(try httpBin.shutdown())
