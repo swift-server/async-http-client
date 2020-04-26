@@ -94,14 +94,12 @@ final class ConnectionPool {
         }
     }
 
-    func close(on eventLoop: EventLoop) {
+    func close(on eventLoop: EventLoop) -> EventLoopFuture<Void> {
         let providers = self.lock.withLock {
             self.providers.values
         }
 
-        providers.forEach {
-            $0.close()
-        }
+        return EventLoopFuture.andAllComplete(providers.map { $0.close(on: eventLoop) }, on: eventLoop)
     }
 
     var connectionProviderCount: Int {
@@ -240,6 +238,7 @@ final class ConnectionPool {
         enum Action {
             case lease(Connection, Waiter)
             case create(Waiter)
+            case delete
             case none
         }
 
@@ -327,6 +326,8 @@ final class ConnectionPool {
                 .cascade(to: waiter.promise)
             case .create(let waiter):
                 self.makeConnection(on: waiter.preference.bestEventLoop ?? self.eventLoop).cascade(to: waiter.promise)
+            case .delete:
+                self.pool.delete(self)
             case .none:
                 break
             }
@@ -380,18 +381,19 @@ final class ConnectionPool {
         }
 
         func delete(connection: Connection) {
-            self.lock.withLock {
+            let action: Action = self.lock.withLock {
                 self.openedConnectionsCount -= 1
                 self.availableConnections.removeAll { $0 === connection }
 
                 if self.openedConnectionsCount == 0 {
                     self.active = false
+                    return .delete
                 }
+
+                return .none
             }
 
-            if !self.isActive {
-                self.pool.delete(self)
-            }
+            self.execute(action)
         }
 
         private func processNextWaiter() {
@@ -399,6 +401,9 @@ final class ConnectionPool {
                 if let waiter = self.waiters.popFirst() {
                     self.openedConnectionsCount += 1
                     return .create(waiter)
+                } else if self.openedConnectionsCount == 0 {
+                    self.active = false
+                    return .delete
                 }
                 return .none
             }
@@ -447,7 +452,7 @@ final class ConnectionPool {
             }
         }
 
-        func close() {
+        func close(on eventLoop: EventLoop) -> EventLoopFuture<Void> {
             let waiters: CircularBuffer<Waiter> = self.lock.withLock {
                 let copy = self.waiters
                 self.waiters.removeAll()
@@ -463,6 +468,8 @@ final class ConnectionPool {
             }
 
             connections.forEach { $0.close() }
+
+            return EventLoopFuture.andAllComplete(connections.map { $0.channel.closeFuture }, on: eventLoop)
         }
 
         private func resolvePreference(_ preference: HTTPClient.EventLoopPreference) -> (EventLoop, Bool) {

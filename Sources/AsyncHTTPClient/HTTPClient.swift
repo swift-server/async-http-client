@@ -73,6 +73,7 @@ public class HTTPClient {
     }
 
     deinit {
+        assert(self.pool.connectionProviderCount == 0)
         assert(self.state == .shutDown, "Client not shut down before the deinit. Please call client.syncShutdown() when no longer needed.")
     }
 
@@ -172,13 +173,14 @@ public class HTTPClient {
             }
 
             self.cancelTasks(tasks).whenComplete { _ in
-                self.pool.close(on: self.eventLoopGroup.next())
-                self.shutdownEventLoop(queue: queue) { eventLoopError in
-                    // we prioritise .uncleanShutdown here
-                    if let error = closeError {
-                        callback(error)
-                    } else {
-                        callback(eventLoopError)
+                self.pool.close(on: self.eventLoopGroup.next()).whenComplete { _ in
+                    self.shutdownEventLoop(queue: queue) { eventLoopError in
+                        // we prioritise .uncleanShutdown here
+                        if let error = closeError {
+                            callback(error)
+                        } else {
+                            callback(eventLoopError)
+                        }
                     }
                 }
             }
