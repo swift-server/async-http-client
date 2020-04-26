@@ -557,7 +557,7 @@ extension HTTPClient {
 
         func fail<Delegate: HTTPClientResponseDelegate>(with error: Error, delegateType: Delegate.Type) {
             if let connection = self.connection {
-                connection.close()
+                connection.channel.close(promise: nil)
                 self.releaseAssociatedConnection(delegateType: delegateType).whenComplete { _ in
                     self.promise.fail(error)
                 }

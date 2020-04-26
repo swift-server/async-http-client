@@ -168,13 +168,15 @@ final class ConnectionPool {
         /// - Warning: Requests that lease connections from the `ConnectionPool` are responsible
         /// for removing the specific handlers they added to the `Channel` pipeline before releasing it to the pool.
         let channel: Channel
+        let closeFuture: EventLoopFuture<Void>
 
         /// Indicates that this connection is about to close
         var isClosing: Bool = false
 
-        init(key: Key, channel: Channel, pool: ConnectionPool) {
+        init(key: Key, channel: Channel, closeFuture: EventLoopFuture<Void>, pool: ConnectionPool) {
             self.key = key
             self.channel = channel
+            self.closeFuture = closeFuture
             self.pool = pool
         }
 
@@ -194,8 +196,9 @@ final class ConnectionPool {
             self.pool.release(self)
         }
 
-        func close() {
+        func close() -> EventLoopFuture<Void> {
             self.channel.close(promise: nil)
+            return self.closeFuture
         }
 
         func cancelIdleTimeout() -> EventLoopFuture<Connection> {
@@ -429,10 +432,12 @@ final class ConnectionPool {
                 return handshakePromise.futureResult.flatMap {
                     channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
                 }.map {
-                    let connection = Connection(key: self.key, channel: channel, pool: self.pool)
+                    let closePromise = channel.eventLoop.makePromise(of: Void.self)
+                    let connection = Connection(key: self.key, channel: channel, closeFuture: closePromise.futureResult, pool: self.pool)
 
                     channel.closeFuture.whenComplete { _ in
                         self.delete(connection: connection)
+                        closePromise.succeed(())
                     }
 
                     return connection
@@ -467,9 +472,7 @@ final class ConnectionPool {
                 return copy
             }
 
-            connections.forEach { $0.close() }
-
-            return EventLoopFuture.andAllComplete(connections.map { $0.channel.closeFuture }, on: eventLoop)
+            return EventLoopFuture.andAllComplete(connections.map { $0.close() }, on: eventLoop)
         }
 
         private func resolvePreference(_ preference: HTTPClient.EventLoopPreference) -> (EventLoop, Bool) {
