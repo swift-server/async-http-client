@@ -19,6 +19,7 @@ import NIOHTTP1
 import NIOHTTPCompression
 import NIOSSL
 import NIOTLS
+import NIOTransportServices
 
 /// HTTPClient class provides API for request execution.
 ///
@@ -65,7 +66,15 @@ public class HTTPClient {
         case .shared(let group):
             self.eventLoopGroup = group
         case .createNew:
-            self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+            #if canImport(Network)
+                if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
+                    self.eventLoopGroup = NIOTSEventLoopGroup()
+                } else {
+                    self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+                }
+            #else
+                self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+            #endif
         }
         self.configuration = configuration
         self.pool = ConnectionPool(configuration: configuration)
@@ -668,19 +677,24 @@ extension ChannelPipeline {
         return addHandlers([encoder, decoder, handler])
     }
 
-    func addSSLHandlerIfNeeded(for key: ConnectionPool.Key, tlsConfiguration: TLSConfiguration?, handshakePromise: EventLoopPromise<Void>) {
+    func addSSLHandlerIfNeeded(for key: ConnectionPool.Key, tlsConfiguration: TLSConfiguration?, addSSLClient: Bool, handshakePromise: EventLoopPromise<Void>) {
         guard key.scheme == .https else {
             handshakePromise.succeed(())
             return
         }
 
         do {
-            let tlsConfiguration = tlsConfiguration ?? TLSConfiguration.forClient()
-            let context = try NIOSSLContext(configuration: tlsConfiguration)
-            let handlers: [ChannelHandler] = [
-                try NIOSSLClientHandler(context: context, serverHostname: key.host.isIPAddress ? nil : key.host),
-                TLSEventsHandler(completionPromise: handshakePromise),
-            ]
+            let handlers: [ChannelHandler]
+            if addSSLClient {
+                let tlsConfiguration = tlsConfiguration ?? TLSConfiguration.forClient()
+                let context = try NIOSSLContext(configuration: tlsConfiguration)
+                handlers = [
+                    try NIOSSLClientHandler(context: context, serverHostname: key.host.isIPAddress ? nil : key.host),
+                    TLSEventsHandler(completionPromise: handshakePromise),
+                ]
+            } else {
+                handlers = [TLSEventsHandler(completionPromise: handshakePromise)]
+            }
             self.addHandlers(handlers).cascadeFailure(to: handshakePromise)
         } catch {
             handshakePromise.fail(error)
