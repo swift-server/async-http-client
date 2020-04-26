@@ -181,15 +181,13 @@ public class HTTPClient {
                 closeError = HTTPClientError.uncleanShutdown
             }
 
-            self.cancelTasks(tasks).whenComplete { _ in
-                self.pool.close(on: self.eventLoopGroup.next()).whenComplete { _ in
-                    self.shutdownEventLoop(queue: queue) { eventLoopError in
-                        // we prioritise .uncleanShutdown here
-                        if let error = closeError {
-                            callback(error)
-                        } else {
-                            callback(eventLoopError)
-                        }
+            self.cancelTasks(tasks).and(self.pool.close(on: self.eventLoopGroup.next())).whenComplete { _ in
+                self.shutdownEventLoop(queue: queue) { eventLoopError in
+                    // we prioritise .uncleanShutdown here
+                    if let error = closeError {
+                        callback(error)
+                    } else {
+                        callback(eventLoopError)
                     }
                 }
             }

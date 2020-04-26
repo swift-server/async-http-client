@@ -376,6 +376,10 @@ final class ConnectionPool {
                 }
             }
 
+            if case .none = action {
+                return
+            }
+
             // This is needed to start a new stack, otherwise, since this is called on a previous
             // future completion handler chain, it will be growing indefinitely until the connection is closed.
             // We might revisit this when https://github.com/apple/swift-nio/issues/970 is resolved.
