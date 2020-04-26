@@ -317,7 +317,9 @@ final class ConnectionPool {
                 connection.cancelIdleTimeout().flatMapError { error in
                     // if connection is already inactive, we create a new one.
                     if error is Connection.InactiveChannelError {
-                        self.openedConnectionsCount += 1
+                        self.lock.withLockVoid {
+                            self.openedConnectionsCount += 1
+                        }
                         return self.makeConnection(on: waiter.preference.bestEventLoop ?? self.eventLoop)
                     }
                     return connection.channel.eventLoop.makeFailedFuture(error)
