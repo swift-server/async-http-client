@@ -528,8 +528,8 @@ extension HTTPClient {
         /// Cancels the request execution.
         public func cancel() {
             let channel: Channel? = self.lock.withLock {
-                if !cancelled {
-                    cancelled = true
+                if !self.cancelled {
+                    self.cancelled = true
                     return self.connection?.channel
                 } else {
                     return nil
@@ -557,10 +557,9 @@ extension HTTPClient {
 
         func fail<Delegate: HTTPClientResponseDelegate>(with error: Error, delegateType: Delegate.Type) {
             if let connection = self.connection {
-                let closeFuture = connection.closeFuture
                 connection.channel.close(promise: nil)
                 self.releaseAssociatedConnection(delegateType: delegateType).whenComplete { _ in
-                    closeFuture.whenComplete { _ in
+                    connection.closeFuture.whenComplete { _ in
                         self.promise.fail(error)
                     }
                 }
