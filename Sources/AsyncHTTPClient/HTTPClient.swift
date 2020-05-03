@@ -357,7 +357,7 @@ public class HTTPClient {
             redirectHandler = nil
         }
 
-        let task = Task<Delegate.Response>(eventLoop: taskEL, poolingTimeout: self.configuration.maximumAllowedIdleTimeInConnectionPool)
+        let task = Task<Delegate.Response>(eventLoop: taskEL)
         self.stateLock.withLock {
             self.tasks[task.id] = task
         }

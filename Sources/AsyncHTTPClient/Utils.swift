@@ -135,7 +135,7 @@ extension NIOClientTCPBootstrap {
     }
 }
 
-extension ConnectionPool.Connection {
+extension Connection {
     func removeHandler<Handler: RemovableChannelHandler>(_ type: Handler.Type) -> EventLoopFuture<Void> {
         return self.channel.pipeline.handler(type: type).flatMap { handler in
             self.channel.pipeline.removeHandler(handler)

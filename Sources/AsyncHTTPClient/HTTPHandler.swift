@@ -491,19 +491,17 @@ extension HTTPClient {
 
         let promise: EventLoopPromise<Response>
         var completion: EventLoopFuture<Void>
-        var connection: ConnectionPool.Connection?
+        var connection: Connection?
         var cancelled: Bool
         let lock: Lock
         let id = UUID()
-        let poolingTimeout: TimeAmount?
 
-        init(eventLoop: EventLoop, poolingTimeout: TimeAmount? = nil) {
+        init(eventLoop: EventLoop) {
             self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.completion = self.promise.futureResult.map { _ in }
             self.cancelled = false
             self.lock = Lock()
-            self.poolingTimeout = poolingTimeout
         }
 
         static func failedTask(eventLoop: EventLoop, error: Error) -> Task<Response> {
@@ -539,7 +537,7 @@ extension HTTPClient {
         }
 
         @discardableResult
-        func setConnection(_ connection: ConnectionPool.Connection) -> ConnectionPool.Connection {
+        func setConnection(_ connection: Connection) -> Connection {
             return self.lock.withLock {
                 self.connection = connection
                 if self.cancelled {
@@ -558,10 +556,8 @@ extension HTTPClient {
         func fail<Delegate: HTTPClientResponseDelegate>(with error: Error, delegateType: Delegate.Type) {
             if let connection = self.connection {
                 connection.channel.close(promise: nil)
-                self.releaseAssociatedConnection(delegateType: delegateType).whenComplete { _ in
-                    connection.closeFuture.whenComplete { _ in
-                        self.promise.fail(error)
-                    }
+                self.releaseAssociatedConnection(delegateType: delegateType).whenSuccess {
+                    self.promise.fail(error)
                 }
             }
         }
@@ -569,28 +565,15 @@ extension HTTPClient {
         func releaseAssociatedConnection<Delegate: HTTPClientResponseDelegate>(delegateType: Delegate.Type) -> EventLoopFuture<Void> {
             if let connection = self.connection {
                 return connection.removeHandler(NIOHTTPResponseDecompressor.self).flatMap {
+                    // remove read timeout handler
                     connection.removeHandler(IdleStateHandler.self)
                 }.flatMap {
                     connection.removeHandler(TaskHandler<Delegate>.self)
-                }.flatMap {
-                    let idlePoolConnectionHandler = IdlePoolConnectionHandler()
-                    return connection.channel.pipeline.addHandler(idlePoolConnectionHandler, position: .last).flatMap {
-                        connection.channel.pipeline.addHandler(IdleStateHandler(writeTimeout: self.poolingTimeout), position: .before(idlePoolConnectionHandler))
-                    }
-                }.flatMapError { error in
-                    if let error = error as? ChannelError, error == .ioOnClosedChannel {
-                        // We may get this error if channel is released because it is
-                        // closed, it is safe to ignore it
-                        return connection.channel.eventLoop.makeSucceededFuture(())
-                    } else {
-                        return connection.channel.eventLoop.makeFailedFuture(error)
-                    }
                 }.map {
                     connection.release()
                 }.flatMapError { error in
                     fatalError("Couldn't remove taskHandler: \(error)")
                 }
-
             } else {
                 // TODO: This seems only reached in some internal unit test
                 // Maybe there could be a better handling in the future to make
@@ -1019,24 +1002,6 @@ internal struct RedirectHandler<ResponseType> {
             }
         } catch {
             promise.fail(error)
-        }
-    }
-}
-
-class IdlePoolConnectionHandler: ChannelInboundHandler, RemovableChannelHandler {
-    typealias InboundIn = NIOAny
-
-    let _hasNotSentClose: NIOAtomic<Bool> = .makeAtomic(value: true)
-    var hasNotSentClose: Bool {
-        return self._hasNotSentClose.load()
-    }
-
-    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
-        if let idleEvent = event as? IdleStateHandler.IdleStateEvent, idleEvent == .write {
-            self._hasNotSentClose.store(false)
-            context.close(promise: nil)
-        } else {
-            context.fireUserInboundEventTriggered(event)
         }
     }
 }
