@@ -16,8 +16,8 @@ import Foundation
 import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
-import NIOTLS
 import NIOHTTPCompression
+import NIOTLS
 import NIOTransportServices
 
 /// A connection pool that manages and creates new connections to hosts respecting the specified preferences
@@ -502,8 +502,7 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
         }
     }
 
-    struct ProviderClosedError: Error {
-    }
+    struct ProviderClosedError: Error {}
 
     /// The client configuration used to bootstrap new requests
     private let configuration: HTTPClient.Configuration
@@ -568,9 +567,9 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
         case .create(let waiter):
             self.makeConnection(on: waiter.preference.bestEventLoop ?? self.eventLoop).cascade(to: waiter.promise)
         case .replace(let connection, let waiter):
-             connection.cancelIdleTimeout().whenComplete {
+            connection.cancelIdleTimeout().whenComplete {
                 _ in connection.channel.close(promise: nil)
-             }
+            }
             self.makeConnection(on: waiter.preference.bestEventLoop ?? self.eventLoop).cascade(to: waiter.promise)
         case .park(let connection):
             connection.setIdleTimeout(timeout: self.configuration.maximumAllowedIdleTimeInConnectionPool)

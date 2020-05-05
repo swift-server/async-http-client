@@ -24,8 +24,7 @@ import NIOTransportServices
 import XCTest
 
 class ConnectionPoolTests: XCTestCase {
-    struct TempError: Error {
-    }
+    struct TempError: Error {}
 
     func testPending() {
         let eventLoop = EmbeddedEventLoop()
@@ -1059,9 +1058,9 @@ class ActiveChannel: Channel {
     var closeFuture: EventLoopFuture<Void>
     var eventLoop: EventLoop
 
-    var localAddress: SocketAddress? = nil
-    var remoteAddress: SocketAddress? = nil
-    var parent: Channel? = nil
+    var localAddress: SocketAddress?
+    var remoteAddress: SocketAddress?
+    var parent: Channel?
     var isWritable: Bool = true
     var isActive: Bool = true
 
@@ -1079,11 +1078,11 @@ class ActiveChannel: Channel {
         return ChannelPipeline(channel: self)
     }
 
-    func setOption<Option>(_ option: Option, value: Option.Value) -> EventLoopFuture<Void> where Option : ChannelOption {
+    func setOption<Option>(_ option: Option, value: Option.Value) -> EventLoopFuture<Void> where Option: ChannelOption {
         preconditionFailure("Not implemented")
     }
 
-    func getOption<Option>(_ option: Option) -> EventLoopFuture<Option.Value> where Option : ChannelOption {
+    func getOption<Option>(_: Option) -> EventLoopFuture<Option.Value> where Option: ChannelOption {
         preconditionFailure("Not implemented")
     }
 }
