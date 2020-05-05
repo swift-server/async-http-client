@@ -287,30 +287,61 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
             case closed
         }
 
-        private let maximumConcurrentConnections: Int
-        private let eventLoop: EventLoop
+        #if DEBUG
+        struct Snapshot {
+            var state: State
+            var availableConnections: CircularBuffer<Connection> = .init(initialCapacity: 8)
+            var waiters: CircularBuffer<Waiter> = .init(initialCapacity: 8)
+            var openedConnectionsCount: Int = 0
+            var pending: Int = 1
+        }
+        #endif
 
-        var state: State = .active
+        let maximumConcurrentConnections: Int
+        let eventLoop: EventLoop
+
+        private var state: State = .active
 
         /// Opened connections that are available
-        var availableConnections: CircularBuffer<Connection> = .init(initialCapacity: 8)
+        private var availableConnections: CircularBuffer<Connection> = .init(initialCapacity: 8)
 
         /// Consumers that weren't able to get a new connection without exceeding
         /// `maximumConcurrentConnections` get a `Future<Connection>`
         /// whose associated promise is stored in `Waiter`. The promise is completed
         /// as soon as possible by the provider, in FIFO order.
-        var waiters: CircularBuffer<Waiter> = .init(initialCapacity: 8)
+        private var waiters: CircularBuffer<Waiter> = .init(initialCapacity: 8)
 
         /// Number of opened or opening connections, used to keep track of all connections and enforcing `maximumConcurrentConnections` limit.
-        var openedConnectionsCount: Int = 0
+        private var openedConnectionsCount: Int = 0
 
         /// Number of enqueued requests, used to track if it is safe to delete the provider.
-        var pending: Int = 1
+        private var pending: Int = 1
 
         init(maximumConcurrentConnections: Int = 8, eventLoop: EventLoop) {
             self.maximumConcurrentConnections = maximumConcurrentConnections
             self.eventLoop = eventLoop
         }
+
+        #if DEBUG
+        func testsOnly_getInternalState() -> Snapshot {
+            return Snapshot(state: self.state, availableConnections: self.availableConnections, waiters: self.waiters, openedConnectionsCount: self.openedConnectionsCount, pending: self.pending)
+        }
+
+        mutating func testsOnly_setInternalState(_ snapshot: Snapshot) {
+            self.state = snapshot.state
+            self.availableConnections = snapshot.availableConnections
+            self.waiters = snapshot.waiters
+            self.openedConnectionsCount = snapshot.openedConnectionsCount
+            self.pending = snapshot.pending
+        }
+
+        func assertInvariants() {
+            assert(self.waiters.isEmpty)
+            assert(self.availableConnections.isEmpty)
+            assert(self.openedConnectionsCount == 0)
+            assert(self.pending == 0)
+        }
+        #endif
 
         mutating func enqueue() -> Bool {
             switch self.state {
@@ -542,10 +573,9 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
     }
 
     deinit {
-        assert(self.state.waiters.isEmpty)
-        assert(self.state.availableConnections.isEmpty)
-        assert(self.state.openedConnectionsCount == 0)
-        assert(self.state.pending == 0)
+        #if DEBUG
+        self.state.assertInvariants()
+        #endif
     }
 
     var description: String {
