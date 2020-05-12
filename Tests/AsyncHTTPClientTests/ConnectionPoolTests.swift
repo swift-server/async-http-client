@@ -33,6 +33,7 @@ class ConnectionPoolTests: XCTestCase {
 
         var snapshot = state.testsOnly_getInternalState()
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(0, snapshot.openedConnectionsCount)
@@ -41,6 +42,7 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot = state.testsOnly_getInternalState()
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(2, snapshot.pending)
         XCTAssertEqual(0, snapshot.openedConnectionsCount)
@@ -55,6 +57,7 @@ class ConnectionPoolTests: XCTestCase {
 
         var snapshot = state.testsOnly_getInternalState()
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(0, snapshot.openedConnectionsCount)
@@ -69,6 +72,7 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot = state.testsOnly_getInternalState()
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
@@ -82,7 +86,6 @@ class ConnectionPoolTests: XCTestCase {
         var snapshot = provider.state.testsOnly_getInternalState()
 
         let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
         snapshot.availableConnections.append(connection)
         snapshot.openedConnectionsCount = 1
 
@@ -90,6 +93,7 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot = provider.state.testsOnly_getInternalState()
         XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
@@ -101,14 +105,15 @@ class ConnectionPoolTests: XCTestCase {
 
             snapshot = provider.state.testsOnly_getInternalState()
             XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(1, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
             // cleanup, since we don't call release
-            connection.isInUse = false
             snapshot.openedConnectionsCount = 0
             provider.state.testsOnly_setInternalState(snapshot)
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -125,6 +130,7 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot = provider.state.testsOnly_getInternalState()
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(8, snapshot.openedConnectionsCount)
@@ -134,6 +140,7 @@ class ConnectionPoolTests: XCTestCase {
         case .none:
             snapshot = provider.state.testsOnly_getInternalState()
             XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(0, snapshot.leasedConnections.count)
             XCTAssertEqual(1, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(8, snapshot.openedConnectionsCount)
@@ -144,7 +151,8 @@ class ConnectionPoolTests: XCTestCase {
         // cleanup
         snapshot.openedConnectionsCount = 0
         provider.state.testsOnly_setInternalState(snapshot)
-        try provider.close(on: eventLoop).wait()
+        provider.closePromise.succeed(())
+        _ = try provider.close().wait()
     }
 
     // MARK: - Acquire on Specific EL Tests
@@ -156,6 +164,7 @@ class ConnectionPoolTests: XCTestCase {
         var snapshot = state.testsOnly_getInternalState()
 
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(0, snapshot.openedConnectionsCount)
@@ -170,6 +179,7 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot = state.testsOnly_getInternalState()
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
@@ -182,13 +192,13 @@ class ConnectionPoolTests: XCTestCase {
         var snapshot = provider.state.testsOnly_getInternalState()
 
         let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
         snapshot.availableConnections.append(connection)
         snapshot.openedConnectionsCount = 1
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
@@ -200,14 +210,15 @@ class ConnectionPoolTests: XCTestCase {
 
             snapshot = provider.state.testsOnly_getInternalState()
             XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(1, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
             // cleanup, since we don't call release
-            connection.isInUse = false
             snapshot.openedConnectionsCount = 0
             provider.state.testsOnly_setInternalState(snapshot)
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -221,26 +232,25 @@ class ConnectionPoolTests: XCTestCase {
         var snapshot = provider.state.testsOnly_getInternalState()
 
         let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
-
         snapshot.availableConnections.append(connection)
         snapshot.openedConnectionsCount = 8
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(8, snapshot.openedConnectionsCount)
 
         let action = provider.state.acquire(waiter: .init(promise: eventLoop.makePromise(), preference: .delegateAndChannel(on: eventLoop)))
         switch action {
-        case .replace(let connection, let waiter):
-            connection.isInUse = false
+        case .replace(_, let waiter):
             waiter.promise.fail(TempError())
 
             snapshot = provider.state.testsOnly_getInternalState()
             XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(0, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(8, snapshot.openedConnectionsCount)
@@ -251,7 +261,8 @@ class ConnectionPoolTests: XCTestCase {
         // cleanup
         snapshot.openedConnectionsCount = 0
         provider.state.testsOnly_setInternalState(snapshot)
-        try provider.close(on: channel.eventLoop).wait()
+        provider.closePromise.succeed(())
+        _ = try provider.close().wait()
     }
 
     func testAcquireWhenUnavailableSpecificEL() throws {
@@ -265,6 +276,7 @@ class ConnectionPoolTests: XCTestCase {
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(8, snapshot.openedConnectionsCount)
@@ -274,6 +286,7 @@ class ConnectionPoolTests: XCTestCase {
         case .none:
             snapshot = provider.state.testsOnly_getInternalState()
             XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(0, snapshot.leasedConnections.count)
             XCTAssertEqual(1, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(8, snapshot.openedConnectionsCount)
@@ -284,7 +297,8 @@ class ConnectionPoolTests: XCTestCase {
         // cleanup
         snapshot.openedConnectionsCount = 0
         provider.state.testsOnly_setInternalState(snapshot)
-        try provider.close(on: eventLoop).wait()
+        provider.closePromise.succeed(())
+        _ = try provider.close().wait()
     }
 
     // MARK: - Acquire Errors Tests
@@ -319,25 +333,29 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot.pending = 0
         snapshot.openedConnectionsCount = 1
+        let connection = Connection(channel: channel, provider: provider)
+        snapshot.leasedConnections.insert(connection)
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(1, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
-        let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
-
-        let action = provider.state.release(connection: connection, inPool: false)
+        let action = provider.state.release(connection: connection, closing: false)
         switch action {
         case .park:
             snapshot = provider.state.testsOnly_getInternalState()
             XCTAssertEqual(1, snapshot.availableConnections.count)
+            XCTAssertEqual(0, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(1, snapshot.openedConnectionsCount)
+
+            // cleanp
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -351,26 +369,29 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot.pending = 0
         snapshot.openedConnectionsCount = 1
+        let connection = Connection(channel: channel, provider: provider)
+        snapshot.leasedConnections.insert(connection)
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(1, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
-        let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
-        connection.isClosing = true
-
-        let action = provider.state.release(connection: connection, inPool: false)
+        let action = provider.state.release(connection: connection, closing: true)
         switch action {
-        case .deleteProvider:
+        case .closeProvider:
             snapshot = provider.state.testsOnly_getInternalState()
             XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(0, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(0, snapshot.openedConnectionsCount)
+
+            // cleanup
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -384,25 +405,29 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot.pending = 0
         snapshot.openedConnectionsCount = 1
+        let connection = Connection(channel: channel, provider: provider)
+        snapshot.leasedConnections.insert(connection)
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(1, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
-        let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
-
-        let action = provider.state.release(connection: connection, inPool: true)
+        let action = provider.state.release(connection: connection, closing: true)
         switch action {
-        case .deleteProvider:
+        case .closeProvider:
             snapshot = provider.state.testsOnly_getInternalState()
             XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(0, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(0, snapshot.openedConnectionsCount)
+
+            // cleanup
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -416,29 +441,31 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot.pending = 0
         snapshot.openedConnectionsCount = 2
-
+        let connection = Connection(channel: channel, provider: provider)
+        snapshot.leasedConnections.insert(connection)
         let available = Connection(channel: channel, provider: provider)
-        available.isInUse = false
         snapshot.availableConnections.append(available)
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(1, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(2, snapshot.openedConnectionsCount)
 
-        let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
-
-        let action = provider.state.release(connection: connection, inPool: false)
+        let action = provider.state.release(connection: connection, closing: true)
         switch action {
         case .none:
             snapshot = provider.state.testsOnly_getInternalState()
             XCTAssertEqual(1, snapshot.availableConnections.count)
+            XCTAssertEqual(0, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(1, snapshot.openedConnectionsCount)
+
+            // cleanup
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -452,31 +479,31 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot.pending = 0
         snapshot.openedConnectionsCount = 1
+        let connection = Connection(channel: channel, provider: provider)
+        snapshot.leasedConnections.insert(connection)
         snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .indifferent))
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(1, snapshot.leasedConnections.count)
         XCTAssertEqual(1, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
-        let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
-
-        let action = provider.state.release(connection: connection, inPool: false)
+        let action = provider.state.release(connection: connection, closing: false)
         switch action {
         case .lease(let connection, let waiter):
-            XCTAssertTrue(connection.isInUse)
+            //XCTAssertTrue(connection.isInUse)
             snapshot = provider.state.testsOnly_getInternalState()
             XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(1, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
             // cleanup
             waiter.promise.succeed(connection)
-            connection.isInUse = false
             snapshot.openedConnectionsCount = 0
             provider.state.testsOnly_setInternalState(snapshot)
         default:
@@ -492,23 +519,24 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot.pending = 0
         snapshot.openedConnectionsCount = 1
+        let connection = Connection(channel: channel, provider: provider)
+        snapshot.leasedConnections.insert(connection)
         snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .indifferent))
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(1, snapshot.leasedConnections.count)
         XCTAssertEqual(1, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
-        let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
-
-        let action = provider.state.release(connection: connection, inPool: false)
+        let action = provider.state.release(connection: connection, closing: true)
         switch action {
         case .create(let waiter):
             snapshot = provider.state.testsOnly_getInternalState()
             XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(0, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(1, snapshot.openedConnectionsCount)
@@ -517,6 +545,7 @@ class ConnectionPoolTests: XCTestCase {
             waiter.promise.fail(TempError())
             snapshot.openedConnectionsCount = 0
             provider.state.testsOnly_setInternalState(snapshot)
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -530,36 +559,36 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot.pending = 0
         snapshot.openedConnectionsCount = 2
+        let connection = Connection(channel: channel, provider: provider)
+        snapshot.leasedConnections.insert(connection)
         snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .indifferent))
 
         let available = Connection(channel: channel, provider: provider)
-        available.isInUse = false
         snapshot.availableConnections.append(available)
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(1, snapshot.leasedConnections.count)
         XCTAssertEqual(1, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(2, snapshot.openedConnectionsCount)
 
-        let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
-
-        let action = provider.state.release(connection: connection, inPool: false)
+        let action = provider.state.release(connection: connection, closing: false)
         switch action {
         case .lease(let connection, let waiter):
             snapshot = provider.state.testsOnly_getInternalState()
             XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(1, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
             // cleanup
             waiter.promise.succeed(connection)
-            connection.isInUse = false
             snapshot.openedConnectionsCount = 0
             provider.state.testsOnly_setInternalState(snapshot)
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -575,33 +604,34 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot.pending = 0
         snapshot.openedConnectionsCount = 1
+        let connection = Connection(channel: channel, provider: provider)
+        snapshot.leasedConnections.insert(connection)
         snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .delegateAndChannel(on: channel.eventLoop)))
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(1, snapshot.leasedConnections.count)
         XCTAssertEqual(1, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
-        let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
-
-        let action = provider.state.release(connection: connection, inPool: false)
+        let action = provider.state.release(connection: connection, closing: false)
         switch action {
         case .lease(let connection, let waiter):
-            XCTAssertTrue(connection.isInUse)
             snapshot = provider.state.testsOnly_getInternalState()
+            XCTAssertTrue(snapshot.leasedConnections.contains(connection))
             XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(1, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
             // cleanup
             waiter.promise.succeed(connection)
-            connection.isInUse = false
             snapshot.openedConnectionsCount = 0
             provider.state.testsOnly_setInternalState(snapshot)
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -616,24 +646,25 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot.pending = 0
         snapshot.openedConnectionsCount = 1
+        let connection = Connection(channel: channel, provider: provider)
+        snapshot.leasedConnections.insert(connection)
         snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .delegateAndChannel(on: eventLoop)))
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(1, snapshot.leasedConnections.count)
         XCTAssertEqual(1, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
-        let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
-
-        let action = provider.state.release(connection: connection, inPool: false)
+        let action = provider.state.release(connection: connection, closing: false)
         switch action {
         case .parkAnd(let connection, .create(let waiter)):
-            XCTAssertFalse(connection.isInUse)
             snapshot = provider.state.testsOnly_getInternalState()
+            XCTAssertFalse(snapshot.leasedConnections.contains(connection))
             XCTAssertEqual(1, snapshot.availableConnections.count)
+            XCTAssertEqual(0, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(2, snapshot.openedConnectionsCount)
@@ -642,6 +673,7 @@ class ConnectionPoolTests: XCTestCase {
             waiter.promise.succeed(connection)
             snapshot.openedConnectionsCount = 0
             provider.state.testsOnly_setInternalState(snapshot)
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -656,38 +688,38 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot.pending = 0
         snapshot.openedConnectionsCount = 2
+        let connection = Connection(channel: channel, provider: provider)
+        snapshot.leasedConnections.insert(connection)
         snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .delegateAndChannel(on: otherChannel.eventLoop)))
 
         let available = Connection(channel: otherChannel, provider: provider)
-        available.isInUse = false
         snapshot.availableConnections.append(available)
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(1, snapshot.leasedConnections.count)
         XCTAssertEqual(1, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(2, snapshot.openedConnectionsCount)
 
-        let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
-
-        let action = provider.state.release(connection: connection, inPool: false)
+        let action = provider.state.release(connection: connection, closing: false)
         switch action {
         case .parkAnd(let connection, .lease(let replacement, let waiter)):
-            XCTAssertFalse(connection.isInUse)
-            XCTAssertTrue(replacement.isInUse)
             snapshot = provider.state.testsOnly_getInternalState()
+            XCTAssertFalse(snapshot.leasedConnections.contains(connection))
+            XCTAssertTrue(snapshot.leasedConnections.contains(replacement))
             XCTAssertEqual(1, snapshot.availableConnections.count)
+            XCTAssertEqual(1, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(2, snapshot.openedConnectionsCount)
 
             // cleanup
             waiter.promise.succeed(replacement)
-            replacement.isInUse = false
             snapshot.openedConnectionsCount = 0
             provider.state.testsOnly_setInternalState(snapshot)
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -702,28 +734,28 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot.pending = 0
         snapshot.openedConnectionsCount = 8
+        let connection = Connection(channel: channel, provider: provider)
+        snapshot.leasedConnections.insert(connection)
         snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .delegateAndChannel(on: otherChannel.eventLoop)))
 
         let available = Connection(channel: channel, provider: provider)
-        available.isInUse = false
         snapshot.availableConnections.append(available)
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(1, snapshot.leasedConnections.count)
         XCTAssertEqual(1, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(8, snapshot.openedConnectionsCount)
 
-        let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
-
-        let action = provider.state.release(connection: connection, inPool: false)
+        let action = provider.state.release(connection: connection, closing: false)
         switch action {
         case .replace(let connection, let waiter):
-            XCTAssertFalse(connection.isInUse)
             snapshot = provider.state.testsOnly_getInternalState()
+            XCTAssertTrue(snapshot.leasedConnections.contains(connection))
             XCTAssertEqual(1, snapshot.availableConnections.count)
+            XCTAssertEqual(1, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(8, snapshot.openedConnectionsCount)
@@ -732,6 +764,7 @@ class ConnectionPoolTests: XCTestCase {
             waiter.promise.fail(TempError())
             snapshot.openedConnectionsCount = 0
             provider.state.testsOnly_setInternalState(snapshot)
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -746,38 +779,38 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot.pending = 0
         snapshot.openedConnectionsCount = 2
+        let connection = Connection(channel: channel, provider: provider)
+        snapshot.leasedConnections.insert(connection)
         snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .delegateAndChannel(on: otherChannel.eventLoop)))
 
         let available = Connection(channel: otherChannel, provider: provider)
-        available.isInUse = false
         snapshot.availableConnections.append(available)
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(1, snapshot.leasedConnections.count)
         XCTAssertEqual(1, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(2, snapshot.openedConnectionsCount)
 
-        let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
-
-        let action = provider.state.release(connection: connection, inPool: false)
+        let action = provider.state.release(connection: connection, closing: false)
         switch action {
         case .lease(let connection, let waiter):
-            XCTAssertTrue(connection.isInUse)
-            XCTAssertTrue(connection === available)
             snapshot = provider.state.testsOnly_getInternalState()
+            XCTAssertTrue(connection == available)
+            XCTAssertTrue(snapshot.leasedConnections.contains(connection))
             XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(1, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
             // cleanup
             waiter.promise.succeed(connection)
-            connection.isInUse = false
             snapshot.openedConnectionsCount = 0
             provider.state.testsOnly_setInternalState(snapshot)
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -792,27 +825,27 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot.pending = 0
         snapshot.openedConnectionsCount = 2
+        let connection = Connection(channel: channel, provider: provider)
+        snapshot.leasedConnections.insert(connection)
         snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .delegateAndChannel(on: otherChannel.eventLoop)))
 
         let available = Connection(channel: channel, provider: provider)
-        available.isInUse = false
         snapshot.availableConnections.append(available)
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(1, snapshot.leasedConnections.count)
         XCTAssertEqual(1, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(2, snapshot.openedConnectionsCount)
 
-        let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
-
-        let action = provider.state.release(connection: connection, inPool: false)
+        let action = provider.state.release(connection: connection, closing: false)
         switch action {
         case .create(let waiter):
             snapshot = provider.state.testsOnly_getInternalState()
             XCTAssertEqual(1, snapshot.availableConnections.count)
+            XCTAssertEqual(0, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(2, snapshot.openedConnectionsCount)
@@ -821,6 +854,7 @@ class ConnectionPoolTests: XCTestCase {
             waiter.promise.fail(TempError())
             snapshot.openedConnectionsCount = 0
             provider.state.testsOnly_setInternalState(snapshot)
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -835,23 +869,26 @@ class ConnectionPoolTests: XCTestCase {
         var snapshot = provider.state.testsOnly_getInternalState()
 
         snapshot.pending = 0
-        snapshot.openedConnectionsCount = 1
-
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
+        XCTAssertEqual(0, snapshot.openedConnectionsCount)
 
         let action = provider.state.processNextWaiter()
         switch action {
-        case .deleteProvider:
+        case .closeProvider:
             snapshot = provider.state.testsOnly_getInternalState()
             XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(0, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(0, snapshot.openedConnectionsCount)
+
+            // cleanup
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -864,27 +901,31 @@ class ConnectionPoolTests: XCTestCase {
         var snapshot = provider.state.testsOnly_getInternalState()
 
         snapshot.pending = 0
-        snapshot.openedConnectionsCount = 2
+        snapshot.openedConnectionsCount = 1
 
         let available = Connection(channel: channel, provider: provider)
-        available.isInUse = false
         snapshot.availableConnections.append(available)
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(2, snapshot.openedConnectionsCount)
+        XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
         let action = provider.state.processNextWaiter()
         switch action {
         case .none:
             snapshot = provider.state.testsOnly_getInternalState()
             XCTAssertEqual(1, snapshot.availableConnections.count)
+            XCTAssertEqual(0, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(1, snapshot.openedConnectionsCount)
+
+            // cleanup
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -897,34 +938,36 @@ class ConnectionPoolTests: XCTestCase {
         var snapshot = provider.state.testsOnly_getInternalState()
 
         snapshot.pending = 0
-        snapshot.openedConnectionsCount = 2
+        snapshot.openedConnectionsCount = 1
         snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .indifferent))
 
         let available = Connection(channel: channel, provider: provider)
-        available.isInUse = false
         snapshot.availableConnections.append(available)
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(1, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(2, snapshot.openedConnectionsCount)
+        XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
         let action = provider.state.processNextWaiter()
         switch action {
         case .lease(let connection, let waiter):
             snapshot = provider.state.testsOnly_getInternalState()
+            XCTAssertTrue(snapshot.leasedConnections.contains(connection))
             XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(1, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
             // cleanup
             waiter.promise.succeed(connection)
-            connection.isInUse = false
             snapshot.openedConnectionsCount = 0
             provider.state.testsOnly_setInternalState(snapshot)
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -937,34 +980,36 @@ class ConnectionPoolTests: XCTestCase {
         var snapshot = provider.state.testsOnly_getInternalState()
 
         snapshot.pending = 0
-        snapshot.openedConnectionsCount = 2
+        snapshot.openedConnectionsCount = 1
         snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .delegateAndChannel(on: channel.eventLoop)))
 
         let available = Connection(channel: channel, provider: provider)
-        available.isInUse = false
         snapshot.availableConnections.append(available)
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(1, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(2, snapshot.openedConnectionsCount)
+        XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
         let action = provider.state.processNextWaiter()
         switch action {
         case .lease(let connection, let waiter):
             var snapshot = provider.state.testsOnly_getInternalState()
+            XCTAssertTrue(snapshot.leasedConnections.contains(connection))
             XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(1, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
             // cleanup
             waiter.promise.succeed(connection)
-            connection.isInUse = false
             snapshot.openedConnectionsCount = 0
             provider.state.testsOnly_setInternalState(snapshot)
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -978,25 +1023,26 @@ class ConnectionPoolTests: XCTestCase {
         var snapshot = provider.state.testsOnly_getInternalState()
 
         snapshot.pending = 0
-        snapshot.openedConnectionsCount = 2
+        snapshot.openedConnectionsCount = 1
         snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .delegateAndChannel(on: eventLoop)))
 
         let available = Connection(channel: channel, provider: provider)
-        available.isInUse = false
         snapshot.availableConnections.append(available)
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(1, snapshot.waiters.count)
         XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(2, snapshot.openedConnectionsCount)
+        XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
         let action = provider.state.processNextWaiter()
         switch action {
         case .create(let waiter):
             snapshot = provider.state.testsOnly_getInternalState()
             XCTAssertEqual(1, snapshot.availableConnections.count)
+            XCTAssertEqual(0, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(2, snapshot.openedConnectionsCount)
@@ -1005,6 +1051,159 @@ class ConnectionPoolTests: XCTestCase {
             waiter.promise.fail(TempError())
             snapshot.openedConnectionsCount = 0
             provider.state.testsOnly_setInternalState(snapshot)
+            provider.closePromise.succeed(())
+        default:
+            XCTFail("Unexpected action: \(action)")
+        }
+    }
+
+    // MARK: - Timeout and Remote Close Tests
+
+    func testTimeoutLeasedConnection() throws {
+        let channel = EmbeddedChannel()
+
+        let provider = try HTTP1ConnectionProvider(key: .init(.init(url: "http://some.test")), eventLoop: channel.eventLoop, configuration: .init(), pool: .init(configuration: .init()))
+        var snapshot = provider.state.testsOnly_getInternalState()
+
+        let connection = Connection(channel: channel, provider: provider)
+        snapshot.pending = 0
+        snapshot.openedConnectionsCount = 1
+        snapshot.leasedConnections.insert(connection)
+
+        provider.state.testsOnly_setInternalState(snapshot)
+
+        XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(1, snapshot.leasedConnections.count)
+        XCTAssertEqual(0, snapshot.waiters.count)
+        XCTAssertEqual(0, snapshot.pending)
+        XCTAssertEqual(1, snapshot.openedConnectionsCount)
+
+        let action = provider.state.timeout(connection: connection)
+        switch action {
+        case .none:
+            snapshot = provider.state.testsOnly_getInternalState()
+            XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(1, snapshot.leasedConnections.count)
+            XCTAssertEqual(0, snapshot.waiters.count)
+            XCTAssertEqual(0, snapshot.pending)
+            XCTAssertEqual(1, snapshot.openedConnectionsCount)
+
+            // cleanup
+            provider.closePromise.succeed(())
+        default:
+            XCTFail("Unexpected action: \(action)")
+        }
+    }
+
+    func testTimeoutAvailableConnection() throws {
+        let channel = EmbeddedChannel()
+
+        let provider = try HTTP1ConnectionProvider(key: .init(.init(url: "http://some.test")), eventLoop: channel.eventLoop, configuration: .init(), pool: .init(configuration: .init()))
+        var snapshot = provider.state.testsOnly_getInternalState()
+
+        let connection = Connection(channel: channel, provider: provider)
+        snapshot.pending = 0
+        snapshot.openedConnectionsCount = 1
+        snapshot.availableConnections.append(connection)
+
+        provider.state.testsOnly_setInternalState(snapshot)
+
+        XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
+        XCTAssertEqual(0, snapshot.waiters.count)
+        XCTAssertEqual(0, snapshot.pending)
+        XCTAssertEqual(1, snapshot.openedConnectionsCount)
+
+        let action = provider.state.timeout(connection: connection)
+        switch action {
+        case .closeAnd(_, let after):
+            switch after {
+            case .closeProvider:
+                break
+            default:
+                XCTFail("Unexpected action: \(action)")
+            }
+            snapshot = provider.state.testsOnly_getInternalState()
+            XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(0, snapshot.leasedConnections.count)
+            XCTAssertEqual(0, snapshot.waiters.count)
+            XCTAssertEqual(0, snapshot.pending)
+            XCTAssertEqual(0, snapshot.openedConnectionsCount)
+
+            // cleanup
+            provider.closePromise.succeed(())
+        default:
+            XCTFail("Unexpected action: \(action)")
+        }
+    }
+
+    func testRemoteClosedLeasedConnection() throws {
+        let channel = EmbeddedChannel()
+
+        let provider = try HTTP1ConnectionProvider(key: .init(.init(url: "http://some.test")), eventLoop: channel.eventLoop, configuration: .init(), pool: .init(configuration: .init()))
+        var snapshot = provider.state.testsOnly_getInternalState()
+
+        let connection = Connection(channel: channel, provider: provider)
+        snapshot.pending = 0
+        snapshot.openedConnectionsCount = 1
+        snapshot.leasedConnections.insert(connection)
+
+        provider.state.testsOnly_setInternalState(snapshot)
+
+        XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(1, snapshot.leasedConnections.count)
+        XCTAssertEqual(0, snapshot.waiters.count)
+        XCTAssertEqual(0, snapshot.pending)
+        XCTAssertEqual(1, snapshot.openedConnectionsCount)
+
+        let action = provider.state.remoteClosed(connection: connection)
+        switch action {
+        case .none:
+            snapshot = provider.state.testsOnly_getInternalState()
+            XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(1, snapshot.leasedConnections.count)
+            XCTAssertEqual(0, snapshot.waiters.count)
+            XCTAssertEqual(0, snapshot.pending)
+            XCTAssertEqual(1, snapshot.openedConnectionsCount)
+
+            // cleanup
+            provider.closePromise.succeed(())
+        default:
+            XCTFail("Unexpected action: \(action)")
+        }
+    }
+
+    func testRemoteClosedAvailableConnection() throws {
+        let channel = EmbeddedChannel()
+
+        let provider = try HTTP1ConnectionProvider(key: .init(.init(url: "http://some.test")), eventLoop: channel.eventLoop, configuration: .init(), pool: .init(configuration: .init()))
+        var snapshot = provider.state.testsOnly_getInternalState()
+
+        let connection = Connection(channel: channel, provider: provider)
+        snapshot.pending = 0
+        snapshot.openedConnectionsCount = 1
+        snapshot.availableConnections.append(connection)
+
+        provider.state.testsOnly_setInternalState(snapshot)
+
+        XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
+        XCTAssertEqual(0, snapshot.waiters.count)
+        XCTAssertEqual(0, snapshot.pending)
+        XCTAssertEqual(1, snapshot.openedConnectionsCount)
+
+        let action = provider.state.remoteClosed(connection: connection)
+        switch action {
+        case .closeProvider:
+            snapshot = provider.state.testsOnly_getInternalState()
+            XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(0, snapshot.leasedConnections.count)
+            XCTAssertEqual(0, snapshot.waiters.count)
+            XCTAssertEqual(0, snapshot.pending)
+            XCTAssertEqual(0, snapshot.openedConnectionsCount)
+
+            // cleanup
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -1018,24 +1217,24 @@ class ConnectionPoolTests: XCTestCase {
         let provider = try HTTP1ConnectionProvider(key: .init(.init(url: "http://some.test")), eventLoop: channel.eventLoop, configuration: .init(), pool: .init(configuration: .init()))
         var snapshot = provider.state.testsOnly_getInternalState()
 
+        let connection = Connection(channel: channel, provider: provider)
         snapshot.openedConnectionsCount = 1
+        snapshot.leasedConnections.insert(connection)
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(1, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
-        let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = true
-        connection.isClosing = false
+        connection.release(closing: false)
 
-        connection.release()
-
-        XCTAssertFalse(connection.isInUse)
+        //XCTAssertFalse(connection.isInUse)
         snapshot = provider.state.testsOnly_getInternalState()
         XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
@@ -1043,6 +1242,7 @@ class ConnectionPoolTests: XCTestCase {
         // cleanup
         snapshot.pending = 0
         provider.state.testsOnly_setInternalState(snapshot)
+        provider.closePromise.succeed(())
     }
 
     func testConnectionReleaseInactive() throws {
@@ -1051,24 +1251,23 @@ class ConnectionPoolTests: XCTestCase {
         let provider = try HTTP1ConnectionProvider(key: .init(.init(url: "http://some.test")), eventLoop: channel.eventLoop, configuration: .init(), pool: .init(configuration: .init()))
         var snapshot = provider.state.testsOnly_getInternalState()
 
+        let connection = Connection(channel: channel, provider: provider)
         snapshot.openedConnectionsCount = 1
+        snapshot.leasedConnections.insert(connection)
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(1, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
-        let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = true
-        connection.isClosing = true
+        connection.release(closing: true)
 
-        connection.release()
-
-        XCTAssertFalse(connection.isInUse)
         snapshot = provider.state.testsOnly_getInternalState()
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(0, snapshot.openedConnectionsCount)
@@ -1076,6 +1275,7 @@ class ConnectionPoolTests: XCTestCase {
         // cleanup
         snapshot.pending = 0
         provider.state.testsOnly_setInternalState(snapshot)
+        provider.closePromise.succeed(())
     }
 
     func testConnectionRemoteCloseRelease() throws {
@@ -1085,13 +1285,13 @@ class ConnectionPoolTests: XCTestCase {
         var snapshot = provider.state.testsOnly_getInternalState()
 
         let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
         snapshot.availableConnections.append(connection)
         snapshot.openedConnectionsCount = 1
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
@@ -1100,6 +1300,7 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot = provider.state.testsOnly_getInternalState()
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(0, snapshot.openedConnectionsCount)
@@ -1107,6 +1308,7 @@ class ConnectionPoolTests: XCTestCase {
         // cleanup
         snapshot.pending = 0
         provider.state.testsOnly_setInternalState(snapshot)
+        provider.closePromise.succeed(())
     }
 
     func testConnectionTimeoutRelease() throws {
@@ -1116,13 +1318,13 @@ class ConnectionPoolTests: XCTestCase {
         var snapshot = provider.state.testsOnly_getInternalState()
 
         let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
         snapshot.availableConnections.append(connection)
         snapshot.openedConnectionsCount = 1
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
@@ -1131,6 +1333,7 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot = provider.state.testsOnly_getInternalState()
         XCTAssertEqual(0, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(0, snapshot.openedConnectionsCount)
@@ -1138,6 +1341,7 @@ class ConnectionPoolTests: XCTestCase {
         // cleanup
         snapshot.pending = 0
         provider.state.testsOnly_setInternalState(snapshot)
+        provider.closePromise.succeed(())
     }
 
     func testAcquireAvailableBecomesUnavailable() throws {
@@ -1148,13 +1352,13 @@ class ConnectionPoolTests: XCTestCase {
         var snapshot = provider.state.testsOnly_getInternalState()
 
         let connection = Connection(channel: channel, provider: provider)
-        connection.isInUse = false
         snapshot.availableConnections.append(connection)
         snapshot.openedConnectionsCount = 1
 
         provider.state.testsOnly_setInternalState(snapshot)
 
         XCTAssertEqual(1, snapshot.availableConnections.count)
+        XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
@@ -1165,10 +1369,11 @@ class ConnectionPoolTests: XCTestCase {
             // Since this connection is already in use, this should be a no-op and state should not have changed from normal lease
             connection.timeout()
 
-            XCTAssertTrue(connection.isActiveEstimation)
-            XCTAssertTrue(connection.isInUse)
             snapshot = provider.state.testsOnly_getInternalState()
+            XCTAssertTrue(connection.isActiveEstimation)
+            XCTAssertTrue(snapshot.leasedConnections.contains(connection))
             XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(1, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(1, snapshot.openedConnectionsCount)
@@ -1177,10 +1382,10 @@ class ConnectionPoolTests: XCTestCase {
             // This is important to prevent provider deletion since connection is released and there could be 0 waiters
             connection.remoteClosed()
 
-            XCTAssertTrue(connection.isClosing)
-            XCTAssertFalse(connection.isActiveEstimation)
             snapshot = provider.state.testsOnly_getInternalState()
+            XCTAssertTrue(snapshot.leasedConnections.contains(connection))
             XCTAssertEqual(0, snapshot.availableConnections.count)
+            XCTAssertEqual(1, snapshot.leasedConnections.count)
             XCTAssertEqual(0, snapshot.waiters.count)
             XCTAssertEqual(0, snapshot.pending)
             XCTAssertEqual(1, snapshot.openedConnectionsCount)
@@ -1188,9 +1393,9 @@ class ConnectionPoolTests: XCTestCase {
             waiter.promise.succeed(connection)
 
             // cleanup
-            connection.isInUse = false
             snapshot.openedConnectionsCount = 0
             provider.state.testsOnly_setInternalState(snapshot)
+            provider.closePromise.succeed(())
         default:
             XCTFail("Unexpected action: \(action)")
         }

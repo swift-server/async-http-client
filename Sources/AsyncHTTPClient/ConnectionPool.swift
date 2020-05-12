@@ -86,12 +86,12 @@ final class ConnectionPool {
         }
     }
 
-    func close(on eventLoop: EventLoop) -> EventLoopFuture<Void> {
+    func close(on eventLoop: EventLoop) -> EventLoopFuture<Bool> {
         let providers = self.lock.withLock {
             self.providers.values
         }
 
-        return EventLoopFuture.andAllComplete(providers.map { $0.close(on: eventLoop) }, on: eventLoop)
+        return EventLoopFuture.reduce(true, providers.map { $0.close() }, on: eventLoop) { $0 && $1 }
     }
 
     var connectionProviderCount: Int {
@@ -141,7 +141,7 @@ final class ConnectionPool {
 /// and has a certain "lease state" (see the `inUse` property).
 /// The role of `Connection` is to model this by storing a `Channel` alongside its associated properties
 /// so that they can be passed around together and correct provider can be identified when connection is released.
-class Connection: CustomStringConvertible {
+class Connection {
     /// The provider this `Connection` belongs to.
     ///
     /// This enables calling methods like `release()` directly on a `Connection` instead of
@@ -155,97 +155,42 @@ class Connection: CustomStringConvertible {
     /// for removing the specific handlers they added to the `Channel` pipeline before releasing it to the pool.
     let channel: Channel
 
-    /// This indicates if connection is going to be or is used for a request.
-    private var inUse: NIOAtomic<Bool>
-
-    /// This indicates that connection is going to be closed.
-    private var closing: NIOAtomic<Bool>
-
     init(channel: Channel, provider: HTTP1ConnectionProvider) {
         self.channel = channel
         self.provider = provider
-        self.inUse = NIOAtomic.makeAtomic(value: true)
-        self.closing = NIOAtomic.makeAtomic(value: false)
-    }
-
-    deinit {
-        assert(!self.inUse.load())
-    }
-
-    var description: String {
-        return "Connection { channel: \(self.channel) }"
     }
 
     /// Convenience property indicating wether the underlying `Channel` is active or not.
     var isActiveEstimation: Bool {
-        return !self.isClosing && self.channel.isActive
-    }
-
-    var isClosing: Bool {
-        get {
-            return self.closing.load()
-        }
-        set {
-            self.closing.store(newValue)
-        }
-    }
-
-    var isInUse: Bool {
-        get {
-            return self.inUse.load()
-        }
-        set {
-            return self.inUse.store(newValue)
-        }
-    }
-
-    func lease() {
-        self.inUse.store(true)
+        return self.channel.isActive
     }
 
     /// Release this `Connection` to its associated `HTTP1ConnectionProvider`.
     ///
     /// - Warning: This only releases the connection and doesn't take care of cleaning handlers in the `Channel` pipeline.
-    func release() {
+    func release(closing: Bool) {
         assert(self.channel.eventLoop.inEventLoop)
-        assert(self.inUse.load())
-
-        self.inUse.store(false)
-        self.provider.release(connection: self, inPool: false)
+        self.provider.release(connection: self, closing: closing)
     }
 
     /// Called when channel exceeds idle time in pool.
     func timeout() {
         assert(self.channel.eventLoop.inEventLoop)
-
-        // We can get timeout and inUse = true when we decided to lease the connection, but this action is not executed yet.
-        // In this case we can ignore timeout notification. If connection was not in use, we release it from the pool, increasing
-        // available capacity
-        if !self.inUse.load() {
-            self.closing.store(true)
-            self.provider.release(connection: self, inPool: true)
-            self.channel.close(promise: nil)
-        }
+        self.provider.timeout(connection: self)
     }
 
     /// Called when channel goes inactive while in the pool.
     func remoteClosed() {
         assert(self.channel.eventLoop.inEventLoop)
+        self.provider.remoteClosed(connection: self)
+    }
 
-        // Connection can be closed remotely while we wait for `.lease` action to complete. If this
-        // happens, we have no other choice but to mark connection as `closing`. If this connection is not in use,
-        // the have to release it as well
-        self.closing.store(true)
-        if !self.inUse.load() {
-            self.provider.release(connection: self, inPool: true)
-        }
+    func cancel() -> EventLoopFuture<Void> {
+        return self.channel.triggerUserOutboundEvent(TaskCancelEvent())
     }
 
     /// Called from `HTTP1ConnectionProvider.close` when client is shutting down.
     func close() -> EventLoopFuture<Void> {
-        assert(!self.inUse.load())
-
-        self.closing.store(true)
         return self.channel.close()
     }
 
@@ -264,6 +209,16 @@ class Connection: CustomStringConvertible {
     }
 }
 
+extension Connection: Hashable {
+    static func == (lhs: Connection, rhs: Connection) -> Bool {
+        return ObjectIdentifier(lhs) == ObjectIdentifier(rhs)
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(ObjectIdentifier(self))
+    }
+}
+
 /// A connection provider of `HTTP/1.1` connections with a given `Key` (host, scheme, port)
 ///
 /// On top of enabling connection reuse this provider it also facilitates the creation
@@ -274,10 +229,12 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
         case lease(Connection, Waiter)
         case create(Waiter)
         case replace(Connection, Waiter)
-        case deleteProvider
+        case closeProvider
         case park(Connection)
         case none
         case fail(Waiter, Error)
+        case cancel(Connection, Bool)
+        indirect case closeAnd(Connection, Action)
         indirect case parkAnd(Connection, Action)
     }
 
@@ -290,10 +247,11 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
         #if DEBUG
         struct Snapshot {
             var state: State
-            var availableConnections: CircularBuffer<Connection> = .init(initialCapacity: 8)
-            var waiters: CircularBuffer<Waiter> = .init(initialCapacity: 8)
-            var openedConnectionsCount: Int = 0
-            var pending: Int = 1
+            var availableConnections: CircularBuffer<Connection>
+            var leasedConnections: Set<Connection>
+            var waiters: CircularBuffer<Waiter>
+            var openedConnectionsCount: Int
+            var pending: Int
         }
         #endif
 
@@ -302,8 +260,11 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
 
         private var state: State = .active
 
-        /// Opened connections that are available
+        /// Opened connections that are available.
         private var availableConnections: CircularBuffer<Connection> = .init(initialCapacity: 8)
+
+        /// Opened connections that are leased to the user.
+        private var leasedConnections: Set<Connection> = .init()
 
         /// Consumers that weren't able to get a new connection without exceeding
         /// `maximumConcurrentConnections` get a `Future<Connection>`
@@ -324,12 +285,13 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
 
         #if DEBUG
         func testsOnly_getInternalState() -> Snapshot {
-            return Snapshot(state: self.state, availableConnections: self.availableConnections, waiters: self.waiters, openedConnectionsCount: self.openedConnectionsCount, pending: self.pending)
+            return Snapshot(state: self.state, availableConnections: self.availableConnections, leasedConnections: self.leasedConnections, waiters: self.waiters, openedConnectionsCount: self.openedConnectionsCount, pending: self.pending)
         }
 
         mutating func testsOnly_setInternalState(_ snapshot: Snapshot) {
             self.state = snapshot.state
             self.availableConnections = snapshot.availableConnections
+            self.leasedConnections = snapshot.leasedConnections
             self.waiters = snapshot.waiters
             self.openedConnectionsCount = snapshot.openedConnectionsCount
             self.pending = snapshot.pending
@@ -338,6 +300,7 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
         func assertInvariants() {
             assert(self.waiters.isEmpty)
             assert(self.availableConnections.isEmpty)
+            assert(self.leasedConnections.isEmpty)
             assert(self.openedConnectionsCount == 0)
             assert(self.pending == 0)
         }
@@ -353,6 +316,14 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
             }
         }
 
+        private var hasCapacity: Bool {
+            return self.openedConnectionsCount < self.maximumConcurrentConnections
+        }
+
+        private var isEmpty: Bool {
+            return self.openedConnectionsCount == 0 && self.pending == 0
+        }
+
         mutating func acquire(waiter: Waiter) -> Action {
             switch self.state {
             case .active:
@@ -363,12 +334,12 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
                     // If there is an opened connection on the same EL - use it
                     if let found = self.availableConnections.firstIndex(where: { $0.channel.eventLoop === eventLoop }) {
                         let connection = self.availableConnections.remove(at: found)
-                        connection.lease()
+                        self.leasedConnections.insert(connection)
                         return .lease(connection, waiter)
                     }
 
                     // If we can create additional connection, create
-                    if self.openedConnectionsCount < self.maximumConcurrentConnections {
+                    if self.hasCapacity {
                         self.openedConnectionsCount += 1
                         return .create(waiter)
                     }
@@ -381,9 +352,9 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
                     self.waiters.append(waiter)
                     return .none
                 } else if let connection = self.availableConnections.popFirst() {
-                    connection.lease()
+                    self.leasedConnections.insert(connection)
                     return .lease(connection, waiter)
-                } else if self.openedConnectionsCount < self.maximumConcurrentConnections {
+                } else if self.hasCapacity {
                     self.openedConnectionsCount += 1
                     return .create(waiter)
                 } else {
@@ -395,28 +366,31 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
             }
         }
 
-        mutating func release(connection: Connection, inPool: Bool) -> Action {
+        mutating func release(connection: Connection, closing: Bool) -> Action {
             switch self.state {
             case .active:
-                if connection.isActiveEstimation { // If connection is alive, we can offer it to a next waiter
+                assert(self.leasedConnections.contains(connection))
+
+                if connection.isActiveEstimation && !closing { // If connection is alive, we can offer it to a next waiter
                     if let waiter = self.waiters.popFirst() {
                         let (eventLoop, required) = self.resolvePreference(waiter.preference)
 
                         // If returned connection is on same EL or we do not require special EL - lease it
                         if connection.channel.eventLoop === eventLoop || !required {
-                            connection.lease()
                             return .lease(connection, waiter)
                         }
 
                         // If there is an opened connection on the same loop, lease it and park returned
                         if let found = self.availableConnections.firstIndex(where: { $0.channel.eventLoop === eventLoop }) {
+                            self.leasedConnections.remove(connection)
                             let replacement = self.availableConnections.swap(at: found, with: connection)
-                            replacement.lease()
+                            self.leasedConnections.insert(replacement)
                             return .parkAnd(connection, .lease(replacement, waiter))
                         }
 
                         // If we can create new connection - do it
-                        if self.openedConnectionsCount < self.maximumConcurrentConnections {
+                        if self.hasCapacity {
+                            self.leasedConnections.remove(connection)
                             self.availableConnections.append(connection)
                             self.openedConnectionsCount += 1
                             return .parkAnd(connection, .create(waiter))
@@ -425,97 +399,137 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
                         // If we cannot create new connections, we will have to replace returned connection with a new one on the required loop
                         return .replace(connection, waiter)
                     } else { // or park, if there are no waiters
+                        self.leasedConnections.remove(connection)
                         self.availableConnections.append(connection)
                         return .park(connection)
                     }
                 } else { // if connection is not alive, we delete it and process the next waiter
                     // this connections is now gone, we will either create new connection or do nothing
-                    assert(!connection.isInUse)
-
                     self.openedConnectionsCount -= 1
+                    self.leasedConnections.remove(connection)
 
-                    if let waiter = self.waiters.popFirst() {
-                        let (eventLoop, required) = self.resolvePreference(waiter.preference)
-
-                        // If specific EL is required, we have only two options - find open one or create a new one
-                        if required, let found = self.availableConnections.firstIndex(where: { $0.channel.eventLoop === eventLoop }) {
-                            let connection = self.availableConnections.remove(at: found)
-                            connection.lease()
-                            return .lease(connection, waiter)
-                        } else if !required, let connection = self.availableConnections.popFirst() {
-                            connection.lease()
-                            return .lease(connection, waiter)
-                        } else {
-                            self.openedConnectionsCount += 1
-                            return .create(waiter)
-                        }
-                    }
-
-                    if inPool {
-                        self.availableConnections.removeAll { $0 === connection }
-                    }
-
-                    // if capacity is at max and the are no waiters and no in-flight requests for connection, we are closing this provider
-                    if self.openedConnectionsCount == 0, self.pending == 0 {
-                        // deactivate and remove
-                        self.state = .closed
-                        return .deleteProvider
-                    }
-
-                    return .none
+                    return self.processNextWaiter()
                 }
             case .closed:
+                self.openedConnectionsCount -= 1
+                self.leasedConnections.remove(connection)
+
+                return self.processNextWaiter()
+            }
+        }
+
+        mutating func offer(connection: Connection) -> Action {
+            switch self.state {
+            case .active:
+                self.leasedConnections.insert(connection)
+                return .none
+            case .closed: // This can happen when we close the client while connections was being estableshed
+                return .cancel(connection, self.isEmpty)
+            }
+        }
+
+        mutating func drop(connection: Connection) {
+            switch self.state {
+            case .active:
+                self.leasedConnections.remove(connection)
+            default:
                 assertionFailure("should not happen")
+            }
+        }
+
+        mutating func connectFailed() -> Action {
+            switch self.state {
+            case .active:
+                self.openedConnectionsCount -= 1
+                return self.processNextWaiter()
+            default:
+                assertionFailure("should not happen")
+                return .none
+            }
+        }
+
+        mutating func remoteClosed(connection: Connection) -> Action {
+            switch self.state {
+            case .active:
+                // Connection can be closed remotely while we wait for `.lease` action to complete.
+                // If this happens when connections is leased, we do not remove it from leased connections,
+                // it will be done when a new replacement will be ready for it.
+                if self.leasedConnections.contains(connection) {
+                    return .none
+                }
+
+                // If this connection is not in use, the have to release it as well
+                self.openedConnectionsCount -= 1
+                self.availableConnections.removeAll { $0 == connection }
+
+                return self.processNextWaiter()
+            case .closed:
+                self.openedConnectionsCount -= 1
+                return self.processNextWaiter()
+            }
+        }
+
+        mutating func timeout(connection: Connection) -> Action {
+            switch self.state {
+            case .active:
+                // We can get timeout and inUse = true when we decided to lease the connection, but this action is not executed yet.
+                // In this case we can ignore timeout notification.
+                if self.leasedConnections.contains(connection) {
+                    return .none
+                }
+
+                // If connection was not in use, we release it from the pool, increasing available capacity
+                self.openedConnectionsCount -= 1
+                self.availableConnections.removeAll { $0 == connection }
+
+                return .closeAnd(connection, self.processNextWaiter())
+            case .closed:
                 return .none
             }
         }
 
         mutating func processNextWaiter() -> Action {
-            switch self.state {
-            case .active:
-                self.openedConnectionsCount -= 1
+            if let waiter = self.waiters.popFirst() {
+                let (eventLoop, required) = self.resolvePreference(waiter.preference)
 
-                if let waiter = self.waiters.popFirst() {
-                    let (eventLoop, required) = self.resolvePreference(waiter.preference)
-
-                    // If specific EL is required, we have only two options - find open one or create a new one
-                    if required, let found = self.availableConnections.firstIndex(where: { $0.channel.eventLoop === eventLoop }) {
-                        let connection = self.availableConnections.remove(at: found)
-                        connection.lease()
-                        return .lease(connection, waiter)
-                    } else if !required, let connection = self.availableConnections.popFirst() {
-                        connection.lease()
-                        return .lease(connection, waiter)
-                    } else {
-                        self.openedConnectionsCount += 1
-                        return .create(waiter)
-                    }
+                // If specific EL is required, we have only two options - find open one or create a new one
+                if required, let found = self.availableConnections.firstIndex(where: { $0.channel.eventLoop === eventLoop }) {
+                    let connection = self.availableConnections.remove(at: found)
+                    self.leasedConnections.insert(connection)
+                    return .lease(connection, waiter)
+                } else if !required, let connection = self.availableConnections.popFirst() {
+                    self.leasedConnections.insert(connection)
+                    return .lease(connection, waiter)
+                } else {
+                    self.openedConnectionsCount += 1
+                    return .create(waiter)
                 }
-
-                // if capacity is at max and the are no waiters and no in-flight requests for connection, we are closing this provider
-                if self.openedConnectionsCount == 0, self.pending == 0 {
-                    // deactivate and remove
-                    self.state = .closed
-                    return .deleteProvider
-                }
-
-                return .none
-            case .closed:
-                assertionFailure("should not happen")
-                return .none
             }
+
+            // if capacity is at max and the are no waiters and no in-flight requests for connection, we are closing this provider
+            if self.isEmpty {
+                // deactivate and remove
+                self.state = .closed
+                return .closeProvider
+            }
+
+            return .none
         }
 
-        mutating func close() -> (CircularBuffer<Waiter>, CircularBuffer<Connection>)? {
+        mutating func close() -> (CircularBuffer<Waiter>, CircularBuffer<Connection>, Set<Connection>, Bool)? {
             switch self.state {
             case .active:
                 let waiters = self.waiters
                 self.waiters.removeAll()
 
-                let connections = self.availableConnections
+                let available = self.availableConnections
                 self.availableConnections.removeAll()
 
-                return (waiters, connections)
+                let leased = self.leasedConnections
+
+                self.state = .closed
+
+                return (waiters, available, leased, self.openedConnectionsCount - available.count == 0)
             case .closed:
                 return nil
             }
@@ -555,6 +569,8 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
     /// - Warning: This lock should always be acquired *after* `ConnectionPool`s `lock` if used in combination with it.
     private let lock = Lock()
 
+    var closePromise: EventLoopPromise<Void>
+
     var state: ConnectionsState
 
     /// Creates a new `HTTP1ConnectionProvider`
@@ -569,6 +585,7 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
         self.configuration = configuration
         self.key = key
         self.pool = pool
+        self.closePromise = eventLoop.makePromise()
         self.state = .init(eventLoop: eventLoop)
     }
 
@@ -590,26 +607,56 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
                 if connection.isActiveEstimation {
                     waiter.promise.succeed(connection)
                 } else {
-                    connection.isInUse = false
-                    self.makeConnection(on: waiter.preference.bestEventLoop ?? self.eventLoop).cascade(to: waiter.promise)
+                    self.makeChannel(preference: waiter.preference).whenComplete { result in
+                        switch result {
+                        case .success(let channel):
+                            self.connect(using: channel, waiter: waiter, replacing: connection)
+                        case .failure(let error):
+                            self.connectFailed(error: error, waiter: waiter)
+                        }
+                    }
                 }
             }
         case .create(let waiter):
-            self.makeConnection(on: waiter.preference.bestEventLoop ?? self.eventLoop).cascade(to: waiter.promise)
-        case .replace(let connection, let waiter):
-            connection.cancelIdleTimeout().whenComplete {
-                _ in connection.channel.close(promise: nil)
+            self.makeChannel(preference: waiter.preference).whenComplete { result in
+                switch result {
+                case .success(let channel):
+                    self.connect(using: channel, waiter: waiter)
+                case .failure(let error):
+                    self.connectFailed(error: error, waiter: waiter)
+                }
             }
-            self.makeConnection(on: waiter.preference.bestEventLoop ?? self.eventLoop).cascade(to: waiter.promise)
+        case .replace(let connection, let waiter):
+            connection.cancelIdleTimeout().flatMap {
+                connection.close()
+            }.whenComplete { _ in
+                self.makeChannel(preference: waiter.preference).whenComplete { result in
+                    switch result {
+                    case .success(let channel):
+                        self.connect(using: channel, waiter: waiter, replacing: connection)
+                    case .failure(let error):
+                        self.connectFailed(error: error, waiter: waiter)
+                    }
+                }
+            }
         case .park(let connection):
             connection.setIdleTimeout(timeout: self.configuration.maximumAllowedIdleTimeInConnectionPool)
-        case .deleteProvider:
-            self.pool.delete(self)
+        case .closeProvider:
+            self.closeAndDelete()
         case .none:
             break
         case .parkAnd(let connection, let action):
             connection.setIdleTimeout(timeout: self.configuration.maximumAllowedIdleTimeInConnectionPool)
             self.execute(action)
+        case .closeAnd(let connection, let action):
+            connection.channel.close(promise: nil)
+            self.execute(action)
+        case .cancel(let connection, let close):
+            connection.cancel().whenComplete { _ in
+                if close {
+                    self.closeAndDelete()
+                }
+            }
         case .fail(let waiter, let error):
             waiter.promise.fail(error)
         }
@@ -634,15 +681,42 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
         return waiter.promise.futureResult
     }
 
-    func release(connection: Connection, inPool: Bool = false) {
+    func connect(using channel: Channel, waiter: Waiter) {
+        let connection = Connection(channel: channel, provider: self)
         let action: Action = self.lock.withLock {
-            self.state.release(connection: connection, inPool: inPool)
+            self.state.offer(connection: connection)
+        }
+        waiter.promise.succeed(connection)
+        self.execute(action)
+    }
+
+    func connect(using channel: Channel, waiter: Waiter, replacing connection: Connection) {
+        let replacement = Connection(channel: channel, provider: self)
+        let action: Action = self.lock.withLock {
+            self.state.drop(connection: connection)
+            return self.state.offer(connection: replacement)
+        }
+        waiter.promise.succeed(replacement)
+        self.execute(action)
+    }
+
+    func connectFailed(error: Error, waiter: Waiter) {
+        let action = self.lock.withLock {
+            self.state.connectFailed()
+        }
+        waiter.promise.fail(error)
+        self.execute(action)
+    }
+
+    func release(connection: Connection, closing: Bool) {
+        let action: Action = self.lock.withLock {
+            self.state.release(connection: connection, closing: closing)
         }
 
         switch action {
         case .none:
             break
-        case .park, .deleteProvider:
+        case .park, .closeProvider:
             // Since both `.park` and `.deleteProvider` are terminal in terms of execution,
             // we can execute them immediately
             self.execute(action)
@@ -656,23 +730,47 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
         }
     }
 
-    func processNextWaiter() {
+    func remoteClosed(connection: Connection) {
         let action: Action = self.lock.withLock {
-            self.state.processNextWaiter()
+            self.state.remoteClosed(connection: connection)
         }
 
         self.execute(action)
     }
 
-    func close(on eventLoop: EventLoop) -> EventLoopFuture<Void> {
-        if let (waiters, connections) = self.lock.withLock({ self.state.close() }) {
-            waiters.forEach { $0.promise.fail(HTTPClientError.cancelled) }
-            return EventLoopFuture.andAllComplete(connections.map { $0.close() }, on: eventLoop)
+    func timeout(connection: Connection) {
+        let action: Action = self.lock.withLock {
+            self.state.timeout(connection: connection)
         }
-        return self.eventLoop.makeSucceededFuture(())
+
+        self.execute(action)
     }
 
-    private func makeConnection(on eventLoop: EventLoop) -> EventLoopFuture<Connection> {
+    private func closeAndDelete() {
+        self.pool.delete(self)
+        self.closePromise.succeed(())
+    }
+
+    func close() -> EventLoopFuture<Bool> {
+        if let (waiters, available, leased, clean) = self.lock.withLock({ self.state.close() }) {
+            waiters.forEach {
+                $0.promise.fail(HTTPClientError.cancelled)
+            }
+
+            EventLoopFuture.andAllComplete(leased.map { $0.cancel() }, on: self.eventLoop).flatMap { _ in
+                EventLoopFuture.andAllComplete(available.map { $0.close() }, on: self.eventLoop)
+            }.whenFailure { error in
+                self.closePromise.fail(error)
+            }
+
+            return self.closePromise.futureResult.map { clean }
+        }
+
+        return self.closePromise.futureResult.map { true }
+    }
+
+    private func makeChannel(preference: HTTPClient.EventLoopPreference) -> EventLoopFuture<Channel> {
+        let eventLoop = preference.bestEventLoop ?? self.eventLoop
         let requiresTLS = self.key.scheme == .https
         let bootstrap: NIOClientTCPBootstrap
         do {
@@ -692,7 +790,7 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
 
         return channel.flatMap { channel in
             let requiresSSLHandler = self.configuration.proxy != nil && self.key.scheme == .https
-            let handshakePromise = eventLoop.makePromise(of: Void.self)
+            let handshakePromise = channel.eventLoop.makePromise(of: Void.self)
 
             channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, addSSLClient: requiresSSLHandler, handshakePromise: handshakePromise)
 
@@ -704,9 +802,9 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
                         return channel.pipeline.addHandler(HTTPClient.NWErrorHandler(), position: .first)
                     }
                 #endif
-                return eventLoop.makeSucceededFuture(())
+                return channel.eventLoop.makeSucceededFuture(())
             }.map {
-                Connection(channel: channel, provider: self)
+                channel
             }
         }.flatMapError { error in
             #if canImport(Network)
@@ -715,9 +813,6 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
                     error = HTTPClient.NWErrorHandler.translateError(error)
                 }
             #endif
-
-            // there is no connection here anymore, we need to bootstrap next waiter
-            self.processNextWaiter()
             return self.eventLoop.makeFailedFuture(error)
         }
     }

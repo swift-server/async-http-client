@@ -582,7 +582,7 @@ class HTTPClientInternalTests: XCTestCase {
 
         // And let's also give the connection back :).
         try connection.channel.eventLoop.submit {
-            connection.release()
+            connection.release(closing: false)
         }.wait()
 
         XCTAssertEqual(0, sharedStateServerHandler.requestNumber.load())
@@ -629,7 +629,7 @@ class HTTPClientInternalTests: XCTestCase {
 
             let channel = connection.channel
             try! channel.eventLoop.submit {
-                connection.release()
+                connection.release(closing: true)
             }.wait()
             return (web, channel)
         })
@@ -718,7 +718,7 @@ class HTTPClientInternalTests: XCTestCase {
                                                                                            sawTheClosePromise: sawTheClosePromise),
                                                          position: .first).wait())
         try! connection.channel.eventLoop.submit {
-            connection.release()
+            connection.release(closing: false)
         }.wait()
 
         XCTAssertNoThrow(try client.execute(request: req).wait())
@@ -748,7 +748,7 @@ class HTTPClientInternalTests: XCTestCase {
 
         XCTAssert(connection !== connection2)
         try! connection2.channel.eventLoop.submit {
-            connection2.release()
+            connection2.release(closing: true)
         }.wait()
         XCTAssertTrue(connection2.channel.isActive)
     }
