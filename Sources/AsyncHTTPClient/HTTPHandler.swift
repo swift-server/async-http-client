@@ -557,8 +557,8 @@ extension HTTPClient {
                 connection.channel.close(promise: nil)
                 self.releaseAssociatedConnection(delegateType: delegateType, closing: true)
                     .whenSuccess {
-                    self.promise.fail(error)
-                }
+                        self.promise.fail(error)
+                    }
             }
         }
 
@@ -741,7 +741,7 @@ extension TaskHandler: ChannelDuplexHandler {
         context.write(wrapOutboundOut(.head(head))).map {
             self.callOutToDelegateFireAndForget(value: head, self.delegate.didSendRequestHead)
         }.flatMap {
-            return self.writeBody(request: request, context: context)
+            self.writeBody(request: request, context: context)
         }.flatMap {
             context.eventLoop.assertInEventLoop()
             return context.writeAndFlush(self.wrapOutboundOut(.end(nil)))

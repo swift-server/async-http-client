@@ -494,7 +494,7 @@ class ConnectionPoolTests: XCTestCase {
         let action = provider.state.release(connection: connection, closing: false)
         switch action {
         case .lease(let connection, let waiter):
-            //XCTAssertTrue(connection.isInUse)
+            // XCTAssertTrue(connection.isInUse)
             snapshot = provider.state.testsOnly_getInternalState()
             XCTAssertEqual(0, snapshot.availableConnections.count)
             XCTAssertEqual(1, snapshot.leasedConnections.count)
@@ -1231,7 +1231,7 @@ class ConnectionPoolTests: XCTestCase {
 
         connection.release(closing: false)
 
-        //XCTAssertFalse(connection.isInUse)
+        // XCTAssertFalse(connection.isInUse)
         snapshot = provider.state.testsOnly_getInternalState()
         XCTAssertEqual(1, snapshot.availableConnections.count)
         XCTAssertEqual(0, snapshot.leasedConnections.count)

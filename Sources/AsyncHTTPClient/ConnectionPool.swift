@@ -245,14 +245,14 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
         }
 
         #if DEBUG
-        struct Snapshot {
-            var state: State
-            var availableConnections: CircularBuffer<Connection>
-            var leasedConnections: Set<Connection>
-            var waiters: CircularBuffer<Waiter>
-            var openedConnectionsCount: Int
-            var pending: Int
-        }
+            struct Snapshot {
+                var state: State
+                var availableConnections: CircularBuffer<Connection>
+                var leasedConnections: Set<Connection>
+                var waiters: CircularBuffer<Waiter>
+                var openedConnectionsCount: Int
+                var pending: Int
+            }
         #endif
 
         let maximumConcurrentConnections: Int
@@ -284,26 +284,26 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
         }
 
         #if DEBUG
-        func testsOnly_getInternalState() -> Snapshot {
-            return Snapshot(state: self.state, availableConnections: self.availableConnections, leasedConnections: self.leasedConnections, waiters: self.waiters, openedConnectionsCount: self.openedConnectionsCount, pending: self.pending)
-        }
+            func testsOnly_getInternalState() -> Snapshot {
+                return Snapshot(state: self.state, availableConnections: self.availableConnections, leasedConnections: self.leasedConnections, waiters: self.waiters, openedConnectionsCount: self.openedConnectionsCount, pending: self.pending)
+            }
 
-        mutating func testsOnly_setInternalState(_ snapshot: Snapshot) {
-            self.state = snapshot.state
-            self.availableConnections = snapshot.availableConnections
-            self.leasedConnections = snapshot.leasedConnections
-            self.waiters = snapshot.waiters
-            self.openedConnectionsCount = snapshot.openedConnectionsCount
-            self.pending = snapshot.pending
-        }
+            mutating func testsOnly_setInternalState(_ snapshot: Snapshot) {
+                self.state = snapshot.state
+                self.availableConnections = snapshot.availableConnections
+                self.leasedConnections = snapshot.leasedConnections
+                self.waiters = snapshot.waiters
+                self.openedConnectionsCount = snapshot.openedConnectionsCount
+                self.pending = snapshot.pending
+            }
 
-        func assertInvariants() {
-            assert(self.waiters.isEmpty)
-            assert(self.availableConnections.isEmpty)
-            assert(self.leasedConnections.isEmpty)
-            assert(self.openedConnectionsCount == 0)
-            assert(self.pending == 0)
-        }
+            func assertInvariants() {
+                assert(self.waiters.isEmpty)
+                assert(self.availableConnections.isEmpty)
+                assert(self.leasedConnections.isEmpty)
+                assert(self.openedConnectionsCount == 0)
+                assert(self.pending == 0)
+            }
         #endif
 
         mutating func enqueue() -> Bool {
@@ -371,7 +371,7 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
             case .active:
                 assert(self.leasedConnections.contains(connection))
 
-                if connection.isActiveEstimation && !closing { // If connection is alive, we can offer it to a next waiter
+                if connection.isActiveEstimation, !closing { // If connection is alive, we can offer it to a next waiter
                     if let waiter = self.waiters.popFirst() {
                         let (eventLoop, required) = self.resolvePreference(waiter.preference)
 
@@ -591,7 +591,7 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
 
     deinit {
         #if DEBUG
-        self.state.assertInvariants()
+            self.state.assertInvariants()
         #endif
     }
 

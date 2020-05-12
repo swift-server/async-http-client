@@ -1236,7 +1236,7 @@ class HTTPClientTests: XCTestCase {
         let client = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
         let req = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get", method: .GET, headers: ["X-internal-delay": "500"])
         let res = client.execute(request: req)
-        //Thread.sleep(forTimeInterval: 0.05)
+        // Thread.sleep(forTimeInterval: 0.05)
         XCTAssertNoThrow(try client.syncShutdown(requiresCleanClose: false))
         _ = try? res.timeout(after: .seconds(2)).wait()
         try httpBin.shutdown()
