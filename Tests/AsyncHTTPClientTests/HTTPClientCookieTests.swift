@@ -30,6 +30,19 @@ class HTTPClientCookieTests: XCTestCase {
         XCTAssertTrue(c.secure)
     }
 
+    func testEmptyValueCookie() {
+        let v = "cookieValue=; Path=/"
+        let c = HTTPClient.Cookie(header: v, defaultDomain: "exampe.org")!
+        XCTAssertEqual("cookieValue", c.name)
+        XCTAssertEqual("", c.value)
+        XCTAssertEqual("/", c.path)
+        XCTAssertEqual("exampe.org", c.domain)
+        XCTAssertNil(c.expires)
+        XCTAssertNil(c.maxAge)
+        XCTAssertFalse(c.httpOnly)
+        XCTAssertFalse(c.secure)
+    }
+
     func testCookieDefaults() {
         let v = "key=value"
         let c = HTTPClient.Cookie(header: v, defaultDomain: "example.org")!

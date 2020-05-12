@@ -50,7 +50,7 @@ extension HTTPClient {
                 return nil
             }
 
-            let nameAndValue = components[0].split(separator: "=", maxSplits: 1).map {
+            let nameAndValue = components[0].split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).map {
                 $0.trimmingCharacters(in: .whitespaces)
             }
 
