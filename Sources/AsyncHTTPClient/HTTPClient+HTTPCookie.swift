@@ -61,6 +61,10 @@ extension HTTPClient {
             self.name = nameAndValue[0]
             self.value = nameAndValue[1]
 
+            guard !self.name.isEmpty else {
+                return nil
+            }
+
             self.path = "/"
             self.domain = defaultDomain
             self.expires = nil
@@ -70,6 +74,8 @@ extension HTTPClient {
 
             for component in components[1...] {
                 switch self.parseComponent(component) {
+                case (nil, nil):
+                    continue
                 case ("path", .some(let value)):
                     self.path = value
                 case ("domain", .some(let value)):
@@ -114,14 +120,16 @@ extension HTTPClient {
             self.secure = secure
         }
 
-        func parseComponent(_ component: String) -> (String, String?) {
+        func parseComponent(_ component: String) -> (String?, String?) {
             let nameAndValue = component.split(separator: "=", maxSplits: 1).map {
                 $0.trimmingCharacters(in: .whitespaces)
             }
             if nameAndValue.count == 2 {
                 return (nameAndValue[0].lowercased(), nameAndValue[1])
+            } else if nameAndValue.count == 1 {
+                return (nameAndValue[0].lowercased(), nil)
             }
-            return (nameAndValue[0].lowercased(), nil)
+            return (nil, nil)
         }
     }
 }
