@@ -69,37 +69,24 @@ extension HTTPClient {
             self.secure = false
 
             for component in components[1...] {
-                if component.starts(with: "Path"), let value = parseComponentValue(component) {
+                switch self.parseComponent(component) {
+                case ("path", .some(let value)):
                     self.path = value
-                    continue
-                }
-
-                if component.starts(with: "Domain"), let value = parseComponentValue(component) {
+                case ("domain", .some(let value)):
                     self.domain = value
-                    continue
-                }
-
-                if component.starts(with: "Expires") {
+                case ("expires", let value):
                     let formatter = DateFormatter()
                     formatter.locale = Locale(identifier: "en_US")
                     formatter.timeZone = TimeZone(identifier: "GMT")
                     formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss z"
-                    self.expires = self.parseComponentValue(component).flatMap { formatter.date(from: $0) }
-                    continue
-                }
-
-                if component.starts(with: "Max-Age"), let value = parseComponentValue(component).flatMap(Int.init) {
-                    self.maxAge = value
-                    continue
-                }
-
-                if component == "Secure" {
+                    self.expires = value.flatMap { formatter.date(from: $0) }
+                case ("max-age", let value):
+                    self.maxAge = value.flatMap(Int.init)
+                case ("secure", nil):
                     self.secure = true
-                    continue
-                }
-
-                if component == "HttpOnly" {
+                case ("httponly", nil):
                     self.httpOnly = true
+                default:
                     continue
                 }
             }
@@ -127,14 +114,14 @@ extension HTTPClient {
             self.secure = secure
         }
 
-        func parseComponentValue(_ component: String) -> String? {
+        func parseComponent(_ component: String) -> (String, String?) {
             let nameAndValue = component.split(separator: "=", maxSplits: 1).map {
                 $0.trimmingCharacters(in: .whitespaces)
             }
             if nameAndValue.count == 2 {
-                return nameAndValue[1]
+                return (nameAndValue[0].lowercased(), nameAndValue[1])
             }
-            return nil
+            return (nameAndValue[0].lowercased(), nil)
         }
     }
 }
