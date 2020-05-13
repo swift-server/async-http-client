@@ -49,7 +49,7 @@ import NIOTransportServices
 public class HTTPClient {
     static var DEBUG = false
     static func debug(_ message: String) {
-        if DEBUG {
+        if self.DEBUG {
             print(message)
         }
     }
