@@ -47,6 +47,13 @@ import NIOTransportServices
 ///     try client.syncShutdown()
 /// ```
 public class HTTPClient {
+    static var DEBUG = false
+    static func debug(_ message: String) {
+        if DEBUG {
+            print(message)
+        }
+    }
+
     public let eventLoopGroup: EventLoopGroup
     let eventLoopGroupProvider: EventLoopGroupProvider
     let configuration: Configuration

@@ -1073,6 +1073,11 @@ class HTTPClientTests: XCTestCase {
         }
 
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        HTTPClient.DEBUG = true
+        defer {
+            HTTPClient.DEBUG = false
+        }
+
         _ = httpClient.get(url: "http://localhost:\(httpBin.port)/wait")
         do {
             try httpClient.syncShutdown(requiresCleanClose: true)
