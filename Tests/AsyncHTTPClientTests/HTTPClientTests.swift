@@ -92,6 +92,11 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try httpBin.shutdown())
         }
 
+        HTTPClient.DEBUG = true
+        defer {
+            HTTPClient.DEBUG = false
+        }
+
         let response = try httpClient.get(url: "http://localhost:\(httpBin.port)/get").wait()
         XCTAssertEqual(.ok, response.status)
     }
