@@ -67,4 +67,19 @@ class HTTPClientCookieTests: XCTestCase {
         XCTAssertTrue(c.httpOnly)
         XCTAssertTrue(c.secure)
     }
+
+    func testMalformedCookies() {
+        XCTAssertNil(HTTPClient.Cookie(header: "", defaultDomain: "exampe.org"))
+        XCTAssertNil(HTTPClient.Cookie(header: ";;", defaultDomain: "exampe.org"))
+        XCTAssertNil(HTTPClient.Cookie(header: "name;;", defaultDomain: "exampe.org"))
+        XCTAssertNotNil(HTTPClient.Cookie(header: "name=;;", defaultDomain: "exampe.org"))
+        XCTAssertNotNil(HTTPClient.Cookie(header: "name=value;;", defaultDomain: "exampe.org"))
+        XCTAssertNotNil(HTTPClient.Cookie(header: "name=value;x;", defaultDomain: "exampe.org"))
+        XCTAssertNotNil(HTTPClient.Cookie(header: "name=value;x=;", defaultDomain: "exampe.org"))
+        XCTAssertNotNil(HTTPClient.Cookie(header: "name=value;;x=;", defaultDomain: "exampe.org"))
+        XCTAssertNil(HTTPClient.Cookie(header: ";key=value", defaultDomain: "exampe.org"))
+        XCTAssertNil(HTTPClient.Cookie(header: "key;key=value", defaultDomain: "exampe.org"))
+        XCTAssertNil(HTTPClient.Cookie(header: "=;", defaultDomain: "exampe.org"))
+        XCTAssertNil(HTTPClient.Cookie(header: "=value;", defaultDomain: "exampe.org"))
+    }
 }
