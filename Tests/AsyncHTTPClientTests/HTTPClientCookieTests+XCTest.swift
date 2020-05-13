@@ -29,6 +29,7 @@ extension HTTPClientCookieTests {
             ("testEmptyValueCookie", testEmptyValueCookie),
             ("testCookieDefaults", testCookieDefaults),
             ("testCookieInit", testCookieInit),
+            ("testMalformedCookies", testMalformedCookies),
         ]
     }
 }

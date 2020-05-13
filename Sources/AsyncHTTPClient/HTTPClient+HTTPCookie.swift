@@ -61,7 +61,7 @@ extension HTTPClient {
             self.name = nameAndValue[0]
             self.value = nameAndValue[1]
 
-            guard !name.isEmpty else {
+            guard !self.name.isEmpty else {
                 return nil
             }
 
