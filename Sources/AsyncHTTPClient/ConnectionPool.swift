@@ -686,9 +686,10 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
         let action: Action = self.lock.withLock {
             self.state.offer(connection: connection)
         }
-        HTTPClient.debug("connect; \(action)")
         waiter.promise.succeed(connection)
-        self.execute(action)
+        connection.channel.eventLoop.execute {
+            self.execute(action)
+        }
     }
 
     func connect(using channel: Channel, waiter: Waiter, replacing connection: Connection) {
@@ -698,7 +699,9 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
             return self.state.offer(connection: replacement)
         }
         waiter.promise.succeed(replacement)
-        self.execute(action)
+        replacement.channel.eventLoop.execute {
+            self.execute(action)
+        }
     }
 
     func connectFailed(error: Error, waiter: Waiter) {
@@ -754,8 +757,6 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
 
     func close() -> EventLoopFuture<Bool> {
         if let (waiters, available, leased, clean) = self.lock.withLock({ self.state.close() }) {
-            HTTPClient.debug("closing provider; w: \(waiters.count) a: \(available.count) l: \(leased.count) c: \(clean)")
-
             waiters.forEach {
                 $0.promise.fail(HTTPClientError.cancelled)
             }

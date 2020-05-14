@@ -92,11 +92,6 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try httpBin.shutdown())
         }
 
-        HTTPClient.DEBUG = true
-        defer {
-            HTTPClient.DEBUG = false
-        }
-
         let response = try httpClient.get(url: "http://localhost:\(httpBin.port)/get").wait()
         XCTAssertEqual(.ok, response.status)
     }
@@ -1072,21 +1067,13 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testUncleanCloseThrows() {
-        print("starting test")
         let httpBin = HTTPBin()
         defer {
             XCTAssertNoThrow(try httpBin.shutdown())
         }
-        print("http bin created")
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
-        print("http client created")
-        HTTPClient.DEBUG = true
-        defer {
-            HTTPClient.DEBUG = false
-        }
 
         _ = httpClient.get(url: "http://localhost:\(httpBin.port)/wait")
-        print("requet queued")
         do {
             try httpClient.syncShutdown(requiresCleanClose: true)
             XCTFail("There should be an error on shutdown")
