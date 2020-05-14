@@ -26,8 +26,10 @@ extension HTTPClientCookieTests {
     static var allTests: [(String, (HTTPClientCookieTests) -> () throws -> Void)] {
         return [
             ("testCookie", testCookie),
+            ("testEmptyValueCookie", testEmptyValueCookie),
             ("testCookieDefaults", testCookieDefaults),
             ("testCookieInit", testCookieInit),
+            ("testMalformedCookies", testMalformedCookies),
         ]
     }
 }
