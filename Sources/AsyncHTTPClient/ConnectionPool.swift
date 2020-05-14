@@ -807,6 +807,14 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
                     }
                 #endif
                 return channel.eventLoop.makeSucceededFuture(())
+            }.flatMap {
+                switch self.configuration.decompression {
+                case .disabled:
+                    return channel.eventLoop.makeSucceededFuture(())
+                case .enabled(let limit):
+                    let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
+                    return channel.pipeline.addHandler(decompressHandler)
+                }
             }.map {
                 channel
             }

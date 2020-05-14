@@ -564,10 +564,8 @@ extension HTTPClient {
 
         func releaseAssociatedConnection<Delegate: HTTPClientResponseDelegate>(delegateType: Delegate.Type, closing: Bool) -> EventLoopFuture<Void> {
             if let connection = self.connection {
-                return connection.removeHandler(NIOHTTPResponseDecompressor.self).flatMap {
-                    // remove read timeout handler
-                    connection.removeHandler(IdleStateHandler.self)
-                }.flatMap {
+                // remove read timeout handler
+                return connection.removeHandler(IdleStateHandler.self).flatMap {
                     connection.removeHandler(TaskHandler<Delegate>.self)
                 }.map {
                     connection.release(closing: closing)
