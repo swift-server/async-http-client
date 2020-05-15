@@ -64,7 +64,7 @@ extension HTTPClient {
         ///
         /// - parameters:
         ///     - length: Body size. Request validation will be failed with `HTTPClientErrors.contentLengthMissing` if nil,
-        ///               unless `Trasfer-Encoding: chunked` header is set.
+        ///               unless `Transfer-Encoding: chunked` header is set.
         ///     - stream: Body chunk provider.
         public static func stream(length: Int? = nil, _ stream: @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
             return Body(length: length, stream: stream)
