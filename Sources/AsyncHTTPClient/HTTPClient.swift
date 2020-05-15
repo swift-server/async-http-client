@@ -350,7 +350,8 @@ public class HTTPClient {
         }
 
         let task = Task<Delegate.Response>(eventLoop: taskEL)
-        let connection = self.pool.getConnection(for: request, preference: eventLoopPreference, on: taskEL, deadline: deadline)
+        let setupComplete = taskEL.makePromise(of: Void.self)
+        let connection = self.pool.getConnection(for: request, preference: eventLoopPreference, on: taskEL, deadline: deadline, setupComplete: setupComplete.futureResult)
 
         connection.flatMap { connection -> EventLoopFuture<Void> in
             let channel = connection.channel
@@ -368,6 +369,8 @@ public class HTTPClient {
                                               redirectHandler: redirectHandler,
                                               ignoreUncleanSSLShutdown: self.configuration.ignoreUncleanSSLShutdown)
                 return channel.pipeline.addHandler(taskHandler)
+            }.always { _ in
+                setupComplete.succeed(())
             }.flatMap {
                 task.setConnection(connection)
 
@@ -388,7 +391,10 @@ public class HTTPClient {
                 connection.release(closing: true)
                 return channel.eventLoop.makeFailedFuture(error)
             }
-        }.cascadeFailure(to: task.promise)
+        }.whenFailure { error in
+            setupComplete.fail(error)
+            task.promise.fail(error)
+        }
 
         return task
     }

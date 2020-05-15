@@ -571,10 +571,12 @@ class HTTPClientInternalTests: XCTestCase {
         var maybeConnection: Connection?
         // This is pretty evil but we literally just get hold of a connection to get to the channel to be able to
         // observe when the server closing the connection is known to the client.
+        let el = group.next()
         XCTAssertNoThrow(maybeConnection = try client.pool.getConnection(for: .init(url: url),
                                                                          preference: .indifferent,
-                                                                         on: group.next(),
-                                                                         deadline: nil).wait())
+                                                                         on: el,
+                                                                         deadline: nil,
+                                                                         setupComplete: el.makeSucceededFuture(())).wait())
         guard let connection = maybeConnection else {
             XCTFail("couldn't get connection")
             return
@@ -618,10 +620,12 @@ class HTTPClientInternalTests: XCTestCase {
                                               method: .GET,
                                               body: nil)
             var maybeConnection: Connection?
+            let el = client.eventLoopGroup.next()
             XCTAssertNoThrow(try maybeConnection = client.pool.getConnection(for: req,
                                                                              preference: .indifferent,
-                                                                             on: client.eventLoopGroup.next(),
-                                                                             deadline: nil).wait())
+                                                                             on: el,
+                                                                             deadline: nil,
+                                                                             setupComplete: el.makeSucceededFuture(())).wait())
             guard let connection = maybeConnection else {
                 XCTFail("couldn't make connection")
                 throw NoChannelError()
@@ -701,10 +705,12 @@ class HTTPClientInternalTests: XCTestCase {
 
         // Let's start by getting a connection so we can mess with the Channel :).
         var maybeConnection: Connection?
+        let el = client.eventLoopGroup.next()
         XCTAssertNoThrow(try maybeConnection = client.pool.getConnection(for: req,
                                                                          preference: .indifferent,
-                                                                         on: client.eventLoopGroup.next(),
-                                                                         deadline: nil).wait())
+                                                                         on: el,
+                                                                         deadline: nil,
+                                                                         setupComplete: el.makeSucceededFuture(())).wait())
         guard let connection = maybeConnection else {
             XCTFail("couldn't make connection")
             return
@@ -734,10 +740,12 @@ class HTTPClientInternalTests: XCTestCase {
 
         // When asking for a connection again, we should _not_ get the same one back because we did most of the close,
         // similar to what the SSLHandler would do.
+        let el2 = client.eventLoopGroup.next()
         let connection2Future = client.pool.getConnection(for: req,
                                                           preference: .indifferent,
-                                                          on: client.eventLoopGroup.next(),
-                                                          deadline: nil)
+                                                          on: el2,
+                                                          deadline: nil,
+                                                          setupComplete: el2.makeSucceededFuture(()))
         doActualCloseNowPromise.succeed(())
 
         XCTAssertNoThrow(try maybeConnection = connection2Future.wait())

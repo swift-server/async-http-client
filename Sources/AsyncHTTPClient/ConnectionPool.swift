@@ -64,7 +64,7 @@ final class ConnectionPool {
     /// When the pool is asked for a new connection, it creates a `Key` from the url associated to the `request`. This key
     /// is used to determine if there already exists an associated `HTTP1ConnectionProvider` in `providers`.
     /// If there is, the connection provider then takes care of leasing a new connection. If a connection provider doesn't exist, it is created.
-    func getConnection(for request: HTTPClient.Request, preference: HTTPClient.EventLoopPreference, on eventLoop: EventLoop, deadline: NIODeadline?) -> EventLoopFuture<Connection> {
+    func getConnection(for request: HTTPClient.Request, preference: HTTPClient.EventLoopPreference, on eventLoop: EventLoop, deadline: NIODeadline?, setupComplete: EventLoopFuture<Void>) -> EventLoopFuture<Connection> {
         let key = Key(request)
 
         let provider: HTTP1ConnectionProvider = self.lock.withLock {
@@ -77,7 +77,7 @@ final class ConnectionPool {
             }
         }
 
-        return provider.getConnection(preference: preference)
+        return provider.getConnection(preference: preference, setupComplete: setupComplete)
     }
 
     func delete(_ provider: HTTP1ConnectionProvider) {
@@ -669,8 +669,8 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
         }
     }
 
-    func getConnection(preference: HTTPClient.EventLoopPreference) -> EventLoopFuture<Connection> {
-        let waiter = Waiter(promise: self.eventLoop.makePromise(), preference: preference)
+    func getConnection(preference: HTTPClient.EventLoopPreference, setupComplete: EventLoopFuture<Void>) -> EventLoopFuture<Connection> {
+        let waiter = Waiter(promise: self.eventLoop.makePromise(), setupComplete: setupComplete, preference: preference)
 
         let action: Action = self.lock.withLock {
             self.state.acquire(waiter: waiter)
@@ -687,7 +687,7 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
             self.state.offer(connection: connection)
         }
         waiter.promise.succeed(connection)
-        connection.channel.eventLoop.execute {
+        waiter.setupComplete.whenComplete { _ in
             self.execute(action)
         }
     }
@@ -699,7 +699,7 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
             return self.state.offer(connection: replacement)
         }
         waiter.promise.succeed(replacement)
-        replacement.channel.eventLoop.execute {
+        waiter.setupComplete.whenComplete { _ in
             self.execute(action)
         }
     }
@@ -709,7 +709,9 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
             self.state.connectFailed()
         }
         waiter.promise.fail(error)
-        self.execute(action)
+        waiter.setupComplete.whenComplete { _ in
+            self.execute(action)
+        }
     }
 
     func release(connection: Connection, closing: Bool) {
@@ -837,6 +839,9 @@ class HTTP1ConnectionProvider: CustomStringConvertible {
     struct Waiter {
         /// The promise to complete once a connection is available
         let promise: EventLoopPromise<Connection>
+
+        /// Future that will be succeeded when request timeout handler and `TaskHandler` are added to the pipeline.
+        let setupComplete: EventLoopFuture<Void>
 
         /// The event loop preference associated to this particular request
         /// that the provider should respect

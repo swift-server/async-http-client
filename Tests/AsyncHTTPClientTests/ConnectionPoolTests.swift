@@ -62,7 +62,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(0, snapshot.openedConnectionsCount)
 
-        let action = state.acquire(waiter: .init(promise: eventLoop.makePromise(), preference: .indifferent))
+        let action = state.acquire(waiter: .init(promise: eventLoop.makePromise(), setupComplete: eventLoop.makeSucceededFuture(()), preference: .indifferent))
         switch action {
         case .create(let waiter):
             waiter.promise.fail(TempError())
@@ -98,7 +98,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
-        let action = provider.state.acquire(waiter: .init(promise: eventLoop.makePromise(), preference: .indifferent))
+        let action = provider.state.acquire(waiter: .init(promise: eventLoop.makePromise(), setupComplete: eventLoop.makeSucceededFuture(()), preference: .indifferent))
         switch action {
         case .lease(let connection, let waiter):
             waiter.promise.succeed(connection)
@@ -135,7 +135,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(8, snapshot.openedConnectionsCount)
 
-        let action = provider.state.acquire(waiter: .init(promise: eventLoop.makePromise(), preference: .indifferent))
+        let action = provider.state.acquire(waiter: .init(promise: eventLoop.makePromise(), setupComplete: eventLoop.makeSucceededFuture(()), preference: .indifferent))
         switch action {
         case .none:
             snapshot = provider.state.testsOnly_getInternalState()
@@ -169,7 +169,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(0, snapshot.openedConnectionsCount)
 
-        let action = state.acquire(waiter: .init(promise: eventLoop.makePromise(), preference: .delegateAndChannel(on: eventLoop)))
+        let action = state.acquire(waiter: .init(promise: eventLoop.makePromise(), setupComplete: eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: eventLoop)))
         switch action {
         case .create(let waiter):
             waiter.promise.fail(TempError())
@@ -203,7 +203,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
-        let action = provider.state.acquire(waiter: .init(promise: channel.eventLoop.makePromise(), preference: .delegateAndChannel(on: channel.eventLoop)))
+        let action = provider.state.acquire(waiter: .init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: channel.eventLoop)))
         switch action {
         case .lease(let connection, let waiter):
             waiter.promise.succeed(connection)
@@ -243,7 +243,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(8, snapshot.openedConnectionsCount)
 
-        let action = provider.state.acquire(waiter: .init(promise: eventLoop.makePromise(), preference: .delegateAndChannel(on: eventLoop)))
+        let action = provider.state.acquire(waiter: .init(promise: eventLoop.makePromise(), setupComplete: eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: eventLoop)))
         switch action {
         case .replace(_, let waiter):
             waiter.promise.fail(TempError())
@@ -281,7 +281,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(8, snapshot.openedConnectionsCount)
 
-        let action = provider.state.acquire(waiter: .init(promise: eventLoop.makePromise(), preference: .delegateAndChannel(on: eventLoop)))
+        let action = provider.state.acquire(waiter: .init(promise: eventLoop.makePromise(), setupComplete: eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: eventLoop)))
         switch action {
         case .none:
             snapshot = provider.state.testsOnly_getInternalState()
@@ -314,7 +314,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertFalse(state.enqueue())
 
         let promise = eventLoop.makePromise(of: Connection.self)
-        let action = state.acquire(waiter: .init(promise: promise, preference: .indifferent))
+        let action = state.acquire(waiter: .init(promise: promise, setupComplete: eventLoop.makeSucceededFuture(()), preference: .indifferent))
         switch action {
         case .fail(let waiter, let error):
             waiter.promise.fail(error)
@@ -481,7 +481,7 @@ class ConnectionPoolTests: XCTestCase {
         snapshot.openedConnectionsCount = 1
         let connection = Connection(channel: channel, provider: provider)
         snapshot.leasedConnections.insert(connection)
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .indifferent))
+        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .indifferent))
 
         provider.state.testsOnly_setInternalState(snapshot)
 
@@ -521,7 +521,7 @@ class ConnectionPoolTests: XCTestCase {
         snapshot.openedConnectionsCount = 1
         let connection = Connection(channel: channel, provider: provider)
         snapshot.leasedConnections.insert(connection)
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .indifferent))
+        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .indifferent))
 
         provider.state.testsOnly_setInternalState(snapshot)
 
@@ -561,7 +561,7 @@ class ConnectionPoolTests: XCTestCase {
         snapshot.openedConnectionsCount = 2
         let connection = Connection(channel: channel, provider: provider)
         snapshot.leasedConnections.insert(connection)
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .indifferent))
+        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .indifferent))
 
         let available = Connection(channel: channel, provider: provider)
         snapshot.availableConnections.append(available)
@@ -606,7 +606,7 @@ class ConnectionPoolTests: XCTestCase {
         snapshot.openedConnectionsCount = 1
         let connection = Connection(channel: channel, provider: provider)
         snapshot.leasedConnections.insert(connection)
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .delegateAndChannel(on: channel.eventLoop)))
+        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: channel.eventLoop)))
 
         provider.state.testsOnly_setInternalState(snapshot)
 
@@ -648,7 +648,7 @@ class ConnectionPoolTests: XCTestCase {
         snapshot.openedConnectionsCount = 1
         let connection = Connection(channel: channel, provider: provider)
         snapshot.leasedConnections.insert(connection)
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .delegateAndChannel(on: eventLoop)))
+        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: eventLoop)))
 
         provider.state.testsOnly_setInternalState(snapshot)
 
@@ -690,7 +690,7 @@ class ConnectionPoolTests: XCTestCase {
         snapshot.openedConnectionsCount = 2
         let connection = Connection(channel: channel, provider: provider)
         snapshot.leasedConnections.insert(connection)
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .delegateAndChannel(on: otherChannel.eventLoop)))
+        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: otherChannel.eventLoop)))
 
         let available = Connection(channel: otherChannel, provider: provider)
         snapshot.availableConnections.append(available)
@@ -736,7 +736,7 @@ class ConnectionPoolTests: XCTestCase {
         snapshot.openedConnectionsCount = 8
         let connection = Connection(channel: channel, provider: provider)
         snapshot.leasedConnections.insert(connection)
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .delegateAndChannel(on: otherChannel.eventLoop)))
+        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: otherChannel.eventLoop)))
 
         let available = Connection(channel: channel, provider: provider)
         snapshot.availableConnections.append(available)
@@ -781,7 +781,7 @@ class ConnectionPoolTests: XCTestCase {
         snapshot.openedConnectionsCount = 2
         let connection = Connection(channel: channel, provider: provider)
         snapshot.leasedConnections.insert(connection)
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .delegateAndChannel(on: otherChannel.eventLoop)))
+        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: otherChannel.eventLoop)))
 
         let available = Connection(channel: otherChannel, provider: provider)
         snapshot.availableConnections.append(available)
@@ -827,7 +827,7 @@ class ConnectionPoolTests: XCTestCase {
         snapshot.openedConnectionsCount = 2
         let connection = Connection(channel: channel, provider: provider)
         snapshot.leasedConnections.insert(connection)
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .delegateAndChannel(on: otherChannel.eventLoop)))
+        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: otherChannel.eventLoop)))
 
         let available = Connection(channel: channel, provider: provider)
         snapshot.availableConnections.append(available)
@@ -939,7 +939,7 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot.pending = 0
         snapshot.openedConnectionsCount = 1
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .indifferent))
+        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .indifferent))
 
         let available = Connection(channel: channel, provider: provider)
         snapshot.availableConnections.append(available)
@@ -981,7 +981,7 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot.pending = 0
         snapshot.openedConnectionsCount = 1
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .delegateAndChannel(on: channel.eventLoop)))
+        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: channel.eventLoop)))
 
         let available = Connection(channel: channel, provider: provider)
         snapshot.availableConnections.append(available)
@@ -1024,7 +1024,7 @@ class ConnectionPoolTests: XCTestCase {
 
         snapshot.pending = 0
         snapshot.openedConnectionsCount = 1
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), preference: .delegateAndChannel(on: eventLoop)))
+        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: eventLoop)))
 
         let available = Connection(channel: channel, provider: provider)
         snapshot.availableConnections.append(available)
@@ -1363,7 +1363,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
-        let action = provider.state.acquire(waiter: .init(promise: eventLoop.makePromise(), preference: .indifferent))
+        let action = provider.state.acquire(waiter: .init(promise: eventLoop.makePromise(), setupComplete: eventLoop.makeSucceededFuture(()), preference: .indifferent))
         switch action {
         case .lease(let connection, let waiter):
             // Since this connection is already in use, this should be a no-op and state should not have changed from normal lease
