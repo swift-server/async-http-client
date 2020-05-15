@@ -470,7 +470,7 @@ class HTTPClientInternalTests: XCTestCase {
         _ = try! httpClient.execute(request: req).wait()
         let el = httpClient.eventLoopGroup.next()
         try! el.scheduleTask(in: .milliseconds(500)) {
-            XCTAssertEqual(httpClient.pool.connectionProviderCount, 0)
+            XCTAssertEqual(httpClient.pool.count, 0)
         }.futureResult.wait()
     }
 
@@ -588,7 +588,7 @@ class HTTPClientInternalTests: XCTestCase {
         }.wait()
 
         XCTAssertEqual(0, sharedStateServerHandler.requestNumber.load())
-        XCTAssertEqual(1, client.pool.connectionProviderCount)
+        XCTAssertEqual(1, client.pool.count)
         XCTAssertTrue(connection.channel.isActive)
         XCTAssertNoThrow(XCTAssertEqual(.ok, try client.get(url: url).wait().status))
         XCTAssertEqual(1, sharedStateServerHandler.connectionNumber.load())
