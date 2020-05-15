@@ -369,8 +369,6 @@ public class HTTPClient {
                                               redirectHandler: redirectHandler,
                                               ignoreUncleanSSLShutdown: self.configuration.ignoreUncleanSSLShutdown)
                 return channel.pipeline.addHandler(taskHandler)
-            }.always { _ in
-                setupComplete.succeed(())
             }.flatMap {
                 task.setConnection(connection)
 
@@ -391,10 +389,9 @@ public class HTTPClient {
                 connection.release(closing: true)
                 return channel.eventLoop.makeFailedFuture(error)
             }
-        }.whenFailure { error in
-            setupComplete.fail(error)
-            task.promise.fail(error)
-        }
+        }.always { _ in
+            setupComplete.succeed(())
+        }.cascadeFailure(to: task.promise)
 
         return task
     }
