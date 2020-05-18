@@ -766,7 +766,7 @@ extension TaskHandler: ChannelDuplexHandler {
         }
 
         func doIt() -> EventLoopFuture<Void> {
-            body.stream(HTTPClient.Body.StreamWriter { part in
+            return body.stream(HTTPClient.Body.StreamWriter { part in
                 self.task.eventLoop.assertInEventLoop()
                 func doIt() -> EventLoopFuture<Void> {
                     return context.writeAndFlush(self.wrapOutboundOut(.body(part))).map {
