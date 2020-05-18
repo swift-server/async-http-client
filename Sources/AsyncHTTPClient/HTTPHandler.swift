@@ -767,9 +767,10 @@ extension TaskHandler: ChannelDuplexHandler {
 
         return body.stream(HTTPClient.Body.StreamWriter { part in
             context.eventLoop.assertInEventLoop()
-            return context.writeAndFlush(self.wrapOutboundOut(.body(part))).map {
+            context.write(self.wrapOutboundOut(.body(part))).whenSuccess {
                 self.callOutToDelegateFireAndForget(value: part, self.delegate.didSendRequestPart)
             }
+            return context.eventLoop.makeSucceededFuture(())
         })
     }
 
