@@ -37,7 +37,7 @@ extension HTTP1ConnectionProvider {
         struct Snapshot {
             var state: State
             var availableConnections: CircularBuffer<Connection>
-            var leasedConnections: Set<Connection>
+            var leasedConnections: Set<ConnectionKey>
             var waiters: CircularBuffer<Waiter>
             var openedConnectionsCount: Int
             var pending: Int
@@ -52,7 +52,7 @@ extension HTTP1ConnectionProvider {
         private var availableConnections: CircularBuffer<Connection> = .init(initialCapacity: 8)
 
         /// Opened connections that are leased to the user.
-        private var leasedConnections: Set<Connection> = .init()
+        private var leasedConnections: Set<ConnectionKey> = .init()
 
         /// Consumers that weren't able to get a new connection without exceeding
         /// `maximumConcurrentConnections` get a `Future<Connection>`
@@ -120,7 +120,7 @@ extension HTTP1ConnectionProvider {
                     // If there is an opened connection on the same EL - use it
                     if let found = self.availableConnections.firstIndex(where: { $0.channel.eventLoop === eventLoop }) {
                         let connection = self.availableConnections.remove(at: found)
-                        self.leasedConnections.insert(connection)
+                        self.leasedConnections.insert(ConnectionKey(connection))
                         return .lease(connection, waiter)
                     }
 
@@ -138,7 +138,7 @@ extension HTTP1ConnectionProvider {
                     self.waiters.append(waiter)
                     return .none
                 } else if let connection = self.availableConnections.popFirst() {
-                    self.leasedConnections.insert(connection)
+                    self.leasedConnections.insert(ConnectionKey(connection))
                     return .lease(connection, waiter)
                 } else if self.hasCapacity {
                     self.openedConnectionsCount += 1
@@ -155,7 +155,7 @@ extension HTTP1ConnectionProvider {
         mutating func release(connection: Connection, closing: Bool) -> Action {
             switch self.state {
             case .active:
-                assert(self.leasedConnections.contains(connection))
+                assert(self.leasedConnections.contains(ConnectionKey(connection)))
 
                 if connection.isActiveEstimation, !closing { // If connection is alive, we can offer it to a next waiter
                     if let waiter = self.waiters.popFirst() {
@@ -168,15 +168,15 @@ extension HTTP1ConnectionProvider {
 
                         // If there is an opened connection on the same loop, lease it and park returned
                         if let found = self.availableConnections.firstIndex(where: { $0.channel.eventLoop === eventLoop }) {
-                            self.leasedConnections.remove(connection)
+                            self.leasedConnections.remove(ConnectionKey(connection))
                             let replacement = self.availableConnections.swap(at: found, with: connection)
-                            self.leasedConnections.insert(replacement)
+                            self.leasedConnections.insert(ConnectionKey(replacement))
                             return .parkAnd(connection, .lease(replacement, waiter))
                         }
 
                         // If we can create new connection - do it
                         if self.hasCapacity {
-                            self.leasedConnections.remove(connection)
+                            self.leasedConnections.remove(ConnectionKey(connection))
                             self.availableConnections.append(connection)
                             self.openedConnectionsCount += 1
                             return .parkAnd(connection, .create(waiter))
@@ -185,20 +185,20 @@ extension HTTP1ConnectionProvider {
                         // If we cannot create new connections, we will have to replace returned connection with a new one on the required loop
                         return .replace(connection, waiter)
                     } else { // or park, if there are no waiters
-                        self.leasedConnections.remove(connection)
+                        self.leasedConnections.remove(ConnectionKey(connection))
                         self.availableConnections.append(connection)
                         return .park(connection)
                     }
                 } else { // if connection is not alive, we delete it and process the next waiter
                     // this connections is now gone, we will either create new connection or do nothing
                     self.openedConnectionsCount -= 1
-                    self.leasedConnections.remove(connection)
+                    self.leasedConnections.remove(ConnectionKey(connection))
 
                     return self.processNextWaiter()
                 }
             case .closed:
                 self.openedConnectionsCount -= 1
-                self.leasedConnections.remove(connection)
+                self.leasedConnections.remove(ConnectionKey(connection))
 
                 return self.processNextWaiter()
             }
@@ -207,7 +207,7 @@ extension HTTP1ConnectionProvider {
         mutating func offer(connection: Connection) -> Action {
             switch self.state {
             case .active:
-                self.leasedConnections.insert(connection)
+                self.leasedConnections.insert(ConnectionKey(connection))
                 return .none
             case .closed: // This can happen when we close the client while connections was being estableshed
                 return .cancel(connection, self.isEmpty)
@@ -217,7 +217,7 @@ extension HTTP1ConnectionProvider {
         mutating func drop(connection: Connection) {
             switch self.state {
             case .active:
-                self.leasedConnections.remove(connection)
+                self.leasedConnections.remove(ConnectionKey(connection))
             case .closed:
                 assertionFailure("should not happen")
             }
@@ -240,13 +240,13 @@ extension HTTP1ConnectionProvider {
                 // Connection can be closed remotely while we wait for `.lease` action to complete.
                 // If this happens when connections is leased, we do not remove it from leased connections,
                 // it will be done when a new replacement will be ready for it.
-                if self.leasedConnections.contains(connection) {
+                if self.leasedConnections.contains(ConnectionKey(connection)) {
                     return .none
                 }
 
                 // If this connection is not in use, the have to release it as well
                 self.openedConnectionsCount -= 1
-                self.availableConnections.removeAll { $0 == connection }
+                self.availableConnections.removeAll { $0 === connection }
 
                 return self.processNextWaiter()
             case .closed:
@@ -260,13 +260,13 @@ extension HTTP1ConnectionProvider {
             case .active:
                 // We can get timeout and inUse = true when we decided to lease the connection, but this action is not executed yet.
                 // In this case we can ignore timeout notification.
-                if self.leasedConnections.contains(connection) {
+                if self.leasedConnections.contains(ConnectionKey(connection)) {
                     return .none
                 }
 
                 // If connection was not in use, we release it from the pool, increasing available capacity
                 self.openedConnectionsCount -= 1
-                self.availableConnections.removeAll { $0 == connection }
+                self.availableConnections.removeAll { $0 === connection }
 
                 return .closeAnd(connection, self.processNextWaiter())
             case .closed:
@@ -281,10 +281,10 @@ extension HTTP1ConnectionProvider {
                 // If specific EL is required, we have only two options - find open one or create a new one
                 if required, let found = self.availableConnections.firstIndex(where: { $0.channel.eventLoop === eventLoop }) {
                     let connection = self.availableConnections.remove(at: found)
-                    self.leasedConnections.insert(connection)
+                    self.leasedConnections.insert(ConnectionKey(connection))
                     return .lease(connection, waiter)
                 } else if !required, let connection = self.availableConnections.popFirst() {
-                    self.leasedConnections.insert(connection)
+                    self.leasedConnections.insert(ConnectionKey(connection))
                     return .lease(connection, waiter)
                 } else {
                     self.openedConnectionsCount += 1
@@ -302,7 +302,7 @@ extension HTTP1ConnectionProvider {
             return .none
         }
 
-        mutating func close() -> (CircularBuffer<Waiter>, CircularBuffer<Connection>, Set<Connection>, Bool)? {
+        mutating func close() -> (CircularBuffer<Waiter>, CircularBuffer<Connection>, Set<ConnectionKey>, Bool)? {
             switch self.state {
             case .active:
                 let waiters = self.waiters

@@ -208,13 +208,23 @@ class Connection {
     }
 }
 
-extension Connection: Hashable {
-    static func == (lhs: Connection, rhs: Connection) -> Bool {
-        return ObjectIdentifier(lhs) == ObjectIdentifier(rhs)
+struct ConnectionKey: Hashable {
+    let connection: Connection
+
+    init(_ connection: Connection) {
+        self.connection = connection
+    }
+
+    static func == (lhs: ConnectionKey, rhs: ConnectionKey) -> Bool {
+        return ObjectIdentifier(lhs.connection) == ObjectIdentifier(rhs.connection)
     }
 
     func hash(into hasher: inout Hasher) {
-        hasher.combine(ObjectIdentifier(self))
+        hasher.combine(ObjectIdentifier(self.connection))
+    }
+
+    func cancel() -> EventLoopFuture<Void> {
+        self.connection.cancel()
     }
 }
 
