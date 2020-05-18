@@ -765,12 +765,32 @@ extension TaskHandler: ChannelDuplexHandler {
             return context.eventLoop.makeSucceededFuture(())
         }
 
-        return body.stream(HTTPClient.Body.StreamWriter { part in
-            context.eventLoop.assertInEventLoop()
-            return context.writeAndFlush(self.wrapOutboundOut(.body(part))).map {
-                self.callOutToDelegateFireAndForget(value: part, self.delegate.didSendRequestPart)
+        func doIt() -> EventLoopFuture<Void> {
+            body.stream(HTTPClient.Body.StreamWriter { part in
+                self.task.eventLoop.assertInEventLoop()
+                func doIt() -> EventLoopFuture<Void> {
+                    return context.writeAndFlush(self.wrapOutboundOut(.body(part))).map {
+                        self.callOutToDelegateFireAndForget(value: part, self.delegate.didSendRequestPart)
+                    }
+                }
+
+                if context.eventLoop.inEventLoop {
+                    return doIt().hop(to: self.task.eventLoop)
+                } else {
+                    return context.eventLoop.flatSubmit {
+                        doIt()
+                    }.hop(to: self.task.eventLoop)
+                }
+            })
+        }
+
+        if self.task.eventLoop.inEventLoop {
+            return doIt()
+        } else {
+            return self.task.eventLoop.flatSubmit {
+                doIt()
             }
-        })
+        }
     }
 
     public func read(context: ChannelHandlerContext) {
