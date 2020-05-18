@@ -26,6 +26,7 @@ import XCTest
     @testable import AsyncHTTPClientTests
 
     XCTMain([
+        testCase(ConnectionPoolTests.allTests),
         testCase(HTTPClientCookieTests.allTests),
         testCase(HTTPClientInternalTests.allTests),
         testCase(HTTPClientNIOTSTests.allTests),

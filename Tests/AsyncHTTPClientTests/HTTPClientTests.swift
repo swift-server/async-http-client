@@ -781,7 +781,7 @@ class HTTPClientTests: XCTestCase {
     func testCountRedirectLimit() throws {
         let httpBin = HTTPBin(ssl: true)
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                    configuration: HTTPClient.Configuration(certificateVerification: .none, redirectConfiguration: .follow(max: 1000, allowCycles: true)))
+                                    configuration: HTTPClient.Configuration(certificateVerification: .none, redirectConfiguration: .follow(max: 10, allowCycles: true)))
 
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
@@ -1071,8 +1071,8 @@ class HTTPClientTests: XCTestCase {
         defer {
             XCTAssertNoThrow(try httpBin.shutdown())
         }
-
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+
         _ = httpClient.get(url: "http://localhost:\(httpBin.port)/wait")
         do {
             try httpClient.syncShutdown(requiresCleanClose: true)

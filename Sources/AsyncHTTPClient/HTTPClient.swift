@@ -52,7 +52,6 @@ public class HTTPClient {
     let configuration: Configuration
     let pool: ConnectionPool
     var state: State
-    private var tasks = [UUID: TaskProtocol]()
     private let stateLock = Lock()
 
     /// Create an `HTTPClient` with specified `EventLoopGroup` provider and configuration.
@@ -82,7 +81,7 @@ public class HTTPClient {
     }
 
     deinit {
-        assert(self.pool.connectionProviderCount == 0)
+        assert(self.pool.count == 0)
         assert(self.state == .shutDown, "Client not shut down before the deinit. Please call client.syncShutdown() when no longer needed.")
     }
 
@@ -136,14 +135,6 @@ public class HTTPClient {
         self.shutdown(requiresCleanClose: false, queue: queue, callback)
     }
 
-    private func cancelTasks(_ tasks: Dictionary<UUID, TaskProtocol>.Values) -> EventLoopFuture<Void> {
-        for task in tasks {
-            task.cancel()
-        }
-
-        return EventLoopFuture.andAllComplete(tasks.map { $0.completion }, on: self.eventLoopGroup.next())
-    }
-
     private func shutdownEventLoop(queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
         self.stateLock.withLock {
             switch self.eventLoopGroupProvider {
@@ -163,37 +154,34 @@ public class HTTPClient {
     }
 
     private func shutdown(requiresCleanClose: Bool, queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
-        let result: Result<Dictionary<UUID, TaskProtocol>.Values, Error> = self.stateLock.withLock {
-            if self.state != .upAndRunning {
-                return .failure(HTTPClientError.alreadyShutdown)
-            } else {
+        do {
+            try self.stateLock.withLock {
+                if self.state != .upAndRunning {
+                    throw HTTPClientError.alreadyShutdown
+                }
                 self.state = .shuttingDown
-                return .success(self.tasks.values)
             }
+        } catch {
+            callback(error)
+            return
         }
 
-        switch result {
-        case .failure(let error):
-            callback(error)
-        case .success(let tasks):
-            self.pool.prepareForClose(on: self.eventLoopGroup.next()).whenComplete { _ in
-                var closeError: Error?
-                if !tasks.isEmpty, requiresCleanClose {
+        self.pool.close(on: self.eventLoopGroup.next()).whenComplete { result in
+            var closeError: Error?
+            switch result {
+            case .failure(let error):
+                closeError = error
+            case .success(let cleanShutdown):
+                if !cleanShutdown, requiresCleanClose {
                     closeError = HTTPClientError.uncleanShutdown
                 }
 
-                // we ignore errors here
-                self.cancelTasks(tasks).whenComplete { _ in
-                    // we ignore errors here
-                    self.pool.close(on: self.eventLoopGroup.next()).whenComplete { _ in
-                        self.shutdownEventLoop(queue: queue) { eventLoopError in
-                            // we prioritise .uncleanShutdown here
-                            if let error = closeError {
-                                callback(error)
-                            } else {
-                                callback(eventLoopError)
-                            }
-                        }
+                self.shutdownEventLoop(queue: queue) { eventLoopError in
+                    // we prioritise .uncleanShutdown here
+                    if let error = closeError {
+                        callback(error)
+                    } else {
+                        callback(eventLoopError)
                     }
                 }
             }
@@ -361,38 +349,20 @@ public class HTTPClient {
             redirectHandler = nil
         }
 
-        let task = Task<Delegate.Response>(eventLoop: taskEL, poolingTimeout: self.configuration.maximumAllowedIdleTimeInConnectionPool)
-        self.stateLock.withLock {
-            self.tasks[task.id] = task
-        }
-        let promise = task.promise
-
-        promise.futureResult.whenComplete { _ in
-            self.stateLock.withLock {
-                self.tasks[task.id] = nil
-            }
-        }
-
-        let connection = self.pool.getConnection(for: request, preference: eventLoopPreference, on: taskEL, deadline: deadline)
+        let task = Task<Delegate.Response>(eventLoop: taskEL)
+        let setupComplete = taskEL.makePromise(of: Void.self)
+        let connection = self.pool.getConnection(for: request, preference: eventLoopPreference, on: taskEL, deadline: deadline, setupComplete: setupComplete.futureResult)
 
         connection.flatMap { connection -> EventLoopFuture<Void> in
             let channel = connection.channel
-            let addedFuture: EventLoopFuture<Void>
-            switch self.configuration.decompression {
-            case .disabled:
-                addedFuture = channel.eventLoop.makeSucceededFuture(())
-            case .enabled(let limit):
-                let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
-                addedFuture = channel.pipeline.addHandler(decompressHandler)
+            let future: EventLoopFuture<Void>
+            if let timeout = self.resolve(timeout: self.configuration.timeout.read, deadline: deadline) {
+                future = channel.pipeline.addHandler(IdleStateHandler(readTimeout: timeout))
+            } else {
+                future = channel.eventLoop.makeSucceededFuture(())
             }
 
-            return addedFuture.flatMap {
-                if let timeout = self.resolve(timeout: self.configuration.timeout.read, deadline: deadline) {
-                    return channel.pipeline.addHandler(IdleStateHandler(readTimeout: timeout))
-                } else {
-                    return channel.eventLoop.makeSucceededFuture(())
-                }
-            }.flatMap {
+            return future.flatMap {
                 let taskHandler = TaskHandler(task: task,
                                               kind: request.kind,
                                               delegate: delegate,
@@ -416,10 +386,12 @@ public class HTTPClient {
                     return channel.eventLoop.makeSucceededFuture(())
                 }
             }.flatMapError { error in
-                connection.release()
+                connection.release(closing: true)
                 return channel.eventLoop.makeFailedFuture(error)
             }
-        }.cascadeFailure(to: promise)
+        }.always { _ in
+            setupComplete.succeed(())
+        }.cascadeFailure(to: task.promise)
 
         return task
     }

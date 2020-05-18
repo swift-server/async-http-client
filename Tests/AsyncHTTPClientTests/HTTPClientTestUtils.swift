@@ -261,10 +261,10 @@ internal final class HTTPBin {
                     }.flatMap {
                         if ssl {
                             return HTTPBin.configureTLS(channel: channel).flatMap {
-                                channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise))
+                                channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise, maxChannelAge: maxChannelAge))
                             }
                         } else {
-                            return channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise))
+                            return channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise, maxChannelAge: maxChannelAge))
                         }
                     }
                 }
@@ -540,6 +540,11 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 context.write(wrapOutboundOut(.body(.byteBuffer(responseBody))), promise: nil)
             }
             context.eventLoop.scheduleTask(in: self.delay) {
+                guard context.channel.isActive else {
+                    context.close(promise: nil)
+                    return
+                }
+
                 context.writeAndFlush(self.wrapOutboundOut(.end(nil))).whenComplete { result in
                     self.isServingRequest = false
                     switch result {

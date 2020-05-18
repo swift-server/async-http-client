@@ -485,25 +485,22 @@ extension URL {
 extension HTTPClient {
     /// Response execution context. Will be created by the library and could be used for obtaining
     /// `EventLoopFuture<Response>` of the execution or cancellation of the execution.
-    public final class Task<Response>: TaskProtocol {
+    public final class Task<Response> {
         /// The `EventLoop` the delegate will be executed on.
         public let eventLoop: EventLoop
 
         let promise: EventLoopPromise<Response>
         var completion: EventLoopFuture<Void>
-        var connection: ConnectionPool.Connection?
+        var connection: Connection?
         var cancelled: Bool
         let lock: Lock
-        let id = UUID()
-        let poolingTimeout: TimeAmount?
 
-        init(eventLoop: EventLoop, poolingTimeout: TimeAmount? = nil) {
+        init(eventLoop: EventLoop) {
             self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.completion = self.promise.futureResult.map { _ in }
             self.cancelled = false
             self.lock = Lock()
-            self.poolingTimeout = poolingTimeout
         }
 
         static func failedTask(eventLoop: EventLoop, error: Error) -> Task<Response> {
@@ -528,8 +525,8 @@ extension HTTPClient {
         /// Cancels the request execution.
         public func cancel() {
             let channel: Channel? = self.lock.withLock {
-                if !cancelled {
-                    cancelled = true
+                if !self.cancelled {
+                    self.cancelled = true
                     return self.connection?.channel
                 } else {
                     return nil
@@ -539,7 +536,7 @@ extension HTTPClient {
         }
 
         @discardableResult
-        func setConnection(_ connection: ConnectionPool.Connection) -> ConnectionPool.Connection {
+        func setConnection(_ connection: Connection) -> Connection {
             return self.lock.withLock {
                 self.connection = connection
                 if self.cancelled {
@@ -549,47 +546,32 @@ extension HTTPClient {
             }
         }
 
-        func succeed<Delegate: HTTPClientResponseDelegate>(promise: EventLoopPromise<Response>?, with value: Response, delegateType: Delegate.Type) {
-            self.releaseAssociatedConnection(delegateType: delegateType).whenSuccess {
+        func succeed<Delegate: HTTPClientResponseDelegate>(promise: EventLoopPromise<Response>?, with value: Response, delegateType: Delegate.Type, closing: Bool) {
+            self.releaseAssociatedConnection(delegateType: delegateType, closing: closing).whenSuccess {
                 promise?.succeed(value)
             }
         }
 
         func fail<Delegate: HTTPClientResponseDelegate>(with error: Error, delegateType: Delegate.Type) {
             if let connection = self.connection {
-                connection.close().whenComplete { _ in
-                    self.releaseAssociatedConnection(delegateType: delegateType).whenComplete { _ in
+                connection.channel.close(promise: nil)
+                self.releaseAssociatedConnection(delegateType: delegateType, closing: true)
+                    .whenSuccess {
                         self.promise.fail(error)
                     }
-                }
             }
         }
 
-        func releaseAssociatedConnection<Delegate: HTTPClientResponseDelegate>(delegateType: Delegate.Type) -> EventLoopFuture<Void> {
+        func releaseAssociatedConnection<Delegate: HTTPClientResponseDelegate>(delegateType: Delegate.Type, closing: Bool) -> EventLoopFuture<Void> {
             if let connection = self.connection {
-                return connection.removeHandler(NIOHTTPResponseDecompressor.self).flatMap {
-                    connection.removeHandler(IdleStateHandler.self)
-                }.flatMap {
+                // remove read timeout handler
+                return connection.removeHandler(IdleStateHandler.self).flatMap {
                     connection.removeHandler(TaskHandler<Delegate>.self)
-                }.flatMap {
-                    let idlePoolConnectionHandler = IdlePoolConnectionHandler()
-                    return connection.channel.pipeline.addHandler(idlePoolConnectionHandler, position: .last).flatMap {
-                        connection.channel.pipeline.addHandler(IdleStateHandler(writeTimeout: self.poolingTimeout), position: .before(idlePoolConnectionHandler))
-                    }
-                }.flatMapError { error in
-                    if let error = error as? ChannelError, error == .ioOnClosedChannel {
-                        // We may get this error if channel is released because it is
-                        // closed, it is safe to ignore it
-                        return connection.channel.eventLoop.makeSucceededFuture(())
-                    } else {
-                        return connection.channel.eventLoop.makeFailedFuture(error)
-                    }
                 }.map {
-                    connection.release()
+                    connection.release(closing: closing)
                 }.flatMapError { error in
                     fatalError("Couldn't remove taskHandler: \(error)")
                 }
-
             } else {
                 // TODO: This seems only reached in some internal unit test
                 // Maybe there could be a better handling in the future to make
@@ -601,12 +583,6 @@ extension HTTPClient {
 }
 
 internal struct TaskCancelEvent {}
-
-internal protocol TaskProtocol {
-    func cancel()
-    var id: UUID { get }
-    var completion: EventLoopFuture<Void> { get }
-}
 
 // MARK: - TaskHandler
 
@@ -628,6 +604,7 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: RemovableChann
     var state: State = .idle
     var pendingRead = false
     var mayRead = true
+    var closing = false
     let kind: HTTPClient.Request.Kind
 
     init(task: HTTPClient.Task<Delegate.Response>,
@@ -695,7 +672,7 @@ extension TaskHandler {
             do {
                 let result = try body(self.task)
 
-                self.task.succeed(promise: promise, with: result, delegateType: Delegate.self)
+                self.task.succeed(promise: promise, with: result, delegateType: Delegate.self, closing: self.closing)
             } catch {
                 self.task.fail(with: error, delegateType: Delegate.self)
             }
@@ -727,7 +704,7 @@ extension TaskHandler: ChannelDuplexHandler {
 
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
         self.state = .idle
-        let request = unwrapOutboundIn(data)
+        let request = self.unwrapOutboundIn(data)
 
         let uri: String
         switch (self.kind, request.url.baseURL) {
@@ -772,8 +749,13 @@ extension TaskHandler: ChannelDuplexHandler {
             self.callOutToDelegateFireAndForget(self.delegate.didSendRequest)
         }.flatMapErrorThrowing { error in
             context.eventLoop.assertInEventLoop()
-            self.state = .end
-            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+            switch self.state {
+            case .end:
+                break
+            default:
+                self.state = .end
+                self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+            }
             throw error
         }.cascade(to: promise)
     }
@@ -805,16 +787,10 @@ extension TaskHandler: ChannelDuplexHandler {
         switch response {
         case .head(let head):
             if !head.isKeepAlive {
-                self.task.lock.withLock {
-                    if let connection = self.task.connection {
-                        connection.isClosing = true
-                    } else {
-                        preconditionFailure("There should always be a connection at this point")
-                    }
-                }
+                self.closing = true
             }
 
-            if let redirectURL = redirectHandler?.redirectTarget(status: head.status, headers: head.headers) {
+            if let redirectURL = self.redirectHandler?.redirectTarget(status: head.status, headers: head.headers) {
                 self.state = .redirected(head, redirectURL)
             } else {
                 self.state = .head
@@ -840,7 +816,7 @@ extension TaskHandler: ChannelDuplexHandler {
             switch self.state {
             case .redirected(let head, let redirectURL):
                 self.state = .end
-                self.task.releaseAssociatedConnection(delegateType: Delegate.self).whenSuccess {
+                self.task.releaseAssociatedConnection(delegateType: Delegate.self, closing: self.closing).whenSuccess {
                     self.redirectHandler?.redirect(status: head.status, to: redirectURL, promise: self.task.promise)
                 }
             default:
@@ -1018,24 +994,6 @@ internal struct RedirectHandler<ResponseType> {
             }
         } catch {
             promise.fail(error)
-        }
-    }
-}
-
-class IdlePoolConnectionHandler: ChannelInboundHandler, RemovableChannelHandler {
-    typealias InboundIn = NIOAny
-
-    let _hasNotSentClose: NIOAtomic<Bool> = .makeAtomic(value: true)
-    var hasNotSentClose: Bool {
-        return self._hasNotSentClose.load()
-    }
-
-    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
-        if let idleEvent = event as? IdleStateHandler.IdleStateEvent, idleEvent == .write {
-            self._hasNotSentClose.store(false)
-            context.close(promise: nil)
-        } else {
-            context.fireUserInboundEventTriggered(event)
         }
     }
 }

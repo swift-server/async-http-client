@@ -470,11 +470,11 @@ class HTTPClientInternalTests: XCTestCase {
         _ = try! httpClient.execute(request: req).wait()
         let el = httpClient.eventLoopGroup.next()
         try! el.scheduleTask(in: .milliseconds(500)) {
-            XCTAssertEqual(httpClient.pool.connectionProviderCount, 0)
+            XCTAssertEqual(httpClient.pool.count, 0)
         }.futureResult.wait()
     }
 
-    func testWeNoticeRemoteClosuresEvenWhenConnectionIsIdleInPool() {
+    func testWeNoticeRemoteClosuresEvenWhenConnectionIsIdleInPool() throws {
         final class ServerThatRespondsThenJustCloses: ChannelInboundHandler {
             typealias InboundIn = HTTPServerRequestPart
             typealias OutboundOut = HTTPServerResponsePart
@@ -568,23 +568,27 @@ class HTTPClientInternalTests: XCTestCase {
             XCTAssertNoThrow(try client.syncShutdown())
         }
 
-        var maybeConnection: ConnectionPool.Connection?
+        var maybeConnection: Connection?
         // This is pretty evil but we literally just get hold of a connection to get to the channel to be able to
         // observe when the server closing the connection is known to the client.
+        let el = group.next()
         XCTAssertNoThrow(maybeConnection = try client.pool.getConnection(for: .init(url: url),
                                                                          preference: .indifferent,
-                                                                         on: group.next(),
-                                                                         deadline: nil).wait())
+                                                                         on: el,
+                                                                         deadline: nil,
+                                                                         setupComplete: el.makeSucceededFuture(())).wait())
         guard let connection = maybeConnection else {
             XCTFail("couldn't get connection")
             return
         }
 
         // And let's also give the connection back :).
-        client.pool.release(connection)
+        try connection.channel.eventLoop.submit {
+            connection.release(closing: false)
+        }.wait()
 
         XCTAssertEqual(0, sharedStateServerHandler.requestNumber.load())
-        XCTAssertEqual(1, client.pool.connectionProviderCount)
+        XCTAssertEqual(1, client.pool.count)
         XCTAssertTrue(connection.channel.isActive)
         XCTAssertNoThrow(XCTAssertEqual(.ok, try client.get(url: url).wait().status))
         XCTAssertEqual(1, sharedStateServerHandler.connectionNumber.load())
@@ -615,18 +619,22 @@ class HTTPClientInternalTests: XCTestCase {
             let req = try! HTTPClient.Request(url: "http://localhost:\(web.serverChannel.localAddress!.port!)/get",
                                               method: .GET,
                                               body: nil)
-            var maybeConnection: ConnectionPool.Connection?
+            var maybeConnection: Connection?
+            let el = client.eventLoopGroup.next()
             XCTAssertNoThrow(try maybeConnection = client.pool.getConnection(for: req,
                                                                              preference: .indifferent,
-                                                                             on: client.eventLoopGroup.next(),
-                                                                             deadline: nil).wait())
+                                                                             on: el,
+                                                                             deadline: nil,
+                                                                             setupComplete: el.makeSucceededFuture(())).wait())
             guard let connection = maybeConnection else {
                 XCTFail("couldn't make connection")
                 throw NoChannelError()
             }
 
             let channel = connection.channel
-            client.pool.release(connection)
+            try! channel.eventLoop.submit {
+                connection.release(closing: true)
+            }.wait()
             return (web, channel)
         })
 
@@ -696,11 +704,13 @@ class HTTPClientInternalTests: XCTestCase {
                                           body: nil)
 
         // Let's start by getting a connection so we can mess with the Channel :).
-        var maybeConnection: ConnectionPool.Connection?
+        var maybeConnection: Connection?
+        let el = client.eventLoopGroup.next()
         XCTAssertNoThrow(try maybeConnection = client.pool.getConnection(for: req,
                                                                          preference: .indifferent,
-                                                                         on: client.eventLoopGroup.next(),
-                                                                         deadline: nil).wait())
+                                                                         on: el,
+                                                                         deadline: nil,
+                                                                         setupComplete: el.makeSucceededFuture(())).wait())
         guard let connection = maybeConnection else {
             XCTFail("couldn't make connection")
             return
@@ -713,7 +723,9 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertNoThrow(try channel.pipeline.addHandler(DelayChannelCloseUntilToldHandler(doTheCloseNowFuture: doActualCloseNowPromise.futureResult,
                                                                                            sawTheClosePromise: sawTheClosePromise),
                                                          position: .first).wait())
-        client.pool.release(connection)
+        try! connection.channel.eventLoop.submit {
+            connection.release(closing: false)
+        }.wait()
 
         XCTAssertNoThrow(try client.execute(request: req).wait())
 
@@ -728,10 +740,12 @@ class HTTPClientInternalTests: XCTestCase {
 
         // When asking for a connection again, we should _not_ get the same one back because we did most of the close,
         // similar to what the SSLHandler would do.
+        let el2 = client.eventLoopGroup.next()
         let connection2Future = client.pool.getConnection(for: req,
                                                           preference: .indifferent,
-                                                          on: client.eventLoopGroup.next(),
-                                                          deadline: nil)
+                                                          on: el2,
+                                                          deadline: nil,
+                                                          setupComplete: el2.makeSucceededFuture(()))
         doActualCloseNowPromise.succeed(())
 
         XCTAssertNoThrow(try maybeConnection = connection2Future.wait())
@@ -741,7 +755,9 @@ class HTTPClientInternalTests: XCTestCase {
         }
 
         XCTAssert(connection !== connection2)
-        client.pool.release(connection2)
+        try! connection2.channel.eventLoop.submit {
+            connection2.release(closing: true)
+        }.wait()
         XCTAssertTrue(connection2.channel.isActive)
     }
 }
