@@ -71,6 +71,7 @@ final class ConnectionPool {
             if let existing = self.providers[key], existing.enqueue() {
                 return existing
             } else {
+                // Connection provider will be created with `pending = 1`
                 let provider = HTTP1ConnectionProvider(key: key, eventLoop: eventLoop, configuration: self.configuration, pool: self)
                 self.providers[key] = provider
                 return provider
@@ -194,7 +195,7 @@ class Connection {
 
     /// Sets idle timeout handler and channel inactivity listener.
     func setIdleTimeout(timeout: TimeAmount?) {
-        _ = self.channel.pipeline.addHandler(IdleStateHandler(writeTimeout: timeout)).flatMap { _ in
+        _ = self.channel.pipeline.addHandler(IdleStateHandler(writeTimeout: timeout), position: .first).flatMap { _ in
             self.channel.pipeline.addHandler(IdlePoolConnectionHandler(connection: self))
         }
     }
@@ -278,35 +279,20 @@ class HTTP1ConnectionProvider {
                     waiter.promise.succeed(connection)
                 } else {
                     self.makeChannel(preference: waiter.preference).whenComplete { result in
-                        switch result {
-                        case .success(let channel):
-                            self.connect(using: channel, waiter: waiter, replacing: connection)
-                        case .failure(let error):
-                            self.connectFailed(error: error, waiter: waiter)
-                        }
+                        self.connect(result, waiter: waiter, replacing: connection)
                     }
                 }
             }
         case .create(let waiter):
             self.makeChannel(preference: waiter.preference).whenComplete { result in
-                switch result {
-                case .success(let channel):
-                    self.connect(using: channel, waiter: waiter)
-                case .failure(let error):
-                    self.connectFailed(error: error, waiter: waiter)
-                }
+                self.connect(result, waiter: waiter)
             }
         case .replace(let connection, let waiter):
             connection.cancelIdleTimeout().flatMap {
                 connection.close()
             }.whenComplete { _ in
                 self.makeChannel(preference: waiter.preference).whenComplete { result in
-                    switch result {
-                    case .success(let channel):
-                        self.connect(using: channel, waiter: waiter, replacing: connection)
-                    case .failure(let error):
-                        self.connectFailed(error: error, waiter: waiter)
-                    }
+                    self.connect(result, waiter: waiter, replacing: connection)
                 }
             }
         case .park(let connection):
@@ -351,34 +337,24 @@ class HTTP1ConnectionProvider {
         return waiter.promise.futureResult
     }
 
-    func connect(using channel: Channel, waiter: Waiter) {
-        let connection = Connection(channel: channel, provider: self)
-        let action: Action = self.lock.withLock {
-            self.state.offer(connection: connection)
+    func connect(_ result: Result<Channel, Error>, waiter: Waiter, replacing closedConnection: Connection? = nil) {
+        let action: Action
+        switch result {
+        case .success(let channel):
+            let connection = Connection(channel: channel, provider: self)
+            action = self.lock.withLock {
+                if let closedConnection = closedConnection {
+                    self.state.drop(connection: closedConnection)
+                }
+                return self.state.offer(connection: connection)
+            }
+            waiter.promise.succeed(connection)
+        case .failure(let error):
+            action = self.lock.withLock {
+                self.state.connectFailed()
+            }
+            waiter.promise.fail(error)
         }
-        waiter.promise.succeed(connection)
-        waiter.setupComplete.whenComplete { _ in
-            self.execute(action)
-        }
-    }
-
-    func connect(using channel: Channel, waiter: Waiter, replacing connection: Connection) {
-        let replacement = Connection(channel: channel, provider: self)
-        let action: Action = self.lock.withLock {
-            self.state.drop(connection: connection)
-            return self.state.offer(connection: replacement)
-        }
-        waiter.promise.succeed(replacement)
-        waiter.setupComplete.whenComplete { _ in
-            self.execute(action)
-        }
-    }
-
-    func connectFailed(error: Error, waiter: Waiter) {
-        let action = self.lock.withLock {
-            self.state.connectFailed()
-        }
-        waiter.promise.fail(error)
         waiter.setupComplete.whenComplete { _ in
             self.execute(action)
         }
