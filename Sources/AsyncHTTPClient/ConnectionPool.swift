@@ -224,7 +224,7 @@ struct ConnectionKey: Hashable {
     }
 
     func cancel() -> EventLoopFuture<Void> {
-        self.connection.cancel()
+        return self.connection.cancel()
     }
 }
 
