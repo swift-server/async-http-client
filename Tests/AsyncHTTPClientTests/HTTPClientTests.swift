@@ -1679,7 +1679,7 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNoThrow(try promise.futureResult.wait())
     }
 
-    func testValidationErrorsAreSurfaced() {
+    func testValidationErrorsAreSurfaced() throws {
         let httpBin = HTTPBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
         defer {
