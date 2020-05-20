@@ -1705,6 +1705,7 @@ class HTTPClientTests: XCTestCase {
             private let bodyPromises: [EventLoopPromise<ByteBuffer>]
             private let endPromise: EventLoopPromise<Void>
             private var bodyPartsSeenSoFar = 0
+            private var atEnd = false
 
             init(headPromise: EventLoopPromise<HTTPRequestHead>,
                  bodyPromises: [EventLoopPromise<ByteBuffer>],
@@ -1727,10 +1728,14 @@ class HTTPClientTests: XCTestCase {
                     context.write(self.wrapOutboundOut(.head(.init(version: .init(major: 1, minor: 1), status: .ok))),
                                   promise: nil)
                     context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: self.endPromise)
+                    self.atEnd = true
                 }
             }
 
             func handlerRemoved(context: ChannelHandlerContext) {
+                guard !self.atEnd else {
+                    return
+                }
                 struct NotFulfilledError: Error {}
 
                 self.headPromise.fail(NotFulfilledError())
