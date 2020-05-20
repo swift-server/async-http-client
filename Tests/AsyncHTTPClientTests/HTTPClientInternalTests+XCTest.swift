@@ -37,6 +37,8 @@ extension HTTPClientInternalTests {
             ("testWeNoticeRemoteClosuresEvenWhenConnectionIsIdleInPool", testWeNoticeRemoteClosuresEvenWhenConnectionIsIdleInPool),
             ("testWeTolerateConnectionsGoingAwayWhilstPoolIsShuttingDown", testWeTolerateConnectionsGoingAwayWhilstPoolIsShuttingDown),
             ("testRaceBetweenAsynchronousCloseAndChannelUsabilityDetection", testRaceBetweenAsynchronousCloseAndChannelUsabilityDetection),
+            ("testResponseFutureIsOnCorrectEL", testResponseFutureIsOnCorrectEL),
+            ("testUncleanCloseThrows", testUncleanCloseThrows),
         ]
     }
 }

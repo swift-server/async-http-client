@@ -760,4 +760,50 @@ class HTTPClientInternalTests: XCTestCase {
         }.wait()
         XCTAssertTrue(connection2.channel.isActive)
     }
+
+    func testResponseFutureIsOnCorrectEL() throws {
+        let group = getDefaultEventLoopGroup(numberOfThreads: 4)
+        defer {
+            XCTAssertNoThrow(try group.syncShutdownGracefully())
+        }
+        let client = HTTPClient(eventLoopGroupProvider: .shared(group))
+        let httpBin = HTTPBin()
+        defer {
+            XCTAssertNoThrow(try client.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get")
+        var futures = [EventLoopFuture<HTTPClient.Response>]()
+        for _ in 1...100 {
+            let el = group.next()
+            let req1 = client.execute(request: request, eventLoop: .delegate(on: el))
+            let req2 = client.execute(request: request, eventLoop: .delegateAndChannel(on: el))
+            let req3 = client.execute(request: request, eventLoop: .init(.testOnly_exact(channelOn: el, delegateOn: el)))
+            XCTAssert(req1.eventLoop === el)
+            XCTAssert(req2.eventLoop === el)
+            XCTAssert(req3.eventLoop === el)
+            futures.append(contentsOf: [req1, req2, req3])
+        }
+        try EventLoopFuture<HTTPClient.Response>.andAllComplete(futures, on: group.next()).wait()
+    }
+
+    func testUncleanCloseThrows() {
+        let httpBin = HTTPBin()
+        defer {
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+
+        _ = httpClient.get(url: "http://localhost:\(httpBin.port)/wait")
+        do {
+            try httpClient.syncShutdown(requiresCleanClose: true)
+            XCTFail("There should be an error on shutdown")
+        } catch {
+            guard let clientError = error as? HTTPClientError, clientError == .uncleanShutdown else {
+                XCTFail("Unexpected shutdown error: \(error)")
+                return
+            }
+        }
+    }
 }

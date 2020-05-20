@@ -60,7 +60,6 @@ extension HTTPClientTests {
             ("testWrongContentLengthForSSLUncleanShutdown", testWrongContentLengthForSSLUncleanShutdown),
             ("testWrongContentLengthWithIgnoreErrorForSSLUncleanShutdown", testWrongContentLengthWithIgnoreErrorForSSLUncleanShutdown),
             ("testEventLoopArgument", testEventLoopArgument),
-            ("testResponseFutureIsOnCorrectEL", testResponseFutureIsOnCorrectEL),
             ("testDecompression", testDecompression),
             ("testDecompressionLimit", testDecompressionLimit),
             ("testLoopDetectionRedirectLimit", testLoopDetectionRedirectLimit),
@@ -73,7 +72,6 @@ extension HTTPClientTests {
             ("testSubsequentRequestsWorkWithServerAlternatingBetweenKeepAliveAndClose", testSubsequentRequestsWorkWithServerAlternatingBetweenKeepAliveAndClose),
             ("testStressGetHttps", testStressGetHttps),
             ("testStressGetHttpsSSLError", testStressGetHttpsSSLError),
-            ("testUncleanCloseThrows", testUncleanCloseThrows),
             ("testFailingConnectionIsReleased", testFailingConnectionIsReleased),
             ("testResponseDelayGet", testResponseDelayGet),
             ("testIdleTimeoutNoReuse", testIdleTimeoutNoReuse),
@@ -98,6 +96,8 @@ extension HTTPClientTests {
             ("testRacePoolIdleConnectionsAndGet", testRacePoolIdleConnectionsAndGet),
             ("testAvoidLeakingTLSHandshakeCompletionPromise", testAvoidLeakingTLSHandshakeCompletionPromise),
             ("testAsyncShutdown", testAsyncShutdown),
+            ("testValidationErrorsAreSurfaced", testValidationErrorsAreSurfaced),
+            ("testUploadsReallyStream", testUploadsReallyStream),
         ]
     }
 }
