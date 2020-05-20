@@ -1667,7 +1667,7 @@ class HTTPClientTests: XCTestCase {
         }
     }
 
-    func testAsyncShutdown() {
+    func testAsyncShutdown() throws {
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
         let promise = self.clientGroup.next().makePromise(of: Void.self)
         self.clientGroup.next().execute {
@@ -1677,6 +1677,23 @@ class HTTPClientTests: XCTestCase {
             }
         }
         XCTAssertNoThrow(try promise.futureResult.wait())
+    }
+
+    func testValidationErrorsAreSurfaced() throws {
+        let httpBin = HTTPBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get", method: .TRACE, body: .stream { _ in
+            httpClient.eventLoopGroup.next().makeSucceededFuture(())
+        })
+        let runningRequest = httpClient.execute(request: request)
+        XCTAssertThrowsError(try runningRequest.wait()) { error in
+            XCTAssertEqual(HTTPClientError.traceRequestWithBody, error as? HTTPClientError)
+        }
     }
 
     func testUploadsReallyStream() {

@@ -554,10 +554,10 @@ extension HTTPClient {
 
         func fail<Delegate: HTTPClientResponseDelegate>(with error: Error, delegateType: Delegate.Type) {
             if let connection = self.connection {
-                connection.channel.close(promise: nil)
                 self.releaseAssociatedConnection(delegateType: delegateType, closing: true)
                     .whenSuccess {
                         self.promise.fail(error)
+                        connection.channel.close(promise: nil)
                     }
             }
         }
@@ -729,7 +729,7 @@ extension TaskHandler: ChannelDuplexHandler {
             try headers.validate(method: request.method, body: request.body)
         } catch {
             promise?.fail(error)
-            context.fireErrorCaught(error)
+            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
             self.state = .end
             return
         }
