@@ -99,7 +99,6 @@ extension HTTPClientTests {
             ("testValidationErrorsAreSurfaced", testValidationErrorsAreSurfaced),
             ("testUploadsReallyStream", testUploadsReallyStream),
             ("testUploadStreamingCallinToleratedFromOtsideEL", testUploadStreamingCallinToleratedFromOtsideEL),
-            ("testUploadStreamingIsCalledOnTaskEL", testUploadStreamingIsCalledOnTaskEL),
         ]
     }
 }

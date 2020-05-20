@@ -806,4 +806,81 @@ class HTTPClientInternalTests: XCTestCase {
             }
         }
     }
+
+    func testUploadStreamingIsCalledOnTaskEL() throws {
+        let group = getDefaultEventLoopGroup(numberOfThreads: 4)
+        defer {
+            XCTAssertNoThrow(try group.syncShutdownGracefully())
+        }
+
+        let httpBin = HTTPBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(group))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        let el1 = group.next()
+        let el2 = group.next()
+        XCTAssert(el1 !== el2)
+
+        let body: HTTPClient.Body = .stream(length: 8) { writer in
+            XCTAssert(el1.inEventLoop)
+            let buffer = ByteBuffer.of(string: "1234")
+            return writer.write(.byteBuffer(buffer)).flatMap {
+                XCTAssert(el1.inEventLoop)
+                let buffer = ByteBuffer.of(string: "4321")
+                return writer.write(.byteBuffer(buffer))
+            }
+        }
+        let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/post", method: .POST, body: body)
+        let response = httpClient.execute(request: request,
+                                          delegate: ResponseAccumulator(request: request),
+                                          eventLoop: HTTPClient.EventLoopPreference(.testOnly_exact(channelOn: el2,
+                                                                                                    delegateOn: el1)))
+        XCTAssert(el1 === response.eventLoop)
+        XCTAssertNoThrow(try response.wait())
+    }
+
+    func testWeCanActuallyExactlySetTheEventLoops() throws {
+        let group = getDefaultEventLoopGroup(numberOfThreads: 3)
+        defer {
+            XCTAssertNoThrow(try group.syncShutdownGracefully())
+        }
+
+        let httpBin = HTTPBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(group))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        let el1 = group.next()
+        let el2 = group.next()
+        XCTAssert(el1 !== el2)
+
+        let taskPromise = group.next().makePromise(of: HTTPClient.Task<HTTPClient.Response>.self)
+        let body: HTTPClient.Body = .stream(length: 8) { writer in
+            XCTAssert(el1.inEventLoop)
+            let buffer = ByteBuffer.of(string: "1234")
+            return writer.write(.byteBuffer(buffer)).flatMap {
+                XCTAssert(el1.inEventLoop)
+                let buffer = ByteBuffer.of(string: "4321")
+                return taskPromise.futureResult.map { (task: HTTPClient.Task<HTTPClient.Response>) -> Void in
+                    XCTAssertNotNil(task.connection)
+                    XCTAssert(task.connection?.channel.eventLoop === el2)
+                }.flatMap {
+                    writer.write(.byteBuffer(buffer))
+                }
+            }
+        }
+        let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/post", method: .POST, body: body)
+        let response = httpClient.execute(request: request,
+                                          delegate: ResponseAccumulator(request: request),
+                                          eventLoop: HTTPClient.EventLoopPreference(.testOnly_exact(channelOn: el2,
+                                                                                                    delegateOn: el1)))
+        taskPromise.succeed(response)
+        XCTAssert(el1 === response.eventLoop)
+        XCTAssertNoThrow(try response.wait())
+    }
 }

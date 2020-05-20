@@ -39,6 +39,8 @@ extension HTTPClientInternalTests {
             ("testRaceBetweenAsynchronousCloseAndChannelUsabilityDetection", testRaceBetweenAsynchronousCloseAndChannelUsabilityDetection),
             ("testResponseFutureIsOnCorrectEL", testResponseFutureIsOnCorrectEL),
             ("testUncleanCloseThrows", testUncleanCloseThrows),
+            ("testUploadStreamingIsCalledOnTaskEL", testUploadStreamingIsCalledOnTaskEL),
+            ("testWeCanActuallyExactlySetTheEventLoops", testWeCanActuallyExactlySetTheEventLoops),
         ]
     }
 }
