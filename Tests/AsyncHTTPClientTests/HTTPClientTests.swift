@@ -1836,41 +1836,4 @@ class HTTPClientTests: XCTestCase {
         })
         XCTAssertNoThrow(try httpClient.execute(request: request).wait())
     }
-
-    func testUploadStreamingIsCalledOnTaskEL() throws {
-        let group = getDefaultEventLoopGroup(numberOfThreads: 4)
-        defer {
-            XCTAssertNoThrow(try group.syncShutdownGracefully())
-        }
-
-        let httpBin = HTTPBin()
-        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(group))
-        defer {
-            XCTAssertNoThrow(try httpClient.syncShutdown())
-            XCTAssertNoThrow(try httpBin.shutdown())
-        }
-
-        let el1 = group.next()
-        let el2 = group.next()
-        XCTAssertFalse(el1 === el2)
-
-        do {
-            // Pre-populate pool with a connection on a different EL
-            let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get", method: .GET)
-            XCTAssertNoThrow(try httpClient.execute(request: request, delegate: ResponseAccumulator(request: request), eventLoop: .delegateAndChannel(on: el2)).wait())
-        }
-
-        let body: HTTPClient.Body = .stream(length: 8) { writer in
-            XCTAssert(el1.inEventLoop)
-            let buffer = ByteBuffer.of(string: "1234")
-            return writer.write(.byteBuffer(buffer)).flatMap {
-                XCTAssert(el1.inEventLoop)
-                let buffer = ByteBuffer.of(string: "4321")
-                return writer.write(.byteBuffer(buffer))
-            }
-        }
-        let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/post", method: .POST, body: body)
-        let response = httpClient.execute(request: request, delegate: ResponseAccumulator(request: request), eventLoop: .delegate(on: el1))
-        XCTAssertNoThrow(try response.wait())
-    }
 }
