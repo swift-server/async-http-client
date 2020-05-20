@@ -97,6 +97,7 @@ extension HTTPClientTests {
             ("testAvoidLeakingTLSHandshakeCompletionPromise", testAvoidLeakingTLSHandshakeCompletionPromise),
             ("testAsyncShutdown", testAsyncShutdown),
             ("testValidationErrorsAreSurfaced", testValidationErrorsAreSurfaced),
+            ("testUploadsReallyStream", testUploadsReallyStream),
         ]
     }
 }
