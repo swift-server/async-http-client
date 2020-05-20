@@ -767,23 +767,23 @@ extension TaskHandler: ChannelDuplexHandler {
 
         func doIt() -> EventLoopFuture<Void> {
             return body.stream(HTTPClient.Body.StreamWriter { part in
-                self.task.eventLoop.assertInEventLoop()
-                func doIt() -> EventLoopFuture<Void> {
-                    return context.writeAndFlush(self.wrapOutboundOut(.body(part))).map {
-                        self.callOutToDelegateFireAndForget(value: part, self.delegate.didSendRequestPart)
+                let promise = self.task.eventLoop.makePromise(of: Void.self)
+                // All writes have to be switched to the channel EL if channel and task ELs differ
+                if context.eventLoop.inEventLoop {
+                    context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
+                } else {
+                    context.eventLoop.execute {
+                        context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
                     }
                 }
 
-                if context.eventLoop.inEventLoop {
-                    return doIt().hop(to: self.task.eventLoop)
-                } else {
-                    return context.eventLoop.flatSubmit {
-                        doIt()
-                    }.hop(to: self.task.eventLoop)
+                return promise.futureResult.map {
+                    self.callOutToDelegateFireAndForget(value: part, self.delegate.didSendRequestPart)
                 }
             })
         }
 
+        // Callout to the user to start body streaming should be on task EL
         if self.task.eventLoop.inEventLoop {
             return doIt()
         } else {

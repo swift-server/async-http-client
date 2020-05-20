@@ -1771,10 +1771,7 @@ class HTTPClientTests: XCTestCase {
         let bodyPromises = (0..<16).map { _ in group.next().makePromise(of: ByteBuffer.self) }
         let endPromise = group.next().makePromise(of: Void.self)
         let sentOffAllBodyPartsPromise = group.next().makePromise(of: Void.self)
-        // Because of https://github.com/swift-server/async-http-client/issues/200 we also need to pull off a terrible
-        // hack and get the internal EventLoop out :(. Once the bug is fixed, this promise should only get the
-        // StreamWriter.
-        let streamWriterPromise = group.next().makePromise(of: (EventLoop, HTTPClient.Body.StreamWriter).self)
+        let streamWriterPromise = group.next().makePromise(of: HTTPClient.Body.StreamWriter.self)
 
         func makeServer() -> Channel? {
             return try? ServerBootstrap(group: group)
@@ -1799,12 +1796,7 @@ class HTTPClientTests: XCTestCase {
                                            method: .POST,
                                            headers: ["transfer-encoding": "chunked"],
                                            body: .stream { streamWriter in
-                                               // Due to https://github.com/swift-server/async-http-client/issues/200
-                                               // we also need to pull off a terrible hack and get the internal
-                                               // EventLoop out :(. Once the bug is fixed, this promise should only get
-                                               // the StreamWriter.
-                                               let currentEL = MultiThreadedEventLoopGroup.currentEventLoop! // HACK!!
-                                               streamWriterPromise.succeed((currentEL, streamWriter))
+                                               streamWriterPromise.succeed((streamWriter))
                                                return sentOffAllBodyPartsPromise.futureResult
             })
         }
@@ -1829,9 +1821,7 @@ class HTTPClientTests: XCTestCase {
             buffer.clear()
             buffer.writeString(String(bodyChunkNumber, radix: 16))
             XCTAssertEqual(1, buffer.readableBytes)
-            XCTAssertNoThrow(try streamWriter.0.flatSubmit {
-                streamWriter.1.write(.byteBuffer(buffer))
-            }.wait())
+            XCTAssertNoThrow(try streamWriter.write(.byteBuffer(buffer)).wait())
             XCTAssertNoThrow(XCTAssertEqual(buffer, try bodyPromises[bodyChunkNumber].futureResult.wait()))
         }
         sentOffAllBodyPartsPromise.succeed(())
