@@ -1678,4 +1678,21 @@ class HTTPClientTests: XCTestCase {
         }
         XCTAssertNoThrow(try promise.futureResult.wait())
     }
+
+    func testValidationErrorsAreSurfaced() {
+        let httpBin = HTTPBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get", method: .TRACE, body: .stream { writer in
+            httpClient.eventLoopGroup.next().makeSucceededFuture(())
+        })
+        let runningRequest = httpClient.execute(request: request)
+        XCTAssertThrowsError(try runningRequest.wait()) { error in
+            XCTAssertEqual(HTTPClientError.traceRequestWithBody, error as? HTTPClientError)
+        }
+    }
 }
