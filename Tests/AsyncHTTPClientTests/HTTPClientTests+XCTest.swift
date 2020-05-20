@@ -98,6 +98,8 @@ extension HTTPClientTests {
             ("testAsyncShutdown", testAsyncShutdown),
             ("testValidationErrorsAreSurfaced", testValidationErrorsAreSurfaced),
             ("testUploadsReallyStream", testUploadsReallyStream),
+            ("testUploadStreamingCallinToleratedFromOtsideEL", testUploadStreamingCallinToleratedFromOtsideEL),
+            ("testUploadStreamingIsCalledOnTaskEL", testUploadStreamingIsCalledOnTaskEL),
         ]
     }
 }
