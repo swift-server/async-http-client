@@ -1796,7 +1796,7 @@ class HTTPClientTests: XCTestCase {
                                            method: .POST,
                                            headers: ["transfer-encoding": "chunked"],
                                            body: .stream { streamWriter in
-                                               streamWriterPromise.succeed((streamWriter))
+                                               streamWriterPromise.succeed(streamWriter)
                                                return sentOffAllBodyPartsPromise.futureResult
             })
         }
