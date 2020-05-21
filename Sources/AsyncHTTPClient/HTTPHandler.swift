@@ -604,7 +604,13 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: RemovableChann
     var state: State = .idle
     var pendingRead = false
     var mayRead = true
-    var closing = false
+    var closing = false {
+        didSet {
+            assert(self.closing || !oldValue,
+                   "BUG in AsyncHTTPClient: TaskHandler.closing went from true (no conn reuse) to true (do reuse).")
+        }
+    }
+
     let kind: HTTPClient.Request.Kind
 
     init(task: HTTPClient.Task<Delegate.Response>,
@@ -735,6 +741,14 @@ extension TaskHandler: ChannelDuplexHandler {
         }
 
         head.headers = headers
+
+        if head.headers[canonicalForm: "connection"].map({ $0.lowercased() }).contains("close") {
+            self.closing = true
+        }
+        // This assert can go away when (if ever!) the above `if` correctly handles other HTTP versions. For example
+        // in HTTP/1.0, we need to treat the absence of a 'connection: keep-alive' as a close too.
+        assert(head.version == HTTPVersion(major: 1, minor: 1),
+               "Sending a request in HTTP version \(head.version) which is unsupported by the above `if`")
 
         context.write(wrapOutboundOut(.head(head))).map {
             self.callOutToDelegateFireAndForget(value: head, self.delegate.didSendRequestHead)

@@ -186,7 +186,7 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(response.status, .ok)
     }
 
-    func testHttpHostRedirect() throws {
+    func testHttpHostRedirect() {
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: HTTPClient.Configuration(certificateVerification: .none, redirectConfiguration: .follow(max: 10, allowCycles: true)))
 
@@ -194,18 +194,15 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try localClient.syncShutdown())
         }
 
-        let response = try localClient.get(url: self.defaultHTTPBinURLPrefix + "redirect/loopback?port=\(self.defaultHTTPBin.port)").wait()
-        guard var body = response.body else {
-            XCTFail("The target page should have a body containing the value of the Host header")
+        let url = self.defaultHTTPBinURLPrefix + "redirect/loopback?port=\(self.defaultHTTPBin.port)"
+        var maybeResponse: HTTPClient.Response?
+        XCTAssertNoThrow(maybeResponse = try localClient.get(url: url).wait())
+        guard let response = maybeResponse, let body = response.body else {
+            XCTFail("request failed")
             return
         }
-        guard let responseData = body.readData(length: body.readableBytes) else {
-            XCTFail("Read data shouldn't be nil since we passed body.readableBytes to body.readData")
-            return
-        }
-        let decoder = JSONDecoder()
-        let hostName = try decoder.decode([String: String].self, from: responseData)["data"]
-        XCTAssert(hostName == "127.0.0.1")
+        let hostName = try? JSONDecoder().decode(RequestInfo.self, from: body).data
+        XCTAssertEqual("127.0.0.1", hostName)
     }
 
     func testPercentEncoded() throws {
@@ -1636,5 +1633,127 @@ class HTTPClientTests: XCTestCase {
             return promise.futureResult
         })
         XCTAssertNoThrow(try self.defaultClient.execute(request: request).wait())
+    }
+
+    func testWeHandleUsSendingACloseHeaderCorrectly() {
+        guard let req1 = try? Request(url: self.defaultHTTPBinURLPrefix + "stats",
+                                      method: .GET,
+                                      headers: ["connection": "close"]),
+            let statsBytes1 = try? self.defaultClient.execute(request: req1).wait().body,
+            let stats1 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes1) else {
+            XCTFail("request 1 didn't work")
+            return
+        }
+        guard let statsBytes2 = try? self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "stats").wait().body,
+            let stats2 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes2) else {
+            XCTFail("request 2 didn't work")
+            return
+        }
+        guard let statsBytes3 = try? self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "stats").wait().body,
+            let stats3 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes3) else {
+            XCTFail("request 3 didn't work")
+            return
+        }
+
+        // req 1 and 2 cannot share the same connection (close header)
+        XCTAssertEqual(stats1.connectionNumber + 1, stats2.connectionNumber)
+        XCTAssertEqual(stats1.requestNumber + 1, stats2.requestNumber)
+
+        // req 2 and 3 should share the same connection (keep-alive is default)
+        XCTAssertEqual(stats2.requestNumber + 1, stats3.requestNumber)
+        XCTAssertEqual(stats2.connectionNumber, stats3.connectionNumber)
+    }
+
+    func testWeHandleUsReceivingACloseHeaderCorrectly() {
+        guard let req1 = try? Request(url: self.defaultHTTPBinURLPrefix + "stats",
+                                      method: .GET,
+                                      headers: ["X-Send-Back-Header-Connection": "close"]),
+            let statsBytes1 = try? self.defaultClient.execute(request: req1).wait().body,
+            let stats1 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes1) else {
+            XCTFail("request 1 didn't work")
+            return
+        }
+        guard let statsBytes2 = try? self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "stats").wait().body,
+            let stats2 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes2) else {
+            XCTFail("request 2 didn't work")
+            return
+        }
+        guard let statsBytes3 = try? self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "stats").wait().body,
+            let stats3 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes3) else {
+            XCTFail("request 3 didn't work")
+            return
+        }
+
+        // req 1 and 2 cannot share the same connection (close header)
+        XCTAssertEqual(stats1.connectionNumber + 1, stats2.connectionNumber)
+        XCTAssertEqual(stats1.requestNumber + 1, stats2.requestNumber)
+
+        // req 2 and 3 should share the same connection (keep-alive is default)
+        XCTAssertEqual(stats2.requestNumber + 1, stats3.requestNumber)
+        XCTAssertEqual(stats2.connectionNumber, stats3.connectionNumber)
+    }
+
+    func testWeHandleUsSendingACloseHeaderAmongstOtherConnectionHeadersCorrectly() {
+        for closeHeader in [("connection", "close"), ("CoNneCTION", "ClOSe")] {
+            guard let req1 = try? Request(url: self.defaultHTTPBinURLPrefix + "stats",
+                                          method: .GET,
+                                          headers: ["X-Send-Back-Header-\(closeHeader.0)":
+                                              "foo,\(closeHeader.1),bar"]),
+                let statsBytes1 = try? self.defaultClient.execute(request: req1).wait().body,
+                let stats1 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes1) else {
+                XCTFail("request 1 didn't work")
+                return
+            }
+            guard let statsBytes2 = try? self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "stats").wait().body,
+                let stats2 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes2) else {
+                XCTFail("request 2 didn't work")
+                return
+            }
+            guard let statsBytes3 = try? self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "stats").wait().body,
+                let stats3 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes3) else {
+                XCTFail("request 3 didn't work")
+                return
+            }
+
+            // req 1 and 2 cannot share the same connection (close header)
+            XCTAssertEqual(stats1.connectionNumber + 1, stats2.connectionNumber)
+            XCTAssertEqual(stats1.requestNumber + 1, stats2.requestNumber)
+
+            // req 2 and 3 should share the same connection (keep-alive is default)
+            XCTAssertEqual(stats2.requestNumber + 1, stats3.requestNumber)
+            XCTAssertEqual(stats2.connectionNumber, stats3.connectionNumber)
+        }
+    }
+
+    func testWeHandleUsReceivingACloseHeaderAmongstOtherConnectionHeadersCorrectly() {
+        for closeHeader in [("connection", "close"), ("CoNneCTION", "ClOSe")] {
+            guard let req1 = try? Request(url: self.defaultHTTPBinURLPrefix + "stats",
+                                          method: .GET,
+                                          headers: ["X-Send-Back-Header-\(closeHeader.0)":
+                                              "foo,\(closeHeader.1),bar"]),
+                let statsBytes1 = try? self.defaultClient.execute(request: req1).wait().body,
+                let stats1 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes1) else {
+                XCTFail("request 1 didn't work")
+                return
+            }
+            guard let statsBytes2 = try? self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "stats").wait().body,
+                let stats2 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes2) else {
+                XCTFail("request 2 didn't work")
+                return
+            }
+            guard let statsBytes3 = try? self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "stats").wait().body,
+                let stats3 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes3) else {
+                XCTFail("request 3 didn't work")
+                return
+            }
+
+            // req 1 and 2 cannot share the same connection (close header)
+            XCTAssertEqual(stats1.connectionNumber + 1, stats2.connectionNumber)
+            XCTAssertEqual(stats1.requestNumber + 1, stats2.requestNumber)
+
+            // req 2 and 3 should share the same connection (keep-alive is default)
+            XCTAssertEqual(stats2.requestNumber + 1, stats3.requestNumber)
+            XCTAssertEqual(stats2.connectionNumber, stats3.connectionNumber)
+        }
     }
 }
