@@ -339,7 +339,7 @@ final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
 }
 
 internal struct HTTPResponseBuilder {
-    let head: HTTPResponseHead
+    var head: HTTPResponseHead
     var body: ByteBuffer?
 
     init(_ version: HTTPVersion = HTTPVersion(major: 1, minor: 1), status: HTTPResponseStatus, headers: HTTPHeaders = HTTPHeaders()) {
@@ -357,8 +357,13 @@ internal struct HTTPResponseBuilder {
     }
 }
 
+let globalRequestCounter = NIOAtomic<Int>.makeAtomic(value: 0)
+let globalConnectionCounter = NIOAtomic<Int>.makeAtomic(value: 0)
+
 internal struct RequestInfo: Codable {
-    let data: String
+    var data: String
+    var requestNumber: Int
+    var connectionNumber: Int
 }
 
 internal final class HttpBinHandler: ChannelInboundHandler {
@@ -367,16 +372,19 @@ internal final class HttpBinHandler: ChannelInboundHandler {
 
     let channelPromise: EventLoopPromise<Channel>?
     var resps = CircularBuffer<HTTPResponseBuilder>()
-    var closeAfterResponse = false
+    var responseHeaders = HTTPHeaders()
     var delay: TimeAmount = .seconds(0)
     let creationDate = Date()
     let maxChannelAge: TimeAmount?
     var shouldClose = false
     var isServingRequest = false
+    let myConnectionNumber: Int
+    var currentRequestNumber: Int = -1
 
     init(channelPromise: EventLoopPromise<Channel>? = nil, maxChannelAge: TimeAmount? = nil) {
         self.channelPromise = channelPromise
         self.maxChannelAge = maxChannelAge
+        self.myConnectionNumber = globalConnectionCounter.add(1)
     }
 
     func handlerAdded(context: ChannelHandlerContext) {
@@ -402,10 +410,12 @@ internal final class HttpBinHandler: ChannelInboundHandler {
             self.delay = .nanoseconds(0)
         }
 
-        if let connection = head.headers["Connection"].first {
-            self.closeAfterResponse = (connection == "close")
-        } else {
-            self.closeAfterResponse = false
+        for header in head.headers {
+            let needle = "x-send-back-header-"
+            if header.name.lowercased().starts(with: needle) {
+                self.responseHeaders.add(name: String(header.name.dropFirst(needle.count)),
+                                         value: header.value)
+            }
         }
     }
 
@@ -413,16 +423,18 @@ internal final class HttpBinHandler: ChannelInboundHandler {
         self.isServingRequest = true
         switch self.unwrapInboundIn(data) {
         case .head(let req):
+            self.responseHeaders = HTTPHeaders()
+            self.currentRequestNumber = globalRequestCounter.add(1)
             self.parseAndSetOptions(from: req)
             let urlComponents = URLComponents(string: req.uri)!
             switch urlComponents.percentEncodedPath {
             case "/":
-                var headers = HTTPHeaders()
+                var headers = self.responseHeaders
                 headers.add(name: "X-Is-This-Slash", value: "Yes")
                 self.resps.append(HTTPResponseBuilder(status: .ok, headers: headers))
                 return
             case "/echo-uri":
-                var headers = HTTPHeaders()
+                var headers = self.responseHeaders
                 headers.add(name: "X-Calling-URI", value: req.uri)
                 self.resps.append(HTTPResponseBuilder(status: .ok, headers: headers))
                 return
@@ -436,6 +448,13 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 }
                 self.resps.append(HTTPResponseBuilder(status: .ok))
                 return
+            case "/stats":
+                var body = context.channel.allocator.buffer(capacity: 1)
+                body.writeString("Just some stats mate.")
+                var builder = HTTPResponseBuilder(status: .ok)
+                builder.add(body)
+
+                self.resps.append(builder)
             case "/post":
                 if req.method != .POST {
                     self.resps.append(HTTPResponseBuilder(status: .methodNotAllowed))
@@ -444,29 +463,29 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 self.resps.append(HTTPResponseBuilder(status: .ok))
                 return
             case "/redirect/302":
-                var headers = HTTPHeaders()
+                var headers = self.responseHeaders
                 headers.add(name: "location", value: "/ok")
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
                 return
             case "/redirect/https":
                 let port = self.value(for: "port", from: urlComponents.query!)
-                var headers = HTTPHeaders()
+                var headers = self.responseHeaders
                 headers.add(name: "Location", value: "https://localhost:\(port)/ok")
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
                 return
             case "/redirect/loopback":
                 let port = self.value(for: "port", from: urlComponents.query!)
-                var headers = HTTPHeaders()
+                var headers = self.responseHeaders
                 headers.add(name: "Location", value: "http://127.0.0.1:\(port)/echohostheader")
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
                 return
             case "/redirect/infinite1":
-                var headers = HTTPHeaders()
+                var headers = self.responseHeaders
                 headers.add(name: "Location", value: "/redirect/infinite2")
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
                 return
             case "/redirect/infinite2":
-                var headers = HTTPHeaders()
+                var headers = self.responseHeaders
                 headers.add(name: "Location", value: "/redirect/infinite1")
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
                 return
@@ -528,15 +547,15 @@ internal final class HttpBinHandler: ChannelInboundHandler {
             if self.resps.isEmpty {
                 return
             }
-            let response = self.resps.removeFirst()
+            var response = self.resps.removeFirst()
+            response.head.headers.add(contentsOf: self.responseHeaders)
             context.write(wrapOutboundOut(.head(response.head)), promise: nil)
-            if var body = response.body {
-                let data = body.readData(length: body.readableBytes)!
-                let serialized = try! JSONEncoder().encode(RequestInfo(data: String(decoding: data,
-                                                                                    as: Unicode.UTF8.self)))
-
-                var responseBody = context.channel.allocator.buffer(capacity: serialized.count)
-                responseBody.writeBytes(serialized)
+            if let body = response.body {
+                let requestInfo = RequestInfo(data: String(buffer: body),
+                                              requestNumber: self.currentRequestNumber,
+                                              connectionNumber: self.myConnectionNumber)
+                let responseBody = try! JSONEncoder().encodeAsByteBuffer(requestInfo,
+                                                                         allocator: context.channel.allocator)
                 context.write(wrapOutboundOut(.body(.byteBuffer(responseBody))), promise: nil)
             }
             context.eventLoop.scheduleTask(in: self.delay) {
@@ -549,7 +568,8 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                     self.isServingRequest = false
                     switch result {
                     case .success:
-                        if self.closeAfterResponse || self.shouldClose {
+                        if self.responseHeaders[canonicalForm: "X-Close-Connection"].contains("true") ||
+                            self.shouldClose {
                             context.close(promise: nil)
                         }
                     case .failure(let error):

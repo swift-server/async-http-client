@@ -139,11 +139,10 @@ class HTTPClientInternalTests: XCTestCase {
         }
 
         let upload = try! httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait()
-        let bytes = upload.body.flatMap { $0.getData(at: 0, length: $0.readableBytes) }
-        let data = try! JSONDecoder().decode(RequestInfo.self, from: bytes!)
+        let data = upload.body.flatMap { try? JSONDecoder().decode(RequestInfo.self, from: $0) }
 
         XCTAssertEqual(.ok, upload.status)
-        XCTAssertEqual("id: 0id: 1id: 2id: 3id: 4id: 5id: 6id: 7id: 8id: 9", data.data)
+        XCTAssertEqual("id: 0id: 1id: 2id: 3id: 4id: 5id: 6id: 7id: 8id: 9", data?.data)
     }
 
     func testProxyStreamingFailure() throws {
@@ -466,7 +465,9 @@ class HTTPClientInternalTests: XCTestCase {
             XCTAssertNoThrow(try httpBin.shutdown())
         }
 
-        let req = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get", method: .GET, headers: ["Connection": "close"], body: nil)
+        let req = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get",
+                                         method: .GET,
+                                         headers: ["X-Send-Back-Header-Connection": "close"], body: nil)
         _ = try! httpClient.execute(request: req).wait()
         let el = httpClient.eventLoopGroup.next()
         try! el.scheduleTask(in: .milliseconds(500)) {
