@@ -1325,6 +1325,43 @@ class HTTPClientTests: XCTestCase {
         })
     }
 
+    func testHTTPPlusUNIX() {
+        // Here, we're testing a URL where the UNIX domain socket is encoded as the host name
+        XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
+            let localHTTPBin = HTTPBin(bindTarget: .unixDomainSocket(path))
+            defer {
+                XCTAssertNoThrow(try localHTTPBin.shutdown())
+            }
+            guard let target = URL(string: "http+unix://\(path.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/echo-uri"),
+                let request = try? Request(url: target) else {
+                XCTFail("couldn't build URL for request")
+                return
+            }
+            XCTAssertNoThrow(XCTAssertEqual(["/echo-uri"[...]],
+                                            try self.defaultClient.execute(request: request).wait().headers[canonicalForm: "X-Calling-URI"]))
+        })
+    }
+
+    func testHTTPSPlusUNIX() {
+        // Here, we're testing a URL where the UNIX domain socket is encoded as the host name
+        XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
+            let localHTTPBin = HTTPBin(ssl: true, bindTarget: .unixDomainSocket(path))
+            let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                         configuration: HTTPClient.Configuration(certificateVerification: .none))
+            defer {
+                XCTAssertNoThrow(try localClient.syncShutdown())
+                XCTAssertNoThrow(try localHTTPBin.shutdown())
+            }
+            guard let target = URL(string: "https+unix://\(path.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/echo-uri"),
+                let request = try? Request(url: target) else {
+                XCTFail("couldn't build URL for request")
+                return
+            }
+            XCTAssertNoThrow(XCTAssertEqual(["/echo-uri"[...]],
+                                            try localClient.execute(request: request).wait().headers[canonicalForm: "X-Calling-URI"]))
+        })
+    }
+
     func testUseExistingConnectionOnDifferentEL() throws {
         let threadCount = 16
         let elg = getDefaultEventLoopGroup(numberOfThreads: threadCount)

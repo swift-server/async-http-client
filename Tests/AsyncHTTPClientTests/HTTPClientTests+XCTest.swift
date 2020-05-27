@@ -90,6 +90,8 @@ extension HTTPClientTests {
             ("testMakeSecondRequestWhilstFirstIsOngoing", testMakeSecondRequestWhilstFirstIsOngoing),
             ("testUDSBasic", testUDSBasic),
             ("testUDSSocketAndPath", testUDSSocketAndPath),
+            ("testHTTPPlusUNIX", testHTTPPlusUNIX),
+            ("testHTTPSPlusUNIX", testHTTPSPlusUNIX),
             ("testUseExistingConnectionOnDifferentEL", testUseExistingConnectionOnDifferentEL),
             ("testWeRecoverFromServerThatClosesTheConnectionOnUs", testWeRecoverFromServerThatClosesTheConnectionOnUs),
             ("testPoolClosesIdleConnections", testPoolClosesIdleConnections),
