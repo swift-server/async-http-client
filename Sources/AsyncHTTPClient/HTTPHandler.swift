@@ -99,20 +99,23 @@ extension HTTPClient {
     public struct Request {
         /// Represent kind of Request
         enum Kind {
+            enum UnixScheme {
+                case baseURL
+            }
+
             /// Remote host request.
             case host
             /// UNIX Domain Socket HTTP request.
-            case unixSocket
+            case unixSocket(_ scheme: UnixScheme)
 
             private static var hostSchemes = ["http", "https"]
             private static var unixSchemes = ["unix"]
 
             init(forScheme scheme: String) throws {
-                if Kind.host.supports(scheme: scheme) {
-                    self = .host
-                } else if Kind.unixSocket.supports(scheme: scheme) {
-                    self = .unixSocket
-                } else {
+                switch scheme {
+                case "http", "https": self = .host
+                case "unix": self = .unixSocket(.baseURL)
+                default:
                     throw HTTPClientError.unsupportedScheme(scheme)
                 }
             }
@@ -126,6 +129,24 @@ extension HTTPClient {
                     return host
                 case .unixSocket:
                     return ""
+                }
+            }
+
+            func socketPathFromURL(_ url: URL) throws -> String {
+                switch self {
+                case .unixSocket(.baseURL):
+                    return url.baseURL?.path ?? url.path
+                case .host:
+                    return ""
+                }
+            }
+
+            func uriFromURL(_ url: URL) -> String {
+                switch self {
+                case .host:
+                    return url.uri
+                case .unixSocket(.baseURL):
+                    return url.baseURL != nil ? url.uri : "/"
                 }
             }
 
@@ -147,6 +168,10 @@ extension HTTPClient {
         public let scheme: String
         /// Remote host, resolved from `URL`.
         public let host: String
+        /// Socket path, resolved from `URL`.
+        let socketPath: String
+        /// URI composed of the path and query, resolved from `URL`.
+        let uri: String
         /// Request custom HTTP Headers, defaults to no headers.
         public var headers: HTTPHeaders
         /// Request body, defaults to no body.
@@ -199,6 +224,8 @@ extension HTTPClient {
 
             self.kind = try Kind(forScheme: scheme)
             self.host = try self.kind.hostFromURL(url)
+            self.socketPath = try self.kind.socketPathFromURL(url)
+            self.uri = self.kind.uriFromURL(url)
 
             self.redirectState = nil
             self.url = url
@@ -712,19 +739,9 @@ extension TaskHandler: ChannelDuplexHandler {
         self.state = .idle
         let request = self.unwrapOutboundIn(data)
 
-        let uri: String
-        switch (self.kind, request.url.baseURL) {
-        case (.host, _):
-            uri = request.url.uri
-        case (.unixSocket, .none):
-            uri = "/" // we don't have a real path, the path we have is the path of the UNIX Domain Socket.
-        case (.unixSocket, .some(_)):
-            uri = request.url.uri
-        }
-
         var head = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1),
                                    method: request.method,
-                                   uri: uri)
+                                   uri: request.uri)
         var headers = request.headers
 
         if !request.headers.contains(name: "Host") {

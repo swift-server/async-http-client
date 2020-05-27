@@ -654,7 +654,7 @@ extension ChannelPipeline {
     }
 
     func addSSLHandlerIfNeeded(for key: ConnectionPool.Key, tlsConfiguration: TLSConfiguration?, addSSLClient: Bool, handshakePromise: EventLoopPromise<Void>) {
-        guard key.scheme == .https else {
+        guard key.scheme.requiresTLS else {
             handshakePromise.succeed(())
             return
         }

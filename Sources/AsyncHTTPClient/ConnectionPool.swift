@@ -113,23 +113,32 @@ final class ConnectionPool {
                 self.scheme = .https
             case "unix":
                 self.scheme = .unix
-                self.unixPath = request.url.baseURL?.path ?? request.url.path
             default:
                 fatalError("HTTPClient.Request scheme should already be a valid one")
             }
             self.port = request.port
             self.host = request.host
+            self.unixPath = request.socketPath
         }
 
         var scheme: Scheme
         var host: String
         var port: Int
-        var unixPath: String = ""
+        var unixPath: String
 
         enum Scheme: Hashable {
             case http
             case https
             case unix
+
+            var requiresTLS: Bool {
+                switch self {
+                case .https:
+                    return true
+                default:
+                    return false
+                }
+            }
         }
     }
 }
@@ -433,7 +442,7 @@ class HTTP1ConnectionProvider {
 
     private func makeChannel(preference: HTTPClient.EventLoopPreference) -> EventLoopFuture<Channel> {
         let eventLoop = preference.bestEventLoop ?? self.eventLoop
-        let requiresTLS = self.key.scheme == .https
+        let requiresTLS = self.key.scheme.requiresTLS
         let bootstrap: NIOClientTCPBootstrap
         do {
             bootstrap = try NIOClientTCPBootstrap.makeHTTPClientBootstrapBase(on: eventLoop, host: self.key.host, port: self.key.port, requiresTLS: requiresTLS, configuration: self.configuration)
@@ -451,7 +460,7 @@ class HTTP1ConnectionProvider {
         }
 
         return channel.flatMap { channel in
-            let requiresSSLHandler = self.configuration.proxy != nil && self.key.scheme == .https
+            let requiresSSLHandler = self.configuration.proxy != nil && self.key.scheme.requiresTLS
             let handshakePromise = channel.eventLoop.makePromise(of: Void.self)
 
             channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, addSSLClient: requiresSSLHandler, handshakePromise: handshakePromise)
