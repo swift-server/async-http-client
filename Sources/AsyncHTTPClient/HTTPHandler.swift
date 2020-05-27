@@ -101,6 +101,8 @@ extension HTTPClient {
         enum Kind {
             enum UnixScheme {
                 case baseURL
+                case http_unix
+                case https_unix
             }
 
             /// Remote host request.
@@ -109,12 +111,14 @@ extension HTTPClient {
             case unixSocket(_ scheme: UnixScheme)
 
             private static var hostSchemes = ["http", "https"]
-            private static var unixSchemes = ["unix"]
+            private static var unixSchemes = ["unix", "http+unix", "https+unix"]
 
             init(forScheme scheme: String) throws {
                 switch scheme {
                 case "http", "https": self = .host
                 case "unix": self = .unixSocket(.baseURL)
+                case "http+unix": self = .unixSocket(.http_unix)
+                case "https+unix": self = .unixSocket(.https_unix)
                 default:
                     throw HTTPClientError.unsupportedScheme(scheme)
                 }
@@ -136,6 +140,11 @@ extension HTTPClient {
                 switch self {
                 case .unixSocket(.baseURL):
                     return url.baseURL?.path ?? url.path
+                case .unixSocket:
+                    guard let socketPath = url.host else {
+                        throw HTTPClientError.missingSocketPath
+                    }
+                    return socketPath
                 case .host:
                     return ""
                 }
@@ -147,6 +156,8 @@ extension HTTPClient {
                     return url.uri
                 case .unixSocket(.baseURL):
                     return url.baseURL != nil ? url.uri : "/"
+                case .unixSocket:
+                    return url.uri
                 }
             }
 
@@ -217,6 +228,7 @@ extension HTTPClient {
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
+        ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
             guard let scheme = url.scheme?.lowercased() else {
                 throw HTTPClientError.emptyScheme
@@ -237,7 +249,7 @@ extension HTTPClient {
 
         /// Whether request will be executed using secure socket.
         public var useTLS: Bool {
-            return self.scheme == "https"
+            return self.scheme == "https" || self.scheme == "https+unix"
         }
 
         /// Resolved port.

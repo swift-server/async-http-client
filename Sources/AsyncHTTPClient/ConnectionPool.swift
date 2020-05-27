@@ -113,6 +113,10 @@ final class ConnectionPool {
                 self.scheme = .https
             case "unix":
                 self.scheme = .unix
+            case "http+unix":
+                self.scheme = .http_unix
+            case "https+unix":
+                self.scheme = .https_unix
             default:
                 fatalError("HTTPClient.Request scheme should already be a valid one")
             }
@@ -130,10 +134,12 @@ final class ConnectionPool {
             case http
             case https
             case unix
+            case http_unix
+            case https_unix
 
             var requiresTLS: Bool {
                 switch self {
-                case .https:
+                case .https, .https_unix:
                     return true
                 default:
                     return false
@@ -455,7 +461,7 @@ class HTTP1ConnectionProvider {
         case .http, .https:
             let address = HTTPClient.resolveAddress(host: self.key.host, port: self.key.port, proxy: self.configuration.proxy)
             channel = bootstrap.connect(host: address.host, port: address.port)
-        case .unix:
+        case .unix, .http_unix, .https_unix:
             channel = bootstrap.connect(unixDomainSocketPath: self.key.unixPath)
         }
 

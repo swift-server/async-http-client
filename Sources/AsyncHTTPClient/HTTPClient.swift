@@ -726,6 +726,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     private enum Code: Equatable {
         case invalidURL
         case emptyHost
+        case missingSocketPath
         case alreadyShutdown
         case emptyScheme
         case unsupportedScheme(String)
@@ -758,6 +759,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let invalidURL = HTTPClientError(code: .invalidURL)
     /// URL does not contain host.
     public static let emptyHost = HTTPClientError(code: .emptyHost)
+    /// URL does not contain a socketPath as a host for http(s)+unix shemes.
+    public static let missingSocketPath = HTTPClientError(code: .missingSocketPath)
     /// Client is shutdown and cannot be used for new requests.
     public static let alreadyShutdown = HTTPClientError(code: .alreadyShutdown)
     /// URL does not contain scheme.
