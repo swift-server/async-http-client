@@ -234,7 +234,6 @@ internal final class HTTPBin {
 
         self.serverChannel = try! ServerBootstrap(group: self.group)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
-            .childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
             .serverChannelInitializer { channel in
                 channel.pipeline.addHandler(activeConnCounterHandler)
             }.childChannelInitializer { channel in
