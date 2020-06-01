@@ -665,7 +665,7 @@ extension ChannelPipeline {
                 let tlsConfiguration = tlsConfiguration ?? TLSConfiguration.forClient()
                 let context = try NIOSSLContext(configuration: tlsConfiguration)
                 handlers = [
-                    try NIOSSLClientHandler(context: context, serverHostname: key.host.isIPAddress ? nil : key.host),
+                    try NIOSSLClientHandler(context: context, serverHostname: (key.host.isIPAddress || key.host.isEmpty) ? nil : key.host),
                     TLSEventsHandler(completionPromise: handshakePromise),
                 ]
             } else {
