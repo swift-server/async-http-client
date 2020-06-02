@@ -654,7 +654,7 @@ extension ChannelPipeline {
     }
 
     func addSSLHandlerIfNeeded(for key: ConnectionPool.Key, tlsConfiguration: TLSConfiguration?, addSSLClient: Bool, handshakePromise: EventLoopPromise<Void>) {
-        guard key.scheme == .https else {
+        guard key.scheme.requiresTLS else {
             handshakePromise.succeed(())
             return
         }
@@ -665,7 +665,7 @@ extension ChannelPipeline {
                 let tlsConfiguration = tlsConfiguration ?? TLSConfiguration.forClient()
                 let context = try NIOSSLContext(configuration: tlsConfiguration)
                 handlers = [
-                    try NIOSSLClientHandler(context: context, serverHostname: key.host.isIPAddress ? nil : key.host),
+                    try NIOSSLClientHandler(context: context, serverHostname: (key.host.isIPAddress || key.host.isEmpty) ? nil : key.host),
                     TLSEventsHandler(completionPromise: handshakePromise),
                 ]
             } else {
@@ -726,6 +726,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     private enum Code: Equatable {
         case invalidURL
         case emptyHost
+        case missingSocketPath
         case alreadyShutdown
         case emptyScheme
         case unsupportedScheme(String)
@@ -758,6 +759,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let invalidURL = HTTPClientError(code: .invalidURL)
     /// URL does not contain host.
     public static let emptyHost = HTTPClientError(code: .emptyHost)
+    /// URL does not contain a socketPath as a host for http(s)+unix shemes.
+    public static let missingSocketPath = HTTPClientError(code: .missingSocketPath)
     /// Client is shutdown and cannot be used for new requests.
     public static let alreadyShutdown = HTTPClientError(code: .alreadyShutdown)
     /// URL does not contain scheme.

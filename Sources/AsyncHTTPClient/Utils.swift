@@ -64,7 +64,7 @@ extension ClientBootstrap {
         } else {
             let tlsConfiguration = configuration.tlsConfiguration ?? TLSConfiguration.forClient()
             let sslContext = try NIOSSLContext(configuration: tlsConfiguration)
-            let hostname = (!requiresTLS || host.isIPAddress) ? nil : host
+            let hostname = (!requiresTLS || host.isIPAddress || host.isEmpty) ? nil : host
             let tlsProvider = try NIOSSLClientTLSProvider<ClientBootstrap>(context: sslContext, serverHostname: hostname)
             return NIOClientTCPBootstrap(self, tls: tlsProvider)
         }
