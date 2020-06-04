@@ -516,6 +516,36 @@ extension URL {
     func hasTheSameOrigin(as other: URL) -> Bool {
         return self.host == other.host && self.scheme == other.scheme && self.port == other.port
     }
+
+    /// Initializes a newly created HTTP URL connecting to a unix domain socket path. The socket path is encoded as the URL's host, replacing percent encoding invalid path characters, and will use the "http+unix" scheme.
+    /// - Parameters:
+    ///   - socketPath: The path to the unix domain socket to connect to.
+    ///   - uri: The URI path and query that will be sent to the server.
+    public init?(httpURLWithSocketPath socketPath: String, uri: String = "/") {
+        guard let host = socketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) else { return nil }
+        var urlString: String
+        if uri.hasPrefix("/") {
+            urlString = "http+unix://\(host)\(uri)"
+        } else {
+            urlString = "http+unix://\(host)/\(uri)"
+        }
+        self.init(string: urlString)
+    }
+
+    /// Initializes a newly created HTTPS URL connecting to a unix domain socket path over TLS. The socket path is encoded as the URL's host, replacing percent encoding invalid path characters, and will use the "https+unix" scheme.
+    /// - Parameters:
+    ///   - socketPath: The path to the unix domain socket to connect to.
+    ///   - uri: The URI path and query that will be sent to the server.
+    public init?(httpsURLWithSocketPath socketPath: String, uri: String = "/") {
+        guard let host = socketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) else { return nil }
+        var urlString: String
+        if uri.hasPrefix("/") {
+            urlString = "https+unix://\(host)\(uri)"
+        } else {
+            urlString = "https+unix://\(host)/\(uri)"
+        }
+        self.init(string: urlString)
+    }
 }
 
 extension HTTPClient {

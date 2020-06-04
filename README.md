@@ -157,3 +157,22 @@ httpClient.execute(request: request, delegate: delegate).futureResult.whenSucces
     print(count)
 }
 ```
+
+### Unix Domain Socket Paths
+Connecting to servers bound to socket paths is easy:
+```swift
+let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+httpClient.get(socketPath: "/tmp/myServer.socket", url: "/path/to/resource").whenComplete (...)
+```
+
+Connecting over TLS to a unix domain socket path is possible as well:
+```swift
+let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+httpClient.post(secureSocketPath: "/tmp/myServer.socket", url: "/path/to/resource", body: .string("hello")).whenComplete (...)
+```
+
+Direct URLs can easily be contructed to be executed in other scenarios:
+```swift
+let socketPathBasedURL = URL(httpURLWithSocketPath: "/tmp/myServer.socket", uri: "/path/to/resource")
+let secureSocketPathBasedURL = URL(httpsURLWithSocketPath: "/tmp/myServer.socket", uri: "/path/to/resource")
+```

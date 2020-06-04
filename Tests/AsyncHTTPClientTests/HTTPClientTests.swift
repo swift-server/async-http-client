@@ -134,6 +134,148 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNoThrow(try Request(url: "hTtPS+uNIx://%2Fsome%2Fpath/"))
     }
 
+    func testURLSocketPathInitializers() throws {
+        let url1 = URL(httpURLWithSocketPath: "/tmp/file")
+        XCTAssertNotNil(url1)
+        if let url = url1 {
+            XCTAssertEqual(url.scheme, "http+unix")
+            XCTAssertEqual(url.host, "/tmp/file")
+            XCTAssertEqual(url.path, "/")
+            XCTAssertEqual(url.absoluteString, "http+unix://%2Ftmp%2Ffile/")
+        }
+
+        let url2 = URL(httpURLWithSocketPath: "/tmp/file", uri: "/file/path")
+        XCTAssertNotNil(url2)
+        if let url = url2 {
+            XCTAssertEqual(url.scheme, "http+unix")
+            XCTAssertEqual(url.host, "/tmp/file")
+            XCTAssertEqual(url.path, "/file/path")
+            XCTAssertEqual(url.absoluteString, "http+unix://%2Ftmp%2Ffile/file/path")
+        }
+
+        let url3 = URL(httpURLWithSocketPath: "/tmp/file", uri: "file/path")
+        XCTAssertNotNil(url3)
+        if let url = url3 {
+            XCTAssertEqual(url.scheme, "http+unix")
+            XCTAssertEqual(url.host, "/tmp/file")
+            XCTAssertEqual(url.path, "/file/path")
+            XCTAssertEqual(url.absoluteString, "http+unix://%2Ftmp%2Ffile/file/path")
+        }
+
+        let url4 = URL(httpURLWithSocketPath: "/tmp/file with spacesと漢字", uri: "file/path")
+        XCTAssertNotNil(url4)
+        if let url = url4 {
+            XCTAssertEqual(url.scheme, "http+unix")
+            XCTAssertEqual(url.host, "/tmp/file with spacesと漢字")
+            XCTAssertEqual(url.path, "/file/path")
+            XCTAssertEqual(url.absoluteString, "http+unix://%2Ftmp%2Ffile%20with%20spaces%E3%81%A8%E6%BC%A2%E5%AD%97/file/path")
+        }
+
+        let url5 = URL(httpsURLWithSocketPath: "/tmp/file")
+        XCTAssertNotNil(url5)
+        if let url = url5 {
+            XCTAssertEqual(url.scheme, "https+unix")
+            XCTAssertEqual(url.host, "/tmp/file")
+            XCTAssertEqual(url.path, "/")
+            XCTAssertEqual(url.absoluteString, "https+unix://%2Ftmp%2Ffile/")
+        }
+
+        let url6 = URL(httpsURLWithSocketPath: "/tmp/file", uri: "/file/path")
+        XCTAssertNotNil(url6)
+        if let url = url6 {
+            XCTAssertEqual(url.scheme, "https+unix")
+            XCTAssertEqual(url.host, "/tmp/file")
+            XCTAssertEqual(url.path, "/file/path")
+            XCTAssertEqual(url.absoluteString, "https+unix://%2Ftmp%2Ffile/file/path")
+        }
+
+        let url7 = URL(httpsURLWithSocketPath: "/tmp/file", uri: "file/path")
+        XCTAssertNotNil(url7)
+        if let url = url7 {
+            XCTAssertEqual(url.scheme, "https+unix")
+            XCTAssertEqual(url.host, "/tmp/file")
+            XCTAssertEqual(url.path, "/file/path")
+            XCTAssertEqual(url.absoluteString, "https+unix://%2Ftmp%2Ffile/file/path")
+        }
+
+        let url8 = URL(httpsURLWithSocketPath: "/tmp/file with spacesと漢字", uri: "file/path")
+        XCTAssertNotNil(url8)
+        if let url = url8 {
+            XCTAssertEqual(url.scheme, "https+unix")
+            XCTAssertEqual(url.host, "/tmp/file with spacesと漢字")
+            XCTAssertEqual(url.path, "/file/path")
+            XCTAssertEqual(url.absoluteString, "https+unix://%2Ftmp%2Ffile%20with%20spaces%E3%81%A8%E6%BC%A2%E5%AD%97/file/path")
+        }
+
+        let url9 = URL(httpURLWithSocketPath: "/tmp/file", uri: " ")
+        XCTAssertNil(url9)
+
+        let url10 = URL(httpsURLWithSocketPath: "/tmp/file", uri: " ")
+        XCTAssertNil(url10)
+    }
+
+    func testConvenienceExecuteMethods() throws {
+        XCTAssertNoThrow(XCTAssertEqual(["GET"[...]],
+                                        try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+        XCTAssertNoThrow(XCTAssertEqual(["POST"[...]],
+                                        try self.defaultClient.post(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+        XCTAssertNoThrow(XCTAssertEqual(["PATCH"[...]],
+                                        try self.defaultClient.patch(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+        XCTAssertNoThrow(XCTAssertEqual(["PUT"[...]],
+                                        try self.defaultClient.put(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+        XCTAssertNoThrow(XCTAssertEqual(["DELETE"[...]],
+                                        try self.defaultClient.delete(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+        XCTAssertNoThrow(XCTAssertEqual(["CHECKOUT"[...]],
+                                        try self.defaultClient.execute(url: self.defaultHTTPBinURLPrefix + "echo-method", method: .CHECKOUT).wait().headers[canonicalForm: "X-Method-Used"]))
+    }
+
+    func testConvenienceExecuteMethodsOverSocket() throws {
+        XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
+            let localSocketPathHTTPBin = HTTPBin(bindTarget: .unixDomainSocket(path))
+            defer {
+                XCTAssertNoThrow(try localSocketPathHTTPBin.shutdown())
+            }
+
+            XCTAssertNoThrow(XCTAssertEqual(["GET"[...]],
+                                            try self.defaultClient.get(socketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+            XCTAssertNoThrow(XCTAssertEqual(["POST"[...]],
+                                            try self.defaultClient.post(socketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+            XCTAssertNoThrow(XCTAssertEqual(["PATCH"[...]],
+                                            try self.defaultClient.patch(socketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+            XCTAssertNoThrow(XCTAssertEqual(["PUT"[...]],
+                                            try self.defaultClient.put(socketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+            XCTAssertNoThrow(XCTAssertEqual(["DELETE"[...]],
+                                            try self.defaultClient.delete(socketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+            XCTAssertNoThrow(XCTAssertEqual(["CHECKOUT"[...]],
+                                            try self.defaultClient.execute(socketPath: path, url: "echo-method", method: .CHECKOUT).wait().headers[canonicalForm: "X-Method-Used"]))
+        })
+    }
+
+    func testConvenienceExecuteMethodsOverSecureSocket() throws {
+        XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
+            let localSocketPathHTTPBin = HTTPBin(ssl: true, bindTarget: .unixDomainSocket(path))
+            let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                         configuration: HTTPClient.Configuration(certificateVerification: .none))
+            defer {
+                XCTAssertNoThrow(try localClient.syncShutdown())
+                XCTAssertNoThrow(try localSocketPathHTTPBin.shutdown())
+            }
+
+            XCTAssertNoThrow(XCTAssertEqual(["GET"[...]],
+                                            try localClient.get(secureSocketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+            XCTAssertNoThrow(XCTAssertEqual(["POST"[...]],
+                                            try localClient.post(secureSocketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+            XCTAssertNoThrow(XCTAssertEqual(["PATCH"[...]],
+                                            try localClient.patch(secureSocketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+            XCTAssertNoThrow(XCTAssertEqual(["PUT"[...]],
+                                            try localClient.put(secureSocketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+            XCTAssertNoThrow(XCTAssertEqual(["DELETE"[...]],
+                                            try localClient.delete(secureSocketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+            XCTAssertNoThrow(XCTAssertEqual(["CHECKOUT"[...]],
+                                            try localClient.execute(secureSocketPath: path, url: "echo-method", method: .CHECKOUT).wait().headers[canonicalForm: "X-Method-Used"]))
+        })
+    }
+
     func testGet() throws {
         let response = try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "get").wait()
         XCTAssertEqual(.ok, response.status)
@@ -1368,7 +1510,7 @@ class HTTPClientTests: XCTestCase {
             defer {
                 XCTAssertNoThrow(try localHTTPBin.shutdown())
             }
-            guard let target = URL(string: "http+unix://\(path.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/echo-uri"),
+            guard let target = URL(httpURLWithSocketPath: path, uri: "/echo-uri"),
                 let request = try? Request(url: target) else {
                 XCTFail("couldn't build URL for request")
                 return
@@ -1388,7 +1530,7 @@ class HTTPClientTests: XCTestCase {
                 XCTAssertNoThrow(try localClient.syncShutdown())
                 XCTAssertNoThrow(try localHTTPBin.shutdown())
             }
-            guard let target = URL(string: "https+unix://\(path.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/echo-uri"),
+            guard let target = URL(httpsURLWithSocketPath: path, uri: "/echo-uri"),
                 let request = try? Request(url: target) else {
                 XCTFail("couldn't build URL for request")
                 return
