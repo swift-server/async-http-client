@@ -98,6 +98,18 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(request3.url.path, "/tmp/file")
         XCTAssertEqual(request3.port, 80)
         XCTAssertFalse(request3.useTLS)
+
+        let request4 = try Request(url: "http+unix://%2Ftmp%2Ffile/file/path")
+        XCTAssertEqual(request4.host, "")
+        XCTAssertEqual(request4.url.host, "/tmp/file")
+        XCTAssertEqual(request4.url.path, "/file/path")
+        XCTAssertFalse(request4.useTLS)
+
+        let request5 = try Request(url: "https+unix://%2Ftmp%2Ffile/file/path")
+        XCTAssertEqual(request5.host, "")
+        XCTAssertEqual(request5.url.host, "/tmp/file")
+        XCTAssertEqual(request5.url.path, "/file/path")
+        XCTAssertTrue(request5.useTLS)
     }
 
     func testBadRequestURI() throws {
@@ -110,11 +122,16 @@ class HTTPClientTests: XCTestCase {
         XCTAssertThrowsError(try Request(url: "https:/foo"), "should throw") { error in
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.emptyHost)
         }
+        XCTAssertThrowsError(try Request(url: "http+unix:///path"), "should throw") { error in
+            XCTAssertEqual(error as! HTTPClientError, HTTPClientError.missingSocketPath)
+        }
     }
 
     func testSchemaCasing() throws {
         XCTAssertNoThrow(try Request(url: "hTTpS://someserver.com:8888/some/path?foo=bar"))
         XCTAssertNoThrow(try Request(url: "uNIx:///some/path"))
+        XCTAssertNoThrow(try Request(url: "hTtP+uNIx://%2Fsome%2Fpath/"))
+        XCTAssertNoThrow(try Request(url: "hTtPS+uNIx://%2Fsome%2Fpath/"))
     }
 
     func testGet() throws {

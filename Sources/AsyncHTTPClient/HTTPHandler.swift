@@ -95,8 +95,8 @@ extension HTTPClient {
     /// Represent HTTP request.
     public struct Request {
         /// Represent kind of Request
-        enum Kind {
-            enum UnixScheme {
+        enum Kind: Equatable {
+            enum UnixScheme: Equatable {
                 case baseURL
                 case http_unix
                 case https_unix
