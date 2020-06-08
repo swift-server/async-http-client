@@ -63,7 +63,8 @@ class HTTPClientNIOTSTests: XCTestCase {
                 _ = try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()
                 XCTFail("This should have failed")
             } catch let error as HTTPClient.NWTLSError {
-                XCTAssertEqual(error.status, errSSLHandshakeFail)
+                XCTAssert(error.status == errSSLHandshakeFail || error.status == errSSLBadCert,
+                          "unexpected NWTLSError with status \(error.status)")
             } catch {
                 XCTFail("Error should have been NWTLSError not \(type(of: error))")
             }
