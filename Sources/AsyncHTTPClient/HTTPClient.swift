@@ -277,9 +277,8 @@ public class HTTPClient {
     ///     - url: Remote URL.
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
-    ///     - logger: The logger to use for this request.
     public func patch(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        return self.post(url: url, body: body, deadline: deadline, logger: HTTPClient.loggingDisabled)
+        return self.patch(url: url, body: body, deadline: deadline, logger: HTTPClient.loggingDisabled)
     }
 
     /// Execute `PATCH` request using specified URL.
@@ -338,6 +337,7 @@ public class HTTPClient {
     /// - parameters:
     ///     - url: Remote URL.
     ///     - deadline: The time when the request must have been completed by.
+    ///     - logger: The logger to use for this request.
     public func delete(url: String, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
         do {
             let request = try Request(url: url, method: .DELETE)
