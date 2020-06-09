@@ -225,8 +225,10 @@ class HTTPClientTests: XCTestCase {
                                         try self.defaultClient.put(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
         XCTAssertNoThrow(XCTAssertEqual(["DELETE"[...]],
                                         try self.defaultClient.delete(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+        XCTAssertNoThrow(XCTAssertEqual(["GET"[...]],
+                                        try self.defaultClient.execute(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
         XCTAssertNoThrow(XCTAssertEqual(["CHECKOUT"[...]],
-                                        try self.defaultClient.execute(url: self.defaultHTTPBinURLPrefix + "echo-method", method: .CHECKOUT).wait().headers[canonicalForm: "X-Method-Used"]))
+                                        try self.defaultClient.execute(.CHECKOUT, url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
     }
 
     func testConvenienceExecuteMethodsOverSocket() throws {
@@ -237,9 +239,11 @@ class HTTPClientTests: XCTestCase {
             }
 
             XCTAssertNoThrow(XCTAssertEqual(["GET"[...]],
-                                            try self.defaultClient.execute(socketPath: path, url: "echo-method", method: .GET).wait().headers[canonicalForm: "X-Method-Used"]))
+                                            try self.defaultClient.execute(socketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+            XCTAssertNoThrow(XCTAssertEqual(["GET"[...]],
+                                            try self.defaultClient.execute(.GET, socketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
             XCTAssertNoThrow(XCTAssertEqual(["POST"[...]],
-                                            try self.defaultClient.execute(socketPath: path, url: "echo-method", method: .POST).wait().headers[canonicalForm: "X-Method-Used"]))
+                                            try self.defaultClient.execute(.POST, socketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
         })
     }
 
@@ -254,9 +258,11 @@ class HTTPClientTests: XCTestCase {
             }
 
             XCTAssertNoThrow(XCTAssertEqual(["GET"[...]],
-                                            try localClient.execute(secureSocketPath: path, url: "echo-method", method: .GET).wait().headers[canonicalForm: "X-Method-Used"]))
+                                            try localClient.execute(secureSocketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+            XCTAssertNoThrow(XCTAssertEqual(["GET"[...]],
+                                            try localClient.execute(.GET, secureSocketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
             XCTAssertNoThrow(XCTAssertEqual(["POST"[...]],
-                                            try localClient.execute(secureSocketPath: path, url: "echo-method", method: .POST).wait().headers[canonicalForm: "X-Method-Used"]))
+                                            try localClient.execute(.POST, secureSocketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
         })
     }
 

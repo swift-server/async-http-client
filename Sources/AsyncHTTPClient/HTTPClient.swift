@@ -237,7 +237,7 @@ public class HTTPClient {
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
     public func get(url: String, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
-        return self.execute(url: url, method: .GET, deadline: deadline, logger: logger)
+        return self.execute(.GET, url: url, deadline: deadline, logger: logger)
     }
 
     /// Execute `POST` request using specified URL.
@@ -258,7 +258,7 @@ public class HTTPClient {
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
     public func post(url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
-        return self.execute(url: url, method: .POST, body: body, deadline: deadline, logger: logger)
+        return self.execute(.POST, url: url, body: body, deadline: deadline, logger: logger)
     }
 
     /// Execute `PATCH` request using specified URL.
@@ -279,7 +279,7 @@ public class HTTPClient {
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
     public func patch(url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
-        return self.execute(url: url, method: .PATCH, body: body, deadline: deadline, logger: logger)
+        return self.execute(.PATCH, url: url, body: body, deadline: deadline, logger: logger)
     }
 
     /// Execute `PUT` request using specified URL.
@@ -300,7 +300,7 @@ public class HTTPClient {
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
     public func put(url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
-        return self.execute(url: url, method: .PUT, body: body, deadline: deadline, logger: logger)
+        return self.execute(.PUT, url: url, body: body, deadline: deadline, logger: logger)
     }
 
     /// Execute `DELETE` request using specified URL.
@@ -319,18 +319,18 @@ public class HTTPClient {
     ///     - deadline: The time when the request must have been completed by.
     ///     - logger: The logger to use for this request.
     public func delete(url: String, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
-        return self.execute(url: url, method: .DELETE, deadline: deadline, logger: logger)
+        return self.execute(.DELETE, url: url, deadline: deadline, logger: logger)
     }
 
     /// Execute arbitrary HTTP request using specified URL.
     ///
     /// - parameters:
-    ///     - url: Request url.
     ///     - method: Request method.
+    ///     - url: Request url.
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
-    public func execute(url: String, method: HTTPMethod, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger? = nil) -> EventLoopFuture<Response> {
+    public func execute(_ method: HTTPMethod = .GET, url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try Request(url: url, method: method, body: body)
             return self.execute(request: request, deadline: deadline, logger: logger ?? HTTPClient.loggingDisabled)
@@ -342,15 +342,15 @@ public class HTTPClient {
     /// Execute arbitrary HTTP+UNIX request to a unix domain socket path, using the specified URL as the request to send to the server.
     ///
     /// - parameters:
-    ///     - socketPath: The path to the unix domain socket to connect to.
-    ///     - url: The URL path and query that will be sent to the server.
     ///     - method: Request method.
+    ///     - socketPath: The path to the unix domain socket to connect to.
+    ///     - urlPath: The URL path and query that will be sent to the server.
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
-    public func execute(socketPath: String, url: String, method: HTTPMethod, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger? = nil) -> EventLoopFuture<Response> {
+    public func execute(_ method: HTTPMethod = .GET, socketPath: String, urlPath: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger? = nil) -> EventLoopFuture<Response> {
         do {
-            guard let url = URL(httpURLWithSocketPath: socketPath, uri: url) else {
+            guard let url = URL(httpURLWithSocketPath: socketPath, uri: urlPath) else {
                 throw HTTPClientError.invalidURL
             }
             let request = try Request(url: url, method: method, body: body)
@@ -363,15 +363,15 @@ public class HTTPClient {
     /// Execute arbitrary HTTPS+UNIX request to a unix domain socket path over TLS, using the specified URL as the request to send to the server.
     ///
     /// - parameters:
-    ///     - secureSocketPath: The path to the unix domain socket to connect to.
-    ///     - url: The URL path and query that will be sent to the server.
     ///     - method: Request method.
+    ///     - secureSocketPath: The path to the unix domain socket to connect to.
+    ///     - urlPath: The URL path and query that will be sent to the server.
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
-    public func execute(secureSocketPath: String, url: String, method: HTTPMethod, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger? = nil) -> EventLoopFuture<Response> {
+    public func execute(_ method: HTTPMethod = .GET, secureSocketPath: String, urlPath: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger? = nil) -> EventLoopFuture<Response> {
         do {
-            guard let url = URL(httpsURLWithSocketPath: secureSocketPath, uri: url) else {
+            guard let url = URL(httpsURLWithSocketPath: secureSocketPath, uri: urlPath) else {
                 throw HTTPClientError.invalidURL
             }
             let request = try Request(url: url, method: method, body: body)

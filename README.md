@@ -162,13 +162,13 @@ httpClient.execute(request: request, delegate: delegate).futureResult.whenSucces
 Connecting to servers bound to socket paths is easy:
 ```swift
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
-httpClient.execute(socketPath: "/tmp/myServer.socket", url: "/path/to/resource", method: .GET).whenComplete (...)
+httpClient.execute(.GET, socketPath: "/tmp/myServer.socket", urlPath: "/path/to/resource").whenComplete (...)
 ```
 
 Connecting over TLS to a unix domain socket path is possible as well:
 ```swift
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
-httpClient.execute(secureSocketPath: "/tmp/myServer.socket", url: "/path/to/resource", body: .string("hello"), method: .POST).whenComplete (...)
+httpClient.execute(.POST, secureSocketPath: "/tmp/myServer.socket", urlPath: "/path/to/resource", body: .string("hello")).whenComplete (...)
 ```
 
 Direct URLs can easily be contructed to be executed in other scenarios:
