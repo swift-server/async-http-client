@@ -237,17 +237,9 @@ class HTTPClientTests: XCTestCase {
             }
 
             XCTAssertNoThrow(XCTAssertEqual(["GET"[...]],
-                                            try self.defaultClient.get(socketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+                                            try self.defaultClient.execute(socketPath: path, url: "echo-method", method: .GET).wait().headers[canonicalForm: "X-Method-Used"]))
             XCTAssertNoThrow(XCTAssertEqual(["POST"[...]],
-                                            try self.defaultClient.post(socketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-            XCTAssertNoThrow(XCTAssertEqual(["PATCH"[...]],
-                                            try self.defaultClient.patch(socketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-            XCTAssertNoThrow(XCTAssertEqual(["PUT"[...]],
-                                            try self.defaultClient.put(socketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-            XCTAssertNoThrow(XCTAssertEqual(["DELETE"[...]],
-                                            try self.defaultClient.delete(socketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-            XCTAssertNoThrow(XCTAssertEqual(["CHECKOUT"[...]],
-                                            try self.defaultClient.execute(socketPath: path, url: "echo-method", method: .CHECKOUT).wait().headers[canonicalForm: "X-Method-Used"]))
+                                            try self.defaultClient.execute(socketPath: path, url: "echo-method", method: .POST).wait().headers[canonicalForm: "X-Method-Used"]))
         })
     }
 
@@ -262,17 +254,9 @@ class HTTPClientTests: XCTestCase {
             }
 
             XCTAssertNoThrow(XCTAssertEqual(["GET"[...]],
-                                            try localClient.get(secureSocketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+                                            try localClient.execute(secureSocketPath: path, url: "echo-method", method: .GET).wait().headers[canonicalForm: "X-Method-Used"]))
             XCTAssertNoThrow(XCTAssertEqual(["POST"[...]],
-                                            try localClient.post(secureSocketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-            XCTAssertNoThrow(XCTAssertEqual(["PATCH"[...]],
-                                            try localClient.patch(secureSocketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-            XCTAssertNoThrow(XCTAssertEqual(["PUT"[...]],
-                                            try localClient.put(secureSocketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-            XCTAssertNoThrow(XCTAssertEqual(["DELETE"[...]],
-                                            try localClient.delete(secureSocketPath: path, url: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-            XCTAssertNoThrow(XCTAssertEqual(["CHECKOUT"[...]],
-                                            try localClient.execute(secureSocketPath: path, url: "echo-method", method: .CHECKOUT).wait().headers[canonicalForm: "X-Method-Used"]))
+                                            try localClient.execute(secureSocketPath: path, url: "echo-method", method: .POST).wait().headers[canonicalForm: "X-Method-Used"]))
         })
     }
 
