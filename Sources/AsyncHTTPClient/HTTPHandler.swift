@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Foundation
+import Logging
 import NIO
 import NIOConcurrencyHelpers
 import NIOFoundationCompat
@@ -533,17 +534,19 @@ extension HTTPClient {
         var connection: Connection?
         var cancelled: Bool
         let lock: Lock
+        let logger: Logger // We are okay to store the logger here because a Task is for only ond request.
 
-        init(eventLoop: EventLoop) {
+        init(eventLoop: EventLoop, logger: Logger) {
             self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.completion = self.promise.futureResult.map { _ in }
             self.cancelled = false
             self.lock = Lock()
+            self.logger = logger
         }
 
-        static func failedTask(eventLoop: EventLoop, error: Error) -> Task<Response> {
-            let task = self.init(eventLoop: eventLoop)
+        static func failedTask(eventLoop: EventLoop, error: Error, logger: Logger) -> Task<Response> {
+            let task = self.init(eventLoop: eventLoop, logger: logger)
             task.promise.fail(error)
             return task
         }
@@ -585,13 +588,18 @@ extension HTTPClient {
             }
         }
 
-        func succeed<Delegate: HTTPClientResponseDelegate>(promise: EventLoopPromise<Response>?, with value: Response, delegateType: Delegate.Type, closing: Bool) {
-            self.releaseAssociatedConnection(delegateType: delegateType, closing: closing).whenSuccess {
+        func succeed<Delegate: HTTPClientResponseDelegate>(promise: EventLoopPromise<Response>?,
+                                                           with value: Response,
+                                                           delegateType: Delegate.Type,
+                                                           closing: Bool) {
+            self.releaseAssociatedConnection(delegateType: delegateType,
+                                             closing: closing).whenSuccess {
                 promise?.succeed(value)
             }
         }
 
-        func fail<Delegate: HTTPClientResponseDelegate>(with error: Error, delegateType: Delegate.Type) {
+        func fail<Delegate: HTTPClientResponseDelegate>(with error: Error,
+                                                        delegateType: Delegate.Type) {
             if let connection = self.connection {
                 self.releaseAssociatedConnection(delegateType: delegateType, closing: true)
                     .whenSuccess {
@@ -601,13 +609,14 @@ extension HTTPClient {
             }
         }
 
-        func releaseAssociatedConnection<Delegate: HTTPClientResponseDelegate>(delegateType: Delegate.Type, closing: Bool) -> EventLoopFuture<Void> {
+        func releaseAssociatedConnection<Delegate: HTTPClientResponseDelegate>(delegateType: Delegate.Type,
+                                                                               closing: Bool) -> EventLoopFuture<Void> {
             if let connection = self.connection {
                 // remove read timeout handler
                 return connection.removeHandler(IdleStateHandler.self).flatMap {
                     connection.removeHandler(TaskHandler<Delegate>.self)
                 }.map {
-                    connection.release(closing: closing)
+                    connection.release(closing: closing, logger: self.logger)
                 }.flatMapError { error in
                     fatalError("Couldn't remove taskHandler: \(error)")
                 }
@@ -639,6 +648,7 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: RemovableChann
     let delegate: Delegate
     let redirectHandler: RedirectHandler<Delegate.Response>?
     let ignoreUncleanSSLShutdown: Bool
+    let logger: Logger // We are okay to store the logger here because a TaskHandler is just for one request.
 
     var state: State = .idle
     var pendingRead = false
@@ -656,12 +666,14 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: RemovableChann
          kind: HTTPClient.Request.Kind,
          delegate: Delegate,
          redirectHandler: RedirectHandler<Delegate.Response>?,
-         ignoreUncleanSSLShutdown: Bool) {
+         ignoreUncleanSSLShutdown: Bool,
+         logger: Logger) {
         self.task = task
         self.delegate = delegate
         self.redirectHandler = redirectHandler
         self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
         self.kind = kind
+        self.logger = logger
     }
 }
 
@@ -717,7 +729,10 @@ extension TaskHandler {
             do {
                 let result = try body(self.task)
 
-                self.task.succeed(promise: promise, with: result, delegateType: Delegate.self, closing: self.closing)
+                self.task.succeed(promise: promise,
+                                  with: result,
+                                  delegateType: Delegate.self,
+                                  closing: self.closing)
             } catch {
                 self.task.fail(with: error, delegateType: Delegate.self)
             }

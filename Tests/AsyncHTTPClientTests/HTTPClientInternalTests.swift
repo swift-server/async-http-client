@@ -39,14 +39,15 @@ class HTTPClientInternalTests: XCTestCase {
     func testHTTPPartsHandler() throws {
         let channel = EmbeddedChannel()
         let recorder = RecordingHandler<HTTPClientResponsePart, HTTPClientRequestPart>()
-        let task = Task<Void>(eventLoop: channel.eventLoop)
+        let task = Task<Void>(eventLoop: channel.eventLoop, logger: HTTPClient.loggingDisabled)
 
         try channel.pipeline.addHandler(recorder).wait()
         try channel.pipeline.addHandler(TaskHandler(task: task,
                                                     kind: .host,
                                                     delegate: TestHTTPDelegate(),
                                                     redirectHandler: nil,
-                                                    ignoreUncleanSSLShutdown: false)).wait()
+                                                    ignoreUncleanSSLShutdown: false,
+                                                    logger: HTTPClient.loggingDisabled)).wait()
 
         var request = try Request(url: "http://localhost/get")
         request.headers.add(name: "X-Test-Header", value: "X-Test-Value")
@@ -69,14 +70,15 @@ class HTTPClientInternalTests: XCTestCase {
     func testBadHTTPRequest() throws {
         let channel = EmbeddedChannel()
         let recorder = RecordingHandler<HTTPClientResponsePart, HTTPClientRequestPart>()
-        let task = Task<Void>(eventLoop: channel.eventLoop)
+        let task = Task<Void>(eventLoop: channel.eventLoop, logger: HTTPClient.loggingDisabled)
 
         XCTAssertNoThrow(try channel.pipeline.addHandler(recorder).wait())
         XCTAssertNoThrow(try channel.pipeline.addHandler(TaskHandler(task: task,
                                                                      kind: .host,
                                                                      delegate: TestHTTPDelegate(),
                                                                      redirectHandler: nil,
-                                                                     ignoreUncleanSSLShutdown: false)).wait())
+                                                                     ignoreUncleanSSLShutdown: false,
+                                                                     logger: HTTPClient.loggingDisabled)).wait())
 
         var request = try Request(url: "http://localhost/get")
         request.headers.add(name: "X-Test-Header", value: "X-Test-Value")
@@ -91,12 +93,13 @@ class HTTPClientInternalTests: XCTestCase {
     func testHTTPPartsHandlerMultiBody() throws {
         let channel = EmbeddedChannel()
         let delegate = TestHTTPDelegate()
-        let task = Task<Void>(eventLoop: channel.eventLoop)
+        let task = Task<Void>(eventLoop: channel.eventLoop, logger: HTTPClient.loggingDisabled)
         let handler = TaskHandler(task: task,
                                   kind: .host,
                                   delegate: delegate,
                                   redirectHandler: nil,
-                                  ignoreUncleanSSLShutdown: false)
+                                  ignoreUncleanSSLShutdown: false,
+                                  logger: HTTPClient.loggingDisabled)
 
         try channel.pipeline.addHandler(handler).wait()
 
@@ -573,11 +576,12 @@ class HTTPClientInternalTests: XCTestCase {
         // This is pretty evil but we literally just get hold of a connection to get to the channel to be able to
         // observe when the server closing the connection is known to the client.
         let el = group.next()
-        XCTAssertNoThrow(maybeConnection = try client.pool.getConnection(for: .init(url: url),
+        XCTAssertNoThrow(maybeConnection = try client.pool.getConnection(Request(url: url),
                                                                          preference: .indifferent,
-                                                                         on: el,
+                                                                         taskEventLoop: el,
                                                                          deadline: nil,
-                                                                         setupComplete: el.makeSucceededFuture(())).wait())
+                                                                         setupComplete: el.makeSucceededFuture(()),
+                                                                         logger: HTTPClient.loggingDisabled).wait())
         guard let connection = maybeConnection else {
             XCTFail("couldn't get connection")
             return
@@ -585,7 +589,7 @@ class HTTPClientInternalTests: XCTestCase {
 
         // And let's also give the connection back :).
         try connection.channel.eventLoop.submit {
-            connection.release(closing: false)
+            connection.release(closing: false, logger: HTTPClient.loggingDisabled)
         }.wait()
 
         XCTAssertEqual(0, sharedStateServerHandler.requestNumber.load())
@@ -622,11 +626,12 @@ class HTTPClientInternalTests: XCTestCase {
                                               body: nil)
             var maybeConnection: Connection?
             let el = client.eventLoopGroup.next()
-            XCTAssertNoThrow(try maybeConnection = client.pool.getConnection(for: req,
+            XCTAssertNoThrow(try maybeConnection = client.pool.getConnection(req,
                                                                              preference: .indifferent,
-                                                                             on: el,
+                                                                             taskEventLoop: el,
                                                                              deadline: nil,
-                                                                             setupComplete: el.makeSucceededFuture(())).wait())
+                                                                             setupComplete: el.makeSucceededFuture(()),
+                                                                             logger: HTTPClient.loggingDisabled).wait())
             guard let connection = maybeConnection else {
                 XCTFail("couldn't make connection")
                 throw NoChannelError()
@@ -634,7 +639,7 @@ class HTTPClientInternalTests: XCTestCase {
 
             let channel = connection.channel
             try! channel.eventLoop.submit {
-                connection.release(closing: true)
+                connection.release(closing: true, logger: HTTPClient.loggingDisabled)
             }.wait()
             return (web, channel)
         })
@@ -707,11 +712,12 @@ class HTTPClientInternalTests: XCTestCase {
         // Let's start by getting a connection so we can mess with the Channel :).
         var maybeConnection: Connection?
         let el = client.eventLoopGroup.next()
-        XCTAssertNoThrow(try maybeConnection = client.pool.getConnection(for: req,
+        XCTAssertNoThrow(try maybeConnection = client.pool.getConnection(req,
                                                                          preference: .indifferent,
-                                                                         on: el,
+                                                                         taskEventLoop: el,
                                                                          deadline: nil,
-                                                                         setupComplete: el.makeSucceededFuture(())).wait())
+                                                                         setupComplete: el.makeSucceededFuture(()),
+                                                                         logger: HTTPClient.loggingDisabled).wait())
         guard let connection = maybeConnection else {
             XCTFail("couldn't make connection")
             return
@@ -725,7 +731,7 @@ class HTTPClientInternalTests: XCTestCase {
                                                                                            sawTheClosePromise: sawTheClosePromise),
                                                          position: .first).wait())
         try! connection.channel.eventLoop.submit {
-            connection.release(closing: false)
+            connection.release(closing: false, logger: HTTPClient.loggingDisabled)
         }.wait()
 
         XCTAssertNoThrow(try client.execute(request: req).wait())
@@ -742,11 +748,12 @@ class HTTPClientInternalTests: XCTestCase {
         // When asking for a connection again, we should _not_ get the same one back because we did most of the close,
         // similar to what the SSLHandler would do.
         let el2 = client.eventLoopGroup.next()
-        let connection2Future = client.pool.getConnection(for: req,
+        let connection2Future = client.pool.getConnection(req,
                                                           preference: .indifferent,
-                                                          on: el2,
+                                                          taskEventLoop: el2,
                                                           deadline: nil,
-                                                          setupComplete: el2.makeSucceededFuture(()))
+                                                          setupComplete: el2.makeSucceededFuture(()),
+                                                          logger: HTTPClient.loggingDisabled)
         doActualCloseNowPromise.succeed(())
 
         XCTAssertNoThrow(try maybeConnection = connection2Future.wait())
@@ -757,7 +764,7 @@ class HTTPClientInternalTests: XCTestCase {
 
         XCTAssert(connection !== connection2)
         try! connection2.channel.eventLoop.submit {
-            connection2.release(closing: true)
+            connection2.release(closing: true, logger: HTTPClient.loggingDisabled)
         }.wait()
         XCTAssertTrue(connection2.channel.isActive)
     }

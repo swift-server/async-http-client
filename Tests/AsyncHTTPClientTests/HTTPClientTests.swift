@@ -16,6 +16,7 @@
 #if canImport(Network)
     import Network
 #endif
+import Logging
 import NIO
 import NIOConcurrencyHelpers
 import NIOFoundationCompat
@@ -33,6 +34,7 @@ class HTTPClientTests: XCTestCase {
     var serverGroup: EventLoopGroup!
     var defaultHTTPBin: HTTPBin!
     var defaultClient: HTTPClient!
+    var backgroundLogStore: CollectEverythingLogHandler.LogStore!
 
     var defaultHTTPBinURLPrefix: String {
         return "http://localhost:\(self.defaultHTTPBin.port)/"
@@ -43,16 +45,25 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNil(self.serverGroup)
         XCTAssertNil(self.defaultHTTPBin)
         XCTAssertNil(self.defaultClient)
+        XCTAssertNil(self.backgroundLogStore)
+
         self.clientGroup = getDefaultEventLoopGroup(numberOfThreads: 1)
         self.serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         self.defaultHTTPBin = HTTPBin()
-        self.defaultClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        self.backgroundLogStore = CollectEverythingLogHandler.LogStore()
+        var backgroundLogger = Logger(label: "\(#function)", factory: { _ in
+            CollectEverythingLogHandler(logStore: self.backgroundLogStore!)
+        })
+        backgroundLogger.logLevel = .trace
+        self.defaultClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                        backgroundActivityLogger: backgroundLogger)
     }
 
     override func tearDown() {
-        XCTAssertNotNil(self.defaultClient)
-        XCTAssertNoThrow(try self.defaultClient.syncShutdown())
-        self.defaultClient = nil
+        if let defaultClient = self.defaultClient {
+            XCTAssertNoThrow(try defaultClient.syncShutdown())
+            self.defaultClient = nil
+        }
 
         XCTAssertNotNil(self.defaultHTTPBin)
         XCTAssertNoThrow(try self.defaultHTTPBin.shutdown())
@@ -65,6 +76,9 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNotNil(self.serverGroup)
         XCTAssertNoThrow(try self.serverGroup.syncShutdownGracefully())
         self.serverGroup = nil
+
+        XCTAssertNotNil(self.backgroundLogStore)
+        self.backgroundLogStore = nil
     }
 
     func testRequestURI() throws {
@@ -1792,5 +1806,198 @@ class HTTPClientTests: XCTestCase {
             XCTAssertEqual(stats2.requestNumber + 1, stats3.requestNumber)
             XCTAssertEqual(stats2.connectionNumber, stats3.connectionNumber)
         }
+    }
+
+    func testLoggingCorrectlyAttachesRequestInformation() {
+        let logStore = CollectEverythingLogHandler.LogStore()
+
+        var loggerYolo001: Logger = Logger(label: "\(#function)", factory: { _ in
+            CollectEverythingLogHandler(logStore: logStore)
+        })
+        loggerYolo001.logLevel = .trace
+        loggerYolo001[metadataKey: "yolo-request-id"] = "yolo-001"
+        var loggerACME002: Logger = Logger(label: "\(#function)", factory: { _ in
+            CollectEverythingLogHandler(logStore: logStore)
+        })
+        loggerACME002.logLevel = .trace
+        loggerACME002[metadataKey: "acme-request-id"] = "acme-002"
+
+        guard let request1 = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get"),
+            let request2 = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "stats"),
+            let request3 = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "ok") else {
+            XCTFail("bad stuff, can't even make request structures")
+            return
+        }
+
+        // === Request 1 (Yolo001)
+        XCTAssertNoThrow(try self.defaultClient.execute(request: request1,
+                                                        eventLoop: .indifferent,
+                                                        deadline: nil,
+                                                        logger: loggerYolo001).wait())
+        let logsAfterReq1 = logStore.allEntries
+        logStore.allEntries = []
+
+        // === Request 2 (Yolo001)
+        XCTAssertNoThrow(try self.defaultClient.execute(request: request2,
+                                                        eventLoop: .indifferent,
+                                                        deadline: nil,
+                                                        logger: loggerYolo001).wait())
+        let logsAfterReq2 = logStore.allEntries
+        logStore.allEntries = []
+
+        // === Request 3 (ACME002)
+        XCTAssertNoThrow(try self.defaultClient.execute(request: request3,
+                                                        eventLoop: .indifferent,
+                                                        deadline: nil,
+                                                        logger: loggerACME002).wait())
+        let logsAfterReq3 = logStore.allEntries
+        logStore.allEntries = []
+
+        // === Assertions
+        XCTAssertGreaterThan(logsAfterReq1.count, 0)
+        XCTAssertGreaterThan(logsAfterReq2.count, 0)
+        XCTAssertGreaterThan(logsAfterReq3.count, 0)
+
+        XCTAssert(logsAfterReq1.allSatisfy { entry in
+            if let httpRequestMetadata = entry.metadata["ahc-request-id"],
+                let yoloRequestID = entry.metadata["yolo-request-id"] {
+                XCTAssertNil(entry.metadata["acme-request-id"])
+                XCTAssertEqual("yolo-001", yoloRequestID)
+                XCTAssertNotNil(Int(httpRequestMetadata))
+                return true
+            } else {
+                XCTFail("log message doesn't contain the right IDs: \(entry)")
+                return false
+            }
+        })
+        XCTAssert(logsAfterReq1.contains { entry in
+            entry.message == "opening fresh connection (no connections to reuse available)"
+        })
+
+        XCTAssert(logsAfterReq2.allSatisfy { entry in
+            if let httpRequestMetadata = entry.metadata["ahc-request-id"],
+                let yoloRequestID = entry.metadata["yolo-request-id"] {
+                XCTAssertNil(entry.metadata["acme-request-id"])
+                XCTAssertEqual("yolo-001", yoloRequestID)
+                XCTAssertNotNil(Int(httpRequestMetadata))
+                return true
+            } else {
+                XCTFail("log message doesn't contain the right IDs: \(entry)")
+                return false
+            }
+        })
+        XCTAssert(logsAfterReq2.contains { entry in
+            entry.message.starts(with: "leasing existing connection")
+        })
+
+        XCTAssert(logsAfterReq3.allSatisfy { entry in
+            if let httpRequestMetadata = entry.metadata["ahc-request-id"],
+                let acmeRequestID = entry.metadata["acme-request-id"] {
+                XCTAssertNil(entry.metadata["yolo-request-id"])
+                XCTAssertEqual("acme-002", acmeRequestID)
+                XCTAssertNotNil(Int(httpRequestMetadata))
+                return true
+            } else {
+                XCTFail("log message doesn't contain the right IDs: \(entry)")
+                return false
+            }
+        })
+        XCTAssert(logsAfterReq3.contains { entry in
+            entry.message.starts(with: "leasing existing connection")
+        })
+    }
+
+    func testNothingIsLoggedAtInfoOrHigher() {
+        let logStore = CollectEverythingLogHandler.LogStore()
+
+        var logger: Logger = Logger(label: "\(#function)", factory: { _ in
+            CollectEverythingLogHandler(logStore: logStore)
+        })
+        logger.logLevel = .info
+
+        guard let request1 = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get"),
+            let request2 = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "stats") else {
+            XCTFail("bad stuff, can't even make request structures")
+            return
+        }
+
+        // === Request 1
+        XCTAssertNoThrow(try self.defaultClient.execute(request: request1,
+                                                        eventLoop: .indifferent,
+                                                        deadline: nil,
+                                                        logger: logger).wait())
+        XCTAssertEqual(0, logStore.allEntries.count)
+
+        // === Request 2
+        XCTAssertNoThrow(try self.defaultClient.execute(request: request2,
+                                                        eventLoop: .indifferent,
+                                                        deadline: nil,
+                                                        logger: logger).wait())
+        XCTAssertEqual(0, logStore.allEntries.count)
+
+        XCTAssertEqual(0, self.backgroundLogStore.allEntries.count)
+    }
+
+    func testAllMethodsLog() {
+        func checkExpectationsWithLogger<T>(type: String, _ body: (Logger, String) throws -> T) throws -> T {
+            let logStore = CollectEverythingLogHandler.LogStore()
+
+            var logger: Logger = Logger(label: "\(#function)", factory: { _ in
+                CollectEverythingLogHandler(logStore: logStore)
+            })
+            logger.logLevel = .trace
+            logger[metadataKey: "req"] = "yo-\(type)"
+
+            let url = self.defaultHTTPBinURLPrefix + "not-found/request/\(type))"
+            let result = try body(logger, url)
+
+            XCTAssertGreaterThan(logStore.allEntries.count, 0)
+            logStore.allEntries.forEach { entry in
+                XCTAssertEqual("yo-\(type)", entry.metadata["req"] ?? "n/a")
+                XCTAssertNotNil(Int(entry.metadata["ahc-request-id"] ?? "n/a"))
+            }
+            return result
+        }
+
+        XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "GET") { logger, url in
+            try self.defaultClient.get(url: url, logger: logger).wait()
+        }.status))
+
+        XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "PUT") { logger, url in
+            try self.defaultClient.put(url: url, logger: logger).wait()
+        }.status))
+
+        XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "POST") { logger, url in
+            try self.defaultClient.post(url: url, logger: logger).wait()
+        }.status))
+
+        XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "DELETE") { logger, url in
+            try self.defaultClient.delete(url: url, logger: logger).wait()
+        }.status))
+
+        XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "PATCH") { logger, url in
+            try self.defaultClient.patch(url: url, logger: logger).wait()
+        }.status))
+
+        // No background activity expected here.
+        XCTAssertEqual(0, self.backgroundLogStore.allEntries.count)
+    }
+
+    func testClosingIdleConnectionsInPoolLogsInTheBackground() {
+        XCTAssertNoThrow(try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "/get").wait())
+
+        XCTAssertNoThrow(try self.defaultClient.syncShutdown())
+
+        XCTAssertGreaterThanOrEqual(self.backgroundLogStore.allEntries.count, 0)
+        XCTAssert(self.backgroundLogStore.allEntries.contains { entry in
+            entry.message == "closing provider"
+        })
+        XCTAssert(self.backgroundLogStore.allEntries.allSatisfy { entry in
+            entry.metadata["ahc-request-id"] == nil &&
+                entry.metadata["ahc-request"] == nil &&
+                entry.metadata["ahc-provider"] != nil
+        })
+
+        self.defaultClient = nil // so it doesn't get shut down again.
     }
 }
