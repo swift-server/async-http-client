@@ -25,15 +25,18 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.7.0"),
         .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.3.0"),
         .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.5.1"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
     ],
     targets: [
         .target(
             name: "AsyncHTTPClient",
-            dependencies: ["NIO", "NIOHTTP1", "NIOSSL", "NIOConcurrencyHelpers", "NIOHTTPCompression", "NIOFoundationCompat", "NIOTransportServices"]
+            dependencies: ["NIO", "NIOHTTP1", "NIOSSL", "NIOConcurrencyHelpers", "NIOHTTPCompression",
+                           "NIOFoundationCompat", "NIOTransportServices", "Logging"]
         ),
         .testTarget(
             name: "AsyncHTTPClientTests",
-            dependencies: ["NIO", "NIOConcurrencyHelpers", "NIOSSL", "AsyncHTTPClient", "NIOFoundationCompat", "NIOTestUtils"]
+            dependencies: ["NIO", "NIOConcurrencyHelpers", "NIOSSL", "AsyncHTTPClient", "NIOFoundationCompat",
+                           "NIOTestUtils", "Logging"]
         ),
     ]
 )

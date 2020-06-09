@@ -9,5 +9,6 @@
 --patternlet inline
 --stripunusedargs unnamed-only
 --ranges nospace
+--disable typeSugar # https://github.com/nicklockwood/SwiftFormat/issues/636
 
 # rules

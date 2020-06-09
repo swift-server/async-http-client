@@ -14,6 +14,7 @@
 
 import AsyncHTTPClient
 import Foundation
+import Logging
 import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
@@ -749,6 +750,60 @@ extension EventLoopFuture {
         }
 
         return promise.futureResult
+    }
+}
+
+struct CollectEverythingLogHandler: LogHandler {
+    var metadata: Logger.Metadata = [:]
+    var logLevel: Logger.Level = .info
+    let logStore: LogStore
+
+    class LogStore {
+        struct Entry {
+            var level: Logger.Level
+            var message: String
+            var metadata: [String: String]
+        }
+
+        var lock = Lock()
+        var logs: [Entry] = []
+
+        var allEntries: [Entry] {
+            get {
+                return self.lock.withLock { self.logs }
+            }
+            set {
+                self.lock.withLock { self.logs = newValue }
+            }
+        }
+
+        func append(level: Logger.Level, message: Logger.Message, metadata: Logger.Metadata?) {
+            self.lock.withLock {
+                self.logs.append(Entry(level: level,
+                                       message: message.description,
+                                       metadata: metadata?.mapValues { $0.description } ?? [:]))
+            }
+        }
+    }
+
+    init(logStore: LogStore) {
+        self.logStore = logStore
+    }
+
+    func log(level: Logger.Level,
+             message: Logger.Message,
+             metadata: Logger.Metadata?,
+             file: String, function: String, line: UInt) {
+        self.logStore.append(level: level, message: message, metadata: self.metadata.merging(metadata ?? [:]) { $1 })
+    }
+
+    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
+        get {
+            return self.metadata[key]
+        }
+        set {
+            self.metadata[key] = newValue
+        }
     }
 }
 
