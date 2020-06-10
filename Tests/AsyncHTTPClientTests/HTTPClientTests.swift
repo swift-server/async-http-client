@@ -2091,7 +2091,70 @@ class HTTPClientTests: XCTestCase {
                                                         logger: logger).wait())
         XCTAssertEqual(0, logStore.allEntries.count)
 
+        // === Synthesized Request
+        XCTAssertNoThrow(try self.defaultClient.execute(.GET,
+                                                        url: self.defaultHTTPBinURLPrefix + "get",
+                                                        body: nil,
+                                                        deadline: nil,
+                                                        logger: logger).wait())
+        XCTAssertEqual(0, logStore.allEntries.count)
+
         XCTAssertEqual(0, self.backgroundLogStore.allEntries.count)
+
+        // === Synthesized Socket Path Request
+        XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
+            let backgroundLogStore = CollectEverythingLogHandler.LogStore()
+            var backgroundLogger = Logger(label: "\(#function)", factory: { _ in
+                CollectEverythingLogHandler(logStore: backgroundLogStore)
+            })
+            backgroundLogger.logLevel = .trace
+
+            let localSocketPathHTTPBin = HTTPBin(bindTarget: .unixDomainSocket(path))
+            let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                         backgroundActivityLogger: backgroundLogger)
+            defer {
+                XCTAssertNoThrow(try localClient.syncShutdown())
+                XCTAssertNoThrow(try localSocketPathHTTPBin.shutdown())
+            }
+
+            XCTAssertNoThrow(try localClient.execute(.GET,
+                                                     socketPath: path,
+                                                     urlPath: "get",
+                                                     body: nil,
+                                                     deadline: nil,
+                                                     logger: logger).wait())
+            XCTAssertEqual(0, logStore.allEntries.count)
+
+            XCTAssertEqual(0, backgroundLogStore.allEntries.count)
+        })
+
+        // === Synthesized Secure Socket Path Request
+        XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
+            let backgroundLogStore = CollectEverythingLogHandler.LogStore()
+            var backgroundLogger = Logger(label: "\(#function)", factory: { _ in
+                CollectEverythingLogHandler(logStore: backgroundLogStore)
+            })
+            backgroundLogger.logLevel = .trace
+
+            let localSocketPathHTTPBin = HTTPBin(ssl: true, bindTarget: .unixDomainSocket(path))
+            let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                         configuration: HTTPClient.Configuration(certificateVerification: .none),
+                                         backgroundActivityLogger: backgroundLogger)
+            defer {
+                XCTAssertNoThrow(try localClient.syncShutdown())
+                XCTAssertNoThrow(try localSocketPathHTTPBin.shutdown())
+            }
+
+            XCTAssertNoThrow(try localClient.execute(.GET,
+                                                     secureSocketPath: path,
+                                                     urlPath: "get",
+                                                     body: nil,
+                                                     deadline: nil,
+                                                     logger: logger).wait())
+            XCTAssertEqual(0, logStore.allEntries.count)
+
+            XCTAssertEqual(0, backgroundLogStore.allEntries.count)
+        })
     }
 
     func testAllMethodsLog() {
@@ -2104,7 +2167,7 @@ class HTTPClientTests: XCTestCase {
             logger.logLevel = .trace
             logger[metadataKey: "req"] = "yo-\(type)"
 
-            let url = self.defaultHTTPBinURLPrefix + "not-found/request/\(type))"
+            let url = "not-found/request/\(type))"
             let result = try body(logger, url)
 
             XCTAssertGreaterThan(logStore.allEntries.count, 0)
@@ -2116,27 +2179,78 @@ class HTTPClientTests: XCTestCase {
         }
 
         XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "GET") { logger, url in
-            try self.defaultClient.get(url: url, logger: logger).wait()
+            try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + url, logger: logger).wait()
         }.status))
 
         XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "PUT") { logger, url in
-            try self.defaultClient.put(url: url, logger: logger).wait()
+            try self.defaultClient.put(url: self.defaultHTTPBinURLPrefix + url, logger: logger).wait()
         }.status))
 
         XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "POST") { logger, url in
-            try self.defaultClient.post(url: url, logger: logger).wait()
+            try self.defaultClient.post(url: self.defaultHTTPBinURLPrefix + url, logger: logger).wait()
         }.status))
 
         XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "DELETE") { logger, url in
-            try self.defaultClient.delete(url: url, logger: logger).wait()
+            try self.defaultClient.delete(url: self.defaultHTTPBinURLPrefix + url, logger: logger).wait()
         }.status))
 
         XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "PATCH") { logger, url in
-            try self.defaultClient.patch(url: url, logger: logger).wait()
+            try self.defaultClient.patch(url: self.defaultHTTPBinURLPrefix + url, logger: logger).wait()
+        }.status))
+
+        XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "CHECKOUT") { logger, url in
+            try self.defaultClient.execute(.CHECKOUT, url: self.defaultHTTPBinURLPrefix + url, logger: logger).wait()
         }.status))
 
         // No background activity expected here.
         XCTAssertEqual(0, self.backgroundLogStore.allEntries.count)
+
+        XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
+            let backgroundLogStore = CollectEverythingLogHandler.LogStore()
+            var backgroundLogger = Logger(label: "\(#function)", factory: { _ in
+                CollectEverythingLogHandler(logStore: backgroundLogStore)
+            })
+            backgroundLogger.logLevel = .trace
+
+            let localSocketPathHTTPBin = HTTPBin(bindTarget: .unixDomainSocket(path))
+            let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                         backgroundActivityLogger: backgroundLogger)
+            defer {
+                XCTAssertNoThrow(try localClient.syncShutdown())
+                XCTAssertNoThrow(try localSocketPathHTTPBin.shutdown())
+            }
+
+            XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "GET") { logger, url in
+                try localClient.execute(socketPath: path, urlPath: url, logger: logger).wait()
+            }.status))
+
+            // No background activity expected here.
+            XCTAssertEqual(0, backgroundLogStore.allEntries.count)
+        })
+
+        XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
+            let backgroundLogStore = CollectEverythingLogHandler.LogStore()
+            var backgroundLogger = Logger(label: "\(#function)", factory: { _ in
+                CollectEverythingLogHandler(logStore: backgroundLogStore)
+            })
+            backgroundLogger.logLevel = .trace
+
+            let localSocketPathHTTPBin = HTTPBin(ssl: true, bindTarget: .unixDomainSocket(path))
+            let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                         configuration: HTTPClient.Configuration(certificateVerification: .none),
+                                         backgroundActivityLogger: backgroundLogger)
+            defer {
+                XCTAssertNoThrow(try localClient.syncShutdown())
+                XCTAssertNoThrow(try localSocketPathHTTPBin.shutdown())
+            }
+
+            XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "GET") { logger, url in
+                try localClient.execute(secureSocketPath: path, urlPath: url, logger: logger).wait()
+            }.status))
+
+            // No background activity expected here.
+            XCTAssertEqual(0, backgroundLogStore.allEntries.count)
+        })
     }
 
     func testClosingIdleConnectionsInPoolLogsInTheBackground() {
