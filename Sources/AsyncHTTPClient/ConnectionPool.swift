@@ -85,7 +85,8 @@ final class ConnectionPool {
                                                        configuration: self.configuration,
                                                        pool: self,
                                                        backgroundActivityLogger: self.backgroundActivityLogger)
-                _ = provider.enqueue()
+                let enqueued = provider.enqueue()
+                assert(enqueued)
                 self.providers[key] = provider
                 return provider
             }
@@ -316,7 +317,7 @@ class HTTP1ConnectionProvider {
         self.state.assertInvariants()
     }
 
-    private func execute(_ action: Action, logger: Logger) {
+    func execute(_ action: Action, logger: Logger) {
         switch action {
         case .lease(let connection, let waiter):
             // if connection is became inactive, we create a new one.
@@ -488,8 +489,15 @@ class HTTP1ConnectionProvider {
 
     func close() -> EventLoopFuture<Bool> {
         if let (waiters, available, leased, clean) = self.lock.withLock({ self.state.close() }) {
+            print(waiters.count, available.count, leased.count, clean)
+
             waiters.forEach {
                 $0.promise.fail(HTTPClientError.cancelled)
+            }
+
+            if available.isEmpty, leased.isEmpty {
+                self.closePromise.succeed(())
+                return self.closePromise.futureResult.map { clean }
             }
 
             EventLoopFuture.andAllComplete(leased.map { $0.cancel() }, on: self.eventLoop).flatMap { _ in
