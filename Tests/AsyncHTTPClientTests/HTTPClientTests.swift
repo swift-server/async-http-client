@@ -915,7 +915,12 @@ class HTTPClientTests: XCTestCase {
                             XCTFail("Unexpected error: \(error)")
                             continue
                         }
-                        XCTAssertEqual(clientError.status, errSSLHandshakeFail)
+                        // We're speaking TLS to a plain text server. This will cause the handshake to fail but given
+                        // that the bytes "HTTP/1.1" aren't the start of a valid TLS packet, we can also get
+                        // errSSLPeerProtocolVersion because the first bytes contain the version.
+                        XCTAssert(clientError.status == errSSLHandshakeFail ||
+                            clientError.status == errSSLPeerProtocolVersion,
+                                  "unexpected NWTLSError with status \(clientError.status)")
                     #endif
                 } else {
                     guard let clientError = error as? NIOSSLError, case NIOSSLError.handshakeFailed = clientError else {
