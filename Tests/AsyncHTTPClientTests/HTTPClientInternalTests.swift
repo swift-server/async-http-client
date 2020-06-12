@@ -49,7 +49,7 @@ class HTTPClientInternalTests: XCTestCase {
                                                     ignoreUncleanSSLShutdown: false,
                                                     logger: HTTPClient.loggingDisabled)).wait()
 
-        var request = try Request(url: "http://localhost/get")
+        var request = try Request(url: "http://localhost:8080/get")
         request.headers.add(name: "X-Test-Header", value: "X-Test-Value")
         request.body = .string("1234")
 
@@ -57,7 +57,7 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertEqual(3, recorder.writes.count)
         var head = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get")
         head.headers.add(name: "X-Test-Header", value: "X-Test-Value")
-        head.headers.add(name: "Host", value: "localhost")
+        head.headers.add(name: "Host", value: "localhost:8080")
         head.headers.add(name: "Content-Length", value: "4")
         XCTAssertEqual(HTTPClientRequestPart.head(head), recorder.writes[0])
         let buffer = ByteBuffer.of(string: "1234")

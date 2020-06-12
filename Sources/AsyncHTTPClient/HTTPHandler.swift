@@ -253,6 +253,11 @@ extension HTTPClient {
             return self.scheme == "https" || self.scheme == "https+unix"
         }
 
+        /// Specified port.
+        public var specifiedPort: Int? {
+            return self.url.port
+        }
+
         /// Resolved port.
         public var port: Int {
             return self.url.port ?? (self.useTLS ? 443 : 80)
@@ -772,7 +777,7 @@ extension TaskHandler: ChannelDuplexHandler {
         var headers = request.headers
 
         if !request.headers.contains(name: "Host") {
-            headers.add(name: "Host", value: request.host)
+            headers.add(name: "Host", value: "\(request.host)\(request.specifiedPort.map { ":\($0)" } ?? "")")
         }
 
         do {
