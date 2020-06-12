@@ -64,7 +64,7 @@ extension HTTP1ConnectionProvider {
         private var openedConnectionsCount: Int = 0
 
         /// Number of enqueued requests, used to track if it is safe to delete the provider.
-        private var pending: Int = 1
+        private var pending: Int = 0
 
         init(maximumConcurrentConnections: Int = 8, eventLoop: EventLoop) {
             self.maximumConcurrentConnections = maximumConcurrentConnections
@@ -148,7 +148,7 @@ extension HTTP1ConnectionProvider {
                     return .none
                 }
             case .closed:
-                return .fail(waiter, ProviderClosedError())
+                return .fail(waiter, HTTPClientError.alreadyShutdown)
             }
         }
 

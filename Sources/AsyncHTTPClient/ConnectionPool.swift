@@ -80,12 +80,12 @@ final class ConnectionPool {
             if let existing = self.providers[key], existing.enqueue() {
                 return existing
             } else {
-                // Connection provider will be created with `pending = 1`
                 let provider = HTTP1ConnectionProvider(key: key,
                                                        eventLoop: taskEventLoop,
                                                        configuration: self.configuration,
                                                        pool: self,
                                                        backgroundActivityLogger: self.backgroundActivityLogger)
+                _ = provider.enqueue()
                 self.providers[key] = provider
                 return provider
             }
@@ -263,8 +263,6 @@ struct ConnectionKey: Hashable {
 /// of concurrent requests as it has built-in politeness regarding the maximum number
 /// of concurrent requests to the server.
 class HTTP1ConnectionProvider {
-    struct ProviderClosedError: Error {}
-
     /// The client configuration used to bootstrap new requests
     private let configuration: HTTPClient.Configuration
 

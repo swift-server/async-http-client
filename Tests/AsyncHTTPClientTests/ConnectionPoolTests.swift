@@ -36,7 +36,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(0, snapshot.availableConnections.count)
         XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
+        XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(0, snapshot.openedConnectionsCount)
 
         XCTAssertTrue(state.enqueue())
@@ -45,7 +45,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(0, snapshot.availableConnections.count)
         XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(2, snapshot.pending)
+        XCTAssertEqual(1, snapshot.pending)
         XCTAssertEqual(0, snapshot.openedConnectionsCount)
     }
 
@@ -58,9 +58,10 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(0, snapshot.availableConnections.count)
         XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
+        XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(0, snapshot.openedConnectionsCount)
 
+        XCTAssertTrue(state.enqueue())
         let action = state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .indifferent))
         switch action {
         case .create(let waiter):
@@ -92,8 +93,10 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(1, snapshot.availableConnections.count)
         XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
+        XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
+
+        XCTAssertTrue(self.http1ConnectionProvider.enqueue())
 
         let action = self.http1ConnectionProvider.state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .indifferent))
         switch action {
@@ -127,8 +130,10 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(0, snapshot.availableConnections.count)
         XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
+        XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(8, snapshot.openedConnectionsCount)
+
+        XCTAssertTrue(self.http1ConnectionProvider.enqueue())
 
         let action = self.http1ConnectionProvider.state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .indifferent))
         switch action {
@@ -159,8 +164,10 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(0, snapshot.availableConnections.count)
         XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
+        XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(0, snapshot.openedConnectionsCount)
+
+        XCTAssertTrue(state.enqueue())
 
         let action = state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: self.eventLoop)))
         switch action {
@@ -192,8 +199,10 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(1, snapshot.availableConnections.count)
         XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
+        XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
+
+        XCTAssertTrue(self.http1ConnectionProvider.enqueue())
 
         let action = self.http1ConnectionProvider.state.acquire(waiter: .init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: channel.eventLoop)))
         switch action {
@@ -231,8 +240,10 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(1, snapshot.availableConnections.count)
         XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
+        XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(8, snapshot.openedConnectionsCount)
+
+        XCTAssertTrue(self.http1ConnectionProvider.enqueue())
 
         let action = self.http1ConnectionProvider.state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: self.eventLoop)))
         switch action {
@@ -266,8 +277,10 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(0, snapshot.availableConnections.count)
         XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
+        XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(8, snapshot.openedConnectionsCount)
+
+        XCTAssertTrue(self.http1ConnectionProvider.enqueue())
 
         let action = self.http1ConnectionProvider.state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: self.eventLoop)))
         switch action {
@@ -1177,7 +1190,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(0, snapshot.availableConnections.count)
         XCTAssertEqual(1, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
+        XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
         connection.release(closing: false, logger: HTTPClient.loggingDisabled)
@@ -1187,7 +1200,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(1, snapshot.availableConnections.count)
         XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
+        XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
         // cleanup
@@ -1211,7 +1224,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(0, snapshot.availableConnections.count)
         XCTAssertEqual(1, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
+        XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
         connection.release(closing: true, logger: HTTPClient.loggingDisabled)
@@ -1220,7 +1233,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(0, snapshot.availableConnections.count)
         XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
+        XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(0, snapshot.openedConnectionsCount)
 
         // cleanup
@@ -1244,7 +1257,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(1, snapshot.availableConnections.count)
         XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
+        XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
         connection.remoteClosed(logger: HTTPClient.loggingDisabled)
@@ -1253,7 +1266,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(0, snapshot.availableConnections.count)
         XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
+        XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(0, snapshot.openedConnectionsCount)
 
         // cleanup
@@ -1277,7 +1290,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(1, snapshot.availableConnections.count)
         XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
+        XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
 
         connection.timeout(logger: HTTPClient.loggingDisabled)
@@ -1286,7 +1299,7 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(0, snapshot.availableConnections.count)
         XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
+        XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(0, snapshot.openedConnectionsCount)
 
         // cleanup
@@ -1309,8 +1322,10 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertEqual(1, snapshot.availableConnections.count)
         XCTAssertEqual(0, snapshot.leasedConnections.count)
         XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
+        XCTAssertEqual(0, snapshot.pending)
         XCTAssertEqual(1, snapshot.openedConnectionsCount)
+
+        XCTAssertTrue(self.http1ConnectionProvider.enqueue())
 
         let action = self.http1ConnectionProvider.state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .indifferent))
         switch action {
