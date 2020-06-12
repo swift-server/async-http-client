@@ -254,7 +254,7 @@ extension HTTPClient {
         }
 
         /// Specified port.
-        public var specifiedPort: Int? {
+        var specifiedPort: Int? {
             return self.url.port
         }
 
