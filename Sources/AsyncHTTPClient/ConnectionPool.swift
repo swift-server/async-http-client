@@ -489,8 +489,6 @@ class HTTP1ConnectionProvider {
 
     func close() -> EventLoopFuture<Bool> {
         if let (waiters, available, leased, clean) = self.lock.withLock({ self.state.close() }) {
-            print(waiters.count, available.count, leased.count, clean)
-
             waiters.forEach {
                 $0.promise.fail(HTTPClientError.cancelled)
             }
