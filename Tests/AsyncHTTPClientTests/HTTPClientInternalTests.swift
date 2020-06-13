@@ -891,4 +891,25 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssert(el1 === response.eventLoop)
         XCTAssertNoThrow(try response.wait())
     }
+
+    func testTaskPromiseBoundToEL() throws {
+        let elg = getDefaultEventLoopGroup(numberOfThreads: 2)
+        let el1 = elg.next()
+        let el2 = elg.next()
+
+        let httpBin = HTTPBin()
+        let client = HTTPClient(eventLoopGroupProvider: .shared(elg))
+
+        defer {
+            XCTAssertNoThrow(try client.syncShutdown())
+            XCTAssertNoThrow(try elg.syncShutdownGracefully())
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)//get")
+        let delegate = ResponseAccumulator(request: request)
+        let task = client.execute(request: request, delegate: delegate, eventLoop: .init(.testOnly_exact(channelOn: el1, delegateOn: el2)))
+        XCTAssertTrue(task.futureResult.eventLoop === el2)
+        XCTAssertNoThrow(try task.wait())
+    }
 }
