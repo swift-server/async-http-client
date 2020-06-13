@@ -2005,4 +2005,38 @@ class HTTPClientTests: XCTestCase {
 
         self.defaultClient = nil // so it doesn't get shut down again.
     }
+
+    func testConnectErrorPropagatedToDelegate() throws {
+        class TestDelegate: HTTPClientResponseDelegate {
+            typealias Response = Void
+            var error : Error?
+            func didFinishRequest(task: HTTPClient.Task<Void>) throws -> Void {}
+            func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
+                self.error = error
+            }
+        }
+
+        let httpBin = HTTPBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+
+        let delegate = TestDelegate()
+        let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get")
+        do {
+            try httpBin.shutdown()
+            _ = try httpClient.execute(request: request, delegate: delegate).wait()
+            XCTFail("Should fail")
+        } catch {
+            switch (error, delegate.error) {
+            case (_ as NIOConnectionError, _ as NIOConnectionError):
+                break
+            case (_ as NIOConnectionError, .none):
+                XCTFail("Delegate error is not \(error)")
+            default:
+                XCTFail("Unexpected error: \(error)")
+            }
+        }
+    }
 }

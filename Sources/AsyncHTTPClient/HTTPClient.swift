@@ -556,7 +556,10 @@ public class HTTPClient {
             }
         }.always { _ in
             setupComplete.succeed(())
-        }.cascadeFailure(to: task.promise)
+        }.whenFailure { error in
+            delegate.didReceiveError(task: task, error)
+            task.promise.fail(error)
+        }
 
         return task
     }
