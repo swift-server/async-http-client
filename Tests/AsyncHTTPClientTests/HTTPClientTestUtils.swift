@@ -495,6 +495,12 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 headers.add(name: "Location", value: "/redirect/infinite1")
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
                 return
+            case "/redirect/target":
+                var headers = self.responseHeaders
+                let targetURL = req.headers["X-Target-Redirect-URL"].first ?? ""
+                headers.add(name: "Location", value: targetURL)
+                self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
+                return
             case "/percent%20encoded":
                 if req.method != .GET {
                     self.resps.append(HTTPResponseBuilder(status: .methodNotAllowed))
