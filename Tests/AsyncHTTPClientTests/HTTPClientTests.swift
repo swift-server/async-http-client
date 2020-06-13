@@ -2016,11 +2016,11 @@ class HTTPClientTests: XCTestCase {
             }
 
             func didReceiveHead(task: HTTPClient.Task<Void>, _: HTTPResponseHead) -> EventLoopFuture<Void> {
-                self.eventLoop.makeSucceededFuture(())
+                return self.eventLoop.makeSucceededFuture(())
             }
 
             func didReceiveBodyPart(task: HTTPClient.Task<Void>, _: ByteBuffer) -> EventLoopFuture<Void> {
-                self.eventLoop.makeSucceededFuture(())
+                return self.eventLoop.makeSucceededFuture(())
             }
 
             func didFinishRequest(task: HTTPClient.Task<Void>) throws {}
