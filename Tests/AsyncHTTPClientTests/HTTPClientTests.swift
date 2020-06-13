@@ -2009,8 +2009,8 @@ class HTTPClientTests: XCTestCase {
     func testConnectErrorPropagatedToDelegate() throws {
         class TestDelegate: HTTPClientResponseDelegate {
             typealias Response = Void
-            var error : Error?
-            func didFinishRequest(task: HTTPClient.Task<Void>) throws -> Void {}
+            var error: Error?
+            func didFinishRequest(task: HTTPClient.Task<Void>) throws {}
             func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
                 self.error = error
             }
