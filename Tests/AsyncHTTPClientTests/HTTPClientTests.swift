@@ -2005,22 +2005,4 @@ class HTTPClientTests: XCTestCase {
 
         self.defaultClient = nil // so it doesn't get shut down again.
     }
-
-    func testTaskPromiseBoundToEL() throws {
-        let elg = getDefaultEventLoopGroup(numberOfThreads: 2)
-        let el = elg.next()
-
-        let client = HTTPClient(eventLoopGroupProvider: .shared(elg))
-
-        defer {
-            XCTAssertNoThrow(try client.syncShutdown())
-            XCTAssertNoThrow(try elg.syncShutdownGracefully())
-        }
-
-        let request = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "/get")
-        let delegate = ResponseAccumulator(request: request)
-        let task = client.execute(request: request, delegate: delegate, eventLoop: .delegate(on: el))
-        XCTAssertTrue(task.futureResult.eventLoop === el)
-        XCTAssertNoThrow(try task.wait())
-    }
 }

@@ -891,4 +891,16 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssert(el1 === response.eventLoop)
         XCTAssertNoThrow(try response.wait())
     }
+
+    func testTaskPromiseBoundToEL() throws {
+        let elg = getDefaultEventLoopGroup(numberOfThreads: 2)
+        let el = elg.next()
+
+        defer {
+            XCTAssertNoThrow(try elg.syncShutdownGracefully())
+        }
+
+        let task: Task<HTTPClient.Response> = .init(eventLoop: el, logger: HTTPClient.loggingDisabled)
+        XCTAssertTrue(task.futureResult.eventLoop === el)
+    }
 }
