@@ -2015,7 +2015,7 @@ class HTTPClientTests: XCTestCase {
         }
 
         var request = try HTTPClient.Request(url: "http://localhost:\(server.serverPort)/")
-        request.body = .stream() { writer in
+        request.body = .stream { writer in
             writer.write(.byteBuffer(ByteBuffer.of(string: "1234")))
         }
 
