@@ -27,11 +27,11 @@ extension HTTPHeaders {
         }
 
         self.remove(name: "Transfer-Encoding")
-        self.remove(name: "Content-Length")
 
         try self.validateFieldNames()
 
         guard let body = body else {
+            self.remove(name: "Content-Length")
             // if we don't have a body we might not need to send the Content-Length field
             // https://tools.ietf.org/html/rfc7230#section-3.3.2
             switch method {
@@ -60,11 +60,15 @@ extension HTTPHeaders {
         }
 
         if encodings.isEmpty {
-            guard let length = body.length else {
-                throw HTTPClientError.contentLengthMissing
+            if let length = body.length {
+                self.remove(name: "Content-Length")
+                contentLength = length
+            } else if !self.contains(name: "Content-Length") {
+                transferEncoding = "chunked"
             }
-            contentLength = length
         } else {
+            self.remove(name: "Content-Length")
+
             transferEncoding = encodings.joined(separator: ", ")
             if !encodings.contains("chunked") {
                 guard let length = body.length else {

@@ -2005,4 +2005,35 @@ class HTTPClientTests: XCTestCase {
 
         self.defaultClient = nil // so it doesn't get shut down again.
     }
+
+    func testUploadStreamingNoLength() throws {
+        let server = NIOHTTP1TestServer(group: self.serverGroup)
+        let client = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        defer {
+            XCTAssertNoThrow(try client.syncShutdown())
+            XCTAssertNoThrow(try server.stop())
+        }
+
+        var request = try HTTPClient.Request(url: "http://localhost:\(server.serverPort)/")
+        request.body = .stream() { writer in
+            writer.write(.byteBuffer(ByteBuffer.of(string: "1234")))
+        }
+
+        let future = client.execute(request: request)
+
+        switch try server.readInbound() {
+        case .head(let head):
+            XCTAssertEqual(head.headers["transfer-encoding"], ["chunked"])
+        default:
+            XCTFail("Unexpected part")
+        }
+
+        XCTAssertNoThrow(try server.readInbound()) // .body
+        XCTAssertNoThrow(try server.readInbound()) // .end
+
+        XCTAssertNoThrow(try server.writeOutbound(.head(.init(version: .init(major: 1, minor: 1), status: .ok))))
+        XCTAssertNoThrow(try server.writeOutbound(.end(nil)))
+
+        XCTAssertNoThrow(try future.wait())
+    }
 }
