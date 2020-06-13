@@ -80,12 +80,13 @@ final class ConnectionPool {
             if let existing = self.providers[key], existing.enqueue() {
                 return existing
             } else {
-                // Connection provider will be created with `pending = 1`
                 let provider = HTTP1ConnectionProvider(key: key,
                                                        eventLoop: taskEventLoop,
                                                        configuration: self.configuration,
                                                        pool: self,
                                                        backgroundActivityLogger: self.backgroundActivityLogger)
+                let enqueued = provider.enqueue()
+                assert(enqueued)
                 self.providers[key] = provider
                 return provider
             }
@@ -263,8 +264,6 @@ struct ConnectionKey: Hashable {
 /// of concurrent requests as it has built-in politeness regarding the maximum number
 /// of concurrent requests to the server.
 class HTTP1ConnectionProvider {
-    struct ProviderClosedError: Error {}
-
     /// The client configuration used to bootstrap new requests
     private let configuration: HTTPClient.Configuration
 
@@ -318,7 +317,7 @@ class HTTP1ConnectionProvider {
         self.state.assertInvariants()
     }
 
-    private func execute(_ action: Action, logger: Logger) {
+    func execute(_ action: Action, logger: Logger) {
         switch action {
         case .lease(let connection, let waiter):
             // if connection is became inactive, we create a new one.
@@ -492,6 +491,11 @@ class HTTP1ConnectionProvider {
         if let (waiters, available, leased, clean) = self.lock.withLock({ self.state.close() }) {
             waiters.forEach {
                 $0.promise.fail(HTTPClientError.cancelled)
+            }
+
+            if available.isEmpty, leased.isEmpty {
+                self.closePromise.succeed(())
+                return self.closePromise.futureResult.map { clean }
             }
 
             EventLoopFuture.andAllComplete(leased.map { $0.cancel() }, on: self.eventLoop).flatMap { _ in
