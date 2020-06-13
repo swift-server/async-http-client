@@ -109,7 +109,6 @@ extension HTTPClientTests {
             ("testNothingIsLoggedAtInfoOrHigher", testNothingIsLoggedAtInfoOrHigher),
             ("testAllMethodsLog", testAllMethodsLog),
             ("testClosingIdleConnectionsInPoolLogsInTheBackground", testClosingIdleConnectionsInPoolLogsInTheBackground),
-            ("testTaskPromiseBoundToEL", testTaskPromiseBoundToEL),
         ]
     }
 }

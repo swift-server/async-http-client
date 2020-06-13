@@ -41,6 +41,7 @@ extension HTTPClientInternalTests {
             ("testUncleanCloseThrows", testUncleanCloseThrows),
             ("testUploadStreamingIsCalledOnTaskEL", testUploadStreamingIsCalledOnTaskEL),
             ("testWeCanActuallyExactlySetTheEventLoops", testWeCanActuallyExactlySetTheEventLoops),
+            ("testTaskPromiseBoundToEL", testTaskPromiseBoundToEL),
         ]
     }
 }
