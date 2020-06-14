@@ -2005,4 +2005,50 @@ class HTTPClientTests: XCTestCase {
 
         self.defaultClient = nil // so it doesn't get shut down again.
     }
+
+    func testDelegateCallinsTolerateRandomEL() throws {
+        class TestDelegate: HTTPClientResponseDelegate {
+            typealias Response = Void
+            let eventLoop: EventLoop
+
+            init(eventLoop: EventLoop) {
+                self.eventLoop = eventLoop
+            }
+
+            func didReceiveHead(task: HTTPClient.Task<Void>, _: HTTPResponseHead) -> EventLoopFuture<Void> {
+                return self.eventLoop.makeSucceededFuture(())
+            }
+
+            func didReceiveBodyPart(task: HTTPClient.Task<Void>, _: ByteBuffer) -> EventLoopFuture<Void> {
+                return self.eventLoop.makeSucceededFuture(())
+            }
+
+            func didFinishRequest(task: HTTPClient.Task<Void>) throws {}
+        }
+
+        let elg = getDefaultEventLoopGroup(numberOfThreads: 3)
+        let first = elg.next()
+        let second = elg.next()
+        XCTAssertFalse(first === second)
+
+        let httpServer = NIOHTTP1TestServer(group: first)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(first))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+            XCTAssertNoThrow(try httpServer.stop())
+        }
+
+        let delegate = TestDelegate(eventLoop: second)
+        let request = try HTTPClient.Request(url: "http://localhost:\(httpServer.serverPort)/")
+        let future = httpClient.execute(request: request, delegate: delegate)
+
+        XCTAssertNoThrow(try httpServer.readInbound()) // .head
+        XCTAssertNoThrow(try httpServer.readInbound()) // .end
+
+        XCTAssertNoThrow(try httpServer.writeOutbound(.head(.init(version: .init(major: 1, minor: 1), status: .ok))))
+        XCTAssertNoThrow(try httpServer.writeOutbound(.body(.byteBuffer(ByteBuffer.of(string: "1234")))))
+        XCTAssertNoThrow(try httpServer.writeOutbound(.end(nil)))
+
+        XCTAssertNoThrow(try future.wait())
+    }
 }
