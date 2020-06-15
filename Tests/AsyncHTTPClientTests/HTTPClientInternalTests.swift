@@ -797,7 +797,7 @@ class HTTPClientInternalTests: XCTestCase {
     }
 
     func testUncleanCloseThrows() {
-        let server = NIOHTTP1TestServer(group: self.clientGroup)
+        let server = NIOHTTP1TestServer(group: MultiThreadedEventLoopGroup(numberOfThreads: 1))
         defer {
             XCTAssertNoThrow(try server.stop())
         }
