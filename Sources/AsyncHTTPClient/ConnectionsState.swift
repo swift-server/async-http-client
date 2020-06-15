@@ -229,7 +229,6 @@ extension HTTP1ConnectionProvider {
                 self.openedConnectionsCount -= 1
                 return self.processNextWaiter()
             case .closed:
-                assertionFailure("should not happen")
                 return .none
             }
         }

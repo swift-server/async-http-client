@@ -320,6 +320,23 @@ class ConnectionPoolTests: XCTestCase {
         }
     }
 
+    func testConnectFailedWhenClosed() {
+        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var snapshot = state.testsOnly_getInternalState()
+        snapshot.state = .closed
+        state.testsOnly_setInternalState(snapshot)
+
+        XCTAssertFalse(state.enqueue())
+
+        let action = state.connectFailed()
+        switch action {
+        case .none:
+            break
+        default:
+            XCTFail("Unexpected action: \(action)")
+        }
+    }
+
     // MARK: - Release Tests
 
     func testReleaseAliveConnectionEmptyQueue() throws {

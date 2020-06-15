@@ -797,13 +797,18 @@ class HTTPClientInternalTests: XCTestCase {
     }
 
     func testUncleanCloseThrows() {
-        let httpBin = HTTPBin()
+        let server = NIOHTTP1TestServer(group: self.clientGroup)
         defer {
-            XCTAssertNoThrow(try httpBin.shutdown())
+            XCTAssertNoThrow(try server.stop())
         }
+
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
 
-        _ = httpClient.get(url: "http://localhost:\(httpBin.port)/wait")
+        _ = httpClient.get(url: "http://localhost:\(server.serverPort)/wait")
+
+        XCTAssertNoThrow(try server.readInbound()) // .head
+        XCTAssertNoThrow(try server.readInbound()) // .end
+
         do {
             try httpClient.syncShutdown(requiresCleanClose: true)
             XCTFail("There should be an error on shutdown")
