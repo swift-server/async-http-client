@@ -796,7 +796,6 @@ extension TaskHandler: ChannelDuplexHandler {
         assert(head.version == HTTPVersion(major: 1, minor: 1),
                "Sending a request in HTTP version \(head.version) which is unsupported by the above `if`")
 
-
         let contentLengths = head.headers[canonicalForm: "content-length"]
         assert(contentLengths.count <= 1)
 

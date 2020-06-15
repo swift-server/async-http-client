@@ -361,8 +361,8 @@ internal struct HTTPResponseBuilder {
     }
 }
 
-//let globalRequestCounter = NIOAtomic<Int>.makeAtomic(value: 0)
-//let globalConnectionCounter = NIOAtomic<Int>.makeAtomic(value: 0)
+// let globalRequestCounter = NIOAtomic<Int>.makeAtomic(value: 0)
+// let globalConnectionCounter = NIOAtomic<Int>.makeAtomic(value: 0)
 
 internal struct RequestInfo: Codable {
     var data: String

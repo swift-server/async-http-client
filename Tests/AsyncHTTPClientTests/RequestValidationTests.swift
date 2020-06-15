@@ -109,7 +109,7 @@ class RequestValidationTests: XCTestCase {
         var headers = HTTPHeaders([("Content-Length", "1"), ("Content-Length", "2")])
         var buffer = ByteBufferAllocator().buffer(capacity: 10)
         buffer.writeBytes([UInt8](repeating: 12, count: 10))
-        let body: HTTPClient.Body = .stream() { writer in
+        let body: HTTPClient.Body = .stream { writer in
             writer.write(.byteBuffer(buffer))
         }
         XCTAssertThrowsError(try headers.validate(method: .PUT, body: body))
