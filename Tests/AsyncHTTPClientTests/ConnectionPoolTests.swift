@@ -304,9 +304,7 @@ class ConnectionPoolTests: XCTestCase {
 
     func testAcquireWhenClosed() {
         var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
-        var snapshot = state.testsOnly_getInternalState()
-        snapshot.state = .closed
-        state.testsOnly_setInternalState(snapshot)
+        _ = state.close()
 
         XCTAssertFalse(state.enqueue())
 
@@ -322,11 +320,7 @@ class ConnectionPoolTests: XCTestCase {
 
     func testConnectFailedWhenClosed() {
         var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
-        var snapshot = state.testsOnly_getInternalState()
-        snapshot.state = .closed
-        state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertFalse(state.enqueue())
+        _ = state.close()
 
         let action = state.connectFailed()
         switch action {

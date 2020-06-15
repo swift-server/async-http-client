@@ -229,6 +229,10 @@ extension HTTP1ConnectionProvider {
                 self.openedConnectionsCount -= 1
                 return self.processNextWaiter()
             case .closed:
+                // This can happen in the following scenario: user initiates a connection that will fail to connect,
+                // user calls `syncShutdown` before we received an error from the bootstrap. In this scenario,
+                // pool will be `.closed` but connection will be still in the process of being established/failed,
+                // so then this process finishes, it will get to this point.
                 return .none
             }
         }
