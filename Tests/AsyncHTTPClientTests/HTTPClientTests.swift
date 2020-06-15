@@ -2051,4 +2051,35 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertNoThrow(try future.wait())
     }
+
+    func testContentLengthTooLongFails() {
+        let url = self.defaultHTTPBinURLPrefix + "/post"
+        XCTAssertThrowsError(
+            try self.defaultClient.execute(request:
+                                            Request(url: url,
+                                                    body: .stream(length: 10) { streamWriter in
+                                                        streamWriter.write(.byteBuffer(ByteBuffer(string: "1")))
+                                                    })).wait()) { error in
+            XCTAssertEqual(error as! HTTPClientError, HTTPClientError.bodyLengthMismatch)
+        }
+        // Quickly try another request and check that it works.
+        XCTAssertNoThrow(try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "/get").wait())
+    }
+
+    // currently gets stuck because of #250 the server just never replies
+    func testContentLengthTooShortFails() {
+        let url = self.defaultHTTPBinURLPrefix + "/post"
+        let tooLong = "XBAD BAD BAD NOT HTTP/1.1\r\n\r\n"
+        XCTAssertThrowsError(
+            try self.defaultClient.execute(request:
+                                            Request(url: url,
+                                                    body: .stream(length: 1) { streamWriter in
+                                                        streamWriter.write(.byteBuffer(ByteBuffer(string: tooLong)))
+                                                    })).wait()) { error in
+            XCTAssertEqual(error as! HTTPClientError, HTTPClientError.bodyLengthMismatch)
+        }
+        // Quickly try another request and check that it works. If we by accident wrote some extra bytes into the
+        // stream (and reuse the connection) that could cause problems.
+        XCTAssertNoThrow(try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "/get").wait())
+    }
 }

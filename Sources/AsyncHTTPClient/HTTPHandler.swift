@@ -651,6 +651,8 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: RemovableChann
     let logger: Logger // We are okay to store the logger here because a TaskHandler is just for one request.
 
     var state: State = .idle
+    var expectedBodyLength: Int? = nil
+    var actualBodyLength: Int = 0
     var pendingRead = false
     var mayRead = true
     var closing = false {
@@ -794,11 +796,19 @@ extension TaskHandler: ChannelDuplexHandler {
         assert(head.version == HTTPVersion(major: 1, minor: 1),
                "Sending a request in HTTP version \(head.version) which is unsupported by the above `if`")
 
+        self.expectedBodyLength = head.headers[canonicalForm: "content-length"].first.flatMap { Int($0) }
+
         context.write(wrapOutboundOut(.head(head))).map {
             self.callOutToDelegateFireAndForget(value: head, self.delegate.didSendRequestHead)
         }.flatMap {
             self.writeBody(request: request, context: context)
         }.flatMap {
+            if let expectedBodyLength = self.expectedBodyLength, expectedBodyLength != self.actualBodyLength {
+                self.state = .end
+                let error = HTTPClientError.bodyLengthMismatch
+                self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+                return context.eventLoop.makeFailedFuture(error)
+            }
             context.eventLoop.assertInEventLoop()
             return context.writeAndFlush(self.wrapOutboundOut(.end(nil)))
         }.map {
@@ -836,6 +846,7 @@ extension TaskHandler: ChannelDuplexHandler {
                 }
 
                 return promise.futureResult.map {
+                    self.actualBodyLength += part.readableBytes
                     self.callOutToDelegateFireAndForget(value: part, self.delegate.didSendRequestPart)
                 }
             })
