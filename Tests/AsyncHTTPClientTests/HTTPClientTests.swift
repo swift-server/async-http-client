@@ -2031,7 +2031,7 @@ class HTTPClientTests: XCTestCase {
         let second = elg.next()
         XCTAssertFalse(first === second)
 
-        let httpServer = NIOHTTP1TestServer(group: first)
+        let httpServer = NIOHTTP1TestServer(group: self.serverGroup)
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(first))
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())

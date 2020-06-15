@@ -23,17 +23,23 @@ class HTTPClientInternalTests: XCTestCase {
     typealias Request = HTTPClient.Request
     typealias Task = HTTPClient.Task
 
+    var serverGroup: EventLoopGroup!
     var clientGroup: EventLoopGroup!
 
     override func setUp() {
         XCTAssertNil(self.clientGroup)
+        XCTAssertNil(self.serverGroup)
+        self.serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         self.clientGroup = getDefaultEventLoopGroup(numberOfThreads: 1)
     }
 
     override func tearDown() {
+        XCTAssertNotNil(self.serverGroup)
+        XCTAssertNoThrow(try self.serverGroup.syncShutdownGracefully())
         XCTAssertNotNil(self.clientGroup)
         XCTAssertNoThrow(try self.clientGroup.syncShutdownGracefully())
         self.clientGroup = nil
+        self.serverGroup = nil
     }
 
     func testHTTPPartsHandler() throws {
@@ -833,7 +839,7 @@ class HTTPClientInternalTests: XCTestCase {
     }
 
     func testUncleanCloseThrows() {
-        let server = NIOHTTP1TestServer(group: self.clientGroup)
+        let server = NIOHTTP1TestServer(group: self.serverGroup)
         defer {
             XCTAssertNoThrow(try server.stop())
         }
