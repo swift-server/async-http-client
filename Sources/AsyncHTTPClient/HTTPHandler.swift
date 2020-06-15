@@ -771,10 +771,13 @@ extension TaskHandler: ChannelDuplexHandler {
                                    uri: request.uri)
         var headers = request.headers
 
-        if !request.headers.contains(name: "Host") {
+        if !request.headers.contains(name: "host") {
             let port = request.port
-            let host = (port != 80 && port != 443) ? "\(request.host):\(port)" : request.host
-            headers.add(name: "Host", value: host)
+            var host = request.host
+            if (port != 80 || request.scheme != "http") && (port != 443 || request.scheme != "https") {
+                host += ":\(port)"
+            }
+            headers.add(name: "host", value: host)
         }
 
         do {

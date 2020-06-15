@@ -109,16 +109,21 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertNoThrow(try channel.writeOutbound(request2))
         let request3 = try Request(url: "http://localhost:8080/get")
         XCTAssertNoThrow(try channel.writeOutbound(request3))
+        let request4 = try Request(url: "http://localhost:443/get")
+        XCTAssertNoThrow(try channel.writeOutbound(request4))
+        let request5 = try Request(url: "https://localhost:80/get")
+        XCTAssertNoThrow(try channel.writeOutbound(request5))
 
-        var head1 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get")
-        head1.headers.add(name: "Host", value: "localhost")
+        let head1 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get", headers: ["host": "localhost"])
         XCTAssertEqual(HTTPClientRequestPart.head(head1), recorder.writes[0])
-        var head2 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get")
-        head2.headers.add(name: "Host", value: "localhost")
+        let head2 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get", headers: ["host": "localhost"])
         XCTAssertEqual(HTTPClientRequestPart.head(head2), recorder.writes[2])
-        var head3 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get")
-        head3.headers.add(name: "Host", value: "localhost:8080")
+        let head3 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get", headers: ["host": "localhost:8080"])
         XCTAssertEqual(HTTPClientRequestPart.head(head3), recorder.writes[4])
+        let head4 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get", headers: ["host": "localhost:443"])
+        XCTAssertEqual(HTTPClientRequestPart.head(head4), recorder.writes[6])
+        let head5 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get", headers: ["host": "localhost:80"])
+        XCTAssertEqual(HTTPClientRequestPart.head(head5), recorder.writes[8])
     }
 
     func testHTTPPartsHandlerMultiBody() throws {
