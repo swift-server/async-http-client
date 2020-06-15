@@ -2056,9 +2056,9 @@ class HTTPClientTests: XCTestCase {
         let url = self.defaultHTTPBinURLPrefix + "/post"
         XCTAssertThrowsError(
             try self.defaultClient.execute(request:
-                                            Request(url: url,
-                                                    body: .stream(length: 10) { streamWriter in
-                                                        streamWriter.write(.byteBuffer(ByteBuffer(string: "1")))
+                Request(url: url,
+                        body: .stream(length: 10) { streamWriter in
+                            streamWriter.write(.byteBuffer(ByteBuffer(string: "1")))
                                                     })).wait()) { error in
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.bodyLengthMismatch)
         }
@@ -2072,9 +2072,9 @@ class HTTPClientTests: XCTestCase {
         let tooLong = "XBAD BAD BAD NOT HTTP/1.1\r\n\r\n"
         XCTAssertThrowsError(
             try self.defaultClient.execute(request:
-                                            Request(url: url,
-                                                    body: .stream(length: 1) { streamWriter in
-                                                        streamWriter.write(.byteBuffer(ByteBuffer(string: tooLong)))
+                Request(url: url,
+                        body: .stream(length: 1) { streamWriter in
+                            streamWriter.write(.byteBuffer(ByteBuffer(string: tooLong)))
                                                     })).wait()) { error in
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.bodyLengthMismatch)
         }

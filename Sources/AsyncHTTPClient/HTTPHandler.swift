@@ -651,7 +651,7 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: RemovableChann
     let logger: Logger // We are okay to store the logger here because a TaskHandler is just for one request.
 
     var state: State = .idle
-    var expectedBodyLength: Int? = nil
+    var expectedBodyLength: Int?
     var actualBodyLength: Int = 0
     var pendingRead = false
     var mayRead = true

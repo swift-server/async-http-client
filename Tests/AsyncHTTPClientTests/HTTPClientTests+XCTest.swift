@@ -110,6 +110,8 @@ extension HTTPClientTests {
             ("testAllMethodsLog", testAllMethodsLog),
             ("testClosingIdleConnectionsInPoolLogsInTheBackground", testClosingIdleConnectionsInPoolLogsInTheBackground),
             ("testDelegateCallinsTolerateRandomEL", testDelegateCallinsTolerateRandomEL),
+            ("testContentLengthTooLongFails", testContentLengthTooLongFails),
+            ("testContentLengthTooShortFails", testContentLengthTooShortFails),
         ]
     }
 }
