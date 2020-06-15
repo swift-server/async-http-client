@@ -110,6 +110,7 @@ extension HTTPClientTests {
             ("testAllMethodsLog", testAllMethodsLog),
             ("testClosingIdleConnectionsInPoolLogsInTheBackground", testClosingIdleConnectionsInPoolLogsInTheBackground),
             ("testConnectErrorPropagatedToDelegate", testConnectErrorPropagatedToDelegate),
+            ("testDelegateCallinsTolerateRandomEL", testDelegateCallinsTolerateRandomEL),
         ]
     }
 }
