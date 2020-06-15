@@ -374,15 +374,6 @@ class HTTP1ConnectionProvider {
                                     "ahc-action": "\(action)"])
             connection.channel.close(promise: nil)
             self.execute(action, logger: logger)
-        case .cancel(let connection, let close):
-            logger.trace("cancelling connection",
-                         metadata: ["ahc-connection": "\(connection)",
-                                    "ahc-close": "\(close)"])
-            connection.cancel().whenComplete { _ in
-                if close {
-                    self.closeAndDelete()
-                }
-            }
         case .fail(let waiter, let error):
             logger.debug("failing connection for waiter",
                          metadata: ["ahc-waiter": "\(waiter)",
@@ -428,7 +419,15 @@ class HTTP1ConnectionProvider {
                 }
                 return self.state.offer(connection: connection)
             }
-            waiter.promise.succeed(connection)
+
+            switch action {
+            case .closeAnd:
+                // This happens when client was shut down during connect
+                connection.channel.close(promise: nil)
+                waiter.promise.fail(HTTPClientError.cancelled)
+            default:
+                waiter.promise.succeed(connection)
+            }
         case .failure(let error):
             logger.debug("connection attempt failed",
                          metadata: ["ahc-error": "\(error)"])
@@ -437,6 +436,7 @@ class HTTP1ConnectionProvider {
             }
             waiter.promise.fail(error)
         }
+
         waiter.setupComplete.whenComplete { _ in
             self.execute(action, logger: logger)
         }
@@ -456,7 +456,7 @@ class HTTP1ConnectionProvider {
             // Since both `.park` and `.deleteProvider` are terminal in terms of execution,
             // we can execute them immediately
             self.execute(action, logger: logger)
-        case .cancel, .closeAnd, .create, .fail, .lease, .parkAnd, .replace:
+        case .closeAnd, .create, .fail, .lease, .parkAnd, .replace:
             // This is needed to start a new stack, otherwise, since this is called on a previous
             // future completion handler chain, it will be growing indefinitely until the connection is closed.
             // We might revisit this when https://github.com/apple/swift-nio/issues/970 is resolved.
@@ -493,7 +493,7 @@ class HTTP1ConnectionProvider {
                 $0.promise.fail(HTTPClientError.cancelled)
             }
 
-            if available.isEmpty, leased.isEmpty {
+            if available.isEmpty, leased.isEmpty, clean {
                 self.closePromise.succeed(())
                 return self.closePromise.futureResult.map { clean }
             }

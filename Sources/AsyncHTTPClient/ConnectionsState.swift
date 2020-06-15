@@ -23,7 +23,6 @@ extension HTTP1ConnectionProvider {
         case park(Connection)
         case none
         case fail(Waiter, Error)
-        case cancel(Connection, Bool)
         indirect case closeAnd(Connection, Action)
         indirect case parkAnd(Connection, Action)
     }
@@ -209,8 +208,9 @@ extension HTTP1ConnectionProvider {
             case .active:
                 self.leasedConnections.insert(ConnectionKey(connection))
                 return .none
-            case .closed: // This can happen when we close the client while connections was being estableshed
-                return .cancel(connection, self.isEmpty)
+            case .closed: // This can happen when we close the client while connections was being established
+                self.openedConnectionsCount -= 1
+                return .closeAnd(connection, self.processNextWaiter())
             }
         }
 
@@ -233,7 +233,9 @@ extension HTTP1ConnectionProvider {
                 // user calls `syncShutdown` before we received an error from the bootstrap. In this scenario,
                 // pool will be `.closed` but connection will be still in the process of being established/failed,
                 // so then this process finishes, it will get to this point.
-                return .none
+                // We need to call `processNextWaiter` to finish deleting provider from the pool.
+                self.openedConnectionsCount -= 1
+                return self.processNextWaiter()
             }
         }
 
@@ -273,7 +275,13 @@ extension HTTP1ConnectionProvider {
 
                 return .closeAnd(connection, self.processNextWaiter())
             case .closed:
-                return .none
+                // This situation can happen when we call close, state changes, but before we call `close` on all
+                // available connections, in this case we should close this connection and, potentially,
+                // delete the provider
+                self.openedConnectionsCount -= 1
+                self.availableConnections.removeAll { $0 === connection }
+
+                return .closeAnd(connection, self.processNextWaiter())
             }
         }
 
