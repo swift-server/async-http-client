@@ -27,6 +27,7 @@ extension HTTPClientInternalTests {
         return [
             ("testHTTPPartsHandler", testHTTPPartsHandler),
             ("testBadHTTPRequest", testBadHTTPRequest),
+            ("testHostPort", testHostPort),
             ("testHTTPPartsHandlerMultiBody", testHTTPPartsHandlerMultiBody),
             ("testProxyStreaming", testProxyStreaming),
             ("testProxyStreamingFailure", testProxyStreamingFailure),
