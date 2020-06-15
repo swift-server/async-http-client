@@ -841,12 +841,12 @@ extension TaskHandler: ChannelDuplexHandler {
                 let promise = self.task.eventLoop.makePromise(of: Void.self)
                 // All writes have to be switched to the channel EL if channel and task ELs differ
                 if context.eventLoop.inEventLoop {
-                    context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
                     self.actualBodyLength += part.readableBytes
+                    context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
                 } else {
                     context.eventLoop.execute {
-                        context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
                         self.actualBodyLength += part.readableBytes
+                        context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
                     }
                 }
 
