@@ -90,6 +90,37 @@ class HTTPClientInternalTests: XCTestCase {
         }
     }
 
+    func testHostPort() throws {
+        let channel = EmbeddedChannel()
+        let recorder = RecordingHandler<HTTPClientResponsePart, HTTPClientRequestPart>()
+        let task = Task<Void>(eventLoop: channel.eventLoop, logger: HTTPClient.loggingDisabled)
+
+        try channel.pipeline.addHandler(recorder).wait()
+        try channel.pipeline.addHandler(TaskHandler(task: task,
+                                                    kind: .host,
+                                                    delegate: TestHTTPDelegate(),
+                                                    redirectHandler: nil,
+                                                    ignoreUncleanSSLShutdown: false,
+                                                    logger: HTTPClient.loggingDisabled)).wait()
+
+        let request1 = try Request(url: "http://localhost:80/get")
+        XCTAssertNoThrow(try channel.writeOutbound(request1))
+        let request2 = try Request(url: "https://localhost/get")
+        XCTAssertNoThrow(try channel.writeOutbound(request2))
+        let request3 = try Request(url: "http://localhost:8080/get")
+        XCTAssertNoThrow(try channel.writeOutbound(request3))
+
+        var head1 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get")
+        head1.headers.add(name: "Host", value: "localhost")
+        XCTAssertEqual(HTTPClientRequestPart.head(head1), recorder.writes[0])
+        var head2 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get")
+        head2.headers.add(name: "Host", value: "localhost")
+        XCTAssertEqual(HTTPClientRequestPart.head(head2), recorder.writes[2])
+        var head3 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get")
+        head3.headers.add(name: "Host", value: "localhost:8080")
+        XCTAssertEqual(HTTPClientRequestPart.head(head3), recorder.writes[4])
+    }
+
     func testHTTPPartsHandlerMultiBody() throws {
         let channel = EmbeddedChannel()
         let delegate = TestHTTPDelegate()
