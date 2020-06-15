@@ -797,9 +797,11 @@ class HTTPClientInternalTests: XCTestCase {
     }
 
     func testUncleanCloseThrows() {
-        let server = NIOHTTP1TestServer(group: MultiThreadedEventLoopGroup(numberOfThreads: 1))
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        let server = NIOHTTP1TestServer(group: group)
         defer {
             XCTAssertNoThrow(try server.stop())
+            XCTAssertNoThrow(try group.syncShutdownGracefully())
         }
 
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
