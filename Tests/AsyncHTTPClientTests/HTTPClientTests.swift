@@ -1713,7 +1713,8 @@ class HTTPClientTests: XCTestCase {
 
         // req 1 and 2 cannot share the same connection (close header)
         XCTAssertEqual(stats1.connectionNumber + 1, stats2.connectionNumber)
-        XCTAssertEqual(stats1.requestNumber + 1, stats2.requestNumber)
+        XCTAssertEqual(stats1.requestNumber, 1)
+        XCTAssertEqual(stats2.requestNumber, 1)
 
         // req 2 and 3 should share the same connection (keep-alive is default)
         XCTAssertEqual(stats2.requestNumber + 1, stats3.requestNumber)
@@ -1742,7 +1743,8 @@ class HTTPClientTests: XCTestCase {
 
         // req 1 and 2 cannot share the same connection (close header)
         XCTAssertEqual(stats1.connectionNumber + 1, stats2.connectionNumber)
-        XCTAssertEqual(stats1.requestNumber + 1, stats2.requestNumber)
+        XCTAssertEqual(stats1.requestNumber, 1)
+        XCTAssertEqual(stats2.requestNumber, 1)
 
         // req 2 and 3 should share the same connection (keep-alive is default)
         XCTAssertEqual(stats2.requestNumber + 1, stats3.requestNumber)
@@ -1773,7 +1775,7 @@ class HTTPClientTests: XCTestCase {
 
             // req 1 and 2 cannot share the same connection (close header)
             XCTAssertEqual(stats1.connectionNumber + 1, stats2.connectionNumber)
-            XCTAssertEqual(stats1.requestNumber + 1, stats2.requestNumber)
+            XCTAssertEqual(stats2.requestNumber, 1)
 
             // req 2 and 3 should share the same connection (keep-alive is default)
             XCTAssertEqual(stats2.requestNumber + 1, stats3.requestNumber)
@@ -1805,7 +1807,7 @@ class HTTPClientTests: XCTestCase {
 
             // req 1 and 2 cannot share the same connection (close header)
             XCTAssertEqual(stats1.connectionNumber + 1, stats2.connectionNumber)
-            XCTAssertEqual(stats1.requestNumber + 1, stats2.requestNumber)
+            XCTAssertEqual(stats2.requestNumber, 1)
 
             // req 2 and 3 should share the same connection (keep-alive is default)
             XCTAssertEqual(stats2.requestNumber + 1, stats3.requestNumber)
@@ -2036,6 +2038,7 @@ class HTTPClientTests: XCTestCase {
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
             XCTAssertNoThrow(try httpServer.stop())
+            XCTAssertNoThrow(try elg.syncShutdownGracefully())
         }
 
         let delegate = TestDelegate(eventLoop: second)
@@ -2050,5 +2053,60 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNoThrow(try httpServer.writeOutbound(.end(nil)))
 
         XCTAssertNoThrow(try future.wait())
+    }
+
+    func testContentLengthTooLongFails() throws {
+        let url = self.defaultHTTPBinURLPrefix + "/post"
+        XCTAssertThrowsError(
+            try self.defaultClient.execute(request:
+                Request(url: url,
+                        body: .stream(length: 10) { streamWriter in
+                            let promise = self.defaultClient.eventLoopGroup.next().makePromise(of: Void.self)
+                            DispatchQueue(label: "content-length-test").async {
+                                streamWriter.write(.byteBuffer(ByteBuffer(string: "1"))).cascade(to: promise)
+                            }
+                            return promise.futureResult
+                        })).wait()) { error in
+            XCTAssertEqual(error as! HTTPClientError, HTTPClientError.bodyLengthMismatch)
+        }
+        // Quickly try another request and check that it works.
+        let response = try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "get").wait()
+        guard var body = response.body else {
+            XCTFail("Body missing: \(response)")
+            return
+        }
+        guard let info = try body.readJSONDecodable(RequestInfo.self, length: body.readableBytes) else {
+            XCTFail("Cannot parse body: \(body.readableBytesView.map { $0 })")
+            return
+        }
+        XCTAssertEqual(info.connectionNumber, 1)
+        XCTAssertEqual(info.requestNumber, 1)
+    }
+
+    // currently gets stuck because of #250 the server just never replies
+    func testContentLengthTooShortFails() throws {
+        let url = self.defaultHTTPBinURLPrefix + "/post"
+        let tooLong = "XBAD BAD BAD NOT HTTP/1.1\r\n\r\n"
+        XCTAssertThrowsError(
+            try self.defaultClient.execute(request:
+                Request(url: url,
+                        body: .stream(length: 1) { streamWriter in
+                            streamWriter.write(.byteBuffer(ByteBuffer(string: tooLong)))
+                                                    })).wait()) { error in
+            XCTAssertEqual(error as! HTTPClientError, HTTPClientError.bodyLengthMismatch)
+        }
+        // Quickly try another request and check that it works. If we by accident wrote some extra bytes into the
+        // stream (and reuse the connection) that could cause problems.
+        let response = try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "get").wait()
+        guard var body = response.body else {
+            XCTFail("Body missing: \(response)")
+            return
+        }
+        guard let info = try body.readJSONDecodable(RequestInfo.self, length: body.readableBytes) else {
+            XCTFail("Cannot parse body: \(body.readableBytesView.map { $0 })")
+            return
+        }
+        XCTAssertEqual(info.connectionNumber, 1)
+        XCTAssertEqual(info.requestNumber, 1)
     }
 }

@@ -949,8 +949,8 @@ class HTTPClientInternalTests: XCTestCase {
 
         defer {
             XCTAssertNoThrow(try client.syncShutdown())
-            XCTAssertNoThrow(try elg.syncShutdownGracefully())
             XCTAssertNoThrow(try httpBin.shutdown())
+            XCTAssertNoThrow(try elg.syncShutdownGracefully())
         }
 
         let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)//get")
