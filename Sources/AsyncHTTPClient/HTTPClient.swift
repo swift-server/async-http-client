@@ -513,11 +513,11 @@ public class HTTPClient {
                                                  logger: logger)
 
         let taskHandler = TaskHandler(task: task,
-            kind: request.kind,
-            delegate: delegate,
-            redirectHandler: redirectHandler,
-            ignoreUncleanSSLShutdown: self.configuration.ignoreUncleanSSLShutdown,
-            logger: logger)
+                                      kind: request.kind,
+                                      delegate: delegate,
+                                      redirectHandler: redirectHandler,
+                                      ignoreUncleanSSLShutdown: self.configuration.ignoreUncleanSSLShutdown,
+                                      logger: logger)
 
         connection.flatMap { connection -> EventLoopFuture<Void> in
             logger.debug("got connection for request",

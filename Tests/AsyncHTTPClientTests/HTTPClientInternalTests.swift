@@ -971,8 +971,7 @@ class HTTPClientInternalTests: XCTestCase {
                 self.expectedEL = expectedEL
             }
 
-            func didFinishRequest(task: HTTPClient.Task<Void>) throws -> Void {
-            }
+            func didFinishRequest(task: HTTPClient.Task<Void>) throws {}
 
             func didReceiveError(task: HTTPClient.Task<Void>, _ error: Error) {
                 self.receivedError = true
