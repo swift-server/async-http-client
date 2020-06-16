@@ -2038,6 +2038,7 @@ class HTTPClientTests: XCTestCase {
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
             XCTAssertNoThrow(try httpServer.stop())
+            XCTAssertNoThrow(try elg.syncShutdownGracefully())
         }
 
         let delegate = TestDelegate(eventLoop: second)
@@ -2069,10 +2070,17 @@ class HTTPClientTests: XCTestCase {
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.bodyLengthMismatch)
         }
         // Quickly try another request and check that it works.
-        var response = try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "get").wait()
-        let info = try response.body!.readJSONDecodable(RequestInfo.self, length: response.body!.readableBytes)
-        XCTAssertEqual(info!.connectionNumber, 1)
-        XCTAssertEqual(info!.requestNumber, 1)
+        let response = try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "get").wait()
+        guard var body = response.body else {
+            XCTFail("Body missing: \(response)")
+            return
+        }
+        guard let info = try body.readJSONDecodable(RequestInfo.self, length: body.readableBytes) else {
+            XCTFail("Cannot parse body: \(body.readableBytesView.map { $0 })")
+            return
+        }
+        XCTAssertEqual(info.connectionNumber, 1)
+        XCTAssertEqual(info.requestNumber, 1)
     }
 
     // currently gets stuck because of #250 the server just never replies
@@ -2089,9 +2097,16 @@ class HTTPClientTests: XCTestCase {
         }
         // Quickly try another request and check that it works. If we by accident wrote some extra bytes into the
         // stream (and reuse the connection) that could cause problems.
-        var response = try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "get").wait()
-        let info = try response.body!.readJSONDecodable(RequestInfo.self, length: response.body!.readableBytes)
-        XCTAssertEqual(info!.connectionNumber, 1)
-        XCTAssertEqual(info!.requestNumber, 1)
+        let response = try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "get").wait()
+        guard var body = response.body else {
+            XCTFail("Body missing: \(response)")
+            return
+        }
+        guard let info = try body.readJSONDecodable(RequestInfo.self, length: body.readableBytes) else {
+            XCTFail("Cannot parse body: \(body.readableBytesView.map { $0 })")
+            return
+        }
+        XCTAssertEqual(info.connectionNumber, 1)
+        XCTAssertEqual(info.requestNumber, 1)
     }
 }
