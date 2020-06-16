@@ -511,6 +511,14 @@ public class HTTPClient {
                                                  deadline: deadline,
                                                  setupComplete: setupComplete.futureResult,
                                                  logger: logger)
+
+        let taskHandler = TaskHandler(task: task,
+            kind: request.kind,
+            delegate: delegate,
+            redirectHandler: redirectHandler,
+            ignoreUncleanSSLShutdown: self.configuration.ignoreUncleanSSLShutdown,
+            logger: logger)
+
         connection.flatMap { connection -> EventLoopFuture<Void> in
             logger.debug("got connection for request",
                          metadata: ["ahc-connection": "\(connection)",
@@ -527,12 +535,6 @@ public class HTTPClient {
             }
 
             return future.flatMap {
-                let taskHandler = TaskHandler(task: task,
-                                              kind: request.kind,
-                                              delegate: delegate,
-                                              redirectHandler: redirectHandler,
-                                              ignoreUncleanSSLShutdown: self.configuration.ignoreUncleanSSLShutdown,
-                                              logger: logger)
                 return channel.pipeline.addHandler(taskHandler)
             }.flatMap {
                 task.setConnection(connection)
@@ -557,7 +559,9 @@ public class HTTPClient {
         }.always { _ in
             setupComplete.succeed(())
         }.whenFailure { error in
-            delegate.didReceiveError(task: task, error)
+            taskHandler.callOutToDelegateFireAndForget { task in
+                delegate.didReceiveError(task: task, error)
+            }
             task.promise.fail(error)
         }
 

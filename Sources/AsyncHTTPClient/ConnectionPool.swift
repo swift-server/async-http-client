@@ -562,7 +562,7 @@ class HTTP1ConnectionProvider {
                     error = HTTPClient.NWErrorHandler.translateError(error)
                 }
             #endif
-            return self.eventLoop.makeFailedFuture(error)
+            return eventLoop.makeFailedFuture(error)
         }
     }
 
