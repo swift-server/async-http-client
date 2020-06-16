@@ -928,6 +928,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case uncleanShutdown
         case traceRequestWithBody
         case invalidHeaderFieldNames([String])
+        case bodyLengthMismatch
     }
 
     private var code: Code
@@ -972,10 +973,12 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let redirectLimitReached = HTTPClientError(code: .redirectLimitReached)
     /// Redirect Cycle detected.
     public static let redirectCycleDetected = HTTPClientError(code: .redirectCycleDetected)
-    /// Unclean shutdown
+    /// Unclean shutdown.
     public static let uncleanShutdown = HTTPClientError(code: .uncleanShutdown)
-    /// A body was sent in a request with method TRACE
+    /// A body was sent in a request with method TRACE.
     public static let traceRequestWithBody = HTTPClientError(code: .traceRequestWithBody)
-    /// Header field names contain invalid characters
+    /// Header field names contain invalid characters.
     public static func invalidHeaderFieldNames(_ names: [String]) -> HTTPClientError { return HTTPClientError(code: .invalidHeaderFieldNames(names)) }
+    /// Body length is not equal to `Content-Length`.
+    public static let bodyLengthMismatch = HTTPClientError(code: .bodyLengthMismatch)
 }

@@ -111,6 +111,8 @@ extension HTTPClientTests {
             ("testClosingIdleConnectionsInPoolLogsInTheBackground", testClosingIdleConnectionsInPoolLogsInTheBackground),
             ("testConnectErrorPropagatedToDelegate", testConnectErrorPropagatedToDelegate),
             ("testDelegateCallinsTolerateRandomEL", testDelegateCallinsTolerateRandomEL),
+            ("testContentLengthTooLongFails", testContentLengthTooLongFails),
+            ("testContentLengthTooShortFails", testContentLengthTooShortFails),
         ]
     }
 }

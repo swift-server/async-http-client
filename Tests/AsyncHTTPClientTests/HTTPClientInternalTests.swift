@@ -23,17 +23,23 @@ class HTTPClientInternalTests: XCTestCase {
     typealias Request = HTTPClient.Request
     typealias Task = HTTPClient.Task
 
+    var serverGroup: EventLoopGroup!
     var clientGroup: EventLoopGroup!
 
     override func setUp() {
         XCTAssertNil(self.clientGroup)
+        XCTAssertNil(self.serverGroup)
+        self.serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         self.clientGroup = getDefaultEventLoopGroup(numberOfThreads: 1)
     }
 
     override func tearDown() {
+        XCTAssertNotNil(self.serverGroup)
+        XCTAssertNoThrow(try self.serverGroup.syncShutdownGracefully())
         XCTAssertNotNil(self.clientGroup)
         XCTAssertNoThrow(try self.clientGroup.syncShutdownGracefully())
         self.clientGroup = nil
+        self.serverGroup = nil
     }
 
     func testHTTPPartsHandler() throws {
@@ -49,7 +55,7 @@ class HTTPClientInternalTests: XCTestCase {
                                                     ignoreUncleanSSLShutdown: false,
                                                     logger: HTTPClient.loggingDisabled)).wait()
 
-        var request = try Request(url: "http://localhost/get")
+        var request = try Request(url: "http://localhost:8080/get")
         request.headers.add(name: "X-Test-Header", value: "X-Test-Value")
         request.body = .string("1234")
 
@@ -57,7 +63,7 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertEqual(3, recorder.writes.count)
         var head = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get")
         head.headers.add(name: "X-Test-Header", value: "X-Test-Value")
-        head.headers.add(name: "Host", value: "localhost")
+        head.headers.add(name: "Host", value: "localhost:8080")
         head.headers.add(name: "Content-Length", value: "4")
         XCTAssertEqual(HTTPClientRequestPart.head(head), recorder.writes[0])
         let buffer = ByteBuffer.of(string: "1234")
@@ -88,6 +94,42 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertThrowsError(try channel.writeOutbound(request)) { error in
             XCTAssertEqual(HTTPClientError.identityCodingIncorrectlyPresent, error as? HTTPClientError)
         }
+    }
+
+    func testHostPort() throws {
+        let channel = EmbeddedChannel()
+        let recorder = RecordingHandler<HTTPClientResponsePart, HTTPClientRequestPart>()
+        let task = Task<Void>(eventLoop: channel.eventLoop, logger: HTTPClient.loggingDisabled)
+
+        try channel.pipeline.addHandler(recorder).wait()
+        try channel.pipeline.addHandler(TaskHandler(task: task,
+                                                    kind: .host,
+                                                    delegate: TestHTTPDelegate(),
+                                                    redirectHandler: nil,
+                                                    ignoreUncleanSSLShutdown: false,
+                                                    logger: HTTPClient.loggingDisabled)).wait()
+
+        let request1 = try Request(url: "http://localhost:80/get")
+        XCTAssertNoThrow(try channel.writeOutbound(request1))
+        let request2 = try Request(url: "https://localhost/get")
+        XCTAssertNoThrow(try channel.writeOutbound(request2))
+        let request3 = try Request(url: "http://localhost:8080/get")
+        XCTAssertNoThrow(try channel.writeOutbound(request3))
+        let request4 = try Request(url: "http://localhost:443/get")
+        XCTAssertNoThrow(try channel.writeOutbound(request4))
+        let request5 = try Request(url: "https://localhost:80/get")
+        XCTAssertNoThrow(try channel.writeOutbound(request5))
+
+        let head1 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get", headers: ["host": "localhost"])
+        XCTAssertEqual(HTTPClientRequestPart.head(head1), recorder.writes[0])
+        let head2 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get", headers: ["host": "localhost"])
+        XCTAssertEqual(HTTPClientRequestPart.head(head2), recorder.writes[2])
+        let head3 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get", headers: ["host": "localhost:8080"])
+        XCTAssertEqual(HTTPClientRequestPart.head(head3), recorder.writes[4])
+        let head4 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get", headers: ["host": "localhost:443"])
+        XCTAssertEqual(HTTPClientRequestPart.head(head4), recorder.writes[6])
+        let head5 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get", headers: ["host": "localhost:80"])
+        XCTAssertEqual(HTTPClientRequestPart.head(head5), recorder.writes[8])
     }
 
     func testHTTPPartsHandlerMultiBody() throws {
@@ -797,13 +839,18 @@ class HTTPClientInternalTests: XCTestCase {
     }
 
     func testUncleanCloseThrows() {
-        let httpBin = HTTPBin()
+        let server = NIOHTTP1TestServer(group: self.serverGroup)
         defer {
-            XCTAssertNoThrow(try httpBin.shutdown())
+            XCTAssertNoThrow(try server.stop())
         }
+
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
 
-        _ = httpClient.get(url: "http://localhost:\(httpBin.port)/wait")
+        _ = httpClient.get(url: "http://localhost:\(server.serverPort)/wait")
+
+        XCTAssertNoThrow(try server.readInbound()) // .head
+        XCTAssertNoThrow(try server.readInbound()) // .end
+
         do {
             try httpClient.syncShutdown(requiresCleanClose: true)
             XCTFail("There should be an error on shutdown")
@@ -902,8 +949,8 @@ class HTTPClientInternalTests: XCTestCase {
 
         defer {
             XCTAssertNoThrow(try client.syncShutdown())
-            XCTAssertNoThrow(try elg.syncShutdownGracefully())
             XCTAssertNoThrow(try httpBin.shutdown())
+            XCTAssertNoThrow(try elg.syncShutdownGracefully())
         }
 
         let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)//get")
