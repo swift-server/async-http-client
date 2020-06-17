@@ -13,10 +13,13 @@
 //===----------------------------------------------------------------------===//
 
 import Foundation
+import Logging
 import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
+import NIOHTTPCompression
 import NIOTLS
+import NIOTransportServices
 
 /// A connection pool that manages and creates new connections to hosts respecting the specified preferences
 ///
@@ -27,17 +30,20 @@ final class ConnectionPool {
 
     /// The main data structure used by the `ConnectionPool` to retreive and create connections associated
     /// to a given `Key` .
-    /// - Warning: This property should be accessed with proper synchronization, see `connectionProvidersLock`
-    private var connectionProviders: [Key: HTTP1ConnectionProvider] = [:]
-
-    /// The lock used by the connection pool used to ensure correct synchronization of accesses to `_connectionProviders`
     ///
-    ///
-    /// - Warning: This lock should always be acquired *before* `HTTP1ConnectionProvider`s `stateLock` if used in combination with it.
-    private let connectionProvidersLock = Lock()
+    /// - Warning: This property should be accessed with proper synchronization, see `lock`
+    private var providers: [Key: HTTP1ConnectionProvider] = [:]
 
-    init(configuration: HTTPClient.Configuration) {
+    /// The lock used by the connection pool used to ensure correct synchronization of accesses to `providers`
+    ///
+    /// - Warning: This lock should always be acquired *before* `HTTP1ConnectionProvider`s `lock` if used in combination with it.
+    private let lock = Lock()
+
+    private let backgroundActivityLogger: Logger
+
+    init(configuration: HTTPClient.Configuration, backgroundActivityLogger: Logger) {
         self.configuration = configuration
+        self.backgroundActivityLogger = backgroundActivityLogger
     }
 
     /// Gets the `EventLoop` associated with the given `Key` if it exists
@@ -47,8 +53,8 @@ final class ConnectionPool {
     /// Having a default `EventLoop` shared by the *channel* and the *delegate* avoids
     /// loss of performance due to `EventLoop` hopping
     func associatedEventLoop(for key: Key) -> EventLoop? {
-        return self.connectionProvidersLock.withLock {
-            self.connectionProviders[key]?.eventLoop
+        return self.lock.withLock {
+            self.providers[key]?.eventLoop
         }
     }
 
@@ -60,66 +66,57 @@ final class ConnectionPool {
     /// - Returns: A connection  corresponding to the specified parameters
     ///
     /// When the pool is asked for a new connection, it creates a `Key` from the url associated to the `request`. This key
-    /// is used to determine if there already exists an associated `HTTP1ConnectionProvider` in `connectionProviders`.
+    /// is used to determine if there already exists an associated `HTTP1ConnectionProvider` in `providers`.
     /// If there is, the connection provider then takes care of leasing a new connection. If a connection provider doesn't exist, it is created.
-    func getConnection(for request: HTTPClient.Request, preference: HTTPClient.EventLoopPreference, on eventLoop: EventLoop, deadline: NIODeadline?) -> EventLoopFuture<Connection> {
+    func getConnection(_ request: HTTPClient.Request,
+                       preference: HTTPClient.EventLoopPreference,
+                       taskEventLoop: EventLoop,
+                       deadline: NIODeadline?,
+                       setupComplete: EventLoopFuture<Void>,
+                       logger: Logger) -> EventLoopFuture<Connection> {
         let key = Key(request)
 
-        let provider: HTTP1ConnectionProvider = self.connectionProvidersLock.withLock {
-            if let existing = self.connectionProviders[key] {
-                existing.stateLock.withLock {
-                    existing.state.pending += 1
-                }
+        let provider: HTTP1ConnectionProvider = self.lock.withLock {
+            if let existing = self.providers[key], existing.enqueue() {
                 return existing
             } else {
-                let http1Provider = HTTP1ConnectionProvider(key: key, eventLoop: eventLoop, configuration: self.configuration, parentPool: self)
-                self.connectionProviders[key] = http1Provider
-                http1Provider.stateLock.withLock {
-                    http1Provider.state.pending += 1
-                }
-                return http1Provider
+                let provider = HTTP1ConnectionProvider(key: key,
+                                                       eventLoop: taskEventLoop,
+                                                       configuration: self.configuration,
+                                                       pool: self,
+                                                       backgroundActivityLogger: self.backgroundActivityLogger)
+                let enqueued = provider.enqueue()
+                assert(enqueued)
+                self.providers[key] = provider
+                return provider
             }
         }
 
-        return provider.getConnection(preference: preference)
+        return provider.getConnection(preference: preference, setupComplete: setupComplete, logger: logger)
     }
 
-    func release(_ connection: Connection) {
-        let connectionProvider = self.connectionProvidersLock.withLock {
-            self.connectionProviders[connection.key]
-        }
-        if let connectionProvider = connectionProvider {
-            connectionProvider.release(connection: connection)
+    func delete(_ provider: HTTP1ConnectionProvider) {
+        self.lock.withLockVoid {
+            self.providers[provider.key] = nil
         }
     }
 
-    func prepareForClose() {
-        let connectionProviders = self.connectionProvidersLock.withLock { self.connectionProviders.values }
-        for connectionProvider in connectionProviders {
-            connectionProvider.prepareForClose()
+    func close(on eventLoop: EventLoop) -> EventLoopFuture<Bool> {
+        let providers = self.lock.withLock {
+            self.providers.values
         }
+
+        return EventLoopFuture.reduce(true, providers.map { $0.close() }, on: eventLoop) { $0 && $1 }
     }
 
-    func syncClose() {
-        let connectionProviders = self.connectionProvidersLock.withLock { self.connectionProviders.values }
-        for connectionProvider in connectionProviders {
-            connectionProvider.syncClose()
-        }
-        self.connectionProvidersLock.withLock {
-            assert(self.connectionProviders.count == 0, "left-overs: \(self.connectionProviders)")
-        }
-    }
-
-    var connectionProviderCount: Int {
-        return self.connectionProvidersLock.withLock {
-            self.connectionProviders.count
-        }
+    var count: Int {
+        return self.providers.count
     }
 
     /// Used by the `ConnectionPool` to index its `HTTP1ConnectionProvider`s
     ///
     /// A key is initialized from a `URL`, it uses the components to derive a hashed value
-    /// used by the `connectionProviders` dictionary to allow retrieving and creating
+    /// used by the `providers` dictionary to allow retrieving and creating
     /// connection providers associated to a certain request in constant time.
     struct Key: Hashable {
         init(_ request: HTTPClient.Request) {
@@ -130,565 +127,500 @@ final class ConnectionPool {
                 self.scheme = .https
             case "unix":
                 self.scheme = .unix
-                self.unixPath = request.url.baseURL?.path ?? request.url.path
+            case "http+unix":
+                self.scheme = .http_unix
+            case "https+unix":
+                self.scheme = .https_unix
             default:
                 fatalError("HTTPClient.Request scheme should already be a valid one")
             }
             self.port = request.port
             self.host = request.host
+            self.unixPath = request.socketPath
         }
 
         var scheme: Scheme
         var host: String
         var port: Int
-        var unixPath: String = ""
+        var unixPath: String
 
         enum Scheme: Hashable {
             case http
             case https
             case unix
+            case http_unix
+            case https_unix
+
+            var requiresTLS: Bool {
+                switch self {
+                case .https, .https_unix:
+                    return true
+                default:
+                    return false
+                }
+            }
+        }
+    }
+}
+
+/// A `Connection` represents a `Channel` in the context of the connection pool
+///
+/// In the `ConnectionPool`, each `Channel` belongs to a given `HTTP1ConnectionProvider`
+/// and has a certain "lease state" (see the `inUse` property).
+/// The role of `Connection` is to model this by storing a `Channel` alongside its associated properties
+/// so that they can be passed around together and correct provider can be identified when connection is released.
+class Connection {
+    /// The provider this `Connection` belongs to.
+    ///
+    /// This enables calling methods like `release()` directly on a `Connection` instead of
+    /// calling `provider.release(connection)`. This gives a more object oriented feel to the API
+    /// and can avoid having to keep explicit references to the pool at call site.
+    let provider: HTTP1ConnectionProvider
+
+    /// The `Channel` of this `Connection`
+    ///
+    /// - Warning: Requests that lease connections from the `ConnectionPool` are responsible
+    /// for removing the specific handlers they added to the `Channel` pipeline before releasing it to the pool.
+    let channel: Channel
+
+    init(channel: Channel, provider: HTTP1ConnectionProvider) {
+        self.channel = channel
+        self.provider = provider
+    }
+
+    /// Convenience property indicating wether the underlying `Channel` is active or not.
+    var isActiveEstimation: Bool {
+        return self.channel.isActive
+    }
+
+    /// Release this `Connection` to its associated `HTTP1ConnectionProvider`.
+    ///
+    /// - Warning: This only releases the connection and doesn't take care of cleaning handlers in the `Channel` pipeline.
+    func release(closing: Bool, logger: Logger) {
+        assert(self.channel.eventLoop.inEventLoop)
+        self.provider.release(connection: self, closing: closing, logger: logger)
+    }
+
+    /// Called when channel exceeds idle time in pool.
+    func timeout(logger: Logger) {
+        assert(self.channel.eventLoop.inEventLoop)
+        self.provider.timeout(connection: self, logger: logger)
+    }
+
+    /// Called when channel goes inactive while in the pool.
+    func remoteClosed(logger: Logger) {
+        assert(self.channel.eventLoop.inEventLoop)
+        self.provider.remoteClosed(connection: self, logger: logger)
+    }
+
+    func cancel() -> EventLoopFuture<Void> {
+        return self.channel.triggerUserOutboundEvent(TaskCancelEvent())
+    }
+
+    /// Called from `HTTP1ConnectionProvider.close` when client is shutting down.
+    func close() -> EventLoopFuture<Void> {
+        return self.channel.close()
+    }
+
+    /// Sets idle timeout handler and channel inactivity listener.
+    func setIdleTimeout(timeout: TimeAmount?, logger: Logger) {
+        _ = self.channel.pipeline.addHandler(IdleStateHandler(writeTimeout: timeout), position: .first).flatMap { _ in
+            self.channel.pipeline.addHandler(IdlePoolConnectionHandler(connection: self,
+                                                                       logger: logger))
         }
     }
 
-    /// A `Connection` represents a `Channel` in the context of the connection pool
-    ///
-    /// In the `ConnectionPool`, each `Channel` belongs to a given `HTTP1ConnectionProvider`
-    /// and has a certain "lease state" (see the `isLeased` property).
-    /// The role of `Connection` is to model this by storing a `Channel` alongside its associated properties
-    /// so that they can be passed around together.
-    ///
-    /// - Warning: `Connection` properties are not thread-safe and should be used with proper synchronization
-    class Connection: CustomStringConvertible {
-        init(key: Key, channel: Channel, parentPool: ConnectionPool) {
-            self.key = key
-            self.channel = channel
-            self.parentPool = parentPool
-            self.closePromise = channel.eventLoop.makePromise(of: Void.self)
-            self.closeFuture = self.closePromise.futureResult
+    /// Removes idle timeout handler and channel inactivity listener
+    func cancelIdleTimeout() -> EventLoopFuture<Void> {
+        return self.removeHandler(IdleStateHandler.self).flatMap { _ in
+            self.removeHandler(IdlePoolConnectionHandler.self)
         }
+    }
+}
 
-        /// Release this `Connection` to its associated `HTTP1ConnectionProvider` in the parent `ConnectionPool`
-        ///
-        /// This is exactly equivalent to calling `.release(theProvider)` on `ConnectionPool`
-        ///
-        /// - Warning: This only releases the connection and doesn't take care of cleaning handlers in the
-        ///  `Channel` pipeline.
-        func release() {
-            self.parentPool.release(self)
-        }
+struct ConnectionKey: Hashable {
+    let connection: Connection
 
-        func close() -> EventLoopFuture<Void> {
-            self.channel.close(promise: nil)
-            return self.closeFuture
-        }
-
-        var description: String {
-            return "Connection { channel: \(self.channel) }"
-        }
-
-        /// The connection pool this `Connection` belongs to.
-        ///
-        /// This enables calling methods like `release()` directly on a `Connection` instead of
-        /// calling `pool.release(connection)`. This gives a more object oriented feel to the API
-        /// and can avoid having to keep explicit references to the pool at call site.
-        let parentPool: ConnectionPool
-
-        /// The `Key` of the `HTTP1ConnectionProvider` this `Connection` belongs to
-        ///
-        /// This lets `ConnectionPool` know the relationship between `Connection`s and `HTTP1ConnectionProvider`s
-        fileprivate let key: Key
-
-        /// The `Channel` of this `Connection`
-        ///
-        /// - Warning: Requests that lease connections from the `ConnectionPool` are responsible
-        /// for removing the specific handlers they added to the `Channel` pipeline before releasing it to the pool.
-        let channel: Channel
-
-        /// Wether the connection is currently leased or not
-        var isLeased: Bool = false
-
-        /// Indicates that this connection is about to close
-        var isClosing: Bool = false
-
-        /// Indicates wether the usual close callback should be run or not, this allows customizing what happens
-        /// on close in some cases such as for the `.replaceConnection` action
-        ///
-        /// - Warning: This should be accessed under the `stateLock` of `HTTP1ConnectionProvider`
-        fileprivate var mustRunDefaultCloseCallback: Bool = true
-
-        /// Convenience property indicating wether the underlying `Channel` is active or not
-        var isActiveEstimation: Bool {
-            return self.channel.isActive
-        }
-
-        fileprivate var closePromise: EventLoopPromise<Void>
-
-        var closeFuture: EventLoopFuture<Void>
-
-        func removeIdleConnectionHandlersForLease() -> EventLoopFuture<Connection> {
-            return self.channel.eventLoop.flatSubmit {
-                self.removeHandler(IdleStateHandler.self).flatMap { () -> EventLoopFuture<Bool> in
-                    self.channel.pipeline.handler(type: IdlePoolConnectionHandler.self).flatMap { idleHandler in
-                        self.channel.pipeline.removeHandler(idleHandler).flatMapError { _ in
-                            self.channel.eventLoop.makeSucceededFuture(())
-                        }.map {
-                            idleHandler.hasNotSentClose && self.channel.isActive
-                        }
-                    }.flatMapError { error in
-                        // These handlers are only added on connection release, they are not added
-                        // when a connection is made to be instantly leased, so we ignore this error
-                        if let channelError = error as? ChannelPipelineError, channelError == .notFound {
-                            return self.channel.eventLoop.makeSucceededFuture(self.channel.isActive)
-                        } else {
-                            return self.channel.eventLoop.makeFailedFuture(error)
-                        }
-                    }
-                }.flatMap { channelIsUsable in
-                    if channelIsUsable {
-                        return self.channel.eventLoop.makeSucceededFuture(self)
-                    } else {
-                        return self.channel.eventLoop.makeFailedFuture(InactiveChannelError())
-                    }
-                }
-            }
-        }
-
-        struct InactiveChannelError: Error {}
+    init(_ connection: Connection) {
+        self.connection = connection
     }
 
-    /// A connection provider of `HTTP/1.1` connections with a given `Key` (host, scheme, port)
+    static func == (lhs: ConnectionKey, rhs: ConnectionKey) -> Bool {
+        return ObjectIdentifier(lhs.connection) == ObjectIdentifier(rhs.connection)
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(ObjectIdentifier(self.connection))
+    }
+
+    func cancel() -> EventLoopFuture<Void> {
+        return self.connection.cancel()
+    }
+}
+
+/// A connection provider of `HTTP/1.1` connections with a given `Key` (host, scheme, port)
+///
+/// On top of enabling connection reuse this provider it also facilitates the creation
+/// of concurrent requests as it has built-in politeness regarding the maximum number
+/// of concurrent requests to the server.
+class HTTP1ConnectionProvider {
+    /// The client configuration used to bootstrap new requests
+    private let configuration: HTTPClient.Configuration
+
+    /// The pool this provider belongs to
+    private let pool: ConnectionPool
+
+    /// The key associated with this provider
+    let key: ConnectionPool.Key
+
+    /// The default `EventLoop` for this provider
     ///
-    /// On top of enabling connection reuse this provider it also facilitates the creation
-    /// of concurrent requests as it has built-in politeness regarding the maximum number
-    /// of concurrent requests to the server.
-    class HTTP1ConnectionProvider: CustomStringConvertible {
-        /// The default `EventLoop` for this provider
-        ///
-        /// The default event loop is used to create futures and is used
-        /// when creating `Channel`s for requests for which the
-        /// `EventLoopPreference` is set to `.indifferent`
-        let eventLoop: EventLoop
+    /// The default event loop is used to create futures and is used when creating `Channel`s for requests
+    /// for which the `EventLoopPreference` is set to `.indifferent`
+    let eventLoop: EventLoop
 
-        /// The client configuration used to bootstrap new requests
-        private let configuration: HTTPClient.Configuration
+    /// The lock used to access and modify the provider state - `availableConnections`, `waiters` and `openedConnectionsCount`.
+    ///
+    /// - Warning: This lock should always be acquired *after* `ConnectionPool`s `lock` if used in combination with it.
+    private let lock = Lock()
 
-        /// The key associated with this provider
-        private let key: ConnectionPool.Key
+    var closePromise: EventLoopPromise<Void>
 
-        /// The `State` of this provider
-        ///
-        /// This property holds data structures representing the current state of the provider
-        /// - Warning: This type isn't thread safe and should be accessed with proper
-        /// synchronization (see the `stateLock` property)
-        fileprivate var state: State
+    var state: ConnectionsState
 
-        /// The lock used to access and modify the `state` property
-        ///
-        /// - Warning: This lock should always be acquired *after* `ConnectionPool`s `connectionProvidersLock` if used in combination with it.
-        fileprivate let stateLock = Lock()
+    private let backgroundActivityLogger: Logger
 
-        /// The maximum number of concurrent connections to a given (host, scheme, port)
-        private let maximumConcurrentConnections: Int = 8
+    /// Creates a new `HTTP1ConnectionProvider`
+    ///
+    /// - parameters:
+    ///     - key: The `Key` (host, scheme, port) this provider is associated to
+    ///     - configuration: The client configuration used globally by all requests
+    ///     - initialConnection: The initial connection the pool initializes this provider with
+    ///     - pool: The pool this provider belongs to
+    ///     - backgroundActivityLogger: The logger used to log activity in the background, ie. not associated with a
+    ///                                 request.
+    init(key: ConnectionPool.Key,
+         eventLoop: EventLoop,
+         configuration: HTTPClient.Configuration,
+         pool: ConnectionPool,
+         backgroundActivityLogger: Logger) {
+        self.eventLoop = eventLoop
+        self.configuration = configuration
+        self.key = key
+        self.pool = pool
+        self.closePromise = eventLoop.makePromise()
+        self.state = .init(eventLoop: eventLoop)
+        self.backgroundActivityLogger = backgroundActivityLogger
+    }
 
-        /// The pool this provider belongs to
-        private let parentPool: ConnectionPool
+    deinit {
+        self.state.assertInvariants()
+    }
 
-        /// Creates a new `HTTP1ConnectionProvider`
-        ///
-        /// - parameters:
-        ///     - key: The `Key` (host, scheme, port) this provider is associated to
-        ///     - configuration: The client configuration used globally by all requests
-        ///     - initialConnection: The initial connection the pool initializes this provider with
-        ///     - parentPool: The pool this provider belongs to
-        init(key: ConnectionPool.Key, eventLoop: EventLoop, configuration: HTTPClient.Configuration, parentPool: ConnectionPool) {
-            self.eventLoop = eventLoop
-            self.configuration = configuration
-            self.key = key
-            self.parentPool = parentPool
-            self.state = State(eventLoop: eventLoop, parentPool: parentPool, key: key)
-        }
-
-        deinit {
-            assert(self.state.activity == .closed, "Non closed on deinit")
-            assert(self.state.availableConnections.isEmpty, "Available connections should be empty before deinit")
-            assert(self.state.leased == 0, "All leased connections should have been returned before deinit")
-            assert(self.state.waiters.count == 0, "Waiters on deinit: \(self.state.waiters)")
-        }
-
-        var description: String {
-            return "HTTP1ConnectionProvider { key: \(self.key), state: \(self.state) }"
-        }
-
-        func getConnection(preference: HTTPClient.EventLoopPreference) -> EventLoopFuture<Connection> {
-            self.activityPrecondition(expected: [.opened])
-            let action = self.stateLock.withLock { self.state.connectionAction(for: preference) }
-            switch action {
-            case .leaseConnection(let connection):
-                return connection.removeIdleConnectionHandlersForLease().flatMapError { _ in
-                    connection.closeFuture.flatMap { // We ensure close actions are run first
-                        let defaultEventLoop = self.stateLock.withLock {
-                            self.state.defaultEventLoop
-                        }
-                        return self.makeConnection(on: preference.bestEventLoop ?? defaultEventLoop)
+    func execute(_ action: Action, logger: Logger) {
+        switch action {
+        case .lease(let connection, let waiter):
+            // if connection is became inactive, we create a new one.
+            connection.cancelIdleTimeout().whenComplete { _ in
+                if connection.isActiveEstimation {
+                    logger.trace("leasing existing connection",
+                                 metadata: ["ahc-connection": "\(connection)"])
+                    waiter.promise.succeed(connection)
+                } else {
+                    logger.trace("opening fresh connection (found matching but inactive connection)",
+                                 metadata: ["ahc-dead-connection": "\(connection)"])
+                    self.makeChannel(preference: waiter.preference).whenComplete { result in
+                        self.connect(result, waiter: waiter, replacing: connection, logger: logger)
                     }
                 }
-            case .makeConnection(let eventLoop):
-                return self.makeConnection(on: eventLoop)
-            case .leaseFutureConnection(let futureConnection):
-                return futureConnection
             }
-        }
-
-        func release(connection: Connection) {
-            self.activityPrecondition(expected: [.opened, .closing])
-            let action = self.parentPool.connectionProvidersLock.withLock {
-                self.stateLock.withLock { self.state.releaseAction(for: connection) }
+        case .create(let waiter):
+            logger.trace("opening fresh connection (no connections to reuse available)")
+            self.makeChannel(preference: waiter.preference).whenComplete { result in
+                self.connect(result, waiter: waiter, logger: logger)
             }
-            switch action {
-            case .succeed(let promise):
-                promise.succeed(connection)
-
-            case .makeConnectionAndComplete(let eventLoop, let promise):
-                self.makeConnection(on: eventLoop).cascade(to: promise)
-
-            case .replaceConnection(let eventLoop, let promise):
-                connection.close().flatMap {
-                    self.makeConnection(on: eventLoop)
-                }.whenComplete { result in
-                    switch result {
-                    case .success(let connection):
-                        promise.succeed(connection)
-                    case .failure(let error):
-                        promise.fail(error)
-                    }
+        case .replace(let connection, let waiter):
+            connection.cancelIdleTimeout().flatMap {
+                connection.close()
+            }.whenComplete { _ in
+                logger.trace("opening fresh connection (replacing exising connection)",
+                             metadata: ["ahc-old-connection": "\(connection)",
+                                        "ahc-waiter": "\(waiter)"])
+                self.makeChannel(preference: waiter.preference).whenComplete { result in
+                    self.connect(result, waiter: waiter, replacing: connection, logger: logger)
                 }
-
-            case .none:
-                break
             }
+        case .park(let connection):
+            logger.trace("parking connection",
+                         metadata: ["ahc-connection": "\(connection)"])
+            connection.setIdleTimeout(timeout: self.configuration.maximumAllowedIdleTimeInConnectionPool,
+                                      logger: self.backgroundActivityLogger)
+        case .closeProvider:
+            logger.debug("closing provider",
+                         metadata: ["ahc-provider": "\(self)"])
+            self.closeAndDelete()
+        case .none:
+            break
+        case .parkAnd(let connection, let action):
+            logger.trace("parking connection & doing further action",
+                         metadata: ["ahc-connection": "\(connection)",
+                                    "ahc-action": "\(action)"])
+            connection.setIdleTimeout(timeout: self.configuration.maximumAllowedIdleTimeInConnectionPool,
+                                      logger: self.backgroundActivityLogger)
+            self.execute(action, logger: logger)
+        case .closeAnd(let connection, let action):
+            logger.trace("closing connection & doing further action",
+                         metadata: ["ahc-connection": "\(connection)",
+                                    "ahc-action": "\(action)"])
+            connection.channel.close(promise: nil)
+            self.execute(action, logger: logger)
+        case .cancel(let connection, let close):
+            logger.trace("cancelling connection",
+                         metadata: ["ahc-connection": "\(connection)",
+                                    "ahc-close": "\(close)"])
+            connection.cancel().whenComplete { _ in
+                if close {
+                    self.closeAndDelete()
+                }
+            }
+        case .fail(let waiter, let error):
+            logger.debug("failing connection for waiter",
+                         metadata: ["ahc-waiter": "\(waiter)",
+                                    "ahc-error": "\(error)"])
+            waiter.promise.fail(error)
+        }
+    }
+
+    /// This function is needed to ensure that there is no race between getting a provider from map, and shutting it down when there are no requests processed by it.
+    func enqueue() -> Bool {
+        return self.lock.withLock {
+            self.state.enqueue()
+        }
+    }
+
+    func getConnection(preference: HTTPClient.EventLoopPreference,
+                       setupComplete: EventLoopFuture<Void>,
+                       logger: Logger) -> EventLoopFuture<Connection> {
+        let waiter = Waiter(promise: self.eventLoop.makePromise(), setupComplete: setupComplete, preference: preference)
+
+        let action: Action = self.lock.withLock {
+            self.state.acquire(waiter: waiter)
         }
 
-        private func makeConnection(on eventLoop: EventLoop) -> EventLoopFuture<Connection> {
-            self.activityPrecondition(expected: [.opened])
-            let handshakePromise = eventLoop.makePromise(of: Void.self)
-            let bootstrap = ClientBootstrap.makeHTTPClientBootstrapBase(group: eventLoop, host: self.key.host, port: self.key.port, configuration: self.configuration)
+        self.execute(action, logger: logger)
+
+        return waiter.promise.futureResult
+    }
+
+    func connect(_ result: Result<Channel, Error>,
+                 waiter: Waiter,
+                 replacing closedConnection: Connection? = nil,
+                 logger: Logger) {
+        let action: Action
+        switch result {
+        case .success(let channel):
+            logger.trace("successfully created connection",
+                         metadata: ["ahc-connection": "\(channel)"])
+            let connection = Connection(channel: channel, provider: self)
+            action = self.lock.withLock {
+                if let closedConnection = closedConnection {
+                    self.state.drop(connection: closedConnection)
+                }
+                return self.state.offer(connection: connection)
+            }
+            waiter.promise.succeed(connection)
+        case .failure(let error):
+            logger.debug("connection attempt failed",
+                         metadata: ["ahc-error": "\(error)"])
+            action = self.lock.withLock {
+                self.state.connectFailed()
+            }
+            waiter.promise.fail(error)
+        }
+        waiter.setupComplete.whenComplete { _ in
+            self.execute(action, logger: logger)
+        }
+    }
+
+    func release(connection: Connection, closing: Bool, logger: Logger) {
+        logger.debug("releasing connection, request complete",
+                     metadata: ["ahc-closing": "\(closing)"])
+        let action: Action = self.lock.withLock {
+            self.state.release(connection: connection, closing: closing)
+        }
+
+        switch action {
+        case .none:
+            break
+        case .park, .closeProvider:
+            // Since both `.park` and `.deleteProvider` are terminal in terms of execution,
+            // we can execute them immediately
+            self.execute(action, logger: logger)
+        case .cancel, .closeAnd, .create, .fail, .lease, .parkAnd, .replace:
+            // This is needed to start a new stack, otherwise, since this is called on a previous
+            // future completion handler chain, it will be growing indefinitely until the connection is closed.
+            // We might revisit this when https://github.com/apple/swift-nio/issues/970 is resolved.
+            connection.channel.eventLoop.execute {
+                self.execute(action, logger: logger)
+            }
+        }
+    }
+
+    func remoteClosed(connection: Connection, logger: Logger) {
+        let action: Action = self.lock.withLock {
+            self.state.remoteClosed(connection: connection)
+        }
+
+        self.execute(action, logger: logger)
+    }
+
+    func timeout(connection: Connection, logger: Logger) {
+        let action: Action = self.lock.withLock {
+            self.state.timeout(connection: connection)
+        }
+
+        self.execute(action, logger: logger)
+    }
+
+    private func closeAndDelete() {
+        self.pool.delete(self)
+        self.closePromise.succeed(())
+    }
+
+    func close() -> EventLoopFuture<Bool> {
+        if let (waiters, available, leased, clean) = self.lock.withLock({ self.state.close() }) {
+            waiters.forEach {
+                $0.promise.fail(HTTPClientError.cancelled)
+            }
+
+            if available.isEmpty, leased.isEmpty {
+                self.closePromise.succeed(())
+                return self.closePromise.futureResult.map { clean }
+            }
+
+            EventLoopFuture.andAllComplete(leased.map { $0.cancel() }, on: self.eventLoop).flatMap { _ in
+                EventLoopFuture.andAllComplete(available.map { $0.close() }, on: self.eventLoop)
+            }.whenFailure { error in
+                self.closePromise.fail(error)
+            }
+
+            return self.closePromise.futureResult.map { clean }
+        }
+
+        return self.closePromise.futureResult.map { true }
+    }
+
+    private func makeChannel(preference: HTTPClient.EventLoopPreference) -> EventLoopFuture<Channel> {
+        let eventLoop = preference.bestEventLoop ?? self.eventLoop
+        let requiresTLS = self.key.scheme.requiresTLS
+        let bootstrap: NIOClientTCPBootstrap
+        do {
+            bootstrap = try NIOClientTCPBootstrap.makeHTTPClientBootstrapBase(on: eventLoop, host: self.key.host, port: self.key.port, requiresTLS: requiresTLS, configuration: self.configuration)
+        } catch {
+            return eventLoop.makeFailedFuture(error)
+        }
+
+        let channel: EventLoopFuture<Channel>
+        switch self.key.scheme {
+        case .http, .https:
             let address = HTTPClient.resolveAddress(host: self.key.host, port: self.key.port, proxy: self.configuration.proxy)
-
-            let channel: EventLoopFuture<Channel>
-            switch self.key.scheme {
-            case .http, .https:
-                channel = bootstrap.connect(host: address.host, port: address.port)
-            case .unix:
-                channel = bootstrap.connect(unixDomainSocketPath: self.key.unixPath)
-            }
-
-            return channel.flatMap { channel -> EventLoopFuture<ConnectionPool.Connection> in
-                channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, handshakePromise: handshakePromise)
-                return handshakePromise.futureResult.flatMap {
-                    channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
-                }.map {
-                    let connection = Connection(key: self.key, channel: channel, parentPool: self.parentPool)
-                    connection.isLeased = true
-                    return connection
-                }
-            }.map { connection in
-                self.configureCloseCallback(of: connection)
-                return connection
-            }.flatMapError { error in
-                // This promise may not have been completed if we reach this
-                // so we fail it to avoid any leak
-                handshakePromise.fail(error)
-                let action = self.parentPool.connectionProvidersLock.withLock {
-                    self.stateLock.withLock {
-                        self.state.failedConnectionAction()
-                    }
-                }
-                switch action {
-                case .makeConnectionAndComplete(let el, let promise):
-                    self.makeConnection(on: el).cascade(to: promise)
-                case .none:
-                    break
-                }
-                return self.eventLoop.makeFailedFuture(error)
-            }
+            channel = bootstrap.connect(host: address.host, port: address.port)
+        case .unix, .http_unix, .https_unix:
+            channel = bootstrap.connect(unixDomainSocketPath: self.key.unixPath)
         }
 
-        /// Adds a callback on connection close that asks the `state` what to do about this
-        ///
-        /// The callback informs the state about the event, and the state returns a
-        /// `ClosedConnectionRemoveAction` which instructs it about what it should do.
-        private func configureCloseCallback(of connection: Connection) {
-            connection.channel.closeFuture.whenComplete { result in
-                let action: HTTP1ConnectionProvider.State.ClosedConnectionRemoveAction? = self.parentPool.connectionProvidersLock.withLock {
-                    self.stateLock.withLock {
-                        guard connection.mustRunDefaultCloseCallback else {
-                            return nil
-                        }
-                        switch result {
-                        case .success:
-                            return self.state.removeClosedConnection(connection)
+        return channel.flatMap { channel in
+            let requiresSSLHandler = self.configuration.proxy != nil && self.key.scheme.requiresTLS
+            let handshakePromise = channel.eventLoop.makePromise(of: Void.self)
 
-                        case .failure(let error):
-                            preconditionFailure("Connection close future failed with error: \(error)")
-                        }
+            channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, addSSLClient: requiresSSLHandler, handshakePromise: handshakePromise)
+
+            return handshakePromise.futureResult.flatMap {
+                channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
+            }.flatMap {
+                #if canImport(Network)
+                    if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), bootstrap.underlyingBootstrap is NIOTSConnectionBootstrap {
+                        return channel.pipeline.addHandler(HTTPClient.NWErrorHandler(), position: .first)
                     }
+                #endif
+                return channel.eventLoop.makeSucceededFuture(())
+            }.flatMap {
+                switch self.configuration.decompression {
+                case .disabled:
+                    return channel.eventLoop.makeSucceededFuture(())
+                case .enabled(let limit):
+                    let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
+                    return channel.pipeline.addHandler(decompressHandler)
                 }
-
-                if let action = action {
-                    switch action {
-                    case .makeConnectionAndComplete(let el, let promise):
-                        self.makeConnection(on: el).cascade(to: promise)
-                    case .none:
-                        break
-                    }
-                }
-
-                connection.closePromise.succeed(())
+            }.map {
+                channel
             }
+        }.flatMapError { error in
+            #if canImport(Network)
+                var error = error
+                if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), bootstrap.underlyingBootstrap is NIOTSConnectionBootstrap {
+                    error = HTTPClient.NWErrorHandler.translateError(error)
+                }
+            #endif
+            return self.eventLoop.makeFailedFuture(error)
         }
+    }
 
-        /// Removes and fails all `waiters`, remove existing `availableConnections` and sets `state.activity` to `.closing`
-        func prepareForClose() {
-            assert(MultiThreadedEventLoopGroup.currentEventLoop == nil,
-                   "HTTPClient shutdown on EventLoop unsupported") // calls .wait() so it would crash later anyway
-            let (waitersFutures, closeFutures) = self.stateLock.withLock { () -> ([EventLoopFuture<Connection>], [EventLoopFuture<Void>]) in
-                // Fail waiters
-                let waitersCopy = self.state.waiters
-                self.state.waiters.removeAll()
-                let waitersPromises = waitersCopy.map { $0.promise }
-                let waitersFutures = waitersPromises.map { $0.futureResult }
-                waitersPromises.forEach { $0.fail(HTTPClientError.cancelled) }
-                let closeFutures = self.state.availableConnections.map { $0.close() }
-                return (waitersFutures, closeFutures)
-            }
-            try? EventLoopFuture<Connection>.andAllComplete(waitersFutures, on: self.eventLoop).wait()
-            try? EventLoopFuture<Void>.andAllComplete(closeFutures, on: self.eventLoop).wait()
+    /// A `Waiter` represents a request that waits for a connection when none is
+    /// currently available
+    ///
+    /// `Waiter`s are created when `maximumConcurrentConnections` is reached
+    /// and we cannot create new connections anymore.
+    struct Waiter {
+        /// The promise to complete once a connection is available
+        let promise: EventLoopPromise<Connection>
 
-            self.stateLock.withLock {
-                if self.state.leased == 0, self.state.availableConnections.isEmpty {
-                    self.state.activity = .closed
-                } else {
-                    self.state.activity = .closing
-                }
-            }
+        /// Future that will be succeeded when request timeout handler and `TaskHandler` are added to the pipeline.
+        let setupComplete: EventLoopFuture<Void>
+
+        /// The event loop preference associated to this particular request
+        /// that the provider should respect
+        let preference: HTTPClient.EventLoopPreference
+    }
+}
+
+class IdlePoolConnectionHandler: ChannelInboundHandler, RemovableChannelHandler {
+    typealias InboundIn = NIOAny
+
+    let connection: Connection
+    var eventSent: Bool
+    let logger: Logger
+
+    init(connection: Connection, logger: Logger) {
+        self.connection = connection
+        self.eventSent = false
+        self.logger = logger
+    }
+
+    // this is needed to detect when remote end closes connection while connection is in the pool idling
+    func channelInactive(context: ChannelHandlerContext) {
+        if !self.eventSent {
+            self.eventSent = true
+            self.connection.remoteClosed(logger: self.logger)
         }
+    }
 
-        func syncClose() {
-            assert(MultiThreadedEventLoopGroup.currentEventLoop == nil,
-                   "HTTPClient shutdown on EventLoop unsupported") // calls .wait() so it would crash later anyway
-            let availableConnections = self.stateLock.withLock { () -> CircularBuffer<ConnectionPool.Connection> in
-                assert(self.state.activity == .closing)
-                return self.state.availableConnections
+    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+        if let idleEvent = event as? IdleStateHandler.IdleStateEvent, idleEvent == .write {
+            if !self.eventSent {
+                self.eventSent = true
+                self.connection.timeout(logger: self.logger)
             }
-            try? EventLoopFuture<Void>.andAllComplete(availableConnections.map { $0.close() }, on: self.eventLoop).wait()
+        } else {
+            context.fireUserInboundEventTriggered(event)
         }
+    }
+}
 
-        private func activityPrecondition(expected: Set<State.Activity>) {
-            self.stateLock.withLock {
-                precondition(expected.contains(self.state.activity), "Attempting to use HTTP1ConnectionProvider with unexpected state: \(self.state.activity) (expected: \(expected))")
-            }
-        }
-
-        fileprivate struct State {
-            /// The default `EventLoop` to use for this `HTTP1ConnectionProvider`
-            let defaultEventLoop: EventLoop
-
-            /// The maximum number of connections to a certain (host, scheme, port) tuple.
-            private let maximumConcurrentConnections: Int = 8
-
-            /// Opened connections that are available
-            fileprivate var availableConnections: CircularBuffer<Connection> = .init(initialCapacity: 8)
-
-            /// The number of currently leased connections
-            fileprivate var leased: Int = 0 {
-                didSet {
-                    assert((0...self.maximumConcurrentConnections).contains(self.leased), "Invalid number of leased connections (\(self.leased))")
-                }
-            }
-
-            /// Consumers that weren't able to get a new connection without exceeding
-            /// `maximumConcurrentConnections` get a `Future<Connection>`
-            /// whose associated promise is stored in `Waiter`. The promise is completed
-            /// as soon as possible by the provider, in FIFO order.
-            fileprivate var waiters: CircularBuffer<Waiter> = .init(initialCapacity: 8)
-
-            fileprivate var activity: Activity = .opened
-
-            fileprivate var pending: Int = 0 {
-                didSet {
-                    assert(self.pending >= 0)
-                }
-            }
-
-            private let parentPool: ConnectionPool
-
-            private let key: Key
-
-            fileprivate init(eventLoop: EventLoop, parentPool: ConnectionPool, key: Key) {
-                self.defaultEventLoop = eventLoop
-                self.parentPool = parentPool
-                self.key = key
-            }
-
-            fileprivate mutating func connectionAction(for preference: HTTPClient.EventLoopPreference) -> ConnectionGetAction {
-                self.pending -= 1
-                let (channelEL, requiresSpecifiedEL) = self.resolvePreference(preference)
-                if self.leased < self.maximumConcurrentConnections {
-                    self.leased += 1
-                    if let connection = availableConnections.swapWithFirstAndRemove(where: { $0.channel.eventLoop === channelEL }) {
-                        connection.isLeased = true
-                        return .leaseConnection(connection)
-                    } else {
-                        if requiresSpecifiedEL {
-                            return .makeConnection(channelEL)
-                        } else if let existingConnection = availableConnections.popFirst() {
-                            return .leaseConnection(existingConnection)
-                        } else {
-                            return .makeConnection(self.defaultEventLoop)
-                        }
-                    }
-                } else {
-                    let promise = channelEL.makePromise(of: Connection.self)
-                    self.waiters.append(Waiter(promise: promise, preference: preference))
-                    return .leaseFutureConnection(promise.futureResult)
-                }
-            }
-
-            fileprivate mutating func releaseAction(for connection: Connection) -> ConnectionReleaseAction {
-                if let firstWaiter = self.waiters.popFirst() {
-                    let (channelEL, requiresSpecifiedEL) = self.resolvePreference(firstWaiter.preference)
-
-                    guard connection.isActiveEstimation, !connection.isClosing else {
-                        return .makeConnectionAndComplete(channelEL, firstWaiter.promise)
-                    }
-
-                    if connection.channel.eventLoop === channelEL {
-                        return .succeed(firstWaiter.promise)
-                    } else {
-                        if requiresSpecifiedEL {
-                            connection.mustRunDefaultCloseCallback = false
-                            return .replaceConnection(channelEL, firstWaiter.promise)
-                        } else {
-                            return .makeConnectionAndComplete(channelEL, firstWaiter.promise)
-                        }
-                    }
-
-                } else {
-                    connection.isLeased = false
-                    self.leased -= 1
-                    if connection.isActiveEstimation, !connection.isClosing {
-                        self.availableConnections.append(connection)
-                    }
-
-                    if self.providerMustClose() {
-                        self.removeFromPool()
-                    }
-
-                    return .none
-                }
-            }
-
-            fileprivate mutating func removeClosedConnection(_ connection: Connection) -> ClosedConnectionRemoveAction {
-                if connection.isLeased {
-                    if let firstWaiter = self.waiters.popFirst() {
-                        let (el, _) = self.resolvePreference(firstWaiter.preference)
-                        return .makeConnectionAndComplete(el, firstWaiter.promise)
-                    }
-                } else {
-                    self.availableConnections.swapWithFirstAndRemove(where: { $0 === connection })
-                }
-
-                if self.providerMustClose() {
-                    self.removeFromPool()
-                }
-
-                return .none
-            }
-
-            fileprivate mutating func failedConnectionAction() -> ClosedConnectionRemoveAction {
-                if let firstWaiter = self.waiters.popFirst() {
-                    let (el, _) = self.resolvePreference(firstWaiter.preference)
-                    return .makeConnectionAndComplete(el, firstWaiter.promise)
-                } else {
-                    self.leased -= 1
-                    if self.providerMustClose() {
-                        self.removeFromPool()
-                    }
-                    return .none
-                }
-            }
-
-            private func providerMustClose() -> Bool {
-                return self.pending == 0 && self.activity != .closed && self.leased == 0 && self.availableConnections.isEmpty && self.waiters.isEmpty
-            }
-
-            /// - Warning: This should always be called from a critical section protected by `.connectionProvidersLock`
-            fileprivate mutating func removeFromPool() {
-                assert(self.parentPool.connectionProviders[self.key] != nil)
-                self.parentPool.connectionProviders[self.key] = nil
-                assert(self.activity != .closed)
-                self.activity = .closed
-            }
-
-            private func resolvePreference(_ preference: HTTPClient.EventLoopPreference) -> (EventLoop, Bool) {
-                switch preference.preference {
-                case .indifferent:
-                    return (self.defaultEventLoop, false)
-                case .delegate(let el):
-                    return (el, false)
-                case .delegateAndChannel(let el), .testOnly_exact(let el, _):
-                    return (el, true)
-                }
-            }
-
-            fileprivate enum ConnectionGetAction {
-                case leaseConnection(Connection)
-                case makeConnection(EventLoop)
-                case leaseFutureConnection(EventLoopFuture<Connection>)
-            }
-
-            fileprivate enum ConnectionReleaseAction {
-                case succeed(EventLoopPromise<Connection>)
-                case makeConnectionAndComplete(EventLoop, EventLoopPromise<Connection>)
-                case replaceConnection(EventLoop, EventLoopPromise<Connection>)
-                case none
-            }
-
-            fileprivate enum ClosedConnectionRemoveAction {
-                case none
-                case makeConnectionAndComplete(EventLoop, EventLoopPromise<Connection>)
-            }
-
-            /// A `Waiter` represents a request that waits for a connection when none is
-            /// currently available
-            ///
-            /// `Waiter`s are created when `maximumConcurrentConnections` is reached
-            /// and we cannot create new connections anymore.
-            fileprivate struct Waiter {
-                /// The promise to complete once a connection is available
-                let promise: EventLoopPromise<Connection>
-
-                /// The event loop preference associated to this particular request
-                /// that the provider should respect
-                let preference: HTTPClient.EventLoopPreference
-            }
-
-            enum Activity: Hashable, CustomStringConvertible {
-                case opened
-                case closing
-                case closed
-
-                var description: String {
-                    switch self {
-                    case .opened:
-                        return "opened"
-                    case .closing:
-                        return "closing"
-                    case .closed:
-                        return "closed"
-                    }
-                }
-            }
-        }
+extension CircularBuffer {
+    mutating func swap(at index: Index, with value: Element) -> Element {
+        let tmp = self[index]
+        self[index] = value
+        return tmp
     }
 }

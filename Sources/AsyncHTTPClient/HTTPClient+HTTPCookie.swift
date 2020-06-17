@@ -50,7 +50,7 @@ extension HTTPClient {
                 return nil
             }
 
-            let nameAndValue = components[0].split(separator: "=", maxSplits: 1).map {
+            let nameAndValue = components[0].split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).map {
                 $0.trimmingCharacters(in: .whitespaces)
             }
 
@@ -61,6 +61,10 @@ extension HTTPClient {
             self.name = nameAndValue[0]
             self.value = nameAndValue[1]
 
+            guard !self.name.isEmpty else {
+                return nil
+            }
+
             self.path = "/"
             self.domain = defaultDomain
             self.expires = nil
@@ -69,37 +73,26 @@ extension HTTPClient {
             self.secure = false
 
             for component in components[1...] {
-                if component.starts(with: "Path"), let value = parseComponentValue(component) {
+                switch self.parseComponent(component) {
+                case (nil, nil):
+                    continue
+                case ("path", .some(let value)):
                     self.path = value
-                    continue
-                }
-
-                if component.starts(with: "Domain"), let value = parseComponentValue(component) {
+                case ("domain", .some(let value)):
                     self.domain = value
-                    continue
-                }
-
-                if component.starts(with: "Expires") {
+                case ("expires", let value):
                     let formatter = DateFormatter()
                     formatter.locale = Locale(identifier: "en_US")
                     formatter.timeZone = TimeZone(identifier: "GMT")
                     formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss z"
-                    self.expires = self.parseComponentValue(component).flatMap { formatter.date(from: $0) }
-                    continue
-                }
-
-                if component.starts(with: "Max-Age"), let value = parseComponentValue(component).flatMap(Int.init) {
-                    self.maxAge = value
-                    continue
-                }
-
-                if component == "Secure" {
+                    self.expires = value.flatMap { formatter.date(from: $0) }
+                case ("max-age", let value):
+                    self.maxAge = value.flatMap(Int.init)
+                case ("secure", nil):
                     self.secure = true
-                    continue
-                }
-
-                if component == "HttpOnly" {
+                case ("httponly", nil):
                     self.httpOnly = true
+                default:
                     continue
                 }
             }
@@ -127,25 +120,23 @@ extension HTTPClient {
             self.secure = secure
         }
 
-        func parseComponentValue(_ component: String) -> String? {
+        func parseComponent(_ component: String) -> (String?, String?) {
             let nameAndValue = component.split(separator: "=", maxSplits: 1).map {
                 $0.trimmingCharacters(in: .whitespaces)
             }
             if nameAndValue.count == 2 {
-                return nameAndValue[1]
+                return (nameAndValue[0].lowercased(), nameAndValue[1])
+            } else if nameAndValue.count == 1 {
+                return (nameAndValue[0].lowercased(), nil)
             }
-            return nil
+            return (nil, nil)
         }
     }
 }
 
 extension HTTPClient.Response {
-    var cookieHeaders: [HTTPHeaders.Element] {
-        return headers.filter { $0.name.lowercased() == "set-cookie" }
-    }
-
     /// List of HTTP cookies returned by the server.
     public var cookies: [HTTPClient.Cookie] {
-        return self.cookieHeaders.compactMap { HTTPClient.Cookie(header: $0.value, defaultDomain: self.host) }
+        return self.headers["set-cookie"].compactMap { HTTPClient.Cookie(header: $0, defaultDomain: self.host) }
     }
 }

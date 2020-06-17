@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Foundation
+import Logging
 import NIO
 import NIOConcurrencyHelpers
 import NIOFoundationCompat
@@ -64,7 +65,7 @@ extension HTTPClient {
         ///
         /// - parameters:
         ///     - length: Body size. Request validation will be failed with `HTTPClientErrors.contentLengthMissing` if nil,
-        ///               unless `Trasfer-Encoding: chunked` header is set.
+        ///               unless `Transfer-Encoding: chunked` header is set.
         ///     - stream: Body chunk provider.
         public static func stream(length: Int? = nil, _ stream: @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
             return Body(length: length, stream: stream)
@@ -76,9 +77,7 @@ extension HTTPClient {
         ///     - data: Body `Data` representation.
         public static func data(_ data: Data) -> Body {
             return Body(length: data.count) { writer in
-                var buffer = ByteBufferAllocator().buffer(capacity: data.count)
-                buffer.writeBytes(data)
-                return writer.write(.byteBuffer(buffer))
+                writer.write(.byteBuffer(ByteBuffer(bytes: data)))
             }
         }
 
@@ -88,9 +87,7 @@ extension HTTPClient {
         ///     - string: Body `String` representation.
         public static func string(_ string: String) -> Body {
             return Body(length: string.utf8.count) { writer in
-                var buffer = ByteBufferAllocator().buffer(capacity: string.utf8.count)
-                buffer.writeString(string)
-                return writer.write(.byteBuffer(buffer))
+                writer.write(.byteBuffer(ByteBuffer(string: string)))
             }
         }
     }
@@ -99,20 +96,27 @@ extension HTTPClient {
     public struct Request {
         /// Represent kind of Request
         enum Kind {
+            enum UnixScheme {
+                case baseURL
+                case http_unix
+                case https_unix
+            }
+
             /// Remote host request.
             case host
             /// UNIX Domain Socket HTTP request.
-            case unixSocket
+            case unixSocket(_ scheme: UnixScheme)
 
             private static var hostSchemes = ["http", "https"]
-            private static var unixSchemes = ["unix"]
+            private static var unixSchemes = ["unix", "http+unix", "https+unix"]
 
             init(forScheme scheme: String) throws {
-                if Kind.host.supports(scheme: scheme) {
-                    self = .host
-                } else if Kind.unixSocket.supports(scheme: scheme) {
-                    self = .unixSocket
-                } else {
+                switch scheme {
+                case "http", "https": self = .host
+                case "unix": self = .unixSocket(.baseURL)
+                case "http+unix": self = .unixSocket(.http_unix)
+                case "https+unix": self = .unixSocket(.https_unix)
+                default:
                     throw HTTPClientError.unsupportedScheme(scheme)
                 }
             }
@@ -126,6 +130,31 @@ extension HTTPClient {
                     return host
                 case .unixSocket:
                     return ""
+                }
+            }
+
+            func socketPathFromURL(_ url: URL) throws -> String {
+                switch self {
+                case .unixSocket(.baseURL):
+                    return url.baseURL?.path ?? url.path
+                case .unixSocket:
+                    guard let socketPath = url.host else {
+                        throw HTTPClientError.missingSocketPath
+                    }
+                    return socketPath
+                case .host:
+                    return ""
+                }
+            }
+
+            func uriFromURL(_ url: URL) -> String {
+                switch self {
+                case .host:
+                    return url.uri
+                case .unixSocket(.baseURL):
+                    return url.baseURL != nil ? url.uri : "/"
+                case .unixSocket:
+                    return url.uri
                 }
             }
 
@@ -147,6 +176,10 @@ extension HTTPClient {
         public let scheme: String
         /// Remote host, resolved from `URL`.
         public let host: String
+        /// Socket path, resolved from `URL`.
+        let socketPath: String
+        /// URI composed of the path and query, resolved from `URL`.
+        let uri: String
         /// Request custom HTTP Headers, defaults to no headers.
         public var headers: HTTPHeaders
         /// Request body, defaults to no body.
@@ -192,6 +225,7 @@ extension HTTPClient {
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
+        ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
             guard let scheme = url.scheme?.lowercased() else {
                 throw HTTPClientError.emptyScheme
@@ -199,6 +233,8 @@ extension HTTPClient {
 
             self.kind = try Kind(forScheme: scheme)
             self.host = try self.kind.hostFromURL(url)
+            self.socketPath = try self.kind.socketPathFromURL(url)
+            self.uri = self.kind.uriFromURL(url)
 
             self.redirectState = nil
             self.url = url
@@ -210,7 +246,7 @@ extension HTTPClient {
 
         /// Whether request will be executed using secure socket.
         public var useTLS: Bool {
-            return self.scheme == "https"
+            return self.scheme == "https" || self.scheme == "https+unix"
         }
 
         /// Resolved port.
@@ -225,6 +261,8 @@ extension HTTPClient {
         public var host: String
         /// Response HTTP status.
         public var status: HTTPResponseStatus
+        /// Response HTTP version.
+        public var version: HTTPVersion
         /// Reponse HTTP headers.
         public var headers: HTTPHeaders
         /// Response body.
@@ -237,9 +275,27 @@ extension HTTPClient {
         ///     - status: Response HTTP status.
         ///     - headers: Reponse HTTP headers.
         ///     - body: Response body.
+        @available(*, deprecated, renamed: "init(host:status:version:headers:body:)")
         public init(host: String, status: HTTPResponseStatus, headers: HTTPHeaders, body: ByteBuffer?) {
             self.host = host
             self.status = status
+            self.version = HTTPVersion(major: 1, minor: 1)
+            self.headers = headers
+            self.body = body
+        }
+
+        /// Create HTTP `Response`.
+        ///
+        /// - parameters:
+        ///     - host: Remote host of the request.
+        ///     - status: Response HTTP status.
+        ///     - version: Response HTTP version.
+        ///     - headers: Reponse HTTP headers.
+        ///     - body: Response body.
+        public init(host: String, status: HTTPResponseStatus, version: HTTPVersion, headers: HTTPHeaders, body: ByteBuffer?) {
+            self.host = host
+            self.status = status
+            self.version = version
             self.headers = headers
             self.body = body
         }
@@ -342,9 +398,9 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
         case .idle:
             preconditionFailure("no head received before end")
         case .head(let head):
-            return Response(host: self.request.host, status: head.status, headers: head.headers, body: nil)
+            return Response(host: self.request.host, status: head.status, version: head.version, headers: head.headers, body: nil)
         case .body(let head, let body):
-            return Response(host: self.request.host, status: head.status, headers: head.headers, body: body)
+            return Response(host: self.request.host, status: head.status, version: head.version, headers: head.headers, body: body)
         case .end:
             preconditionFailure("request already processed")
         case .error(let error):
@@ -444,33 +500,11 @@ extension URL {
         if self.path.isEmpty {
             return "/"
         }
-        return self.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? self.path
-    }
-
-    var pathHasTrailingSlash: Bool {
-        if #available(OSX 10.11, iOS 9.0, tvOS 9.0, watchOS 2.0, *) {
-            return self.hasDirectoryPath
-        } else {
-            // Most platforms should use `self.hasDirectoryPath`, but on older darwin platforms
-            // we have this approximation instead.
-            let url = self.absoluteString
-
-            var pathEndIndex = url.index(before: url.endIndex)
-            if let queryIndex = url.firstIndex(of: "?") {
-                pathEndIndex = url.index(before: queryIndex)
-            } else if let fragmentIndex = url.suffix(from: url.firstIndex(of: "@") ?? url.startIndex).lastIndex(of: "#") {
-                pathEndIndex = url.index(before: fragmentIndex)
-            }
-
-            return url[pathEndIndex] == "/"
-        }
+        return URLComponents(url: self, resolvingAgainstBaseURL: false)?.percentEncodedPath ?? self.path
     }
 
     var uri: String {
         var uri = self.percentEncodedPath
-        if self.pathHasTrailingSlash, uri != "/" {
-            uri += "/"
-        }
 
         if let query = self.query {
             uri += "?" + query
@@ -487,29 +521,28 @@ extension URL {
 extension HTTPClient {
     /// Response execution context. Will be created by the library and could be used for obtaining
     /// `EventLoopFuture<Response>` of the execution or cancellation of the execution.
-    public final class Task<Response>: TaskProtocol {
+    public final class Task<Response> {
         /// The `EventLoop` the delegate will be executed on.
         public let eventLoop: EventLoop
 
         let promise: EventLoopPromise<Response>
         var completion: EventLoopFuture<Void>
-        var connection: ConnectionPool.Connection?
+        var connection: Connection?
         var cancelled: Bool
         let lock: Lock
-        let id = UUID()
-        let poolingTimeout: TimeAmount?
+        let logger: Logger // We are okay to store the logger here because a Task is for only ond request.
 
-        init(eventLoop: EventLoop, poolingTimeout: TimeAmount? = nil) {
+        init(eventLoop: EventLoop, logger: Logger) {
             self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.completion = self.promise.futureResult.map { _ in }
             self.cancelled = false
             self.lock = Lock()
-            self.poolingTimeout = poolingTimeout
+            self.logger = logger
         }
 
-        static func failedTask(eventLoop: EventLoop, error: Error) -> Task<Response> {
-            let task = self.init(eventLoop: eventLoop)
+        static func failedTask(eventLoop: EventLoop, error: Error, logger: Logger) -> Task<Response> {
+            let task = self.init(eventLoop: eventLoop, logger: logger)
             task.promise.fail(error)
             return task
         }
@@ -530,8 +563,8 @@ extension HTTPClient {
         /// Cancels the request execution.
         public func cancel() {
             let channel: Channel? = self.lock.withLock {
-                if !cancelled {
-                    cancelled = true
+                if !self.cancelled {
+                    self.cancelled = true
                     return self.connection?.channel
                 } else {
                     return nil
@@ -541,7 +574,7 @@ extension HTTPClient {
         }
 
         @discardableResult
-        func setConnection(_ connection: ConnectionPool.Connection) -> ConnectionPool.Connection {
+        func setConnection(_ connection: Connection) -> Connection {
             return self.lock.withLock {
                 self.connection = connection
                 if self.cancelled {
@@ -551,47 +584,38 @@ extension HTTPClient {
             }
         }
 
-        func succeed<Delegate: HTTPClientResponseDelegate>(promise: EventLoopPromise<Response>?, with value: Response, delegateType: Delegate.Type) {
-            self.releaseAssociatedConnection(delegateType: delegateType).whenSuccess {
+        func succeed<Delegate: HTTPClientResponseDelegate>(promise: EventLoopPromise<Response>?,
+                                                           with value: Response,
+                                                           delegateType: Delegate.Type,
+                                                           closing: Bool) {
+            self.releaseAssociatedConnection(delegateType: delegateType,
+                                             closing: closing).whenSuccess {
                 promise?.succeed(value)
             }
         }
 
-        func fail<Delegate: HTTPClientResponseDelegate>(with error: Error, delegateType: Delegate.Type) {
+        func fail<Delegate: HTTPClientResponseDelegate>(with error: Error,
+                                                        delegateType: Delegate.Type) {
             if let connection = self.connection {
-                connection.close().whenComplete { _ in
-                    self.releaseAssociatedConnection(delegateType: delegateType).whenComplete { _ in
+                self.releaseAssociatedConnection(delegateType: delegateType, closing: true)
+                    .whenSuccess {
                         self.promise.fail(error)
+                        connection.channel.close(promise: nil)
                     }
-                }
             }
         }
 
-        func releaseAssociatedConnection<Delegate: HTTPClientResponseDelegate>(delegateType: Delegate.Type) -> EventLoopFuture<Void> {
+        func releaseAssociatedConnection<Delegate: HTTPClientResponseDelegate>(delegateType: Delegate.Type,
+                                                                               closing: Bool) -> EventLoopFuture<Void> {
             if let connection = self.connection {
-                return connection.removeHandler(NIOHTTPResponseDecompressor.self).flatMap {
-                    connection.removeHandler(IdleStateHandler.self)
-                }.flatMap {
+                // remove read timeout handler
+                return connection.removeHandler(IdleStateHandler.self).flatMap {
                     connection.removeHandler(TaskHandler<Delegate>.self)
-                }.flatMap {
-                    let idlePoolConnectionHandler = IdlePoolConnectionHandler()
-                    return connection.channel.pipeline.addHandler(idlePoolConnectionHandler, position: .last).flatMap {
-                        connection.channel.pipeline.addHandler(IdleStateHandler(writeTimeout: self.poolingTimeout), position: .before(idlePoolConnectionHandler))
-                    }
-                }.flatMapError { error in
-                    if let error = error as? ChannelError, error == .ioOnClosedChannel {
-                        // We may get this error if channel is released because it is
-                        // closed, it is safe to ignore it
-                        return connection.channel.eventLoop.makeSucceededFuture(())
-                    } else {
-                        return connection.channel.eventLoop.makeFailedFuture(error)
-                    }
                 }.map {
-                    connection.release()
+                    connection.release(closing: closing, logger: self.logger)
                 }.flatMapError { error in
                     fatalError("Couldn't remove taskHandler: \(error)")
                 }
-
             } else {
                 // TODO: This seems only reached in some internal unit test
                 // Maybe there could be a better handling in the future to make
@@ -604,12 +628,6 @@ extension HTTPClient {
 
 internal struct TaskCancelEvent {}
 
-internal protocol TaskProtocol {
-    func cancel()
-    var id: UUID { get }
-    var completion: EventLoopFuture<Void> { get }
-}
-
 // MARK: - TaskHandler
 
 internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: RemovableChannelHandler {
@@ -619,29 +637,41 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: RemovableChann
         case head
         case redirected(HTTPResponseHead, URL)
         case body
-        case end
+        case endOrError
     }
 
     let task: HTTPClient.Task<Delegate.Response>
     let delegate: Delegate
     let redirectHandler: RedirectHandler<Delegate.Response>?
     let ignoreUncleanSSLShutdown: Bool
+    let logger: Logger // We are okay to store the logger here because a TaskHandler is just for one request.
 
     var state: State = .idle
+    var expectedBodyLength: Int?
+    var actualBodyLength: Int = 0
     var pendingRead = false
     var mayRead = true
+    var closing = false {
+        didSet {
+            assert(self.closing || !oldValue,
+                   "BUG in AsyncHTTPClient: TaskHandler.closing went from true (no conn reuse) to true (do reuse).")
+        }
+    }
+
     let kind: HTTPClient.Request.Kind
 
     init(task: HTTPClient.Task<Delegate.Response>,
          kind: HTTPClient.Request.Kind,
          delegate: Delegate,
          redirectHandler: RedirectHandler<Delegate.Response>?,
-         ignoreUncleanSSLShutdown: Bool) {
+         ignoreUncleanSSLShutdown: Bool,
+         logger: Logger) {
         self.task = task
         self.delegate = delegate
         self.redirectHandler = redirectHandler
         self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
         self.kind = kind
+        self.logger = logger
     }
 }
 
@@ -697,7 +727,10 @@ extension TaskHandler {
             do {
                 let result = try body(self.task)
 
-                self.task.succeed(promise: promise, with: result, delegateType: Delegate.self)
+                self.task.succeed(promise: promise,
+                                  with: result,
+                                  delegateType: Delegate.self,
+                                  closing: self.closing)
             } catch {
                 self.task.fail(with: error, delegateType: Delegate.self)
             }
@@ -729,37 +762,45 @@ extension TaskHandler: ChannelDuplexHandler {
 
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
         self.state = .idle
-        let request = unwrapOutboundIn(data)
-
-        let uri: String
-        switch (self.kind, request.url.baseURL) {
-        case (.host, _):
-            uri = request.url.uri
-        case (.unixSocket, .none):
-            uri = "/" // we don't have a real path, the path we have is the path of the UNIX Domain Socket.
-        case (.unixSocket, .some(_)):
-            uri = request.url.uri
-        }
+        let request = self.unwrapOutboundIn(data)
 
         var head = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1),
                                    method: request.method,
-                                   uri: uri)
+                                   uri: request.uri)
         var headers = request.headers
 
-        if !request.headers.contains(name: "Host") {
-            headers.add(name: "Host", value: request.host)
+        if !request.headers.contains(name: "host") {
+            let port = request.port
+            var host = request.host
+            if !(port == 80 && request.scheme == "http"), !(port == 443 && request.scheme == "https") {
+                host += ":\(port)"
+            }
+            headers.add(name: "host", value: host)
         }
 
         do {
-            try headers.validate(body: request.body)
+            try headers.validate(method: request.method, body: request.body)
         } catch {
             promise?.fail(error)
-            context.fireErrorCaught(error)
-            self.state = .end
+            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+            self.state = .endOrError
             return
         }
 
         head.headers = headers
+
+        if head.headers[canonicalForm: "connection"].map({ $0.lowercased() }).contains("close") {
+            self.closing = true
+        }
+        // This assert can go away when (if ever!) the above `if` correctly handles other HTTP versions. For example
+        // in HTTP/1.0, we need to treat the absence of a 'connection: keep-alive' as a close too.
+        assert(head.version == HTTPVersion(major: 1, minor: 1),
+               "Sending a request in HTTP version \(head.version) which is unsupported by the above `if`")
+
+        let contentLengths = head.headers[canonicalForm: "content-length"]
+        assert(contentLengths.count <= 1)
+
+        self.expectedBodyLength = contentLengths.first.flatMap { Int($0) }
 
         context.write(wrapOutboundOut(.head(head))).map {
             self.callOutToDelegateFireAndForget(value: head, self.delegate.didSendRequestHead)
@@ -767,6 +808,12 @@ extension TaskHandler: ChannelDuplexHandler {
             self.writeBody(request: request, context: context)
         }.flatMap {
             context.eventLoop.assertInEventLoop()
+            if let expectedBodyLength = self.expectedBodyLength, expectedBodyLength != self.actualBodyLength {
+                self.state = .endOrError
+                let error = HTTPClientError.bodyLengthMismatch
+                self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+                return context.eventLoop.makeFailedFuture(error)
+            }
             return context.writeAndFlush(self.wrapOutboundOut(.end(nil)))
         }.map {
             context.eventLoop.assertInEventLoop()
@@ -774,8 +821,13 @@ extension TaskHandler: ChannelDuplexHandler {
             self.callOutToDelegateFireAndForget(self.delegate.didSendRequest)
         }.flatMapErrorThrowing { error in
             context.eventLoop.assertInEventLoop()
-            self.state = .end
-            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+            switch self.state {
+            case .endOrError:
+                break
+            default:
+                self.state = .endOrError
+                self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+            }
             throw error
         }.cascade(to: promise)
     }
@@ -785,12 +837,34 @@ extension TaskHandler: ChannelDuplexHandler {
             return context.eventLoop.makeSucceededFuture(())
         }
 
-        return body.stream(HTTPClient.Body.StreamWriter { part in
-            context.eventLoop.assertInEventLoop()
-            return context.writeAndFlush(self.wrapOutboundOut(.body(part))).map {
-                self.callOutToDelegateFireAndForget(value: part, self.delegate.didSendRequestPart)
+        func doIt() -> EventLoopFuture<Void> {
+            return body.stream(HTTPClient.Body.StreamWriter { part in
+                let promise = self.task.eventLoop.makePromise(of: Void.self)
+                // All writes have to be switched to the channel EL if channel and task ELs differ
+                if context.eventLoop.inEventLoop {
+                    self.actualBodyLength += part.readableBytes
+                    context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
+                } else {
+                    context.eventLoop.execute {
+                        self.actualBodyLength += part.readableBytes
+                        context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
+                    }
+                }
+
+                return promise.futureResult.map {
+                    self.callOutToDelegateFireAndForget(value: part, self.delegate.didSendRequestPart)
+                }
+            })
+        }
+
+        // Callout to the user to start body streaming should be on task EL
+        if self.task.eventLoop.inEventLoop {
+            return doIt()
+        } else {
+            return self.task.eventLoop.flatSubmit {
+                doIt()
             }
-        })
+        }
     }
 
     public func read(context: ChannelHandlerContext) {
@@ -807,16 +881,10 @@ extension TaskHandler: ChannelDuplexHandler {
         switch response {
         case .head(let head):
             if !head.isKeepAlive {
-                self.task.lock.withLock {
-                    if let connection = self.task.connection {
-                        connection.isClosing = true
-                    } else {
-                        preconditionFailure("There should always be a connection at this point")
-                    }
-                }
+                self.closing = true
             }
 
-            if let redirectURL = redirectHandler?.redirectTarget(status: head.status, headers: head.headers) {
+            if let redirectURL = self.redirectHandler?.redirectTarget(status: head.status, headers: head.headers) {
                 self.state = .redirected(head, redirectURL)
             } else {
                 self.state = .head
@@ -841,12 +909,12 @@ extension TaskHandler: ChannelDuplexHandler {
         case .end:
             switch self.state {
             case .redirected(let head, let redirectURL):
-                self.state = .end
-                self.task.releaseAssociatedConnection(delegateType: Delegate.self).whenSuccess {
+                self.state = .endOrError
+                self.task.releaseAssociatedConnection(delegateType: Delegate.self, closing: self.closing).whenSuccess {
                     self.redirectHandler?.redirect(status: head.status, to: redirectURL, promise: self.task.promise)
                 }
             default:
-                self.state = .end
+                self.state = .endOrError
                 self.callOutToDelegate(promise: self.task.promise, self.delegate.didFinishRequest)
             }
         }
@@ -861,14 +929,14 @@ extension TaskHandler: ChannelDuplexHandler {
                 context.read()
             }
         case .failure(let error):
-            self.state = .end
+            self.state = .endOrError
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
         }
     }
 
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
         if (event as? IdleStateHandler.IdleStateEvent) == .read {
-            self.state = .end
+            self.state = .endOrError
             let error = HTTPClientError.readTimeout
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
         } else {
@@ -878,7 +946,7 @@ extension TaskHandler: ChannelDuplexHandler {
 
     func triggerUserOutboundEvent(context: ChannelHandlerContext, event: Any, promise: EventLoopPromise<Void>?) {
         if (event as? TaskCancelEvent) != nil {
-            self.state = .end
+            self.state = .endOrError
             let error = HTTPClientError.cancelled
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
             promise?.succeed(())
@@ -889,10 +957,10 @@ extension TaskHandler: ChannelDuplexHandler {
 
     func channelInactive(context: ChannelHandlerContext) {
         switch self.state {
-        case .end:
+        case .endOrError:
             break
         case .body, .head, .idle, .redirected, .sent:
-            self.state = .end
+            self.state = .endOrError
             let error = HTTPClientError.remoteConnectionClosed
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
         }
@@ -903,7 +971,7 @@ extension TaskHandler: ChannelDuplexHandler {
         switch error {
         case NIOSSLError.uncleanShutdown:
             switch self.state {
-            case .end:
+            case .endOrError:
                 /// Some HTTP Servers can 'forget' to respond with CloseNotify when client is closing connection,
                 /// this could lead to incomplete SSL shutdown. But since request is already processed, we can ignore this error.
                 break
@@ -912,11 +980,11 @@ extension TaskHandler: ChannelDuplexHandler {
                 /// We can also ignore this error like `.end`.
                 break
             default:
-                self.state = .end
+                self.state = .endOrError
                 self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
             }
         default:
-            self.state = .end
+            self.state = .endOrError
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
         }
     }
@@ -943,11 +1011,11 @@ internal struct RedirectHandler<ResponseType> {
             return nil
         }
 
-        guard let location = headers.first(where: { $0.name == "Location" }) else {
+        guard let location = headers.first(name: "Location") else {
             return nil
         }
 
-        guard let url = URL(string: location.value, relativeTo: request.url) else {
+        guard let url = URL(string: location, relativeTo: request.url) else {
             return nil
         }
 
@@ -1020,24 +1088,6 @@ internal struct RedirectHandler<ResponseType> {
             }
         } catch {
             promise.fail(error)
-        }
-    }
-}
-
-class IdlePoolConnectionHandler: ChannelInboundHandler, RemovableChannelHandler {
-    typealias InboundIn = NIOAny
-
-    let _hasNotSentClose: NIOAtomic<Bool> = .makeAtomic(value: true)
-    var hasNotSentClose: Bool {
-        return self._hasNotSentClose.load()
-    }
-
-    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
-        if let idleEvent = event as? IdleStateHandler.IdleStateEvent, idleEvent == .write {
-            self._hasNotSentClose.store(false)
-            context.close(promise: nil)
-        } else {
-            context.fireUserInboundEventTriggered(event)
         }
     }
 }
