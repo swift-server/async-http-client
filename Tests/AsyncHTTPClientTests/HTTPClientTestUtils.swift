@@ -507,8 +507,7 @@ internal final class HttpBinHandler: ChannelInboundHandler {
             case "/echohostheader":
                 var builder = HTTPResponseBuilder(status: .ok)
                 let hostValue = req.headers["Host"].first ?? ""
-                var buff = context.channel.allocator.buffer(capacity: hostValue.utf8.count)
-                buff.writeString(hostValue)
+                let buff = context.channel.allocator.buffer(string: hostValue)
                 builder.add(buff)
                 self.resps.append(builder)
                 return
@@ -721,20 +720,6 @@ internal final class HttpBinForSSLUncleanShutdownHandler: ChannelInboundHandler 
         case .end:
             ()
         }
-    }
-}
-
-extension ByteBuffer {
-    public static func of(string: String) -> ByteBuffer {
-        var buffer = ByteBufferAllocator().buffer(capacity: string.count)
-        buffer.writeString(string)
-        return buffer
-    }
-
-    public static func of(bytes: [UInt8]) -> ByteBuffer {
-        var buffer = ByteBufferAllocator().buffer(capacity: bytes.count)
-        buffer.writeBytes(bytes)
-        return buffer
     }
 }
 

@@ -66,7 +66,7 @@ class HTTPClientInternalTests: XCTestCase {
         head.headers.add(name: "Host", value: "localhost:8080")
         head.headers.add(name: "Content-Length", value: "4")
         XCTAssertEqual(HTTPClientRequestPart.head(head), recorder.writes[0])
-        let buffer = ByteBuffer.of(string: "1234")
+        let buffer = channel.allocator.buffer(string: "1234")
         XCTAssertEqual(HTTPClientRequestPart.body(.byteBuffer(buffer)), recorder.writes[1])
 
         XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: HTTPResponseStatus.ok))))
@@ -296,7 +296,7 @@ class HTTPClientInternalTests: XCTestCase {
         try delegate.optionsApplied.futureResult.wait()
 
         // Send 4 bytes, but only one should be received until the backpressure promise is succeeded.
-        let buffer = ByteBuffer.of(string: "1234")
+        let buffer = channel.allocator.buffer(string: "1234")
         try channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(buffer))).wait()
 
         // Now we wait until message is delivered to client channel pipeline
@@ -432,9 +432,9 @@ class HTTPClientInternalTests: XCTestCase {
         }
 
         let body: HTTPClient.Body = .stream(length: 8) { writer in
-            let buffer = ByteBuffer.of(string: "1234")
+            let buffer = ByteBuffer(string: "1234")
             return writer.write(.byteBuffer(buffer)).flatMap {
-                let buffer = ByteBuffer.of(string: "4321")
+                let buffer = ByteBuffer(string: "4321")
                 return writer.write(.byteBuffer(buffer))
             }
         }
@@ -450,7 +450,7 @@ class HTTPClientInternalTests: XCTestCase {
         let channel = try promise.futureResult.wait()
 
         // Send 3 parts, but only one should be received until the future is complete
-        let buffer = ByteBuffer.of(string: "1234")
+        let buffer = channel.allocator.buffer(string: "1234")
         try channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(buffer))).wait()
 
         try channel.writeAndFlush(HTTPServerResponsePart.end(nil)).wait()
@@ -881,10 +881,10 @@ class HTTPClientInternalTests: XCTestCase {
 
         let body: HTTPClient.Body = .stream(length: 8) { writer in
             XCTAssert(el1.inEventLoop)
-            let buffer = ByteBuffer.of(string: "1234")
+            let buffer = ByteBuffer(string: "1234")
             return writer.write(.byteBuffer(buffer)).flatMap {
                 XCTAssert(el1.inEventLoop)
-                let buffer = ByteBuffer.of(string: "4321")
+                let buffer = ByteBuffer(string: "4321")
                 return writer.write(.byteBuffer(buffer))
             }
         }
@@ -917,10 +917,10 @@ class HTTPClientInternalTests: XCTestCase {
         let taskPromise = group.next().makePromise(of: HTTPClient.Task<HTTPClient.Response>.self)
         let body: HTTPClient.Body = .stream(length: 8) { writer in
             XCTAssert(el1.inEventLoop)
-            let buffer = ByteBuffer.of(string: "1234")
+            let buffer = ByteBuffer(string: "1234")
             return writer.write(.byteBuffer(buffer)).flatMap {
                 XCTAssert(el1.inEventLoop)
-                let buffer = ByteBuffer.of(string: "4321")
+                let buffer = ByteBuffer(string: "4321")
                 return taskPromise.futureResult.map { (task: HTTPClient.Task<HTTPClient.Response>) -> Void in
                     XCTAssertNotNil(task.connection)
                     XCTAssert(task.connection?.channel.eventLoop === el2)
