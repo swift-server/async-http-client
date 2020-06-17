@@ -230,7 +230,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testMultipleContentLengthHeaders() throws {
-        let body = ByteBuffer.of(string: "hello world!")
+        let body = ByteBuffer(string: "hello world!")
 
         var headers = HTTPHeaders()
         headers.add(name: "Content-Length", value: "12")
@@ -392,9 +392,9 @@ class HTTPClientTests: XCTestCase {
 
     func testUploadStreaming() throws {
         let body: HTTPClient.Body = .stream(length: 8) { writer in
-            let buffer = ByteBuffer.of(string: "1234")
+            let buffer = ByteBuffer(string: "1234")
             return writer.write(.byteBuffer(buffer)).flatMap {
-                let buffer = ByteBuffer.of(string: "4321")
+                let buffer = ByteBuffer(string: "4321")
                 return writer.write(.byteBuffer(buffer))
             }
         }
@@ -651,7 +651,7 @@ class HTTPClientTests: XCTestCase {
         }
 
         var request = try HTTPClient.Request(url: "http://localhost:\(localHTTPBin.port)/post", method: .POST)
-        request.body = .byteBuffer(ByteBuffer.of(bytes: [120, 156, 75, 76, 28, 5, 200, 0, 0, 248, 66, 103, 17]))
+        request.body = .byteBuffer(ByteBuffer(bytes: [120, 156, 75, 76, 28, 5, 200, 0, 0, 248, 66, 103, 17]))
         request.headers.add(name: "Accept-Encoding", value: "deflate")
 
         XCTAssertThrowsError(try localClient.execute(request: request).wait()) { error in
@@ -1682,7 +1682,7 @@ class HTTPClientTests: XCTestCase {
             let promise = self.defaultClient.eventLoopGroup.next().makePromise(of: Void.self)
             // We have to toleare callins from any thread
             DispatchQueue(label: "upload-streaming").async {
-                writer.write(.byteBuffer(ByteBuffer.of(string: "1234"))).whenComplete { _ in
+                writer.write(.byteBuffer(ByteBuffer(string: "1234"))).whenComplete { _ in
                     promise.succeed(())
                 }
             }
@@ -2049,7 +2049,7 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNoThrow(try httpServer.readInbound()) // .end
 
         XCTAssertNoThrow(try httpServer.writeOutbound(.head(.init(version: .init(major: 1, minor: 1), status: .ok))))
-        XCTAssertNoThrow(try httpServer.writeOutbound(.body(.byteBuffer(ByteBuffer.of(string: "1234")))))
+        XCTAssertNoThrow(try httpServer.writeOutbound(.body(.byteBuffer(ByteBuffer(string: "1234")))))
         XCTAssertNoThrow(try httpServer.writeOutbound(.end(nil)))
 
         XCTAssertNoThrow(try future.wait())
@@ -2066,7 +2066,7 @@ class HTTPClientTests: XCTestCase {
                                 streamWriter.write(.byteBuffer(ByteBuffer(string: "1"))).cascade(to: promise)
                             }
                             return promise.futureResult
-                        })).wait()) { error in
+        })).wait()) { error in
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.bodyLengthMismatch)
         }
         // Quickly try another request and check that it works.
@@ -2092,7 +2092,7 @@ class HTTPClientTests: XCTestCase {
                 Request(url: url,
                         body: .stream(length: 1) { streamWriter in
                             streamWriter.write(.byteBuffer(ByteBuffer(string: tooLong)))
-                                                    })).wait()) { error in
+        })).wait()) { error in
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.bodyLengthMismatch)
         }
         // Quickly try another request and check that it works. If we by accident wrote some extra bytes into the
