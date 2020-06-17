@@ -13,12 +13,29 @@
 //===----------------------------------------------------------------------===//
 
 import Foundation
+import Logging
 import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOHTTPCompression
 import NIOSSL
 import NIOTLS
+import NIOTransportServices
+
+extension Logger {
+    private func requestInfo(_ request: HTTPClient.Request) -> Logger.Metadata.Value {
+        return "\(request.method) \(request.url)"
+    }
+
+    func attachingRequestInformation(_ request: HTTPClient.Request, requestID: Int) -> Logger {
+        var modified = self
+        modified[metadataKey: "ahc-prev-request"] = nil
+        modified[metadataKey: "ahc-request-id"] = "\(requestID)"
+        return modified
+    }
+}
+
+let globalRequestID = NIOAtomic<Int>.makeAtomic(value: 0)
 
 /// HTTPClient class provides API for request execution.
 ///
@@ -51,29 +68,53 @@ public class HTTPClient {
     let configuration: Configuration
     let pool: ConnectionPool
     var state: State
-    private var tasks = [UUID: TaskProtocol]()
     private let stateLock = Lock()
+
+    internal static let loggingDisabled = Logger(label: "AHC-do-not-log", factory: { _ in NoOpLogHandler() })
 
     /// Create an `HTTPClient` with specified `EventLoopGroup` provider and configuration.
     ///
     /// - parameters:
     ///     - eventLoopGroupProvider: Specify how `EventLoopGroup` will be created.
     ///     - configuration: Client configuration.
-    public init(eventLoopGroupProvider: EventLoopGroupProvider, configuration: Configuration = Configuration()) {
+    public convenience init(eventLoopGroupProvider: EventLoopGroupProvider,
+                            configuration: Configuration = Configuration()) {
+        self.init(eventLoopGroupProvider: eventLoopGroupProvider,
+                  configuration: configuration,
+                  backgroundActivityLogger: HTTPClient.loggingDisabled)
+    }
+
+    /// Create an `HTTPClient` with specified `EventLoopGroup` provider and configuration.
+    ///
+    /// - parameters:
+    ///     - eventLoopGroupProvider: Specify how `EventLoopGroup` will be created.
+    ///     - configuration: Client configuration.
+    public required init(eventLoopGroupProvider: EventLoopGroupProvider,
+                         configuration: Configuration = Configuration(),
+                         backgroundActivityLogger: Logger) {
         self.eventLoopGroupProvider = eventLoopGroupProvider
         switch self.eventLoopGroupProvider {
         case .shared(let group):
             self.eventLoopGroup = group
         case .createNew:
-            self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+            #if canImport(Network)
+                if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
+                    self.eventLoopGroup = NIOTSEventLoopGroup()
+                } else {
+                    self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+                }
+            #else
+                self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+            #endif
         }
         self.configuration = configuration
-        self.pool = ConnectionPool(configuration: configuration)
+        self.pool = ConnectionPool(configuration: configuration,
+                                   backgroundActivityLogger: backgroundActivityLogger)
         self.state = .upAndRunning
     }
 
     deinit {
-        assert(self.pool.connectionProviderCount == 0)
+        assert(self.pool.count == 0)
         assert(self.state == .shutDown, "Client not shut down before the deinit. Please call client.syncShutdown() when no longer needed.")
     }
 
@@ -93,54 +134,90 @@ public class HTTPClient {
     /// this indicate shutdown was called too early before tasks were completed or explicitly canceled.
     /// In general, setting this parameter to `true` should make it easier and faster to catch related programming errors.
     internal func syncShutdown(requiresCleanClose: Bool) throws {
-        var closeError: Error?
-
-        let tasks = try self.stateLock.withLock { () -> Dictionary<UUID, TaskProtocol>.Values in
-            if self.state != .upAndRunning {
-                throw HTTPClientError.alreadyShutdown
+        if let eventLoop = MultiThreadedEventLoopGroup.currentEventLoop {
+            preconditionFailure("""
+            BUG DETECTED: syncShutdown() must not be called when on an EventLoop.
+            Calling syncShutdown() on any EventLoop can lead to deadlocks.
+            Current eventLoop: \(eventLoop)
+            """)
+        }
+        let errorStorageLock = Lock()
+        var errorStorage: Error?
+        let continuation = DispatchWorkItem {}
+        self.shutdown(requiresCleanClose: requiresCleanClose, queue: DispatchQueue(label: "async-http-client.shutdown")) { error in
+            if let error = error {
+                errorStorageLock.withLock {
+                    errorStorage = error
+                }
             }
-            self.state = .shuttingDown
-            return self.tasks.values
+            continuation.perform()
         }
-
-        self.pool.prepareForClose()
-
-        if !tasks.isEmpty, requiresCleanClose {
-            closeError = HTTPClientError.uncleanShutdown
+        continuation.wait()
+        try errorStorageLock.withLock {
+            if let error = errorStorage {
+                throw error
+            }
         }
+    }
 
-        for task in tasks {
-            task.cancel()
+    /// Shuts down the client and event loop gracefully. This function is clearly an outlier in that it uses a completion
+    /// callback instead of an EventLoopFuture. The reason for that is that NIO's EventLoopFutures will call back on an event loop.
+    /// The virtue of this function is to shut the event loop down. To work around that we call back on a DispatchQueue
+    /// instead.
+    public func shutdown(queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
+        self.shutdown(requiresCleanClose: false, queue: queue, callback)
+    }
+
+    private func shutdownEventLoop(queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
+        self.stateLock.withLock {
+            switch self.eventLoopGroupProvider {
+            case .shared:
+                self.state = .shutDown
+                callback(nil)
+            case .createNew:
+                switch self.state {
+                case .shuttingDown:
+                    self.state = .shutDown
+                    self.eventLoopGroup.shutdownGracefully(queue: queue, callback)
+                case .shutDown, .upAndRunning:
+                    assertionFailure("The only valid state at this point is \(State.shutDown)")
+                }
+            }
         }
+    }
 
-        try? EventLoopFuture.andAllComplete((tasks.map { $0.completion }), on: self.eventLoopGroup.next()).wait()
-
-        self.pool.syncClose()
-
+    private func shutdown(requiresCleanClose: Bool, queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
         do {
             try self.stateLock.withLock {
-                switch self.eventLoopGroupProvider {
-                case .shared:
-                    self.state = .shutDown
-                    return
-                case .createNew:
-                    switch self.state {
-                    case .shuttingDown:
-                        self.state = .shutDown
-                        try self.eventLoopGroup.syncShutdownGracefully()
-                    case .shutDown, .upAndRunning:
-                        assertionFailure("The only valid state at this point is \(State.shutDown)")
+                if self.state != .upAndRunning {
+                    throw HTTPClientError.alreadyShutdown
+                }
+                self.state = .shuttingDown
+            }
+        } catch {
+            callback(error)
+            return
+        }
+
+        self.pool.close(on: self.eventLoopGroup.next()).whenComplete { result in
+            var closeError: Error?
+            switch result {
+            case .failure(let error):
+                closeError = error
+            case .success(let cleanShutdown):
+                if !cleanShutdown, requiresCleanClose {
+                    closeError = HTTPClientError.uncleanShutdown
+                }
+
+                self.shutdownEventLoop(queue: queue) { eventLoopError in
+                    // we prioritise .uncleanShutdown here
+                    if let error = closeError {
+                        callback(error)
+                    } else {
+                        callback(eventLoopError)
                     }
                 }
             }
-        } catch {
-            if closeError == nil {
-                closeError = error
-            }
-        }
-
-        if let closeError = closeError {
-            throw closeError
         }
     }
 
@@ -150,9 +227,19 @@ public class HTTPClient {
     ///     - url: Remote URL.
     ///     - deadline: Point in time by which the request must complete.
     public func get(url: String, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+        return self.get(url: url, deadline: deadline, logger: HTTPClient.loggingDisabled)
+    }
+
+    /// Execute `GET` request using specified URL.
+    ///
+    /// - parameters:
+    ///     - url: Remote URL.
+    ///     - deadline: Point in time by which the request must complete.
+    ///     - logger: The logger to use for this request.
+    public func get(url: String, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
         do {
             let request = try Request(url: url, method: .GET)
-            return self.execute(request: request, deadline: deadline)
+            return self.execute(request: request, deadline: deadline, logger: logger)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
@@ -165,9 +252,20 @@ public class HTTPClient {
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     public func post(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+        return self.post(url: url, body: body, deadline: deadline, logger: HTTPClient.loggingDisabled)
+    }
+
+    /// Execute `POST` request using specified URL.
+    ///
+    /// - parameters:
+    ///     - url: Remote URL.
+    ///     - body: Request body.
+    ///     - deadline: Point in time by which the request must complete.
+    ///     - logger: The logger to use for this request.
+    public func post(url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .POST, body: body)
-            return self.execute(request: request, deadline: deadline)
+            return self.execute(request: request, deadline: deadline, logger: logger)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
@@ -179,10 +277,22 @@ public class HTTPClient {
     ///     - url: Remote URL.
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
+    ///     - logger: The logger to use for this request.
     public func patch(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+        return self.post(url: url, body: body, deadline: deadline, logger: HTTPClient.loggingDisabled)
+    }
+
+    /// Execute `PATCH` request using specified URL.
+    ///
+    /// - parameters:
+    ///     - url: Remote URL.
+    ///     - body: Request body.
+    ///     - deadline: Point in time by which the request must complete.
+    ///     - logger: The logger to use for this request.
+    public func patch(url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .PATCH, body: body)
-            return self.execute(request: request, deadline: deadline)
+            return self.execute(request: request, deadline: deadline, logger: logger)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
@@ -195,9 +305,20 @@ public class HTTPClient {
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     public func put(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+        return self.put(url: url, body: body, deadline: deadline, logger: HTTPClient.loggingDisabled)
+    }
+
+    /// Execute `PUT` request using specified URL.
+    ///
+    /// - parameters:
+    ///     - url: Remote URL.
+    ///     - body: Request body.
+    ///     - deadline: Point in time by which the request must complete.
+    ///     - logger: The logger to use for this request.
+    public func put(url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
         do {
             let request = try HTTPClient.Request(url: url, method: .PUT, body: body)
-            return self.execute(request: request, deadline: deadline)
+            return self.execute(request: request, deadline: deadline, logger: logger)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
@@ -209,9 +330,18 @@ public class HTTPClient {
     ///     - url: Remote URL.
     ///     - deadline: The time when the request must have been completed by.
     public func delete(url: String, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+        return self.delete(url: url, deadline: deadline, logger: HTTPClient.loggingDisabled)
+    }
+
+    /// Execute `DELETE` request using specified URL.
+    ///
+    /// - parameters:
+    ///     - url: Remote URL.
+    ///     - deadline: The time when the request must have been completed by.
+    public func delete(url: String, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
         do {
             let request = try Request(url: url, method: .DELETE)
-            return self.execute(request: request, deadline: deadline)
+            return self.execute(request: request, deadline: deadline, logger: logger)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
@@ -223,8 +353,18 @@ public class HTTPClient {
     ///     - request: HTTP request to execute.
     ///     - deadline: Point in time by which the request must complete.
     public func execute(request: Request, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+        return self.execute(request: request, deadline: deadline, logger: HTTPClient.loggingDisabled)
+    }
+
+    /// Execute arbitrary HTTP request using specified URL.
+    ///
+    /// - parameters:
+    ///     - request: HTTP request to execute.
+    ///     - deadline: Point in time by which the request must complete.
+    ///     - logger: The logger to use for this request.
+    public func execute(request: Request, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
         let accumulator = ResponseAccumulator(request: request)
-        return self.execute(request: request, delegate: accumulator, deadline: deadline).futureResult
+        return self.execute(request: request, delegate: accumulator, deadline: deadline, logger: logger).futureResult
     }
 
     /// Execute arbitrary HTTP request using specified URL.
@@ -234,8 +374,25 @@ public class HTTPClient {
     ///     - eventLoop: NIO Event Loop preference.
     ///     - deadline: Point in time by which the request must complete.
     public func execute(request: Request, eventLoop: EventLoopPreference, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+        return self.execute(request: request,
+                            eventLoop: eventLoop,
+                            deadline: deadline,
+                            logger: HTTPClient.loggingDisabled)
+    }
+
+    /// Execute arbitrary HTTP request and handle response processing using provided delegate.
+    ///
+    /// - parameters:
+    ///     - request: HTTP request to execute.
+    ///     - eventLoop: NIO Event Loop preference.
+    ///     - deadline: Point in time by which the request must complete.
+    ///     - logger: The logger to use for this request.
+    public func execute(request: Request,
+                        eventLoop eventLoopPreference: EventLoopPreference,
+                        deadline: NIODeadline? = nil,
+                        logger: Logger?) -> EventLoopFuture<Response> {
         let accumulator = ResponseAccumulator(request: request)
-        return self.execute(request: request, delegate: accumulator, eventLoop: eventLoop, deadline: deadline).futureResult
+        return self.execute(request: request, delegate: accumulator, eventLoop: eventLoopPreference, deadline: deadline, logger: logger).futureResult
     }
 
     /// Execute arbitrary HTTP request and handle response processing using provided delegate.
@@ -247,7 +404,40 @@ public class HTTPClient {
     public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
                                                               delegate: Delegate,
                                                               deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
-        return self.execute(request: request, delegate: delegate, eventLoop: .indifferent, deadline: deadline)
+        return self.execute(request: request, delegate: delegate, deadline: deadline, logger: HTTPClient.loggingDisabled)
+    }
+
+    /// Execute arbitrary HTTP request and handle response processing using provided delegate.
+    ///
+    /// - parameters:
+    ///     - request: HTTP request to execute.
+    ///     - delegate: Delegate to process response parts.
+    ///     - deadline: Point in time by which the request must complete.
+    ///     - logger: The logger to use for this request.
+    public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
+                                                              delegate: Delegate,
+                                                              deadline: NIODeadline? = nil,
+                                                              logger: Logger) -> Task<Delegate.Response> {
+        return self.execute(request: request, delegate: delegate, eventLoop: .indifferent, deadline: deadline, logger: logger)
+    }
+
+    /// Execute arbitrary HTTP request and handle response processing using provided delegate.
+    ///
+    /// - parameters:
+    ///     - request: HTTP request to execute.
+    ///     - delegate: Delegate to process response parts.
+    ///     - eventLoop: NIO Event Loop preference.
+    ///     - deadline: Point in time by which the request must complete.
+    ///     - logger: The logger to use for this request.
+    public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
+                                                              delegate: Delegate,
+                                                              eventLoop eventLoopPreference: EventLoopPreference,
+                                                              deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
+        return self.execute(request: request,
+                            delegate: delegate,
+                            eventLoop: eventLoopPreference,
+                            deadline: deadline,
+                            logger: HTTPClient.loggingDisabled)
     }
 
     /// Execute arbitrary HTTP request and handle response processing using provided delegate.
@@ -260,7 +450,9 @@ public class HTTPClient {
     public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
                                                               delegate: Delegate,
                                                               eventLoop eventLoopPreference: EventLoopPreference,
-                                                              deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
+                                                              deadline: NIODeadline? = nil,
+                                                              logger originalLogger: Logger?) -> Task<Delegate.Response> {
+        let logger = (originalLogger ?? HTTPClient.loggingDisabled).attachingRequestInformation(request, requestID: globalRequestID.add(1))
         let taskEL: EventLoop
         switch eventLoopPreference.preference {
         case .indifferent:
@@ -274,13 +466,19 @@ public class HTTPClient {
         case .testOnly_exact(_, delegateOn: let delegateEL):
             taskEL = delegateEL
         }
+        logger.trace("selected EventLoop for task given the preference",
+                     metadata: ["ahc-eventloop": "\(taskEL)",
+                                "ahc-el-preference": "\(eventLoopPreference)"])
 
         let failedTask: Task<Delegate.Response>? = self.stateLock.withLock {
             switch state {
             case .upAndRunning:
                 return nil
             case .shuttingDown, .shutDown:
-                return Task<Delegate.Response>.failedTask(eventLoop: taskEL, error: HTTPClientError.alreadyShutdown)
+                logger.debug("client is shutting down, failing request")
+                return Task<Delegate.Response>.failedTask(eventLoop: taskEL,
+                                                          error: HTTPClientError.alreadyShutdown,
+                                                          logger: logger)
             }
         }
 
@@ -305,43 +503,36 @@ public class HTTPClient {
             redirectHandler = nil
         }
 
-        let task = Task<Delegate.Response>(eventLoop: taskEL, poolingTimeout: self.configuration.maximumAllowedIdleTimeInConnectionPool)
-        self.stateLock.withLock {
-            self.tasks[task.id] = task
-        }
-        let promise = task.promise
-
-        promise.futureResult.whenComplete { _ in
-            self.stateLock.withLock {
-                self.tasks[task.id] = nil
-            }
-        }
-
-        let connection = self.pool.getConnection(for: request, preference: eventLoopPreference, on: taskEL, deadline: deadline)
-
+        let task = Task<Delegate.Response>(eventLoop: taskEL, logger: logger)
+        let setupComplete = taskEL.makePromise(of: Void.self)
+        let connection = self.pool.getConnection(request,
+                                                 preference: eventLoopPreference,
+                                                 taskEventLoop: taskEL,
+                                                 deadline: deadline,
+                                                 setupComplete: setupComplete.futureResult,
+                                                 logger: logger)
         connection.flatMap { connection -> EventLoopFuture<Void> in
+            logger.debug("got connection for request",
+                         metadata: ["ahc-connection": "\(connection)",
+                                    "ahc-request": "\(request.method) \(request.url)",
+                                    "ahc-channel-el": "\(connection.channel.eventLoop)",
+                                    "ahc-task-el": "\(taskEL)"])
+
             let channel = connection.channel
-            let addedFuture: EventLoopFuture<Void>
-            switch self.configuration.decompression {
-            case .disabled:
-                addedFuture = channel.eventLoop.makeSucceededFuture(())
-            case .enabled(let limit):
-                let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
-                addedFuture = channel.pipeline.addHandler(decompressHandler)
+            let future: EventLoopFuture<Void>
+            if let timeout = self.resolve(timeout: self.configuration.timeout.read, deadline: deadline) {
+                future = channel.pipeline.addHandler(IdleStateHandler(readTimeout: timeout))
+            } else {
+                future = channel.eventLoop.makeSucceededFuture(())
             }
 
-            return addedFuture.flatMap {
-                if let timeout = self.resolve(timeout: self.configuration.timeout.read, deadline: deadline) {
-                    return channel.pipeline.addHandler(IdleStateHandler(readTimeout: timeout))
-                } else {
-                    return channel.eventLoop.makeSucceededFuture(())
-                }
-            }.flatMap {
+            return future.flatMap {
                 let taskHandler = TaskHandler(task: task,
                                               kind: request.kind,
                                               delegate: delegate,
                                               redirectHandler: redirectHandler,
-                                              ignoreUncleanSSLShutdown: self.configuration.ignoreUncleanSSLShutdown)
+                                              ignoreUncleanSSLShutdown: self.configuration.ignoreUncleanSSLShutdown,
+                                              logger: logger)
                 return channel.pipeline.addHandler(taskHandler)
             }.flatMap {
                 task.setConnection(connection)
@@ -360,10 +551,12 @@ public class HTTPClient {
                     return channel.eventLoop.makeSucceededFuture(())
                 }
             }.flatMapError { error in
-                connection.release()
+                connection.release(closing: true, logger: logger)
                 return channel.eventLoop.makeFailedFuture(error)
             }
-        }.cascadeFailure(to: promise)
+        }.always { _ in
+            setupComplete.succeed(())
+        }.cascadeFailure(to: task.promise)
 
         return task
     }
@@ -393,7 +586,7 @@ public class HTTPClient {
     /// `HTTPClient` configuration.
     public struct Configuration {
         /// TLS configuration, defaults to `TLSConfiguration.forClient()`.
-        public var tlsConfiguration: TLSConfiguration?
+        public var tlsConfiguration: Optional<TLSConfiguration>
         /// Enables following 3xx redirects automatically, defaults to `false`.
         ///
         /// Following redirects are supported:
@@ -408,7 +601,7 @@ public class HTTPClient {
         /// Default client timeout, defaults to no timeouts.
         public var timeout: Timeout
         /// Timeout of pooled connections
-        public var maximumAllowedIdleTimeInConnectionPool: TimeAmount?
+        public var maximumAllowedIdleTimeInConnectionPool: Optional<TimeAmount>
         /// Upstream proxy, defaults to no proxy.
         public var proxy: Proxy?
         /// Enables automatic body decompression. Supported algorithms are gzip and deflate.
@@ -456,13 +649,30 @@ public class HTTPClient {
                     proxy: Proxy? = nil,
                     ignoreUncleanSSLShutdown: Bool = false,
                     decompression: Decompression = .disabled) {
-            self.tlsConfiguration = TLSConfiguration.forClient(certificateVerification: certificateVerification)
-            self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
-            self.timeout = timeout
-            self.maximumAllowedIdleTimeInConnectionPool = maximumAllowedIdleTimeInConnectionPool
-            self.proxy = proxy
-            self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
-            self.decompression = decompression
+            self.init(tlsConfiguration: TLSConfiguration.forClient(certificateVerification: certificateVerification),
+                      redirectConfiguration: redirectConfiguration,
+                      timeout: timeout,
+                      maximumAllowedIdleTimeInConnectionPool: maximumAllowedIdleTimeInConnectionPool,
+                      proxy: proxy,
+                      ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
+                      decompression: decompression)
+        }
+
+        public init(certificateVerification: CertificateVerification,
+                    redirectConfiguration: RedirectConfiguration? = nil,
+                    timeout: Timeout = Timeout(),
+                    maximumAllowedIdleTimeInConnectionPool: TimeAmount = .seconds(60),
+                    proxy: Proxy? = nil,
+                    ignoreUncleanSSLShutdown: Bool = false,
+                    decompression: Decompression = .disabled,
+                    backgroundActivityLogger: Logger?) {
+            self.init(tlsConfiguration: TLSConfiguration.forClient(certificateVerification: certificateVerification),
+                      redirectConfiguration: redirectConfiguration,
+                      timeout: timeout,
+                      maximumAllowedIdleTimeInConnectionPool: maximumAllowedIdleTimeInConnectionPool,
+                      proxy: proxy,
+                      ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
+                      decompression: decompression)
         }
 
         public init(certificateVerification: CertificateVerification,
@@ -625,19 +835,24 @@ extension ChannelPipeline {
         return addHandlers([encoder, decoder, handler])
     }
 
-    func addSSLHandlerIfNeeded(for key: ConnectionPool.Key, tlsConfiguration: TLSConfiguration?, handshakePromise: EventLoopPromise<Void>) {
-        guard key.scheme == .https else {
+    func addSSLHandlerIfNeeded(for key: ConnectionPool.Key, tlsConfiguration: TLSConfiguration?, addSSLClient: Bool, handshakePromise: EventLoopPromise<Void>) {
+        guard key.scheme.requiresTLS else {
             handshakePromise.succeed(())
             return
         }
 
         do {
-            let tlsConfiguration = tlsConfiguration ?? TLSConfiguration.forClient()
-            let context = try NIOSSLContext(configuration: tlsConfiguration)
-            let handlers: [ChannelHandler] = [
-                try NIOSSLClientHandler(context: context, serverHostname: key.host.isIPAddress ? nil : key.host),
-                TLSEventsHandler(completionPromise: handshakePromise),
-            ]
+            let handlers: [ChannelHandler]
+            if addSSLClient {
+                let tlsConfiguration = tlsConfiguration ?? TLSConfiguration.forClient()
+                let context = try NIOSSLContext(configuration: tlsConfiguration)
+                handlers = [
+                    try NIOSSLClientHandler(context: context, serverHostname: (key.host.isIPAddress || key.host.isEmpty) ? nil : key.host),
+                    TLSEventsHandler(completionPromise: handshakePromise),
+                ]
+            } else {
+                handlers = [TLSEventsHandler(completionPromise: handshakePromise)]
+            }
             self.addHandlers(handlers).cascadeFailure(to: handshakePromise)
         } catch {
             handshakePromise.fail(error)
@@ -693,6 +908,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     private enum Code: Equatable {
         case invalidURL
         case emptyHost
+        case missingSocketPath
         case alreadyShutdown
         case emptyScheme
         case unsupportedScheme(String)
@@ -707,6 +923,9 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case redirectLimitReached
         case redirectCycleDetected
         case uncleanShutdown
+        case traceRequestWithBody
+        case invalidHeaderFieldNames([String])
+        case bodyLengthMismatch
     }
 
     private var code: Code
@@ -723,6 +942,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let invalidURL = HTTPClientError(code: .invalidURL)
     /// URL does not contain host.
     public static let emptyHost = HTTPClientError(code: .emptyHost)
+    /// URL does not contain a socketPath as a host for http(s)+unix shemes.
+    public static let missingSocketPath = HTTPClientError(code: .missingSocketPath)
     /// Client is shutdown and cannot be used for new requests.
     public static let alreadyShutdown = HTTPClientError(code: .alreadyShutdown)
     /// URL does not contain scheme.
@@ -749,6 +970,12 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let redirectLimitReached = HTTPClientError(code: .redirectLimitReached)
     /// Redirect Cycle detected.
     public static let redirectCycleDetected = HTTPClientError(code: .redirectCycleDetected)
-    /// Unclean shutdown
+    /// Unclean shutdown.
     public static let uncleanShutdown = HTTPClientError(code: .uncleanShutdown)
+    /// A body was sent in a request with method TRACE.
+    public static let traceRequestWithBody = HTTPClientError(code: .traceRequestWithBody)
+    /// Header field names contain invalid characters.
+    public static func invalidHeaderFieldNames(_ names: [String]) -> HTTPClientError { return HTTPClientError(code: .invalidHeaderFieldNames(names)) }
+    /// Body length is not equal to `Content-Length`.
+    public static let bodyLengthMismatch = HTTPClientError(code: .bodyLengthMismatch)
 }

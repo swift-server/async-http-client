@@ -27,6 +27,7 @@ extension HTTPClientInternalTests {
         return [
             ("testHTTPPartsHandler", testHTTPPartsHandler),
             ("testBadHTTPRequest", testBadHTTPRequest),
+            ("testHostPort", testHostPort),
             ("testHTTPPartsHandlerMultiBody", testHTTPPartsHandlerMultiBody),
             ("testProxyStreaming", testProxyStreaming),
             ("testProxyStreamingFailure", testProxyStreamingFailure),
@@ -37,6 +38,11 @@ extension HTTPClientInternalTests {
             ("testWeNoticeRemoteClosuresEvenWhenConnectionIsIdleInPool", testWeNoticeRemoteClosuresEvenWhenConnectionIsIdleInPool),
             ("testWeTolerateConnectionsGoingAwayWhilstPoolIsShuttingDown", testWeTolerateConnectionsGoingAwayWhilstPoolIsShuttingDown),
             ("testRaceBetweenAsynchronousCloseAndChannelUsabilityDetection", testRaceBetweenAsynchronousCloseAndChannelUsabilityDetection),
+            ("testResponseFutureIsOnCorrectEL", testResponseFutureIsOnCorrectEL),
+            ("testUncleanCloseThrows", testUncleanCloseThrows),
+            ("testUploadStreamingIsCalledOnTaskEL", testUploadStreamingIsCalledOnTaskEL),
+            ("testWeCanActuallyExactlySetTheEventLoops", testWeCanActuallyExactlySetTheEventLoops),
+            ("testTaskPromiseBoundToEL", testTaskPromiseBoundToEL),
         ]
     }
 }

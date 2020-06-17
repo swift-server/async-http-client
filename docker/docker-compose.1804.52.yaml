@@ -3,16 +3,16 @@ version: "3"
 services:
 
   runtime-setup:
-    image: async-http-client:18.04-5.1
+    image: async-http-client:18.04-5.2
     build:
       args:
         ubuntu_version: "bionic"
-        swift_version: "5.1"
+        swift_version: "5.2"
 
   test:
-    image: async-http-client:18.04-5.1
+    image: async-http-client:18.04-5.2
     environment: []
       #- SANITIZER_ARG=--sanitize=thread
 
   shell:
-    image: async-http-client:18.04-5.1
+    image: async-http-client:18.04-5.2
