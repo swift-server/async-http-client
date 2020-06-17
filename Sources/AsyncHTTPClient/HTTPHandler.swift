@@ -77,9 +77,7 @@ extension HTTPClient {
         ///     - data: Body `Data` representation.
         public static func data(_ data: Data) -> Body {
             return Body(length: data.count) { writer in
-                var buffer = ByteBufferAllocator().buffer(capacity: data.count)
-                buffer.writeBytes(data)
-                return writer.write(.byteBuffer(buffer))
+                writer.write(.byteBuffer(ByteBuffer(bytes: data)))
             }
         }
 
@@ -89,9 +87,7 @@ extension HTTPClient {
         ///     - string: Body `String` representation.
         public static func string(_ string: String) -> Body {
             return Body(length: string.utf8.count) { writer in
-                var buffer = ByteBufferAllocator().buffer(capacity: string.utf8.count)
-                buffer.writeString(string)
-                return writer.write(.byteBuffer(buffer))
+                writer.write(.byteBuffer(ByteBuffer(string: string)))
             }
         }
     }
