@@ -34,6 +34,7 @@ extension ConnectionPoolTests {
             ("testAcquireReplace", testAcquireReplace),
             ("testAcquireWhenUnavailableSpecificEL", testAcquireWhenUnavailableSpecificEL),
             ("testAcquireWhenClosed", testAcquireWhenClosed),
+            ("testConnectFailedWhenClosed", testConnectFailedWhenClosed),
             ("testReleaseAliveConnectionEmptyQueue", testReleaseAliveConnectionEmptyQueue),
             ("testReleaseAliveButClosingConnectionEmptyQueue", testReleaseAliveButClosingConnectionEmptyQueue),
             ("testReleaseInactiveConnectionEmptyQueue", testReleaseInactiveConnectionEmptyQueue),

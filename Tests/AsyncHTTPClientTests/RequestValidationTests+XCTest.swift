@@ -33,6 +33,7 @@ extension RequestValidationTests {
             ("testGET_HEAD_DELETE_CONNECTRequestCanHaveBody", testGET_HEAD_DELETE_CONNECTRequestCanHaveBody),
             ("testInvalidHeaderFieldNames", testInvalidHeaderFieldNames),
             ("testValidHeaderFieldNames", testValidHeaderFieldNames),
+            ("testMultipleContentLengthOnNilStreamLength", testMultipleContentLengthOnNilStreamLength),
         ]
     }
 }
