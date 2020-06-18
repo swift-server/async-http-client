@@ -587,7 +587,7 @@ public class HTTPClient {
     public struct Configuration {
         /// TLS configuration, defaults to `TLSConfiguration.forClient()`.
         public var tlsConfiguration: Optional<TLSConfiguration>
-        /// Enables following 3xx redirects automatically, defaults to `false`.
+        /// Enables following 3xx redirects automatically, defaults to `RedirectConfiguration()`.
         ///
         /// Following redirects are supported:
         ///  - `301: Moved Permanently`
