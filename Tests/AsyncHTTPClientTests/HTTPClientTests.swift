@@ -1680,7 +1680,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testAvoidLeakingTLSHandshakeCompletionPromise() {
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: .init(timeout: .init(connect: .milliseconds(100))))
         let localHTTPBin = HTTPBin()
         let port = localHTTPBin.port
         XCTAssertNoThrow(try localHTTPBin.shutdown())
