@@ -42,32 +42,14 @@ class RequestValidationTests: XCTestCase {
         XCTAssertEqual(headers.first(name: "Content-Length"), "200")
     }
 
-    func testChunkedEncodingDoesNotHaveContentLengthHeader() {
-        var headers = HTTPHeaders([
-            ("Content-Length", "200"),
-            ("Transfer-Encoding", "chunked"),
-        ])
-        var buffer = ByteBufferAllocator().buffer(capacity: 200)
-        buffer.writeBytes([UInt8](repeating: 12, count: 200))
-        XCTAssertNoThrow(try headers.validate(method: .PUT, body: .byteBuffer(buffer)))
-
-        // https://tools.ietf.org/html/rfc7230#section-3.3.2
-        // A sender MUST NOT send a Content-Length header field in any message
-        // that contains a Transfer-Encoding header field.
-
-        XCTAssertNil(headers.first(name: "Content-Length"))
-        XCTAssertEqual(headers.first(name: "Transfer-Encoding"), "chunked")
-    }
-
     func testTRACERequestMustNotHaveBody() {
-        var headers = HTTPHeaders([
-            ("Content-Length", "200"),
-            ("Transfer-Encoding", "chunked"),
-        ])
-        var buffer = ByteBufferAllocator().buffer(capacity: 200)
-        buffer.writeBytes([UInt8](repeating: 12, count: 200))
-        XCTAssertThrowsError(try headers.validate(method: .TRACE, body: .byteBuffer(buffer))) {
-            XCTAssertEqual($0 as? HTTPClientError, .traceRequestWithBody)
+        for header in [("Content-Length", "200"), ("Transfer-Encoding", "chunked")] {
+            var headers = HTTPHeaders([header])
+            var buffer = ByteBufferAllocator().buffer(capacity: 200)
+            buffer.writeBytes([UInt8](repeating: 12, count: 200))
+            XCTAssertThrowsError(try headers.validate(method: .TRACE, body: .byteBuffer(buffer))) {
+                XCTAssertEqual($0 as? HTTPClientError, .traceRequestWithBody)
+            }
         }
     }
 
@@ -105,13 +87,178 @@ class RequestValidationTests: XCTestCase {
         XCTAssertNoThrow(try headers.validate(method: .GET, body: nil))
     }
 
-    func testMultipleContentLengthOnNilStreamLength() {
-        var headers = HTTPHeaders([("Content-Length", "1"), ("Content-Length", "2")])
-        var buffer = ByteBufferAllocator().buffer(capacity: 10)
-        buffer.writeBytes([UInt8](repeating: 12, count: 10))
-        let body: HTTPClient.Body = .stream { writer in
-            writer.write(.byteBuffer(buffer))
+    // MARK: - Content-Length/Transfer-Encoding Matrix
+
+    // Method kind                               User sets  Body   Expectation
+    // ----------------------------------------------------------------------------------
+    // .GET, .HEAD, .DELETE, .CONNECT, .TRACE    nothing    nil    Neither CL nor chunked
+    // other                                     nothing    nil    chunked
+    func testNoHeadersNoBody() throws {
+        for method: HTTPMethod in [.GET, .HEAD, .DELETE, .CONNECT, .TRACE] {
+            var headers: HTTPHeaders = .init()
+            XCTAssertNoThrow(try headers.validate(method: method, body: nil))
+            XCTAssertTrue(headers["content-length"].isEmpty)
+            XCTAssertTrue(headers["transfer-encoding"].isEmpty)
         }
-        XCTAssertThrowsError(try headers.validate(method: .PUT, body: body))
+
+        for method: HTTPMethod in [.POST, .PUT] {
+            var headers: HTTPHeaders = .init()
+            XCTAssertNoThrow(try headers.validate(method: method, body: nil))
+            // TODO: This should be CL=0 ??? https://tools.ietf.org/html/rfc7230#section-3.3.2
+            XCTAssertTrue(headers["content-length"].isEmpty)
+            XCTAssertTrue(headers["transfer-encoding"].contains("chunked"))
+        }
+    }
+
+    // Method kind                               User sets  Body       Expectation
+    // --------------------------------------------------------------------------------------
+    // .GET, .HEAD, .DELETE, .CONNECT, .TRACE    nothing    not nil    Neither CL nor chunked
+    // other                                     nothing    not nil    chunked
+    func testNoHeadersHasBody() throws {
+        for method: HTTPMethod in [.GET, .HEAD, .DELETE, .CONNECT] {
+            var headers: HTTPHeaders = .init()
+            XCTAssertNoThrow(try headers.validate(method: method, body: .byteBuffer(ByteBuffer(bytes: [0]))))
+
+            // TODO: Logically, this should be a Content-Length: 1
+
+            XCTAssertTrue(headers["content-length"].isEmpty)
+            XCTAssertTrue(headers["transfer-encoding"].isEmpty)
+        }
+
+        for method: HTTPMethod in [.POST, .PUT] {
+            var headers: HTTPHeaders = .init()
+            XCTAssertNoThrow(try headers.validate(method: method, body: .byteBuffer(ByteBuffer(bytes: [0]))))
+
+            // TODO: Logically, this should be a Content-Length: 1 since we know size, or chunked if we don't
+
+            XCTAssertTrue(headers["content-length"].isEmpty)
+            XCTAssertTrue(headers["transfer-encoding"].contains("chunked"))
+        }
+
+        for method: HTTPMethod in [.POST, .PUT] {
+            var headers: HTTPHeaders = .init()
+            let body: HTTPClient.Body = .stream { writer in
+                writer.write(.byteBuffer(ByteBuffer(bytes: [0])))
+            }
+            XCTAssertNoThrow(try headers.validate(method: method, body: body))
+
+            // TODO: Logically, this should be a Content-Length: 1 since we know size, or chunked if we don't
+
+            XCTAssertTrue(headers["content-length"].isEmpty)
+            XCTAssertTrue(headers["transfer-encoding"].contains("chunked"))
+        }
+    }
+
+    // Method kind                               User sets         Body   Expectation
+    // ------------------------------------------------------------------------------
+    // .GET, .HEAD, .DELETE, .CONNECT, .TRACE    content-length    nil    CL=0
+    // other                                     content-length    nil    CL=0
+    func testContentLengthHeaderNoBody() throws {
+        for method: HTTPMethod in [.GET, .HEAD, .DELETE, .CONNECT, .TRACE] {
+            var headers: HTTPHeaders = .init([("Content-Length", "1")])
+            XCTAssertNoThrow(try headers.validate(method: method, body: nil))
+            // TODO: this should be Neither CL nor chunked https://tools.ietf.org/html/rfc7230#section-3.3.2
+            XCTAssertEqual(headers["content-length"].first, "0")
+            XCTAssertTrue(headers["transfer-encoding"].isEmpty)
+        }
+
+        for method: HTTPMethod in [.POST, .PUT] {
+            var headers: HTTPHeaders = .init([("Content-Length", "1")])
+            XCTAssertNoThrow(try headers.validate(method: method, body: nil))
+            XCTAssertEqual(headers["content-length"].first, "0")
+            XCTAssertTrue(headers["transfer-encoding"].isEmpty)
+        }
+    }
+
+    // Method kind                               User sets         Body       Expectation
+    // ----------------------------------------------------------------------------------
+    // .GET, .HEAD, .DELETE, .CONNECT, .TRACE    content-length    not nil    CL=1
+    // other                                     content-length    nit nil    CL=1
+    func testContentLengthHeaderHasBody() throws {
+        for method: HTTPMethod in [.GET, .HEAD, .DELETE, .CONNECT] {
+            var headers: HTTPHeaders = .init([("Content-Length", "1")])
+            XCTAssertNoThrow(try headers.validate(method: method, body: .byteBuffer(ByteBuffer(bytes: [0]))))
+            XCTAssertEqual(headers["content-length"].first, "1")
+            XCTAssertTrue(headers["transfer-encoding"].isEmpty)
+        }
+
+        for method: HTTPMethod in [.POST, .PUT] {
+            var headers: HTTPHeaders = .init([("Content-Length", "1")])
+            XCTAssertNoThrow(try headers.validate(method: method, body: .byteBuffer(ByteBuffer(bytes: [0]))))
+            XCTAssertEqual(headers["content-length"].first, "1")
+            XCTAssertTrue(headers["transfer-encoding"].isEmpty)
+        }
+    }
+
+    // Method kind                               User sets                     Body   Expectation
+    // ------------------------------------------------------------------------------------------
+    // .GET, .HEAD, .DELETE, .CONNECT, .TRACE    transfer-encoding: chunked    nil    chunked
+    // other                                     transfer-encoding: chunked    nil    chunked
+    func testTransferEncodingHeaderNoBody() throws {
+        for method: HTTPMethod in [.GET, .HEAD, .DELETE, .CONNECT, .TRACE] {
+            var headers: HTTPHeaders = .init([("Transfer-Encoding", "chunked")])
+            XCTAssertNoThrow(try headers.validate(method: method, body: nil))
+            XCTAssertTrue(headers["content-length"].isEmpty)
+            XCTAssertTrue(headers["transfer-encoding"].contains("chunked"))
+        }
+
+        for method: HTTPMethod in [.POST, .PUT] {
+            var headers: HTTPHeaders = .init([("Transfer-Encoding", "chunked")])
+            XCTAssertNoThrow(try headers.validate(method: method, body: nil))
+            XCTAssertTrue(headers["content-length"].isEmpty)
+            XCTAssertTrue(headers["transfer-encoding"].contains("chunked"))
+        }
+    }
+
+    // Method kind                       User sets                     Body       Expectation
+    // --------------------------------------------------------------------------------------
+    // .GET, .HEAD, .DELETE, .CONNECT    transfer-encoding: chunked    not nil    chunked
+    // other                             transfer-encoding: chunked    not nil    chunked
+    func testTransferEncodingHeaderHasBody() throws {
+        for method: HTTPMethod in [.GET, .HEAD, .DELETE, .CONNECT] {
+            var headers: HTTPHeaders = .init([("Transfer-Encoding", "chunked")])
+            XCTAssertNoThrow(try headers.validate(method: method, body: .byteBuffer(ByteBuffer(bytes: [0]))))
+            XCTAssertTrue(headers["content-length"].isEmpty)
+            XCTAssertTrue(headers["transfer-encoding"].contains("chunked"))
+        }
+
+        for method: HTTPMethod in [.POST, .PUT] {
+            var headers: HTTPHeaders = .init([("Transfer-Encoding", "chunked")])
+            XCTAssertNoThrow(try headers.validate(method: method, body: .byteBuffer(ByteBuffer(bytes: [0]))))
+            XCTAssertTrue(headers["content-length"].isEmpty)
+            XCTAssertTrue(headers["transfer-encoding"].contains("chunked"))
+        }
+    }
+
+    // Method kind                               User sets                 Body   Expectation
+    // ---------------------------------------------------------------------------------------
+    // .GET, .HEAD, .DELETE, .CONNECT, .TRACE    CL & chunked (illegal)    nil    throws error
+    // other                                     CL & chunked (illegal)    nil    throws error
+    func testBothHeadersNoBody() throws {
+        for method: HTTPMethod in [.GET, .HEAD, .DELETE, .CONNECT, .TRACE] {
+            var headers: HTTPHeaders = .init([("Content-Length", "1"), ("Transfer-Encoding", "chunked")])
+            XCTAssertThrowsError(try headers.validate(method: method, body: nil))
+        }
+
+        for method: HTTPMethod in [.POST, .PUT] {
+            var headers: HTTPHeaders = .init([("Content-Length", "1"), ("Transfer-Encoding", "chunked")])
+            XCTAssertThrowsError(try headers.validate(method: method, body: nil))
+        }
+    }
+
+    // Method kind                               User sets                 Body       Expectation
+    // -------------------------------------------------------------------------------------------
+    // .GET, .HEAD, .DELETE, .CONNECT, .TRACE    CL & chunked (illegal)    not nil    throws error
+    // other                                     CL & chunked (illegal)    not nil    throws error
+    func testBothHeadersHasBody() throws {
+        for method: HTTPMethod in [.GET, .HEAD, .DELETE, .CONNECT, .TRACE] {
+            var headers: HTTPHeaders = .init([("Content-Length", "1"), ("Transfer-Encoding", "chunked")])
+            XCTAssertThrowsError(try headers.validate(method: method, body: .byteBuffer(ByteBuffer(bytes: [0]))))
+        }
+
+        for method: HTTPMethod in [.POST, .PUT] {
+            var headers: HTTPHeaders = .init([("Content-Length", "1"), ("Transfer-Encoding", "chunked")])
+            XCTAssertThrowsError(try headers.validate(method: method, body: .byteBuffer(ByteBuffer(bytes: [0]))))
+        }
     }
 }
