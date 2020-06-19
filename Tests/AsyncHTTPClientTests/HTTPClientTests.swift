@@ -422,6 +422,29 @@ class HTTPClientTests: XCTestCase {
         }
     }
 
+    func testConnectTimeout() throws {
+        let httpBin = HTTPBin(ssl: false)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                     configuration: .init(timeout: .init(connect: .milliseconds(100), read: .milliseconds(150))))
+
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+
+        let port = httpBin.port
+        XCTAssertNoThrow(try httpBin.shutdown())
+
+        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(port)/get").wait()) { error in
+            switch error {
+            case ChannelError.connectTimeout(let timeout):
+                XCTAssertLessThanOrEqual(timeout, .milliseconds(150))
+                break
+            default:
+                XCTFail("Unexpected error: \(error)")
+            }
+        }
+    }
+
     func testDeadline() throws {
         XCTAssertThrowsError(try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "wait", deadline: .now() + .milliseconds(150)).wait(), "Should fail") { error in
             guard case let error = error as? HTTPClientError, error == .readTimeout else {

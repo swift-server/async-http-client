@@ -74,19 +74,25 @@ class HTTPClientNIOTSTests: XCTestCase {
     func testConnectionFailError() {
         guard isTestingNIOTS() else { return }
         let httpBin = HTTPBin(ssl: true)
-        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                    configuration: .init(timeout: .init(connect: .milliseconds(100),
+                                                                        read: .milliseconds(100))))
+
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
         }
+
         let port = httpBin.port
         XCTAssertNoThrow(try httpBin.shutdown())
 
-        do {
-            _ = try httpClient.get(url: "https://localhost:\(port)/get").wait()
-            XCTFail("This should have failed")
-        } catch ChannelError.connectTimeout {
-        } catch {
-            XCTFail("Error should have been ChannelError.connectTimeout not \(type(of: error))")
+        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(port)/get").wait()) { error in
+            switch error {
+            case ChannelError.connectTimeout(let timeout):
+                XCTAssertLessThanOrEqual(timeout, .milliseconds(150))
+                break
+            default:
+                XCTFail("Unexpected error: \(error)")
+            }
         }
     }
 
@@ -103,14 +109,9 @@ class HTTPClientNIOTSTests: XCTestCase {
                 XCTAssertNoThrow(try httpBin.shutdown())
             }
 
-            do {
-                _ = try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()
-                XCTFail("This should have failed")
-            } catch let error as HTTPClient.NWTLSError {
-                XCTAssertEqual(error.status, errSSLHandshakeFail)
-            } catch {
-                XCTFail("Error should have been NWTLSError not \(type(of: error))")
-            }
+        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()) { error in
+            XCTAssertEqual((error as? HTTPClient.NWTLSError)?.status, errSSLHandshakeFail)
+        }
         #endif
     }
 }
