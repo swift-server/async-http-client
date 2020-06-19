@@ -998,4 +998,31 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertThrowsError(try task.wait())
         XCTAssertTrue(delegate.receivedError)
     }
+
+    func testInternalRequestURI() throws {
+        let request1 = try Request(url: "https://someserver.com:8888/some/path?foo=bar")
+        XCTAssertEqual(request1.kind, .host)
+        XCTAssertEqual(request1.socketPath, "")
+        XCTAssertEqual(request1.uri, "/some/path?foo=bar")
+
+        let request2 = try Request(url: "https://someserver.com")
+        XCTAssertEqual(request2.kind, .host)
+        XCTAssertEqual(request2.socketPath, "")
+        XCTAssertEqual(request2.uri, "/")
+
+        let request3 = try Request(url: "unix:///tmp/file")
+        XCTAssertEqual(request3.kind, .unixSocket(.baseURL))
+        XCTAssertEqual(request3.socketPath, "/tmp/file")
+        XCTAssertEqual(request3.uri, "/")
+
+        let request4 = try Request(url: "http+unix://%2Ftmp%2Ffile/file/path")
+        XCTAssertEqual(request4.kind, .unixSocket(.http_unix))
+        XCTAssertEqual(request4.socketPath, "/tmp/file")
+        XCTAssertEqual(request4.uri, "/file/path")
+
+        let request5 = try Request(url: "https+unix://%2Ftmp%2Ffile/file/path")
+        XCTAssertEqual(request5.kind, .unixSocket(.https_unix))
+        XCTAssertEqual(request5.socketPath, "/tmp/file")
+        XCTAssertEqual(request5.uri, "/file/path")
+    }
 }

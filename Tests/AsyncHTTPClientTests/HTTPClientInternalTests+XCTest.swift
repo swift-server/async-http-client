@@ -44,6 +44,7 @@ extension HTTPClientInternalTests {
             ("testWeCanActuallyExactlySetTheEventLoops", testWeCanActuallyExactlySetTheEventLoops),
             ("testTaskPromiseBoundToEL", testTaskPromiseBoundToEL),
             ("testConnectErrorCalloutOnCorrectEL", testConnectErrorCalloutOnCorrectEL),
+            ("testInternalRequestURI", testInternalRequestURI),
         ]
     }
 }
