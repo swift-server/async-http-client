@@ -423,7 +423,6 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testConnectTimeout() throws {
-        let httpBin = HTTPBin(ssl: false)
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: .init(timeout: .init(connect: .milliseconds(100), read: .milliseconds(150))))
 
@@ -431,10 +430,8 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try httpClient.syncShutdown())
         }
 
-        let port = httpBin.port
-        XCTAssertNoThrow(try httpBin.shutdown())
-
-        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(port)/get").wait()) { error in
+        // This must throw as 198.51.100.254 is reserved for documentation only
+        XCTAssertThrowsError(try httpClient.get(url: "http://198.51.100.254:65535/get").wait()) { error in
             switch error {
             case ChannelError.connectTimeout(let timeout):
                 XCTAssertLessThanOrEqual(timeout, .milliseconds(150))
