@@ -2026,11 +2026,9 @@ class HTTPClientTests: XCTestCase {
 
         let delegate = TestDelegate()
         let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get")
-        do {
-            try httpBin.shutdown()
-            _ = try httpClient.execute(request: request, delegate: delegate).wait()
-            XCTFail("Should fail")
-        } catch {
+
+        XCTAssertNoThrow(try httpBin.shutdown())
+        XCTAssertThrowsError(try httpClient.execute(request: request, delegate: delegate).wait()) { error in
             switch (error, delegate.error) {
             case (_ as NIOConnectionError, _ as NIOConnectionError):
                 break
