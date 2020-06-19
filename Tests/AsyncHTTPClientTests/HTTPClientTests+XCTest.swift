@@ -28,6 +28,10 @@ extension HTTPClientTests {
             ("testRequestURI", testRequestURI),
             ("testBadRequestURI", testBadRequestURI),
             ("testSchemaCasing", testSchemaCasing),
+            ("testURLSocketPathInitializers", testURLSocketPathInitializers),
+            ("testConvenienceExecuteMethods", testConvenienceExecuteMethods),
+            ("testConvenienceExecuteMethodsOverSocket", testConvenienceExecuteMethodsOverSocket),
+            ("testConvenienceExecuteMethodsOverSecureSocket", testConvenienceExecuteMethodsOverSecureSocket),
             ("testGet", testGet),
             ("testGetWithDifferentEventLoopBackpressure", testGetWithDifferentEventLoopBackpressure),
             ("testPost", testPost),
@@ -110,6 +114,8 @@ extension HTTPClientTests {
             ("testAllMethodsLog", testAllMethodsLog),
             ("testClosingIdleConnectionsInPoolLogsInTheBackground", testClosingIdleConnectionsInPoolLogsInTheBackground),
             ("testDelegateCallinsTolerateRandomEL", testDelegateCallinsTolerateRandomEL),
+            ("testContentLengthTooLongFails", testContentLengthTooLongFails),
+            ("testContentLengthTooShortFails", testContentLengthTooShortFails),
         ]
     }
 }

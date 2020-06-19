@@ -77,9 +77,7 @@ extension HTTPClient {
         ///     - data: Body `Data` representation.
         public static func data(_ data: Data) -> Body {
             return Body(length: data.count) { writer in
-                var buffer = ByteBufferAllocator().buffer(capacity: data.count)
-                buffer.writeBytes(data)
-                return writer.write(.byteBuffer(buffer))
+                writer.write(.byteBuffer(ByteBuffer(bytes: data)))
             }
         }
 
@@ -89,9 +87,7 @@ extension HTTPClient {
         ///     - string: Body `String` representation.
         public static func string(_ string: String) -> Body {
             return Body(length: string.utf8.count) { writer in
-                var buffer = ByteBufferAllocator().buffer(capacity: string.utf8.count)
-                buffer.writeString(string)
-                return writer.write(.byteBuffer(buffer))
+                writer.write(.byteBuffer(ByteBuffer(string: string)))
             }
         }
     }
@@ -99,8 +95,8 @@ extension HTTPClient {
     /// Represent HTTP request.
     public struct Request {
         /// Represent kind of Request
-        enum Kind {
-            enum UnixScheme {
+        enum Kind: Equatable {
+            enum UnixScheme: Equatable {
                 case baseURL
                 case http_unix
                 case https_unix
@@ -520,6 +516,36 @@ extension URL {
     func hasTheSameOrigin(as other: URL) -> Bool {
         return self.host == other.host && self.scheme == other.scheme && self.port == other.port
     }
+
+    /// Initializes a newly created HTTP URL connecting to a unix domain socket path. The socket path is encoded as the URL's host, replacing percent encoding invalid path characters, and will use the "http+unix" scheme.
+    /// - Parameters:
+    ///   - socketPath: The path to the unix domain socket to connect to.
+    ///   - uri: The URI path and query that will be sent to the server.
+    public init?(httpURLWithSocketPath socketPath: String, uri: String = "/") {
+        guard let host = socketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) else { return nil }
+        var urlString: String
+        if uri.hasPrefix("/") {
+            urlString = "http+unix://\(host)\(uri)"
+        } else {
+            urlString = "http+unix://\(host)/\(uri)"
+        }
+        self.init(string: urlString)
+    }
+
+    /// Initializes a newly created HTTPS URL connecting to a unix domain socket path over TLS. The socket path is encoded as the URL's host, replacing percent encoding invalid path characters, and will use the "https+unix" scheme.
+    /// - Parameters:
+    ///   - socketPath: The path to the unix domain socket to connect to.
+    ///   - uri: The URI path and query that will be sent to the server.
+    public init?(httpsURLWithSocketPath socketPath: String, uri: String = "/") {
+        guard let host = socketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) else { return nil }
+        var urlString: String
+        if uri.hasPrefix("/") {
+            urlString = "https+unix://\(host)\(uri)"
+        } else {
+            urlString = "https+unix://\(host)/\(uri)"
+        }
+        self.init(string: urlString)
+    }
 }
 
 extension HTTPClient {
@@ -641,7 +667,7 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: RemovableChann
         case head
         case redirected(HTTPResponseHead, URL)
         case body
-        case end
+        case endOrError
     }
 
     let task: HTTPClient.Task<Delegate.Response>
@@ -651,6 +677,8 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: RemovableChann
     let logger: Logger // We are okay to store the logger here because a TaskHandler is just for one request.
 
     var state: State = .idle
+    var expectedBodyLength: Int?
+    var actualBodyLength: Int = 0
     var pendingRead = false
     var mayRead = true
     var closing = false {
@@ -785,7 +813,7 @@ extension TaskHandler: ChannelDuplexHandler {
         } catch {
             promise?.fail(error)
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
-            self.state = .end
+            self.state = .endOrError
             return
         }
 
@@ -799,12 +827,23 @@ extension TaskHandler: ChannelDuplexHandler {
         assert(head.version == HTTPVersion(major: 1, minor: 1),
                "Sending a request in HTTP version \(head.version) which is unsupported by the above `if`")
 
+        let contentLengths = head.headers[canonicalForm: "content-length"]
+        assert(contentLengths.count <= 1)
+
+        self.expectedBodyLength = contentLengths.first.flatMap { Int($0) }
+
         context.write(wrapOutboundOut(.head(head))).map {
             self.callOutToDelegateFireAndForget(value: head, self.delegate.didSendRequestHead)
         }.flatMap {
             self.writeBody(request: request, context: context)
         }.flatMap {
             context.eventLoop.assertInEventLoop()
+            if let expectedBodyLength = self.expectedBodyLength, expectedBodyLength != self.actualBodyLength {
+                self.state = .endOrError
+                let error = HTTPClientError.bodyLengthMismatch
+                self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+                return context.eventLoop.makeFailedFuture(error)
+            }
             return context.writeAndFlush(self.wrapOutboundOut(.end(nil)))
         }.map {
             context.eventLoop.assertInEventLoop()
@@ -813,10 +852,10 @@ extension TaskHandler: ChannelDuplexHandler {
         }.flatMapErrorThrowing { error in
             context.eventLoop.assertInEventLoop()
             switch self.state {
-            case .end:
+            case .endOrError:
                 break
             default:
-                self.state = .end
+                self.state = .endOrError
                 self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
             }
             throw error
@@ -833,9 +872,11 @@ extension TaskHandler: ChannelDuplexHandler {
                 let promise = self.task.eventLoop.makePromise(of: Void.self)
                 // All writes have to be switched to the channel EL if channel and task ELs differ
                 if context.eventLoop.inEventLoop {
+                    self.actualBodyLength += part.readableBytes
                     context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
                 } else {
                     context.eventLoop.execute {
+                        self.actualBodyLength += part.readableBytes
                         context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
                     }
                 }
@@ -898,12 +939,12 @@ extension TaskHandler: ChannelDuplexHandler {
         case .end:
             switch self.state {
             case .redirected(let head, let redirectURL):
-                self.state = .end
+                self.state = .endOrError
                 self.task.releaseAssociatedConnection(delegateType: Delegate.self, closing: self.closing).whenSuccess {
                     self.redirectHandler?.redirect(status: head.status, to: redirectURL, promise: self.task.promise)
                 }
             default:
-                self.state = .end
+                self.state = .endOrError
                 self.callOutToDelegate(promise: self.task.promise, self.delegate.didFinishRequest)
             }
         }
@@ -918,14 +959,14 @@ extension TaskHandler: ChannelDuplexHandler {
                 context.read()
             }
         case .failure(let error):
-            self.state = .end
+            self.state = .endOrError
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
         }
     }
 
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
         if (event as? IdleStateHandler.IdleStateEvent) == .read {
-            self.state = .end
+            self.state = .endOrError
             let error = HTTPClientError.readTimeout
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
         } else {
@@ -935,7 +976,7 @@ extension TaskHandler: ChannelDuplexHandler {
 
     func triggerUserOutboundEvent(context: ChannelHandlerContext, event: Any, promise: EventLoopPromise<Void>?) {
         if (event as? TaskCancelEvent) != nil {
-            self.state = .end
+            self.state = .endOrError
             let error = HTTPClientError.cancelled
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
             promise?.succeed(())
@@ -946,10 +987,10 @@ extension TaskHandler: ChannelDuplexHandler {
 
     func channelInactive(context: ChannelHandlerContext) {
         switch self.state {
-        case .end:
+        case .endOrError:
             break
         case .body, .head, .idle, .redirected, .sent:
-            self.state = .end
+            self.state = .endOrError
             let error = HTTPClientError.remoteConnectionClosed
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
         }
@@ -960,7 +1001,7 @@ extension TaskHandler: ChannelDuplexHandler {
         switch error {
         case NIOSSLError.uncleanShutdown:
             switch self.state {
-            case .end:
+            case .endOrError:
                 /// Some HTTP Servers can 'forget' to respond with CloseNotify when client is closing connection,
                 /// this could lead to incomplete SSL shutdown. But since request is already processed, we can ignore this error.
                 break
@@ -969,11 +1010,11 @@ extension TaskHandler: ChannelDuplexHandler {
                 /// We can also ignore this error like `.end`.
                 break
             default:
-                self.state = .end
+                self.state = .endOrError
                 self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
             }
         default:
-            self.state = .end
+            self.state = .endOrError
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
         }
     }
