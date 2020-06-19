@@ -425,7 +425,7 @@ class HTTPClientTests: XCTestCase {
     func testConnectTimeout() throws {
         let httpBin = HTTPBin(ssl: false)
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(timeout: .init(connect: .milliseconds(100), read: .milliseconds(150))))
+                                    configuration: .init(timeout: .init(connect: .milliseconds(100), read: .milliseconds(150))))
 
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
@@ -438,7 +438,6 @@ class HTTPClientTests: XCTestCase {
             switch error {
             case ChannelError.connectTimeout(let timeout):
                 XCTAssertLessThanOrEqual(timeout, .milliseconds(150))
-                break
             default:
                 XCTFail("Unexpected error: \(error)")
             }

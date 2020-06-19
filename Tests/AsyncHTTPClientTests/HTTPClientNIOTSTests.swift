@@ -89,7 +89,6 @@ class HTTPClientNIOTSTests: XCTestCase {
             switch error {
             case ChannelError.connectTimeout(let timeout):
                 XCTAssertLessThanOrEqual(timeout, .milliseconds(150))
-                break
             default:
                 XCTFail("Unexpected error: \(error)")
             }
@@ -109,9 +108,9 @@ class HTTPClientNIOTSTests: XCTestCase {
                 XCTAssertNoThrow(try httpBin.shutdown())
             }
 
-        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()) { error in
-            XCTAssertEqual((error as? HTTPClient.NWTLSError)?.status, errSSLHandshakeFail)
-        }
+            XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()) { error in
+                XCTAssertEqual((error as? HTTPClient.NWTLSError)?.status, errSSLHandshakeFail)
+            }
         #endif
     }
 }
