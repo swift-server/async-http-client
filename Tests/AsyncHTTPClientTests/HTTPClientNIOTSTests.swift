@@ -86,12 +86,7 @@ class HTTPClientNIOTSTests: XCTestCase {
         XCTAssertNoThrow(try httpBin.shutdown())
 
         XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(port)/get").wait()) { error in
-            switch error {
-            case ChannelError.connectTimeout(let timeout):
-                XCTAssertLessThanOrEqual(timeout, .milliseconds(150))
-            default:
-                XCTFail("Unexpected error: \(error)")
-            }
+            XCTAssertEqual(.connectTimeout(.milliseconds(100)), error as? ChannelError)
         }
     }
 

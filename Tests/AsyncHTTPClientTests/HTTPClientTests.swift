@@ -432,12 +432,7 @@ class HTTPClientTests: XCTestCase {
 
         // This must throw as 198.51.100.254 is reserved for documentation only
         XCTAssertThrowsError(try httpClient.get(url: "http://198.51.100.254:65535/get").wait()) { error in
-            switch error {
-            case ChannelError.connectTimeout(let timeout):
-                XCTAssertLessThanOrEqual(timeout, .milliseconds(150))
-            default:
-                XCTFail("Unexpected error: \(error)")
-            }
+            XCTAssertEqual(.connectTimeout(.milliseconds(100)), error as? ChannelError)
         }
     }
 
