@@ -867,15 +867,17 @@ extension TaskHandler: ChannelDuplexHandler {
             return context.eventLoop.makeSucceededFuture(())
         }
 
+        let channel = context.channel
+
         func doIt() -> EventLoopFuture<Void> {
             return body.stream(HTTPClient.Body.StreamWriter { part in
                 let promise = self.task.eventLoop.makePromise(of: Void.self)
                 // All writes have to be switched to the channel EL if channel and task ELs differ
-                if context.eventLoop.inEventLoop {
+                if channel.eventLoop.inEventLoop {
                     self.actualBodyLength += part.readableBytes
                     context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
                 } else {
-                    context.eventLoop.execute {
+                    channel.eventLoop.execute {
                         self.actualBodyLength += part.readableBytes
                         context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
                     }
