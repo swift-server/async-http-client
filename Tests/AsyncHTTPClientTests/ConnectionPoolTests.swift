@@ -1391,6 +1391,151 @@ class ConnectionPoolTests: XCTestCase {
         }
     }
 
+    // MARK: - Shutdown tests
+
+    func testShutdownOnPendingAndSuccess() {
+        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+
+        XCTAssertTrue(state.enqueue())
+
+        let connectionPromise = self.eventLoop.makePromise(of: Connection.self)
+        let setupPromise = self.eventLoop.makePromise(of: Void.self)
+        let waiter = HTTP1ConnectionProvider.Waiter(promise: connectionPromise, setupComplete: setupPromise.futureResult, preference: .indifferent)
+        var action = state.acquire(waiter: waiter)
+
+        guard case .create = action else {
+            XCTFail("unexpected action \(action)")
+            return
+        }
+
+        let snapshot = state.testsOnly_getInternalState()
+        XCTAssertEqual(snapshot.openedConnectionsCount, 1)
+
+        if let (waiters, available, leased, clean) = state.close() {
+            XCTAssertTrue(waiters.isEmpty)
+            XCTAssertTrue(available.isEmpty)
+            XCTAssertTrue(leased.isEmpty)
+            XCTAssertFalse(clean)
+        } else {
+            XCTFail("Expecting snapshot")
+        }
+
+        let connection = Connection(channel: EmbeddedChannel(), provider: self.http1ConnectionProvider)
+
+        action = state.offer(connection: connection)
+        guard case .closeAnd(_, .closeProvider) = action else {
+            XCTFail("unexpected action \(action)")
+            return
+        }
+
+        connectionPromise.fail(TempError())
+        setupPromise.succeed(())
+    }
+
+    func testShutdownOnPendingAndError() {
+        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+
+        XCTAssertTrue(state.enqueue())
+
+        let connectionPromise = self.eventLoop.makePromise(of: Connection.self)
+        let setupPromise = self.eventLoop.makePromise(of: Void.self)
+        let waiter = HTTP1ConnectionProvider.Waiter(promise: connectionPromise, setupComplete: setupPromise.futureResult, preference: .indifferent)
+        var action = state.acquire(waiter: waiter)
+
+        guard case .create = action else {
+            XCTFail("unexpected action \(action)")
+            return
+        }
+
+        let snapshot = state.testsOnly_getInternalState()
+        XCTAssertEqual(snapshot.openedConnectionsCount, 1)
+
+        if let (waiters, available, leased, clean) = state.close() {
+            XCTAssertTrue(waiters.isEmpty)
+            XCTAssertTrue(available.isEmpty)
+            XCTAssertTrue(leased.isEmpty)
+            XCTAssertFalse(clean)
+        } else {
+            XCTFail("Expecting snapshot")
+        }
+
+        action = state.connectFailed()
+        guard case .closeProvider = action else {
+            XCTFail("unexpected action \(action)")
+            return
+        }
+
+        connectionPromise.fail(TempError())
+        setupPromise.succeed(())
+    }
+
+    func testShutdownTimeout() {
+        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+
+        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
+
+        let connection = Connection(channel: EmbeddedChannel(), provider: self.http1ConnectionProvider)
+        snapshot.availableConnections.append(connection)
+        snapshot.openedConnectionsCount = 1
+
+        state.testsOnly_setInternalState(snapshot)
+
+        if let (waiters, available, leased, clean) = state.close() {
+            XCTAssertTrue(waiters.isEmpty)
+            XCTAssertFalse(available.isEmpty)
+            XCTAssertTrue(leased.isEmpty)
+            XCTAssertTrue(clean)
+        } else {
+            XCTFail("Expecting snapshot")
+        }
+
+        let action = state.timeout(connection: connection)
+        switch action {
+        case .closeAnd(_, let next):
+            switch next {
+            case .closeProvider:
+                // expected
+                break
+            default:
+                XCTFail("Unexpected action: \(action)")
+            }
+        default:
+            XCTFail("Unexpected action: \(action)")
+        }
+    }
+
+    func testShutdownRemoteClosed() {
+        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+
+        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
+
+        let connection = Connection(channel: EmbeddedChannel(), provider: self.http1ConnectionProvider)
+        snapshot.availableConnections.append(connection)
+        snapshot.openedConnectionsCount = 1
+
+        state.testsOnly_setInternalState(snapshot)
+
+        if let (waiters, available, leased, clean) = state.close() {
+            XCTAssertTrue(waiters.isEmpty)
+            XCTAssertFalse(available.isEmpty)
+            XCTAssertTrue(leased.isEmpty)
+            XCTAssertTrue(clean)
+        } else {
+            XCTFail("Expecting snapshot")
+        }
+
+        let action = state.remoteClosed(connection: connection)
+        switch action {
+        case .closeProvider:
+            // expected
+            break
+        default:
+            XCTFail("Unexpected action: \(action)")
+        }
+    }
+
+    // MARK: - Helpers
+
     override func setUp() {
         XCTAssertNil(self.eventLoop)
         XCTAssertNil(self.http1ConnectionProvider)

@@ -62,6 +62,10 @@ extension ConnectionPoolTests {
             ("testConnectionRemoteCloseRelease", testConnectionRemoteCloseRelease),
             ("testConnectionTimeoutRelease", testConnectionTimeoutRelease),
             ("testAcquireAvailableBecomesUnavailable", testAcquireAvailableBecomesUnavailable),
+            ("testShutdownOnPendingAndSuccess", testShutdownOnPendingAndSuccess),
+            ("testShutdownOnPendingAndError", testShutdownOnPendingAndError),
+            ("testShutdownTimeout", testShutdownTimeout),
+            ("testShutdownRemoteClosed", testShutdownRemoteClosed),
         ]
     }
 }
