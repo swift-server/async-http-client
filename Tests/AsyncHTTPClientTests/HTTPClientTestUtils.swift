@@ -439,6 +439,11 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 headers.add(name: "X-Calling-URI", value: req.uri)
                 self.resps.append(HTTPResponseBuilder(status: .ok, headers: headers))
                 return
+            case "/echo-method":
+                var headers = self.responseHeaders
+                headers.add(name: "X-Method-Used", value: req.method.rawValue)
+                self.resps.append(HTTPResponseBuilder(status: .ok, headers: headers))
+                return
             case "/ok":
                 self.resps.append(HTTPResponseBuilder(status: .ok))
                 return
