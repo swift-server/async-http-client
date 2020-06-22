@@ -423,6 +423,8 @@ class HTTP1ConnectionProvider {
             switch action {
             case .closeAnd:
                 // This happens when client was shut down during connect
+                logger.trace("connection cancelled due to client shutdown",
+                             metadata: ["ahc-connection": "\(channel)"])
                 connection.channel.close(promise: nil)
                 waiter.promise.fail(HTTPClientError.cancelled)
             default:

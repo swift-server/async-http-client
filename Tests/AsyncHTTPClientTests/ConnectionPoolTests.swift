@@ -1403,12 +1403,9 @@ class ConnectionPoolTests: XCTestCase {
         let waiter = HTTP1ConnectionProvider.Waiter(promise: connectionPromise, setupComplete: setupPromise.futureResult, preference: .indifferent)
         var action = state.acquire(waiter: waiter)
 
-        switch action {
-        case .create:
-            // expected
-            break
-        default:
-            XCTFail("Unexpected action: \(action)")
+        guard case .create = action else {
+            XCTFail("unexpected action \(action)")
+            return
         }
 
         let snapshot = state.testsOnly_getInternalState()
@@ -1426,17 +1423,9 @@ class ConnectionPoolTests: XCTestCase {
         let connection = Connection(channel: EmbeddedChannel(), provider: self.http1ConnectionProvider)
 
         action = state.offer(connection: connection)
-        switch action {
-        case .closeAnd(_, let next):
-            switch next {
-            case .closeProvider:
-                // expected
-                break
-            default:
-                XCTFail("Unexpected action: \(action)")
-            }
-        default:
-            XCTFail("Unexpected action: \(action)")
+        guard case .closeAnd(_, .closeProvider) = action else {
+            XCTFail("unexpected action \(action)")
+            return
         }
 
         connectionPromise.fail(TempError())
@@ -1453,12 +1442,9 @@ class ConnectionPoolTests: XCTestCase {
         let waiter = HTTP1ConnectionProvider.Waiter(promise: connectionPromise, setupComplete: setupPromise.futureResult, preference: .indifferent)
         var action = state.acquire(waiter: waiter)
 
-        switch action {
-        case .create:
-            // expected
-            break
-        default:
-            XCTFail("Unexpected action: \(action)")
+        guard case .create = action else {
+            XCTFail("unexpected action \(action)")
+            return
         }
 
         let snapshot = state.testsOnly_getInternalState()
@@ -1474,12 +1460,9 @@ class ConnectionPoolTests: XCTestCase {
         }
 
         action = state.connectFailed()
-        switch action {
-        case .closeProvider:
-            // expected
-            break
-        default:
-            XCTFail("Unexpected action: \(action)")
+        guard case .closeProvider = action else {
+            XCTFail("unexpected action \(action)")
+            return
         }
 
         connectionPromise.fail(TempError())
