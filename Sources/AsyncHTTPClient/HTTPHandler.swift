@@ -107,8 +107,8 @@ extension HTTPClient {
             /// UNIX Domain Socket HTTP request.
             case unixSocket(_ scheme: UnixScheme)
 
-            private static var hostSchemes = ["http", "https"]
-            private static var unixSchemes = ["unix", "http+unix", "https+unix"]
+            private static var hostRestrictedSchemes: Set = ["http", "https"]
+            private static var allSupportedSchemes: Set = ["http", "https", "unix", "http+unix", "https+unix"]
 
             init(forScheme scheme: String) throws {
                 switch scheme {
@@ -158,12 +158,14 @@ extension HTTPClient {
                 }
             }
 
-            func supports(scheme: String) -> Bool {
+            func supportsRedirects(to scheme: String?) -> Bool {
+                guard let scheme = scheme?.lowercased() else { return false }
+
                 switch self {
                 case .host:
-                    return Kind.hostSchemes.contains(scheme)
+                    return Kind.hostRestrictedSchemes.contains(scheme)
                 case .unixSocket:
-                    return Kind.unixSchemes.contains(scheme)
+                    return Kind.allSupportedSchemes.contains(scheme)
                 }
             }
         }
@@ -1051,7 +1053,7 @@ internal struct RedirectHandler<ResponseType> {
             return nil
         }
 
-        guard self.request.kind.supports(scheme: self.request.scheme) else {
+        guard self.request.kind.supportsRedirects(to: url.scheme) else {
             return nil
         }
 

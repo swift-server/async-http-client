@@ -347,6 +347,95 @@ class HTTPClientTests: XCTestCase {
 
         response = try localClient.get(url: self.defaultHTTPBinURLPrefix + "redirect/https?port=\(httpsBin.port)").wait()
         XCTAssertEqual(response.status, .ok)
+
+        XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { httpSocketPath in
+            XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { httpsSocketPath in
+                let socketHTTPBin = HTTPBin(bindTarget: .unixDomainSocket(httpSocketPath))
+                let socketHTTPSBin = HTTPBin(ssl: true, bindTarget: .unixDomainSocket(httpsSocketPath))
+                defer {
+                    XCTAssertNoThrow(try socketHTTPBin.shutdown())
+                    XCTAssertNoThrow(try socketHTTPSBin.shutdown())
+                }
+
+                // From HTTP or HTTPS to HTTP+UNIX should fail to redirect
+                var targetURL = "http+unix://\(httpSocketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/ok"
+                var request = try Request(url: self.defaultHTTPBinURLPrefix + "redirect/target", method: .GET, headers: ["X-Target-Redirect-URL": targetURL], body: nil)
+
+                var response = try localClient.execute(request: request).wait()
+                XCTAssertEqual(response.status, .found)
+                XCTAssertEqual(response.headers.first(name: "Location"), targetURL)
+
+                request = try Request(url: "https://localhost:\(httpsBin.port)/redirect/target", method: .GET, headers: ["X-Target-Redirect-URL": targetURL], body: nil)
+
+                response = try localClient.execute(request: request).wait()
+                XCTAssertEqual(response.status, .found)
+                XCTAssertEqual(response.headers.first(name: "Location"), targetURL)
+
+                // From HTTP or HTTPS to HTTPS+UNIX should also fail to redirect
+                targetURL = "https+unix://\(httpsSocketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/ok"
+                request = try Request(url: self.defaultHTTPBinURLPrefix + "redirect/target", method: .GET, headers: ["X-Target-Redirect-URL": targetURL], body: nil)
+
+                response = try localClient.execute(request: request).wait()
+                XCTAssertEqual(response.status, .found)
+                XCTAssertEqual(response.headers.first(name: "Location"), targetURL)
+
+                request = try Request(url: "https://localhost:\(httpsBin.port)/redirect/target", method: .GET, headers: ["X-Target-Redirect-URL": targetURL], body: nil)
+
+                response = try localClient.execute(request: request).wait()
+                XCTAssertEqual(response.status, .found)
+                XCTAssertEqual(response.headers.first(name: "Location"), targetURL)
+
+                // ... while HTTP+UNIX to HTTP, HTTPS, or HTTP(S)+UNIX should succeed
+                targetURL = self.defaultHTTPBinURLPrefix + "ok"
+                request = try Request(url: "http+unix://\(httpSocketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/redirect/target", method: .GET, headers: ["X-Target-Redirect-URL": targetURL], body: nil)
+
+                response = try localClient.execute(request: request).wait()
+                XCTAssertEqual(response.status, .ok)
+
+                targetURL = "https://localhost:\(httpsBin.port)/ok"
+                request = try Request(url: "http+unix://\(httpSocketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/redirect/target", method: .GET, headers: ["X-Target-Redirect-URL": targetURL], body: nil)
+
+                response = try localClient.execute(request: request).wait()
+                XCTAssertEqual(response.status, .ok)
+
+                targetURL = "http+unix://\(httpSocketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/ok"
+                request = try Request(url: "http+unix://\(httpSocketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/redirect/target", method: .GET, headers: ["X-Target-Redirect-URL": targetURL], body: nil)
+
+                response = try localClient.execute(request: request).wait()
+                XCTAssertEqual(response.status, .ok)
+
+                targetURL = "https+unix://\(httpsSocketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/ok"
+                request = try Request(url: "http+unix://\(httpSocketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/redirect/target", method: .GET, headers: ["X-Target-Redirect-URL": targetURL], body: nil)
+
+                response = try localClient.execute(request: request).wait()
+                XCTAssertEqual(response.status, .ok)
+
+                // ... and HTTPS+UNIX to HTTP, HTTPS, or HTTP(S)+UNIX should succeed
+                targetURL = self.defaultHTTPBinURLPrefix + "ok"
+                request = try Request(url: "https+unix://\(httpsSocketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/redirect/target", method: .GET, headers: ["X-Target-Redirect-URL": targetURL], body: nil)
+
+                response = try localClient.execute(request: request).wait()
+                XCTAssertEqual(response.status, .ok)
+
+                targetURL = "https://localhost:\(httpsBin.port)/ok"
+                request = try Request(url: "https+unix://\(httpsSocketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/redirect/target", method: .GET, headers: ["X-Target-Redirect-URL": targetURL], body: nil)
+
+                response = try localClient.execute(request: request).wait()
+                XCTAssertEqual(response.status, .ok)
+
+                targetURL = "http+unix://\(httpSocketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/ok"
+                request = try Request(url: "https+unix://\(httpsSocketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/redirect/target", method: .GET, headers: ["X-Target-Redirect-URL": targetURL], body: nil)
+
+                response = try localClient.execute(request: request).wait()
+                XCTAssertEqual(response.status, .ok)
+
+                targetURL = "https+unix://\(httpsSocketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/ok"
+                request = try Request(url: "https+unix://\(httpsSocketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)/redirect/target", method: .GET, headers: ["X-Target-Redirect-URL": targetURL], body: nil)
+
+                response = try localClient.execute(request: request).wait()
+                XCTAssertEqual(response.status, .ok)
+            })
+        })
     }
 
     func testHttpHostRedirect() {
