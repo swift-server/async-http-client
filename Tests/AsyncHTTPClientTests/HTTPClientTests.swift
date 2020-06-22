@@ -422,6 +422,20 @@ class HTTPClientTests: XCTestCase {
         }
     }
 
+    func testConnectTimeout() throws {
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                    configuration: .init(timeout: .init(connect: .milliseconds(100), read: .milliseconds(150))))
+
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+
+        // This must throw as 198.51.100.254 is reserved for documentation only
+        XCTAssertThrowsError(try httpClient.get(url: "http://198.51.100.254:65535/get").wait()) { error in
+            XCTAssertEqual(.connectTimeout(.milliseconds(100)), error as? ChannelError)
+        }
+    }
+
     func testDeadline() throws {
         XCTAssertThrowsError(try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "wait", deadline: .now() + .milliseconds(150)).wait(), "Should fail") { error in
             guard case let error = error as? HTTPClientError, error == .readTimeout else {
@@ -1661,7 +1675,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testAvoidLeakingTLSHandshakeCompletionPromise() {
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: .init(timeout: .init(connect: .milliseconds(100))))
         let localHTTPBin = HTTPBin()
         let port = localHTTPBin.port
         XCTAssertNoThrow(try localHTTPBin.shutdown())
@@ -2319,7 +2333,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testContentLengthTooLongFails() throws {
-        let url = self.defaultHTTPBinURLPrefix + "/post"
+        let url = self.defaultHTTPBinURLPrefix + "post"
         XCTAssertThrowsError(
             try self.defaultClient.execute(request:
                 Request(url: url,
@@ -2348,7 +2362,7 @@ class HTTPClientTests: XCTestCase {
 
     // currently gets stuck because of #250 the server just never replies
     func testContentLengthTooShortFails() throws {
-        let url = self.defaultHTTPBinURLPrefix + "/post"
+        let url = self.defaultHTTPBinURLPrefix + "post"
         let tooLong = "XBAD BAD BAD NOT HTTP/1.1\r\n\r\n"
         XCTAssertThrowsError(
             try self.defaultClient.execute(request:
