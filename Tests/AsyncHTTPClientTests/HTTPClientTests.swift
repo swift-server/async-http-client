@@ -2351,7 +2351,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testContentLengthTooLongFails() throws {
-        let url = self.defaultHTTPBinURLPrefix + "/post"
+        let url = self.defaultHTTPBinURLPrefix + "post"
         XCTAssertThrowsError(
             try self.defaultClient.execute(request:
                 Request(url: url,
@@ -2380,7 +2380,7 @@ class HTTPClientTests: XCTestCase {
 
     // currently gets stuck because of #250 the server just never replies
     func testContentLengthTooShortFails() throws {
-        let url = self.defaultHTTPBinURLPrefix + "/post"
+        let url = self.defaultHTTPBinURLPrefix + "post"
         let tooLong = "XBAD BAD BAD NOT HTTP/1.1\r\n\r\n"
         XCTAssertThrowsError(
             try self.defaultClient.execute(request:
