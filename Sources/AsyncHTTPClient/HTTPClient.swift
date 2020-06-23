@@ -967,6 +967,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case traceRequestWithBody
         case invalidHeaderFieldNames([String])
         case bodyLengthMismatch
+        case incompatibleHeaders
     }
 
     private var code: Code
@@ -1019,4 +1020,6 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static func invalidHeaderFieldNames(_ names: [String]) -> HTTPClientError { return HTTPClientError(code: .invalidHeaderFieldNames(names)) }
     /// Body length is not equal to `Content-Length`.
     public static let bodyLengthMismatch = HTTPClientError(code: .bodyLengthMismatch)
+    /// Incompatible headers specified, for example `Transfer-Encoding` and `Content-Length`.
+    public static let incompatibleHeaders = HTTPClientError(code: .incompatibleHeaders)
 }
