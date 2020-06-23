@@ -79,7 +79,7 @@ extension NIOClientTCPBootstrap {
         requiresTLS: Bool,
         configuration: HTTPClient.Configuration
     ) throws -> NIOClientTCPBootstrap {
-        let bootstrap: NIOClientTCPBootstrap
+        var bootstrap: NIOClientTCPBootstrap
         #if canImport(Network)
             // if eventLoop is compatible with NIOTransportServices create a NIOTSConnectionBootstrap
             if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), let tsBootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoop) {
@@ -106,10 +106,15 @@ extension NIOClientTCPBootstrap {
             }
         #endif
 
+        if let timeout = configuration.timeout.connect {
+            bootstrap = bootstrap.connectTimeout(timeout)
+        }
+
         // don't enable TLS if we have a proxy, this will be enabled later on
         if requiresTLS, configuration.proxy == nil {
             return bootstrap.enableTLS()
         }
+
         return bootstrap
     }
 
