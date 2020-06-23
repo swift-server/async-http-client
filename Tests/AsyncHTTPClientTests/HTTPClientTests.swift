@@ -2533,4 +2533,59 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(info.connectionNumber, 1)
         XCTAssertEqual(info.requestNumber, 1)
     }
+
+    func testBackpressue() {
+        class BackpressureResponseDelegate: HTTPClientResponseDelegate {
+            typealias Response = Void
+            var count = 0
+            var processingBodyPart = false
+            var didntWait = false
+            var lock = Lock()
+
+            init() { }
+
+            func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
+                return task.eventLoop.makeSucceededFuture(())
+            }
+
+            func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void> {
+                lock.withLock {
+                    // if processingBodyPart is true then previous body part is still being processed
+                    // XCTAssertEqual doesn't work here so store result to test later
+                    if processingBodyPart == true {
+                        didntWait = true
+                    }
+                    processingBodyPart = true
+                    count += 1
+                }
+                // wait one second before returning a successful future
+                return task.eventLoop.scheduleTask(in: .milliseconds(1000) ) {
+                    self.lock.withLock {
+                        self.processingBodyPart = false
+                        self.count -= 1
+                    }
+                }.futureResult
+            }
+
+            func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) { }
+            func didFinishRequest(task: HTTPClient.Task<Response>) throws { }
+        }
+
+        let elg = MultiThreadedEventLoopGroup(numberOfThreads: 5)
+        let client = HTTPClient(eventLoopGroupProvider: .shared(elg))
+        defer {
+            XCTAssertNoThrow(try client.syncShutdown())
+            XCTAssertNoThrow(try elg.syncShutdownGracefully())
+        }
+
+        let data = Data(count: 65273)
+        let backpressureResponseDelegate = BackpressureResponseDelegate()
+        guard let request = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get", body: .data(data)) else {
+            XCTFail("Failed to init Request")
+            return
+        }
+        XCTAssertNoThrow(try client.execute(request: request, delegate: backpressureResponseDelegate).wait())
+        XCTAssertEqual(backpressureResponseDelegate.didntWait, false)
+        XCTAssertEqual(backpressureResponseDelegate.count, 0)
+    }
 }
