@@ -424,11 +424,10 @@ class HTTPClientInternalTests: XCTestCase {
         let randoEL = group.next()
 
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(group))
-        let promise: EventLoopPromise<Channel> = httpClient.eventLoopGroup.next().makePromise()
-        let httpBin = HTTPBin(channelPromise: promise)
+        let server = NIOHTTP1TestServer(group: MultiThreadedEventLoopGroup(numberOfThreads: 1))
         defer {
+            XCTAssertNoThrow(try server.stop())
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
-            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         let body: HTTPClient.Body = .stream(length: 8) { writer in
@@ -439,7 +438,7 @@ class HTTPClientInternalTests: XCTestCase {
             }
         }
 
-        let request = try Request(url: "http://127.0.0.1:\(httpBin.port)/custom",
+        let request = try Request(url: "http://127.0.0.1:\(server.serverPort)/custom",
                                   body: body)
         let delegate = Delegate(expectedEventLoop: delegateEL, randomOtherEventLoop: randoEL)
         let future = httpClient.execute(request: request,
@@ -447,13 +446,18 @@ class HTTPClientInternalTests: XCTestCase {
                                         eventLoop: .init(.testOnly_exact(channelOn: channelEL,
                                                                          delegateOn: delegateEL))).futureResult
 
-        let channel = try promise.futureResult.wait()
+        XCTAssertNoThrow(try server.readInbound()) // .head
+        XCTAssertNoThrow(try server.readInbound()) // .body
+        XCTAssertNoThrow(try server.readInbound()) // .end
 
         // Send 3 parts, but only one should be received until the future is complete
-        let buffer = channel.allocator.buffer(string: "1234")
-        try channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(buffer))).wait()
+        XCTAssertNoThrow(try server.writeOutbound(.head(.init(version: .init(major: 1, minor: 1),
+                                                           status: .ok,
+                                                           headers: HTTPHeaders([("Transfer-Encoding", "chunked")])))))
+        let buffer = ByteBuffer(string: "1234")
+        XCTAssertNoThrow(try server.writeOutbound(.body(.byteBuffer(buffer))))
+        XCTAssertNoThrow(try server.writeOutbound(.end(nil)))
 
-        try channel.writeAndFlush(HTTPServerResponsePart.end(nil)).wait()
         let (receivedMessages, sentMessages) = try future.wait()
         XCTAssertEqual(2, receivedMessages.count)
         XCTAssertEqual(4, sentMessages.count)
@@ -488,7 +492,7 @@ class HTTPClientInternalTests: XCTestCase {
 
         switch receivedMessages.dropFirst(0).first {
         case .some(.head(let head)):
-            XCTAssertEqual(["transfer-encoding": "chunked"], head.headers)
+            XCTAssertEqual(head.headers["transfer-encoding"].first, "chunked")
         default:
             XCTFail("wrong message")
         }
