@@ -127,7 +127,7 @@ class CountingDelegate: HTTPClientResponseDelegate {
     }
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
-        // this is executed when we receive HTTP Reponse head part of the request (it contains response code and headers), called once
+        // this is executed when we receive HTTP response head part of the request (it contains response code and headers), called once
         // in case backpressure is needed, all reads will be paused until returned future is resolved
         return task.eventLoop.makeSucceededFuture(())
     }
