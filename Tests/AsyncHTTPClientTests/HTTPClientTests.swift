@@ -2502,4 +2502,39 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(info.connectionNumber, 1)
         XCTAssertEqual(info.requestNumber, 1)
     }
+
+    func testBodyUploadAfterEndFails() {
+        let url = self.defaultHTTPBinURLPrefix + "post"
+
+        func uploader(_ streamWriter: HTTPClient.Body.StreamWriter) -> EventLoopFuture<Void> {
+            let done = streamWriter.write(.byteBuffer(ByteBuffer(string: "X")))
+            done.recover { error -> Void in
+                XCTFail("unexpected error \(error)")
+            }.whenSuccess {
+                // This is executed when we have already sent the end of the request.
+                done.eventLoop.execute {
+                    streamWriter.write(.byteBuffer(ByteBuffer(string: "BAD BAD BAD"))).whenComplete { result in
+                        switch result {
+                        case .success:
+                            XCTFail("we succeeded writing bytes after the end!?")
+                        case .failure(let error):
+                            XCTAssertEqual(HTTPClientError.writeAfterRequestSent, error as? HTTPClientError)
+                        }
+                    }
+                }
+            }
+            return done
+        }
+
+        XCTAssertThrowsError(
+            try self.defaultClient.execute(request:
+                Request(url: url,
+                        body: .stream(length: 1, uploader))).wait()) { error in
+            XCTAssertEqual(HTTPClientError.writeAfterRequestSent, error as? HTTPClientError)
+        }
+
+        // Quickly try another request and check that it works. If we by accident wrote some extra bytes into the
+        // stream (and reuse the connection) that could cause problems.
+        XCTAssertNoThrow(try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "get").wait())
+    }
 }

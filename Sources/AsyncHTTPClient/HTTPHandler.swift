@@ -876,12 +876,10 @@ extension TaskHandler: ChannelDuplexHandler {
                 let promise = self.task.eventLoop.makePromise(of: Void.self)
                 // All writes have to be switched to the channel EL if channel and task ELs differ
                 if channel.eventLoop.inEventLoop {
-                    self.actualBodyLength += part.readableBytes
-                    context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
+                    self.writeBodyPart(context: context, part: part, promise: promise)
                 } else {
                     channel.eventLoop.execute {
-                        self.actualBodyLength += part.readableBytes
-                        context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
+                        self.writeBodyPart(context: context, part: part, promise: promise)
                     }
                 }
 
@@ -898,6 +896,19 @@ extension TaskHandler: ChannelDuplexHandler {
             return self.task.eventLoop.flatSubmit {
                 doIt()
             }
+        }
+    }
+
+    private func writeBodyPart(context: ChannelHandlerContext, part: IOData, promise: EventLoopPromise<Void>) {
+        switch self.state {
+        case .idle:
+            self.actualBodyLength += part.readableBytes
+            context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
+        default:
+            let error = HTTPClientError.writeAfterRequestSent
+            promise.fail(error)
+            self.state = .endOrError
+            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
         }
     }
 
