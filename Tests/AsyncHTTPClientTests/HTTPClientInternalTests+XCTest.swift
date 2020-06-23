@@ -43,6 +43,7 @@ extension HTTPClientInternalTests {
             ("testUploadStreamingIsCalledOnTaskEL", testUploadStreamingIsCalledOnTaskEL),
             ("testWeCanActuallyExactlySetTheEventLoops", testWeCanActuallyExactlySetTheEventLoops),
             ("testTaskPromiseBoundToEL", testTaskPromiseBoundToEL),
+            ("testConnectErrorCalloutOnCorrectEL", testConnectErrorCalloutOnCorrectEL),
             ("testInternalRequestURI", testInternalRequestURI),
         ]
     }

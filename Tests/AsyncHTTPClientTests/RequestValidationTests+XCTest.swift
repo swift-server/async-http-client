@@ -32,6 +32,14 @@ extension RequestValidationTests {
             ("testGET_HEAD_DELETE_CONNECTRequestCanHaveBody", testGET_HEAD_DELETE_CONNECTRequestCanHaveBody),
             ("testInvalidHeaderFieldNames", testInvalidHeaderFieldNames),
             ("testValidHeaderFieldNames", testValidHeaderFieldNames),
+            ("testNoHeadersNoBody", testNoHeadersNoBody),
+            ("testNoHeadersHasBody", testNoHeadersHasBody),
+            ("testContentLengthHeaderNoBody", testContentLengthHeaderNoBody),
+            ("testContentLengthHeaderHasBody", testContentLengthHeaderHasBody),
+            ("testTransferEncodingHeaderNoBody", testTransferEncodingHeaderNoBody),
+            ("testTransferEncodingHeaderHasBody", testTransferEncodingHeaderHasBody),
+            ("testBothHeadersNoBody", testBothHeadersNoBody),
+            ("testBothHeadersHasBody", testBothHeadersHasBody),
         ]
     }
 }
