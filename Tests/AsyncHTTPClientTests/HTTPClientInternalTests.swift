@@ -415,8 +415,10 @@ class HTTPClientInternalTests: XCTestCase {
         }
 
         let group = getDefaultEventLoopGroup(numberOfThreads: 3)
+        let serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer {
             XCTAssertNoThrow(try group.syncShutdownGracefully())
+            XCTAssertNoThrow(try serverGroup.syncShutdownGracefully())
         }
 
         let channelEL = group.next()
@@ -424,7 +426,7 @@ class HTTPClientInternalTests: XCTestCase {
         let randoEL = group.next()
 
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(group))
-        let server = NIOHTTP1TestServer(group: MultiThreadedEventLoopGroup(numberOfThreads: 1))
+        let server = NIOHTTP1TestServer(group: serverGroup)
         defer {
             XCTAssertNoThrow(try server.stop())
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))

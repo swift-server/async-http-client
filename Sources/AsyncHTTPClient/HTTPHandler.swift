@@ -665,6 +665,7 @@ internal struct TaskCancelEvent {}
 internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: RemovableChannelHandler {
     enum State {
         case idle
+        case bodySent
         case sent
         case head
         case redirected(HTTPResponseHead, URL)
@@ -839,6 +840,7 @@ extension TaskHandler: ChannelDuplexHandler {
         }.flatMap {
             self.writeBody(request: request, context: context)
         }.flatMap {
+            self.state = .bodySent
             context.eventLoop.assertInEventLoop()
             if let expectedBodyLength = self.expectedBodyLength, expectedBodyLength != self.actualBodyLength {
                 self.state = .endOrError
@@ -902,13 +904,20 @@ extension TaskHandler: ChannelDuplexHandler {
     private func writeBodyPart(context: ChannelHandlerContext, part: IOData, promise: EventLoopPromise<Void>) {
         switch self.state {
         case .idle:
+            if let limit = self.expectedBodyLength, self.actualBodyLength + part.readableBytes > limit {
+                let error = HTTPClientError.bodyLengthMismatch
+                self.state = .endOrError
+                self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+                promise.fail(error)
+                return
+            }
             self.actualBodyLength += part.readableBytes
             context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
         default:
             let error = HTTPClientError.writeAfterRequestSent
-            promise.fail(error)
             self.state = .endOrError
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+            promise.fail(error)
         }
     }
 
@@ -1004,7 +1013,7 @@ extension TaskHandler: ChannelDuplexHandler {
         switch self.state {
         case .endOrError:
             break
-        case .body, .head, .idle, .redirected, .sent:
+        case .body, .head, .idle, .redirected, .sent, .bodySent:
             self.state = .endOrError
             let error = HTTPClientError.remoteConnectionClosed
             self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
