@@ -173,10 +173,10 @@ class RequestValidationTests: XCTestCase {
         }
     }
 
-    // Method kind                               User sets         Body       Expectation
-    // ----------------------------------------------------------------------------------
-    // .GET, .HEAD, .DELETE, .CONNECT, .TRACE    content-length    not nil    CL=1
-    // other                                     content-length    nit nil    CL=1
+    // Method kind                       User sets         Body       Expectation
+    // --------------------------------------------------------------------------
+    // .GET, .HEAD, .DELETE, .CONNECT    content-length    not nil    CL=1
+    // other                             content-length    nit nil    CL=1
     func testContentLengthHeaderHasBody() throws {
         for method: HTTPMethod in [.GET, .HEAD, .DELETE, .CONNECT] {
             var headers: HTTPHeaders = .init([("Content-Length", "1")])

@@ -18,7 +18,7 @@ import NIOHTTP1
 extension HTTPHeaders {
     mutating func validate(method: HTTPMethod, body: HTTPClient.Body?) throws {
         // validate transfer encoding and content length (https://tools.ietf.org/html/rfc7230#section-3.3.1)
-        if self.contains(name: "Transfer-Encoding") && self.contains(name: "Content-Length") {
+        if self.contains(name: "Transfer-Encoding"), self.contains(name: "Content-Length") {
             throw HTTPClientError.incompatibleHeaders
         }
 
