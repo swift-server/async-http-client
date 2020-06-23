@@ -114,6 +114,7 @@ extension HTTPClientTests {
             ("testNothingIsLoggedAtInfoOrHigher", testNothingIsLoggedAtInfoOrHigher),
             ("testAllMethodsLog", testAllMethodsLog),
             ("testClosingIdleConnectionsInPoolLogsInTheBackground", testClosingIdleConnectionsInPoolLogsInTheBackground),
+            ("testUploadStreamingNoLength", testUploadStreamingNoLength),
             ("testConnectErrorPropagatedToDelegate", testConnectErrorPropagatedToDelegate),
             ("testDelegateCallinsTolerateRandomEL", testDelegateCallinsTolerateRandomEL),
             ("testContentLengthTooLongFails", testContentLengthTooLongFails),

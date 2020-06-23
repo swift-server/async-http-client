@@ -968,6 +968,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case invalidHeaderFieldNames([String])
         case bodyLengthMismatch
         case writeAfterRequestSent
+        case incompatibleHeaders
     }
 
     private var code: Code
@@ -1022,4 +1023,6 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let bodyLengthMismatch = HTTPClientError(code: .bodyLengthMismatch)
     /// Body part was written after request was fully sent.
     public static let writeAfterRequestSent = HTTPClientError(code: .writeAfterRequestSent)
+    /// Incompatible headers specified, for example `Transfer-Encoding` and `Content-Length`.
+    public static let incompatibleHeaders = HTTPClientError(code: .incompatibleHeaders)
 }
