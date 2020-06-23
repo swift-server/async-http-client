@@ -2374,6 +2374,33 @@ class HTTPClientTests: XCTestCase {
         self.defaultClient = nil // so it doesn't get shut down again.
     }
 
+    func testConnectErrorPropagatedToDelegate() throws {
+        class TestDelegate: HTTPClientResponseDelegate {
+            typealias Response = Void
+            var error: Error?
+            func didFinishRequest(task: HTTPClient.Task<Void>) throws {}
+            func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
+                self.error = error
+            }
+        }
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                    configuration: .init(timeout: .init(connect: .milliseconds(10))))
+
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+
+        // This must throw as 198.51.100.254 is reserved for documentation only
+        let request = try HTTPClient.Request(url: "http://198.51.100.254:65535/get")
+        let delegate = TestDelegate()
+
+        XCTAssertThrowsError(try httpClient.execute(request: request, delegate: delegate).wait()) { error in
+            XCTAssertEqual(.connectTimeout(.milliseconds(10)), error as? ChannelError)
+            XCTAssertEqual(.connectTimeout(.milliseconds(10)), delegate.error as? ChannelError)
+        }
+    }
+
     func testDelegateCallinsTolerateRandomEL() throws {
         class TestDelegate: HTTPClientResponseDelegate {
             typealias Response = Void

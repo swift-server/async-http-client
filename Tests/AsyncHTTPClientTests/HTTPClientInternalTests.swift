@@ -960,6 +960,45 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertNoThrow(try task.wait())
     }
 
+    func testConnectErrorCalloutOnCorrectEL() throws {
+        class TestDelegate: HTTPClientResponseDelegate {
+            typealias Response = Void
+
+            let expectedEL: EventLoop
+            var receivedError: Bool = false
+
+            init(expectedEL: EventLoop) {
+                self.expectedEL = expectedEL
+            }
+
+            func didFinishRequest(task: HTTPClient.Task<Void>) throws {}
+
+            func didReceiveError(task: HTTPClient.Task<Void>, _ error: Error) {
+                self.receivedError = true
+                XCTAssertTrue(self.expectedEL.inEventLoop)
+            }
+        }
+
+        let elg = getDefaultEventLoopGroup(numberOfThreads: 2)
+        let el1 = elg.next()
+        let el2 = elg.next()
+
+        let httpBin = HTTPBin(refusesConnections: true)
+        let client = HTTPClient(eventLoopGroupProvider: .shared(elg))
+
+        defer {
+            XCTAssertNoThrow(try client.syncShutdown())
+            XCTAssertNoThrow(try elg.syncShutdownGracefully())
+        }
+
+        let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get")
+        let delegate = TestDelegate(expectedEL: el1)
+        XCTAssertNoThrow(try httpBin.shutdown())
+        let task = client.execute(request: request, delegate: delegate, eventLoop: .init(.testOnly_exact(channelOn: el2, delegateOn: el1)))
+        XCTAssertThrowsError(try task.wait())
+        XCTAssertTrue(delegate.receivedError)
+    }
+
     func testInternalRequestURI() throws {
         let request1 = try Request(url: "https://someserver.com:8888/some/path?foo=bar")
         XCTAssertEqual(request1.kind, .host)
