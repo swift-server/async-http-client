@@ -513,13 +513,13 @@ class HTTP1ConnectionProvider {
     }
 
     private func makeChannel(preference: HTTPClient.EventLoopPreference) -> EventLoopFuture<Channel> {
-        let eventLoop = preference.bestEventLoop ?? self.eventLoop
+        let channelEventLoop = preference.bestEventLoop ?? self.eventLoop
         let requiresTLS = self.key.scheme.requiresTLS
         let bootstrap: NIOClientTCPBootstrap
         do {
-            bootstrap = try NIOClientTCPBootstrap.makeHTTPClientBootstrapBase(on: eventLoop, host: self.key.host, port: self.key.port, requiresTLS: requiresTLS, configuration: self.configuration)
+            bootstrap = try NIOClientTCPBootstrap.makeHTTPClientBootstrapBase(on: channelEventLoop, host: self.key.host, port: self.key.port, requiresTLS: requiresTLS, configuration: self.configuration)
         } catch {
-            return eventLoop.makeFailedFuture(error)
+            return channelEventLoop.makeFailedFuture(error)
         }
 
         let channel: EventLoopFuture<Channel>
@@ -564,7 +564,7 @@ class HTTP1ConnectionProvider {
                     error = HTTPClient.NWErrorHandler.translateError(error)
                 }
             #endif
-            return eventLoop.makeFailedFuture(error)
+            return channelEventLoop.makeFailedFuture(error)
         }
     }
 
