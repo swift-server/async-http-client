@@ -452,8 +452,8 @@ class HTTPClientInternalTests: XCTestCase {
 
         // Send 3 parts, but only one should be received until the future is complete
         XCTAssertNoThrow(try server.writeOutbound(.head(.init(version: .init(major: 1, minor: 1),
-                                                           status: .ok,
-                                                           headers: HTTPHeaders([("Transfer-Encoding", "chunked")])))))
+                                                              status: .ok,
+                                                              headers: HTTPHeaders([("Transfer-Encoding", "chunked")])))))
         let buffer = ByteBuffer(string: "1234")
         XCTAssertNoThrow(try server.writeOutbound(.body(.byteBuffer(buffer))))
         XCTAssertNoThrow(try server.writeOutbound(.end(nil)))
