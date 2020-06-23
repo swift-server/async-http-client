@@ -2384,25 +2384,20 @@ class HTTPClientTests: XCTestCase {
             }
         }
 
-        let httpBin = HTTPBin()
-        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                    configuration: .init(timeout: .init(connect: .milliseconds(10))))
+
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
         }
 
+        // This must throw as 198.51.100.254 is reserved for documentation only
+        let request = try HTTPClient.Request(url: "http://198.51.100.254:65535/get")
         let delegate = TestDelegate()
-        let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get")
 
-        XCTAssertNoThrow(try httpBin.shutdown())
         XCTAssertThrowsError(try httpClient.execute(request: request, delegate: delegate).wait()) { error in
-            switch (error, delegate.error) {
-            case (_ as NIOConnectionError, _ as NIOConnectionError):
-                break
-            case (_ as NIOConnectionError, .none):
-                XCTFail("Delegate error is not \(error)")
-            default:
-                XCTFail("Unexpected error: \(error)")
-            }
+            XCTAssertEqual(.connectTimeout(.milliseconds(10)), error as? ChannelError)
+            XCTAssertEqual(.connectTimeout(.milliseconds(10)), delegate.error as? ChannelError)
         }
     }
 
