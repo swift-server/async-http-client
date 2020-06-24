@@ -182,6 +182,10 @@ enum TemporaryFileHelpers {
         }
         return try body(shortEnoughPath)
     }
+
+    internal static func fileSize(path: String) throws -> Int? {
+      try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int
+    }
 }
 
 internal final class HTTPBin {
@@ -531,7 +535,8 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 context.writeAndFlush(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
                 return
             case "/events/10/1": // TODO: parse path
-                context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
+                let headers = HTTPHeaders([("Content-Length", "50")])
+                context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))), promise: nil)
                 for i in 0..<10 {
                     let msg = "id: \(i)"
                     var buf = context.channel.allocator.buffer(capacity: msg.count)
