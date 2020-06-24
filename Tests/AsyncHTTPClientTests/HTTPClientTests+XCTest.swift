@@ -119,7 +119,7 @@ extension HTTPClientTests {
             ("testDelegateCallinsTolerateRandomEL", testDelegateCallinsTolerateRandomEL),
             ("testContentLengthTooLongFails", testContentLengthTooLongFails),
             ("testContentLengthTooShortFails", testContentLengthTooShortFails),
-            ("testBackpressue", testBackpressue),
+            ("testBackpressure", testBackpressure),
         ]
     }
 }

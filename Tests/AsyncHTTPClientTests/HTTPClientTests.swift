@@ -2534,7 +2534,7 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(info.requestNumber, 1)
     }
 
-    func testBackpressue() {
+    func testBackpressure() {
         class BackpressureResponseDelegate: HTTPClientResponseDelegate {
             typealias Response = Void
             var count = 0
@@ -2559,7 +2559,7 @@ class HTTPClientTests: XCTestCase {
                     count += 1
                 }
                 // wait one second before returning a successful future
-                return task.eventLoop.scheduleTask(in: .milliseconds(1000)) {
+                return task.eventLoop.scheduleTask(in: .milliseconds(200)) {
                     self.lock.withLock {
                         self.processingBodyPart = false
                         self.count -= 1
