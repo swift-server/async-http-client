@@ -44,6 +44,7 @@ extension HTTPClientTests {
             ("testPercentEncodedBackslash", testPercentEncodedBackslash),
             ("testMultipleContentLengthHeaders", testMultipleContentLengthHeaders),
             ("testStreaming", testStreaming),
+            ("testFileDownload", testFileDownload),
             ("testRemoteClose", testRemoteClose),
             ("testReadTimeout", testReadTimeout),
             ("testConnectTimeout", testConnectTimeout),
