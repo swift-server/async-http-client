@@ -2542,14 +2542,14 @@ class HTTPClientTests: XCTestCase {
             var didntWait = false
             var lock = Lock()
 
-            init() { }
+            init() {}
 
             func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
                 return task.eventLoop.makeSucceededFuture(())
             }
 
             func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void> {
-                lock.withLock {
+                self.lock.withLock {
                     // if processingBodyPart is true then previous body part is still being processed
                     // XCTAssertEqual doesn't work here so store result to test later
                     if processingBodyPart == true {
@@ -2559,7 +2559,7 @@ class HTTPClientTests: XCTestCase {
                     count += 1
                 }
                 // wait one second before returning a successful future
-                return task.eventLoop.scheduleTask(in: .milliseconds(1000) ) {
+                return task.eventLoop.scheduleTask(in: .milliseconds(1000)) {
                     self.lock.withLock {
                         self.processingBodyPart = false
                         self.count -= 1
@@ -2567,8 +2567,8 @@ class HTTPClientTests: XCTestCase {
                 }.futureResult
             }
 
-            func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) { }
-            func didFinishRequest(task: HTTPClient.Task<Response>) throws { }
+            func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {}
+            func didFinishRequest(task: HTTPClient.Task<Response>) throws {}
         }
 
         let elg = MultiThreadedEventLoopGroup(numberOfThreads: 5)
