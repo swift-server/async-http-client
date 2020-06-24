@@ -492,19 +492,20 @@ class HTTPClientTests: XCTestCase {
         var request = try Request(url: self.defaultHTTPBinURLPrefix + "events/10/1")
         request.headers.add(name: "Accept", value: "text/event-stream")
 
-        let (totalBytes, receivedBytes) = 
+        let (totalBytes, receivedBytes) =
             try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path -> (Int?, Int) in
-            let delegate = try FileDownloadDelegate(path: path)
+                let delegate = try FileDownloadDelegate(path: path)
 
-            let (totalBytes, receivedBytes) = try self.defaultClient.execute(
-                request: request,
-                delegate: delegate)
-            .wait()
+                let (totalBytes, receivedBytes) = try self.defaultClient.execute(
+                    request: request,
+                    delegate: delegate
+                )
+                .wait()
 
-            try XCTAssertEqual(50, TemporaryFileHelpers.fileSize(path: path))
+                try XCTAssertEqual(50, TemporaryFileHelpers.fileSize(path: path))
 
-            return (totalBytes, receivedBytes)
-        }
+                return (totalBytes, receivedBytes)
+            }
 
         XCTAssertEqual(50, totalBytes)
         XCTAssertEqual(50, receivedBytes)
