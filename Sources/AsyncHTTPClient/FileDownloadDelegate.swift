@@ -15,7 +15,10 @@
 import NIO
 import NIOHTTP1
 
+/// Handles a streaming download to a given file path, allowing headers and progress to be reported.
 public final class FileDownloadDelegate: HTTPClientResponseDelegate {
+    /// The response type for this delegate: the total count of bytes as reported by the response
+    /// "Content-Length" header (if available) and the count of bytes downloaded.
     public typealias Response = (totalBytes: Int?, receivedBytes: Int)
 
     private var totalBytes: Int?
@@ -28,6 +31,13 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
 
     private var writeFuture: EventLoopFuture<Void>?
 
+    /// Initializes a new file download delegate.
+    /// - parameters:
+    ///     - path: Path to a file you'd like to write the download to.
+    ///     - pool: A thread pool to use for asynchronous file I/O.
+    ///     - reportHeaders: A closure called when the response headers are available.
+    ///     - reportProgress: A closure called when a body chunk has been downloaded, with
+    ///       the total byte count and download byte count passed to it as arguments.
     public init(
         path: String,
         pool: NIOThreadPool = NIOThreadPool(numberOfThreads: 1),
