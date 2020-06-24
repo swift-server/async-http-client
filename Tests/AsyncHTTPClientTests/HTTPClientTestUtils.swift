@@ -184,7 +184,7 @@ enum TemporaryFileHelpers {
     }
 
     internal static func fileSize(path: String) throws -> Int? {
-        try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int
+        return try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int
     }
 }
 
