@@ -541,8 +541,8 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 }
                 context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
                 return
-            case "/zeros/100000":
-                let buf = context.channel.allocator.buffer(repeating: 0, count: 100_000)
+            case "/zeros/150000":
+                let buf = context.channel.allocator.buffer(repeating: 0, count: 150_000)
                 context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
                 context.writeAndFlush(wrapOutboundOut(.body(.byteBuffer(buf))), promise: nil)
                 context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)

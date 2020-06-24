@@ -2581,13 +2581,13 @@ class HTTPClientTests: XCTestCase {
         }
 
         let backpressureResponseDelegate = BackpressureResponseDelegate()
-        guard let request = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "zeros/100000") else {
+        guard let request = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "zeros/150000") else {
             XCTFail("Failed to init Request")
             return
         }
         XCTAssertNoThrow(try client.execute(request: request, delegate: backpressureResponseDelegate).wait())
         XCTAssertEqual(backpressureResponseDelegate.didntWait, false)
-        XCTAssertGreaterThan(backpressureResponseDelegate.totalCount, 1)
+        XCTAssertGreaterThan(backpressureResponseDelegate.totalCount, 2)
         XCTAssertEqual(backpressureResponseDelegate.count, 0)
     }
 }
