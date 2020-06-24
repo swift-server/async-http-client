@@ -2534,10 +2534,11 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(info.requestNumber, 1)
     }
 
-    func testBackpressure() {
+    func testDownloadBackpressure() {
         class BackpressureResponseDelegate: HTTPClientResponseDelegate {
             typealias Response = Void
             var count = 0
+            var totalCount = 0
             var processingBodyPart = false
             var didntWait = false
             var lock = Lock()
@@ -2557,6 +2558,7 @@ class HTTPClientTests: XCTestCase {
                     }
                     processingBodyPart = true
                     count += 1
+                    totalCount += 1
                 }
                 // wait one second before returning a successful future
                 return task.eventLoop.scheduleTask(in: .milliseconds(200)) {
@@ -2571,21 +2573,21 @@ class HTTPClientTests: XCTestCase {
             func didFinishRequest(task: HTTPClient.Task<Response>) throws {}
         }
 
-        let elg = MultiThreadedEventLoopGroup(numberOfThreads: 5)
+        let elg = MultiThreadedEventLoopGroup(numberOfThreads: 3)
         let client = HTTPClient(eventLoopGroupProvider: .shared(elg))
         defer {
             XCTAssertNoThrow(try client.syncShutdown())
             XCTAssertNoThrow(try elg.syncShutdownGracefully())
         }
 
-        let data = Data(count: 65273)
         let backpressureResponseDelegate = BackpressureResponseDelegate()
-        guard let request = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get", body: .data(data)) else {
+        guard let request = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "zeros/100000") else {
             XCTFail("Failed to init Request")
             return
         }
         XCTAssertNoThrow(try client.execute(request: request, delegate: backpressureResponseDelegate).wait())
         XCTAssertEqual(backpressureResponseDelegate.didntWait, false)
+        XCTAssertGreaterThan(backpressureResponseDelegate.totalCount, 1)
         XCTAssertEqual(backpressureResponseDelegate.count, 0)
     }
 }
