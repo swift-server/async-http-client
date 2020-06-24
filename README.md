@@ -168,7 +168,9 @@ httpClient.execute(request: request, delegate: delegate).futureResult.whenSucces
 ### File downloads
 
 Based on the `HTTPClientResponseDelegate` example above you can build more complex delegates,
-the built-in `FileDownloadDelegate` is one of them:
+the built-in `FileDownloadDelegate` is one of them. It allows streaming the downloaded data
+asynchronously, while reporting the download progress at the same time, like in the following
+example:
 
 ```swift
 let client = HTTPClient(eventLoopGroupProvider: .createNew)
