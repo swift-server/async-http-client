@@ -42,7 +42,7 @@ let globalRequestID = NIOAtomic<Int>.makeAtomic(value: 0)
 /// Example:
 ///
 /// ```swift
-///     let client = HTTPClient(eventLoopGroupProvider = .createNew)
+///     let client = HTTPClient(eventLoopGroupProvider: .createNew)
 ///     client.get(url: "https://swift.org", deadline: .now() + .seconds(1)).whenComplete { result in
 ///         switch result {
 ///         case .failure(let error):
