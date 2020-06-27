@@ -220,14 +220,18 @@ public class HTTPClient {
             }
         }
     }
+    
+    /// Specifies redirect processing settings.
+    public typealias RedirectConfiguration = Configuration.RedirectConfiguration
 
     /// Execute `GET` request using specified URL.
     ///
     /// - parameters:
     ///     - url: Remote URL.
     ///     - deadline: Point in time by which the request must complete.
-    public func get(url: String, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        return self.get(url: url, deadline: deadline, logger: HTTPClient.loggingDisabled)
+    ///     - redirectConfiguration: Redirect configurations for this request.
+    public func get(url: String, deadline: NIODeadline? = nil, redirectConfiguration: RedirectConfiguration? = nil) -> EventLoopFuture<Response> {
+        return self.get(url: url, deadline: deadline, logger: HTTPClient.loggingDisabled, redirectConfiguration: redirectConfiguration)
     }
 
     /// Execute `GET` request using specified URL.
@@ -236,8 +240,9 @@ public class HTTPClient {
     ///     - url: Remote URL.
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
-    public func get(url: String, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
-        return self.execute(.GET, url: url, deadline: deadline, logger: logger)
+    ///     - redirectConfiguration: Redirect configurations for this request.
+    public func get(url: String, deadline: NIODeadline? = nil, logger: Logger, redirectConfiguration: RedirectConfiguration? = nil) -> EventLoopFuture<Response> {
+        return self.execute(.GET, url: url, deadline: deadline, logger: logger, redirectConfiguration: redirectConfiguration)
     }
 
     /// Execute `POST` request using specified URL.
@@ -246,8 +251,9 @@ public class HTTPClient {
     ///     - url: Remote URL.
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
-    public func post(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        return self.post(url: url, body: body, deadline: deadline, logger: HTTPClient.loggingDisabled)
+    ///     - redirectConfiguration: Redirect configurations for this request.
+    public func post(url: String, body: Body? = nil, deadline: NIODeadline? = nil, redirectConfiguration: RedirectConfiguration? = nil) -> EventLoopFuture<Response> {
+        return self.post(url: url, body: body, deadline: deadline, logger: HTTPClient.loggingDisabled, redirectConfiguration: redirectConfiguration)
     }
 
     /// Execute `POST` request using specified URL.
@@ -257,8 +263,9 @@ public class HTTPClient {
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
-    public func post(url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
-        return self.execute(.POST, url: url, body: body, deadline: deadline, logger: logger)
+    ///     - redirectConfiguration: Redirect configurations for this request.
+    public func post(url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger, redirectConfiguration: RedirectConfiguration? = nil) -> EventLoopFuture<Response> {
+        return self.execute(.POST, url: url, body: body, deadline: deadline, logger: logger, redirectConfiguration: redirectConfiguration)
     }
 
     /// Execute `PATCH` request using specified URL.
@@ -267,8 +274,9 @@ public class HTTPClient {
     ///     - url: Remote URL.
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
-    public func patch(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        return self.patch(url: url, body: body, deadline: deadline, logger: HTTPClient.loggingDisabled)
+    ///     - redirectConfiguration: Redirect configurations for this request.
+    public func patch(url: String, body: Body? = nil, deadline: NIODeadline? = nil, redirectConfiguration: RedirectConfiguration? = nil) -> EventLoopFuture<Response> {
+        return self.patch(url: url, body: body, deadline: deadline, logger: HTTPClient.loggingDisabled, redirectConfiguration: redirectConfiguration)
     }
 
     /// Execute `PATCH` request using specified URL.
@@ -278,8 +286,9 @@ public class HTTPClient {
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
-    public func patch(url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
-        return self.execute(.PATCH, url: url, body: body, deadline: deadline, logger: logger)
+    ///     - redirectConfiguration: Redirect configurations for this request.
+    public func patch(url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger, redirectConfiguration: RedirectConfiguration? = nil) -> EventLoopFuture<Response> {
+        return self.execute(.PATCH, url: url, body: body, deadline: deadline, logger: logger, redirectConfiguration: redirectConfiguration)
     }
 
     /// Execute `PUT` request using specified URL.
@@ -288,8 +297,9 @@ public class HTTPClient {
     ///     - url: Remote URL.
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
-    public func put(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        return self.put(url: url, body: body, deadline: deadline, logger: HTTPClient.loggingDisabled)
+    ///     - redirectConfiguration: Redirect configurations for this request.
+    public func put(url: String, body: Body? = nil, deadline: NIODeadline? = nil, redirectConfiguration: RedirectConfiguration? = nil) -> EventLoopFuture<Response> {
+        return self.put(url: url, body: body, deadline: deadline, logger: HTTPClient.loggingDisabled, redirectConfiguration: redirectConfiguration)
     }
 
     /// Execute `PUT` request using specified URL.
@@ -299,8 +309,9 @@ public class HTTPClient {
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
-    public func put(url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
-        return self.execute(.PUT, url: url, body: body, deadline: deadline, logger: logger)
+    ///     - redirectConfiguration: Redirect configurations for this request.
+    public func put(url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger, redirectConfiguration: RedirectConfiguration? = nil) -> EventLoopFuture<Response> {
+        return self.execute(.PUT, url: url, body: body, deadline: deadline, logger: logger, redirectConfiguration: redirectConfiguration)
     }
 
     /// Execute `DELETE` request using specified URL.
@@ -308,8 +319,9 @@ public class HTTPClient {
     /// - parameters:
     ///     - url: Remote URL.
     ///     - deadline: The time when the request must have been completed by.
-    public func delete(url: String, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        return self.delete(url: url, deadline: deadline, logger: HTTPClient.loggingDisabled)
+    ///     - redirectConfiguration: Redirect configurations for this request.
+    public func delete(url: String, deadline: NIODeadline? = nil, redirectConfiguration: RedirectConfiguration? = nil) -> EventLoopFuture<Response> {
+        return self.delete(url: url, deadline: deadline, logger: HTTPClient.loggingDisabled, redirectConfiguration: redirectConfiguration)
     }
 
     /// Execute `DELETE` request using specified URL.
@@ -318,8 +330,9 @@ public class HTTPClient {
     ///     - url: Remote URL.
     ///     - deadline: The time when the request must have been completed by.
     ///     - logger: The logger to use for this request.
-    public func delete(url: String, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
-        return self.execute(.DELETE, url: url, deadline: deadline, logger: logger)
+    ///     - redirectConfiguration: Redirect configurations for this request.
+    public func delete(url: String, deadline: NIODeadline? = nil, logger: Logger, redirectConfiguration: RedirectConfiguration? = nil) -> EventLoopFuture<Response> {
+        return self.execute(.DELETE, url: url, deadline: deadline, logger: logger, redirectConfiguration: redirectConfiguration)
     }
 
     /// Execute arbitrary HTTP request using specified URL.
@@ -330,10 +343,11 @@ public class HTTPClient {
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
-    public func execute(_ method: HTTPMethod = .GET, url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger? = nil) -> EventLoopFuture<Response> {
+    ///     - redirectConfiguration: Redirect configurations for this request.
+    public func execute(_ method: HTTPMethod = .GET, url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger? = nil, redirectConfiguration: RedirectConfiguration? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try Request(url: url, method: method, body: body)
-            return self.execute(request: request, deadline: deadline, logger: logger ?? HTTPClient.loggingDisabled)
+            return self.execute(request: request, deadline: deadline, logger: logger ?? HTTPClient.loggingDisabled, redirectConfiguration: redirectConfiguration)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
@@ -348,13 +362,14 @@ public class HTTPClient {
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
-    public func execute(_ method: HTTPMethod = .GET, socketPath: String, urlPath: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger? = nil) -> EventLoopFuture<Response> {
+    ///     - redirectConfiguration: Redirect configurations for this request.
+    public func execute(_ method: HTTPMethod = .GET, socketPath: String, urlPath: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger? = nil, redirectConfiguration: RedirectConfiguration? = nil) -> EventLoopFuture<Response> {
         do {
             guard let url = URL(httpURLWithSocketPath: socketPath, uri: urlPath) else {
                 throw HTTPClientError.invalidURL
             }
             let request = try Request(url: url, method: method, body: body)
-            return self.execute(request: request, deadline: deadline, logger: logger ?? HTTPClient.loggingDisabled)
+            return self.execute(request: request, deadline: deadline, logger: logger ?? HTTPClient.loggingDisabled, redirectConfiguration: redirectConfiguration)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
@@ -369,13 +384,14 @@ public class HTTPClient {
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
-    public func execute(_ method: HTTPMethod = .GET, secureSocketPath: String, urlPath: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger? = nil) -> EventLoopFuture<Response> {
+    ///     - redirectConfiguration: Redirect configurations for this request.
+    public func execute(_ method: HTTPMethod = .GET, secureSocketPath: String, urlPath: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger? = nil, redirectConfiguration: RedirectConfiguration? = nil) -> EventLoopFuture<Response> {
         do {
             guard let url = URL(httpsURLWithSocketPath: secureSocketPath, uri: urlPath) else {
                 throw HTTPClientError.invalidURL
             }
             let request = try Request(url: url, method: method, body: body)
-            return self.execute(request: request, deadline: deadline, logger: logger ?? HTTPClient.loggingDisabled)
+            return self.execute(request: request, deadline: deadline, logger: logger ?? HTTPClient.loggingDisabled, redirectConfiguration: redirectConfiguration)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
@@ -386,8 +402,9 @@ public class HTTPClient {
     /// - parameters:
     ///     - request: HTTP request to execute.
     ///     - deadline: Point in time by which the request must complete.
-    public func execute(request: Request, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        return self.execute(request: request, deadline: deadline, logger: HTTPClient.loggingDisabled)
+    ///     - redirectConfiguration: Redirect configurations for this request.
+    public func execute(request: Request, deadline: NIODeadline? = nil, redirectConfiguration: RedirectConfiguration? = nil) -> EventLoopFuture<Response> {
+        return self.execute(request: request, deadline: deadline, logger: HTTPClient.loggingDisabled, redirectConfiguration: redirectConfiguration)
     }
 
     /// Execute arbitrary HTTP request using specified URL.
@@ -396,9 +413,10 @@ public class HTTPClient {
     ///     - request: HTTP request to execute.
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
-    public func execute(request: Request, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
+    ///     - redirectConfiguration: Redirect configurations for this request.
+    public func execute(request: Request, deadline: NIODeadline? = nil, logger: Logger, redirectConfiguration: RedirectConfiguration? = nil) -> EventLoopFuture<Response> {
         let accumulator = ResponseAccumulator(request: request)
-        return self.execute(request: request, delegate: accumulator, deadline: deadline, logger: logger).futureResult
+        return self.execute(request: request, delegate: accumulator, deadline: deadline, logger: logger, redirectConfiguration: redirectConfiguration).futureResult
     }
 
     /// Execute arbitrary HTTP request using specified URL.
@@ -407,11 +425,16 @@ public class HTTPClient {
     ///     - request: HTTP request to execute.
     ///     - eventLoop: NIO Event Loop preference.
     ///     - deadline: Point in time by which the request must complete.
-    public func execute(request: Request, eventLoop: EventLoopPreference, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+    ///     - redirectConfiguration: Redirect configurations for this request.
+    public func execute(request: Request,
+                        eventLoop: EventLoopPreference,
+                        deadline: NIODeadline? = nil,
+                        redirectConfiguration: RedirectConfiguration? = nil) -> EventLoopFuture<Response> {
         return self.execute(request: request,
                             eventLoop: eventLoop,
                             deadline: deadline,
-                            logger: HTTPClient.loggingDisabled)
+                            logger: HTTPClient.loggingDisabled,
+                            redirectConfiguration: redirectConfiguration)
     }
 
     /// Execute arbitrary HTTP request and handle response processing using provided delegate.
@@ -421,12 +444,19 @@ public class HTTPClient {
     ///     - eventLoop: NIO Event Loop preference.
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
+    ///     - redirectConfiguration: Redirect configurations for this request.
     public func execute(request: Request,
                         eventLoop eventLoopPreference: EventLoopPreference,
                         deadline: NIODeadline? = nil,
-                        logger: Logger?) -> EventLoopFuture<Response> {
+                        logger: Logger?,
+                        redirectConfiguration: RedirectConfiguration? = nil) -> EventLoopFuture<Response> {
         let accumulator = ResponseAccumulator(request: request)
-        return self.execute(request: request, delegate: accumulator, eventLoop: eventLoopPreference, deadline: deadline, logger: logger).futureResult
+        return self.execute(request: request,
+                            delegate: accumulator,
+                            eventLoop: eventLoopPreference,
+                            deadline: deadline,
+                            logger: logger,
+                            redirectConfiguration: redirectConfiguration).futureResult
     }
 
     /// Execute arbitrary HTTP request and handle response processing using provided delegate.
@@ -435,10 +465,16 @@ public class HTTPClient {
     ///     - request: HTTP request to execute.
     ///     - delegate: Delegate to process response parts.
     ///     - deadline: Point in time by which the request must complete.
+    ///     - redirectConfiguration: Redirect configurations for this request.
     public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
                                                               delegate: Delegate,
-                                                              deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
-        return self.execute(request: request, delegate: delegate, deadline: deadline, logger: HTTPClient.loggingDisabled)
+                                                              deadline: NIODeadline? = nil,
+                                                              redirectConfiguration: RedirectConfiguration? = nil) -> Task<Delegate.Response> {
+        return self.execute(request: request,
+                            delegate: delegate,
+                            deadline: deadline,
+                            logger: HTTPClient.loggingDisabled,
+                            redirectConfiguration: redirectConfiguration)
     }
 
     /// Execute arbitrary HTTP request and handle response processing using provided delegate.
@@ -448,11 +484,18 @@ public class HTTPClient {
     ///     - delegate: Delegate to process response parts.
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
+    ///     - redirectConfiguration: Redirect configurations for this request.
     public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
                                                               delegate: Delegate,
                                                               deadline: NIODeadline? = nil,
-                                                              logger: Logger) -> Task<Delegate.Response> {
-        return self.execute(request: request, delegate: delegate, eventLoop: .indifferent, deadline: deadline, logger: logger)
+                                                              logger: Logger,
+                                                              redirectConfiguration: RedirectConfiguration? = nil) -> Task<Delegate.Response> {
+        return self.execute(request: request,
+                            delegate: delegate,
+                            eventLoop: .indifferent,
+                            deadline: deadline,
+                            logger: logger,
+                            redirectConfiguration: redirectConfiguration)
     }
 
     /// Execute arbitrary HTTP request and handle response processing using provided delegate.
@@ -463,15 +506,18 @@ public class HTTPClient {
     ///     - eventLoop: NIO Event Loop preference.
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
+    ///     - redirectConfiguration: Redirect configurations for this request.
     public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
                                                               delegate: Delegate,
                                                               eventLoop eventLoopPreference: EventLoopPreference,
-                                                              deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
+                                                              deadline: NIODeadline? = nil,
+                                                              redirectConfiguration: RedirectConfiguration? = nil) -> Task<Delegate.Response> {
         return self.execute(request: request,
                             delegate: delegate,
                             eventLoop: eventLoopPreference,
                             deadline: deadline,
-                            logger: HTTPClient.loggingDisabled)
+                            logger: HTTPClient.loggingDisabled,
+                            redirectConfiguration: redirectConfiguration)
     }
 
     /// Execute arbitrary HTTP request and handle response processing using provided delegate.
@@ -481,11 +527,13 @@ public class HTTPClient {
     ///     - delegate: Delegate to process response parts.
     ///     - eventLoop: NIO Event Loop preference.
     ///     - deadline: Point in time by which the request must complete.
+    ///     - redirectConfiguration: Redirect configurations for this request.
     public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
                                                               delegate: Delegate,
                                                               eventLoop eventLoopPreference: EventLoopPreference,
                                                               deadline: NIODeadline? = nil,
-                                                              logger originalLogger: Logger?) -> Task<Delegate.Response> {
+                                                              logger originalLogger: Logger?,
+                                                              redirectConfiguration: RedirectConfiguration? = nil) -> Task<Delegate.Response> {
         let logger = (originalLogger ?? HTTPClient.loggingDisabled).attachingRequestInformation(request, requestID: globalRequestID.add(1))
         let taskEL: EventLoop
         switch eventLoopPreference.preference {
@@ -521,7 +569,9 @@ public class HTTPClient {
         }
 
         let redirectHandler: RedirectHandler<Delegate.Response>?
-        switch self.configuration.redirectConfiguration.configuration {
+        let prevailingConfiguration = redirectConfiguration?.configuration ?? self.configuration.redirectConfiguration.configuration
+        
+        switch prevailingConfiguration {
         case .follow(let max, let allowCycles):
             var request = request
             if request.redirectState == nil {
@@ -531,7 +581,8 @@ public class HTTPClient {
                 self.execute(request: newRequest,
                              delegate: delegate,
                              eventLoop: eventLoopPreference,
-                             deadline: deadline)
+                             deadline: deadline,
+                             redirectConfiguration: .follow(max: max, allowCycles: allowCycles))
             }
         case .disallow:
             redirectHandler = nil
