@@ -106,6 +106,7 @@ extension HTTPClientTests {
             ("testRacePoolIdleConnectionsAndGet", testRacePoolIdleConnectionsAndGet),
             ("testAvoidLeakingTLSHandshakeCompletionPromise", testAvoidLeakingTLSHandshakeCompletionPromise),
             ("testAsyncShutdown", testAsyncShutdown),
+            ("testAsyncShutdownDefaultQueue", testAsyncShutdownDefaultQueue),
             ("testValidationErrorsAreSurfaced", testValidationErrorsAreSurfaced),
             ("testUploadsReallyStream", testUploadsReallyStream),
             ("testUploadStreamingCallinToleratedFromOtsideEL", testUploadStreamingCallinToleratedFromOtsideEL),

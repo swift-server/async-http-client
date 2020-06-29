@@ -164,7 +164,7 @@ public class HTTPClient {
     /// callback instead of an EventLoopFuture. The reason for that is that NIO's EventLoopFutures will call back on an event loop.
     /// The virtue of this function is to shut the event loop down. To work around that we call back on a DispatchQueue
     /// instead.
-    public func shutdown(queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
+    public func shutdown(queue: DispatchQueue = .global(), _ callback: @escaping (Error?) -> Void) {
         self.shutdown(requiresCleanClose: false, queue: queue, callback)
     }
 

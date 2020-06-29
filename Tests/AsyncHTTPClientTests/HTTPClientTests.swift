@@ -1842,6 +1842,18 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNoThrow(try promise.futureResult.wait())
     }
 
+    func testAsyncShutdownDefaultQueue() throws {
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        let promise = self.clientGroup.next().makePromise(of: Void.self)
+        self.clientGroup.next().execute {
+            localClient.shutdown { error in
+                XCTAssertNil(error)
+                promise.succeed(())
+            }
+        }
+        XCTAssertNoThrow(try promise.futureResult.wait())
+    }
+
     func testValidationErrorsAreSurfaced() throws {
         let request = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get", method: .TRACE, body: .stream { _ in
             self.defaultClient.eventLoopGroup.next().makeSucceededFuture(())
