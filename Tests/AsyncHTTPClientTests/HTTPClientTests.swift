@@ -939,7 +939,7 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try localHTTPBin.shutdown())
         }
 
-        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/redirect/infinite1", redirectConfiguration: .follow(max: 5, allowCycles: false)).wait(), "Should fail with redirect limit") { error in
+        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/redirect/infinite1", redirects: .follow(max: 5, allowCycles: false)).wait(), "Should fail with redirect limit") { error in
             XCTAssertEqual(error as? HTTPClientError, HTTPClientError.redirectCycleDetected)
         }
     }
@@ -969,7 +969,7 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try localHTTPBin.shutdown())
         }
 
-        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/redirect/infinite1", redirectConfiguration: .follow(max: 5, allowCycles: true)).wait(), "Should fail with redirect limit") { error in
+        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/redirect/infinite1", redirects: .follow(max: 5, allowCycles: true)).wait(), "Should fail with redirect limit") { error in
             XCTAssertEqual(error as? HTTPClientError, HTTPClientError.redirectLimitReached)
         }
     }
@@ -984,7 +984,7 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try localHTTPBin.shutdown())
         }
 
-        XCTAssertNoThrow(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/redirect/infinite1", redirectConfiguration: .disallow).wait())
+        XCTAssertNoThrow(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/redirect/infinite1", redirects: .disallow).wait())
     }
 
     func testMultipleConcurrentRequests() throws {
