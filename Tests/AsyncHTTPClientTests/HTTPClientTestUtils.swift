@@ -212,7 +212,7 @@ internal final class HTTPBin {
         let configuration = TLSConfiguration.forServer(certificateChain: [.certificate(try! NIOSSLCertificate(bytes: Array(cert.utf8), format: .pem))],
                                                        privateKey: .privateKey(try! NIOSSLPrivateKey(bytes: Array(key.utf8), format: .pem)))
         let context = try! NIOSSLContext(configuration: configuration)
-        return channel.pipeline.addHandler(try! NIOSSLServerHandler(context: context), position: .first)
+        return channel.pipeline.addHandler(NIOSSLServerHandler(context: context), position: .first)
     }
 
     init(ssl: Bool = false,
@@ -655,7 +655,7 @@ internal class HttpBinForSSLUncleanShutdown {
                     let configuration = TLSConfiguration.forServer(certificateChain: [.certificate(try! NIOSSLCertificate(bytes: Array(cert.utf8), format: .pem))],
                                                                    privateKey: .privateKey(try! NIOSSLPrivateKey(bytes: Array(key.utf8), format: .pem)))
                     let context = try! NIOSSLContext(configuration: configuration)
-                    return channel.pipeline.addHandler(try! NIOSSLServerHandler(context: context), name: "NIOSSLServerHandler", position: .first).flatMap {
+                    return channel.pipeline.addHandler(NIOSSLServerHandler(context: context), name: "NIOSSLServerHandler", position: .first).flatMap {
                         channel.pipeline.addHandler(HttpBinForSSLUncleanShutdownHandler(channelPromise: channelPromise))
                     }
                 }
