@@ -1524,7 +1524,7 @@ class HTTPClientTests: XCTestCase {
                                                 XCTAssertEqual(.ok, firstResponse.status)
                                                 return localClient.get(url: url) // <== interesting bit here
                                             }
-        }.wait().status))
+                                        }.wait().status))
     }
 
     func testMakeSecondRequestWhilstFirstIsOngoing() {
@@ -1910,7 +1910,7 @@ class HTTPClientTests: XCTestCase {
                                            body: .stream { streamWriter in
                                                streamWriterPromise.succeed(streamWriter)
                                                return sentOffAllBodyPartsPromise.futureResult
-            })
+                                           })
         }
 
         guard let server = makeServer(), let request = makeRequest(server: server) else {
@@ -2502,7 +2502,7 @@ class HTTPClientTests: XCTestCase {
                                 streamWriter.write(.byteBuffer(ByteBuffer(string: "1"))).cascade(to: promise)
                             }
                             return promise.futureResult
-        })).wait()) { error in
+                        })).wait()) { error in
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.bodyLengthMismatch)
         }
         // Quickly try another request and check that it works.
@@ -2528,7 +2528,7 @@ class HTTPClientTests: XCTestCase {
                 Request(url: url,
                         body: .stream(length: 1) { streamWriter in
                             streamWriter.write(.byteBuffer(ByteBuffer(string: tooLong)))
-        })).wait()) { error in
+                        })).wait()) { error in
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.bodyLengthMismatch)
         }
         // Quickly try another request and check that it works. If we by accident wrote some extra bytes into the
@@ -2589,10 +2589,10 @@ class HTTPClientTests: XCTestCase {
 
         let tooLong = "XBAD BAD BAD NOT HTTP/1.1\r\n\r\n"
         let future = self.defaultClient.execute(
-                request: try Request(url: "http://localhost:\(server.serverPort)",
-                body: .stream(length: 1) { streamWriter in
-                            streamWriter.write(.byteBuffer(ByteBuffer(string: tooLong)))
-        }))
+            request: try Request(url: "http://localhost:\(server.serverPort)",
+                                 body: .stream(length: 1) { streamWriter in
+                                     streamWriter.write(.byteBuffer(ByteBuffer(string: tooLong)))
+                                 }))
 
         XCTAssertNoThrow(try server.readInbound()) // .head
         // this should fail if client detects that we are about to send more bytes than body limit and closes the connection

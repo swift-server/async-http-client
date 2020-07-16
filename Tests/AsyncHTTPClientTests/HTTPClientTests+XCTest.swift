@@ -121,6 +121,7 @@ extension HTTPClientTests {
             ("testContentLengthTooLongFails", testContentLengthTooLongFails),
             ("testContentLengthTooShortFails", testContentLengthTooShortFails),
             ("testBodyUploadAfterEndFails", testBodyUploadAfterEndFails),
+            ("testNoBytesSentOverBodyLimit", testNoBytesSentOverBodyLimit),
         ]
     }
 }

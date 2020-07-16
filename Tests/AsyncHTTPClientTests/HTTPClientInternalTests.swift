@@ -1031,4 +1031,50 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertEqual(request5.socketPath, "/tmp/file")
         XCTAssertEqual(request5.uri, "/file/path")
     }
+
+    func testBodyPartStreamStateChangedBeforeNotification() throws {
+        class StateValidationDelegate: HTTPClientResponseDelegate {
+            typealias Response = Void
+
+            var handler: TaskHandler<StateValidationDelegate>!
+            var triggered = false
+
+            func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
+                self.triggered = true
+                switch self.handler.state {
+                case .endOrError:
+                    // expected
+                    break
+                default:
+                    XCTFail("unexpected state: \(self.handler.state)")
+                }
+            }
+
+            func didFinishRequest(task: HTTPClient.Task<Void>) throws {}
+        }
+
+        let channel = EmbeddedChannel()
+        XCTAssertNoThrow(try channel.connect(to: try SocketAddress(unixDomainSocketPath: "/fake")).wait())
+
+        let task = Task<Void>(eventLoop: channel.eventLoop, logger: HTTPClient.loggingDisabled)
+
+        let delegate = StateValidationDelegate()
+        let handler = TaskHandler(task: task,
+                                  kind: .host,
+                                  delegate: delegate,
+                                  redirectHandler: nil,
+                                  ignoreUncleanSSLShutdown: false,
+                                  logger: HTTPClient.loggingDisabled)
+
+        delegate.handler = handler
+        try channel.pipeline.addHandler(handler).wait()
+
+        var request = try Request(url: "http://localhost:8080/post")
+        request.body = .stream(length: 1) { writer in
+            writer.write(.byteBuffer(ByteBuffer(string: "1234")))
+        }
+
+        XCTAssertThrowsError(try channel.writeOutbound(request))
+        XCTAssertTrue(delegate.triggered)
+    }
 }
