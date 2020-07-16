@@ -126,13 +126,20 @@ class CountingDelegate: HTTPClientResponseDelegate {
         // this is executed when request is fully sent, called once
     }
 
-    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
-        // this is executed when we receive HTTP Reponse head part of the request (it contains response code and headers), called once
-        // in case backpressure is needed, all reads will be paused until returned future is resolved
+    func didReceiveHead(
+        task: HTTPClient.Task<Response>, 
+        _ head: HTTPResponseHead
+    ) -> EventLoopFuture<Void> {
+        // this is executed when we receive HTTP response head part of the request 
+        // (it contains response code and headers), called once in case backpressure 
+        // is needed, all reads will be paused until returned future is resolved
         return task.eventLoop.makeSucceededFuture(())
     }
 
-    func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+    func didReceiveBodyPart(
+        task: HTTPClient.Task<Response>, 
+        _ buffer: ByteBuffer
+    ) -> EventLoopFuture<Void> {
         // this is executed when we receive parts of the response body, could be called zero or more times
         count += buffer.readableBytes
         // in case backpressure is needed, all reads will be paused until returned future is resolved
@@ -162,17 +169,32 @@ httpClient.execute(request: request, delegate: delegate).futureResult.whenSucces
 Connecting to servers bound to socket paths is easy:
 ```swift
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
-httpClient.execute(.GET, socketPath: "/tmp/myServer.socket", urlPath: "/path/to/resource").whenComplete (...)
+httpClient.execute(
+    .GET, 
+    socketPath: "/tmp/myServer.socket", 
+    urlPath: "/path/to/resource"
+).whenComplete (...)
 ```
 
 Connecting over TLS to a unix domain socket path is possible as well:
 ```swift
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
-httpClient.execute(.POST, secureSocketPath: "/tmp/myServer.socket", urlPath: "/path/to/resource", body: .string("hello")).whenComplete (...)
+httpClient.execute(
+    .POST, 
+    secureSocketPath: "/tmp/myServer.socket", 
+    urlPath: "/path/to/resource", 
+    body: .string("hello")
+).whenComplete (...)
 ```
 
 Direct URLs can easily be contructed to be executed in other scenarios:
 ```swift
-let socketPathBasedURL = URL(httpURLWithSocketPath: "/tmp/myServer.socket", uri: "/path/to/resource")
-let secureSocketPathBasedURL = URL(httpsURLWithSocketPath: "/tmp/myServer.socket", uri: "/path/to/resource")
+let socketPathBasedURL = URL(
+    httpURLWithSocketPath: "/tmp/myServer.socket", 
+    uri: "/path/to/resource"
+)
+let secureSocketPathBasedURL = URL(
+    httpsURLWithSocketPath: "/tmp/myServer.socket", 
+    uri: "/path/to/resource"
+)
 ```
