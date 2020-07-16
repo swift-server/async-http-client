@@ -2580,4 +2580,26 @@ class HTTPClientTests: XCTestCase {
         // stream (and reuse the connection) that could cause problems.
         XCTAssertNoThrow(try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "get").wait())
     }
+
+    func testNoBytesSentOverBodyLimit() throws {
+        let server = NIOHTTP1TestServer(group: self.serverGroup)
+        defer {
+            XCTAssertNoThrow(try server.stop())
+        }
+
+        let tooLong = "XBAD BAD BAD NOT HTTP/1.1\r\n\r\n"
+        let future = self.defaultClient.execute(
+                request: try Request(url: "http://localhost:\(server.serverPort)",
+                body: .stream(length: 1) { streamWriter in
+                            streamWriter.write(.byteBuffer(ByteBuffer(string: tooLong)))
+        }))
+
+        XCTAssertNoThrow(try server.readInbound()) // .head
+        // this should fail if client detects that we are about to send more bytes than body limit and closes the connection
+        // We can test that this test actually fails if we remove limit check in `writeBodyPart` - it will send bytes, meaning that the next
+        // call will not throw, but the future will still throw body mismatch error
+        XCTAssertThrowsError(try server.readInbound()) { error in XCTAssertEqual(error as? HTTPParserError, HTTPParserError.invalidEOFState) }
+
+        XCTAssertThrowsError(try future.wait())
+    }
 }
