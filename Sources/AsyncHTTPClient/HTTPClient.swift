@@ -70,7 +70,7 @@ public class HTTPClient {
     var state: State
     private let stateLock = Lock()
 
-    internal static let loggingDisabled = Logger(label: "AHC-do-not-log", factory: { _ in NoOpLogHandler() })
+    internal static let loggingDisabled = Logger(label: "AHC-do-not-log", factory: { _ in SwiftLogNoOpLogHandler() })
 
     /// Create an `HTTPClient` with specified `EventLoopGroup` provider and configuration.
     ///
