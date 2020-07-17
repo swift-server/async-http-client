@@ -353,7 +353,7 @@ class HTTP1ConnectionProvider {
         case .park(let connection):
             logger.trace("parking connection",
                          metadata: ["ahc-connection": "\(connection)"])
-            connection.setIdleTimeout(timeout: self.configuration.maximumAllowedIdleTimeInConnectionPool,
+            connection.setIdleTimeout(timeout: self.configuration.poolConfiguration.idleTimeout,
                                       logger: self.backgroundActivityLogger)
         case .closeProvider:
             logger.debug("closing provider",
@@ -365,7 +365,7 @@ class HTTP1ConnectionProvider {
             logger.trace("parking connection & doing further action",
                          metadata: ["ahc-connection": "\(connection)",
                                     "ahc-action": "\(action)"])
-            connection.setIdleTimeout(timeout: self.configuration.maximumAllowedIdleTimeInConnectionPool,
+            connection.setIdleTimeout(timeout: self.configuration.poolConfiguration.idleTimeout,
                                       logger: self.backgroundActivityLogger)
             self.execute(action, logger: logger)
         case .closeAnd(let connection, let action):
