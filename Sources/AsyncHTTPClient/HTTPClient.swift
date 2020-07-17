@@ -864,7 +864,7 @@ extension HTTPClient.Configuration {
     /// Connection pool configuration.
     public struct PoolConfiguration: Hashable {
         // Specifies amount of time connections are kept idle in the pool.
-        var idleTimeout: TimeAmount
+        public var idleTimeout: TimeAmount
 
         public init(idleTimeout: TimeAmount = .seconds(60)) {
             self.idleTimeout = idleTimeout
