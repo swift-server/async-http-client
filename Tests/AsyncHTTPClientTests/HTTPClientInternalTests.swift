@@ -1076,5 +1076,8 @@ class HTTPClientInternalTests: XCTestCase {
 
         XCTAssertThrowsError(try channel.writeOutbound(request))
         XCTAssertTrue(delegate.triggered)
+
+        XCTAssertNoThrow(try channel.readOutbound(as: HTTPClientRequestPart.self)) // .head
+        XCTAssertNoThrow(XCTAssertTrue(try channel.finish().isClean))
     }
 }
