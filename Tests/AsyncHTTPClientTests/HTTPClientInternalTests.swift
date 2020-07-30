@@ -415,8 +415,10 @@ class HTTPClientInternalTests: XCTestCase {
         }
 
         let group = getDefaultEventLoopGroup(numberOfThreads: 3)
+        let serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer {
             XCTAssertNoThrow(try group.syncShutdownGracefully())
+            XCTAssertNoThrow(try serverGroup.syncShutdownGracefully())
         }
 
         let channelEL = group.next()
@@ -424,11 +426,10 @@ class HTTPClientInternalTests: XCTestCase {
         let randoEL = group.next()
 
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(group))
-        let promise: EventLoopPromise<Channel> = httpClient.eventLoopGroup.next().makePromise()
-        let httpBin = HTTPBin(channelPromise: promise)
+        let server = NIOHTTP1TestServer(group: serverGroup)
         defer {
+            XCTAssertNoThrow(try server.stop())
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
-            XCTAssertNoThrow(try httpBin.shutdown())
         }
 
         let body: HTTPClient.Body = .stream(length: 8) { writer in
@@ -439,7 +440,7 @@ class HTTPClientInternalTests: XCTestCase {
             }
         }
 
-        let request = try Request(url: "http://127.0.0.1:\(httpBin.port)/custom",
+        let request = try Request(url: "http://127.0.0.1:\(server.serverPort)/custom",
                                   body: body)
         let delegate = Delegate(expectedEventLoop: delegateEL, randomOtherEventLoop: randoEL)
         let future = httpClient.execute(request: request,
@@ -447,13 +448,18 @@ class HTTPClientInternalTests: XCTestCase {
                                         eventLoop: .init(.testOnly_exact(channelOn: channelEL,
                                                                          delegateOn: delegateEL))).futureResult
 
-        let channel = try promise.futureResult.wait()
+        XCTAssertNoThrow(try server.readInbound()) // .head
+        XCTAssertNoThrow(try server.readInbound()) // .body
+        XCTAssertNoThrow(try server.readInbound()) // .end
 
         // Send 3 parts, but only one should be received until the future is complete
-        let buffer = channel.allocator.buffer(string: "1234")
-        try channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(buffer))).wait()
+        XCTAssertNoThrow(try server.writeOutbound(.head(.init(version: .init(major: 1, minor: 1),
+                                                              status: .ok,
+                                                              headers: HTTPHeaders([("Transfer-Encoding", "chunked")])))))
+        let buffer = ByteBuffer(string: "1234")
+        XCTAssertNoThrow(try server.writeOutbound(.body(.byteBuffer(buffer))))
+        XCTAssertNoThrow(try server.writeOutbound(.end(nil)))
 
-        try channel.writeAndFlush(HTTPServerResponsePart.end(nil)).wait()
         let (receivedMessages, sentMessages) = try future.wait()
         XCTAssertEqual(2, receivedMessages.count)
         XCTAssertEqual(4, sentMessages.count)
@@ -488,7 +494,7 @@ class HTTPClientInternalTests: XCTestCase {
 
         switch receivedMessages.dropFirst(0).first {
         case .some(.head(let head)):
-            XCTAssertEqual(["transfer-encoding": "chunked"], head.headers)
+            XCTAssertEqual(head.headers["transfer-encoding"].first, "chunked")
         default:
             XCTFail("wrong message")
         }
@@ -1024,5 +1030,54 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertEqual(request5.kind, .unixSocket(.https_unix))
         XCTAssertEqual(request5.socketPath, "/tmp/file")
         XCTAssertEqual(request5.uri, "/file/path")
+    }
+
+    func testBodyPartStreamStateChangedBeforeNotification() throws {
+        class StateValidationDelegate: HTTPClientResponseDelegate {
+            typealias Response = Void
+
+            var handler: TaskHandler<StateValidationDelegate>!
+            var triggered = false
+
+            func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
+                self.triggered = true
+                switch self.handler.state {
+                case .endOrError:
+                    // expected
+                    break
+                default:
+                    XCTFail("unexpected state: \(self.handler.state)")
+                }
+            }
+
+            func didFinishRequest(task: HTTPClient.Task<Void>) throws {}
+        }
+
+        let channel = EmbeddedChannel()
+        XCTAssertNoThrow(try channel.connect(to: try SocketAddress(unixDomainSocketPath: "/fake")).wait())
+
+        let task = Task<Void>(eventLoop: channel.eventLoop, logger: HTTPClient.loggingDisabled)
+
+        let delegate = StateValidationDelegate()
+        let handler = TaskHandler(task: task,
+                                  kind: .host,
+                                  delegate: delegate,
+                                  redirectHandler: nil,
+                                  ignoreUncleanSSLShutdown: false,
+                                  logger: HTTPClient.loggingDisabled)
+
+        delegate.handler = handler
+        try channel.pipeline.addHandler(handler).wait()
+
+        var request = try Request(url: "http://localhost:8080/post")
+        request.body = .stream(length: 1) { writer in
+            writer.write(.byteBuffer(ByteBuffer(string: "1234")))
+        }
+
+        XCTAssertThrowsError(try channel.writeOutbound(request))
+        XCTAssertTrue(delegate.triggered)
+
+        XCTAssertNoThrow(try channel.readOutbound(as: HTTPClientRequestPart.self)) // .head
+        XCTAssertNoThrow(XCTAssertTrue(try channel.finish().isClean))
     }
 }
