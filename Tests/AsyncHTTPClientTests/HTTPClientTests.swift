@@ -1742,7 +1742,7 @@ class HTTPClientTests: XCTestCase {
 
     func testPoolClosesIdleConnections() {
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(poolConfiguration: .init(idleTimeout: .milliseconds(100))))
+                                     configuration: .init(connectionPool: .init(idleTimeout: .milliseconds(100))))
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
         }
@@ -1753,7 +1753,7 @@ class HTTPClientTests: XCTestCase {
 
     func testRacePoolIdleConnectionsAndGet() {
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(poolConfiguration: .init(idleTimeout: .milliseconds(10))))
+                                     configuration: .init(connectionPool: .init(idleTimeout: .milliseconds(10))))
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
         }

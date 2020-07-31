@@ -642,7 +642,7 @@ public class HTTPClient {
         /// Default client timeout, defaults to no timeouts.
         public var timeout: Timeout
         /// Connection pool configuration.
-        public var poolConfiguration: PoolConfiguration
+        public var connectionPool: ConnectionPool
         /// Upstream proxy, defaults to no proxy.
         public var proxy: Proxy?
         /// Enables automatic body decompression. Supported algorithms are gzip and deflate.
@@ -653,14 +653,14 @@ public class HTTPClient {
         public init(tlsConfiguration: TLSConfiguration? = nil,
                     redirectConfiguration: RedirectConfiguration? = nil,
                     timeout: Timeout = Timeout(),
-                    poolConfiguration: PoolConfiguration = PoolConfiguration(),
+                    connectionPool: ConnectionPool = ConnectionPool(),
                     proxy: Proxy? = nil,
                     ignoreUncleanSSLShutdown: Bool = false,
                     decompression: Decompression = .disabled) {
             self.tlsConfiguration = tlsConfiguration
             self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
             self.timeout = timeout
-            self.poolConfiguration = poolConfiguration
+            self.connectionPool = connectionPool
             self.proxy = proxy
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
             self.decompression = decompression
@@ -676,7 +676,7 @@ public class HTTPClient {
                 tlsConfiguration: tlsConfiguration,
                 redirectConfiguration: redirectConfiguration,
                 timeout: timeout,
-                poolConfiguration: PoolConfiguration(),
+                connectionPool: ConnectionPool(),
                 proxy: proxy,
                 ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
                 decompression: decompression
@@ -693,7 +693,7 @@ public class HTTPClient {
             self.init(tlsConfiguration: TLSConfiguration.forClient(certificateVerification: certificateVerification),
                       redirectConfiguration: redirectConfiguration,
                       timeout: timeout,
-                      poolConfiguration: PoolConfiguration(),
+                      connectionPool: ConnectionPool(),
                       proxy: proxy,
                       ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
                       decompression: decompression)
@@ -702,7 +702,7 @@ public class HTTPClient {
         public init(certificateVerification: CertificateVerification,
                     redirectConfiguration: RedirectConfiguration? = nil,
                     timeout: Timeout = Timeout(),
-                    poolConfiguration: TimeAmount = .seconds(60),
+                    connectionPool: TimeAmount = .seconds(60),
                     proxy: Proxy? = nil,
                     ignoreUncleanSSLShutdown: Bool = false,
                     decompression: Decompression = .disabled,
@@ -710,7 +710,7 @@ public class HTTPClient {
             self.init(tlsConfiguration: TLSConfiguration.forClient(certificateVerification: certificateVerification),
                       redirectConfiguration: redirectConfiguration,
                       timeout: timeout,
-                      poolConfiguration: PoolConfiguration(),
+                      connectionPool: ConnectionPool(),
                       proxy: proxy,
                       ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
                       decompression: decompression)
@@ -862,7 +862,7 @@ extension HTTPClient.Configuration {
     }
 
     /// Connection pool configuration.
-    public struct PoolConfiguration: Hashable {
+    public struct ConnectionPool: Hashable {
         // Specifies amount of time connections are kept idle in the pool.
         public var idleTimeout: TimeAmount
 
