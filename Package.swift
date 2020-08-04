@@ -33,7 +33,9 @@ let package = Package(
             name: "AsyncHTTPClient",
             dependencies: ["NIO", "NIOHTTP1", "NIOSSL", "NIOConcurrencyHelpers", "NIOHTTPCompression",
                            "NIOFoundationCompat", "NIOTransportServices", "Logging",
-                           .product(name: "TracingInstrumentation", package: "gsoc-swift-tracing")]
+                           .product(name: "TracingInstrumentation", package: "gsoc-swift-tracing"),
+                           .product(name: "OpenTelemetryInstrumentationSupport", package: "gsoc-swift-tracing"),
+                           .product(name: "NIOInstrumentation", package: "gsoc-swift-tracing")]
         ),
         .testTarget(
             name: "AsyncHTTPClientTests",

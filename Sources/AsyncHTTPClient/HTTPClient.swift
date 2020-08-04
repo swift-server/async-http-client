@@ -14,6 +14,8 @@
 
 import Baggage
 import Foundation
+import Instrumentation
+import TracingInstrumentation
 import Logging
 import NIO
 import NIOConcurrencyHelpers
@@ -22,6 +24,8 @@ import NIOHTTPCompression
 import NIOSSL
 import NIOTLS
 import NIOTransportServices
+import NIOInstrumentation
+import OpenTelemetryInstrumentationSupport
 
 extension Logger {
     private func requestInfo(_ request: HTTPClient.Request) -> Logger.Metadata.Value {
@@ -380,35 +384,25 @@ public class HTTPClient {
     ///     - eventLoop: NIO Event Loop preference.
     ///     - context: Metadata propagated for instrumentation.
     ///     - deadline: Point in time by which the request must complete.
-    ///     - logger: The logger to use for this request.
     public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
                                                               delegate: Delegate,
                                                               eventLoop eventLoopPreference: EventLoopPreference,
                                                               context: BaggageContext,
                                                               deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
-        return self.execute(request: request,
-                            delegate: delegate,
-                            eventLoop: eventLoopPreference,
-                            context: context,
-                            deadline: deadline,
-                            logger: HTTPClient.loggingDisabled)
-    }
+        var span = InstrumentationSystem.tracingInstrument.startSpan(named: request.method.rawValue, context: context, ofKind: .client, at: nil)
+        span.attributes.http.method = request.method.rawValue
+        span.attributes.http.scheme = request.scheme
+        span.attributes.http.target = request.uri
+        span.attributes.http.host = request.host
 
-    /// Execute arbitrary HTTP request and handle response processing using provided delegate.
-    ///
-    /// - parameters:
-    ///     - request: HTTP request to execute.
-    ///     - delegate: Delegate to process response parts.
-    ///     - eventLoop: NIO Event Loop preference.
-    ///     - context: Metadata propagated for instrumentation.
-    ///     - deadline: Point in time by which the request must complete.
-    public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
-                                                              delegate: Delegate,
-                                                              eventLoop eventLoopPreference: EventLoopPreference,
-                                                              context: BaggageContext,
-                                                              deadline: NIODeadline? = nil,
-                                                              logger originalLogger: Logger?) -> Task<Delegate.Response> {
-        let logger = (originalLogger ?? HTTPClient.loggingDisabled).attachingRequestInformation(request, requestID: globalRequestID.add(1))
+        // TODO: http.statusCode response status once request completed
+        // TODO: net.peer.ip / Not required, but recommended
+
+        var request = request
+        InstrumentationSystem.instrument.inject(context, into: &request.headers, using: HTTPHeadersInjector())
+
+//        let logger = (originalLogger ?? HTTPClient.loggingDisabled).attachingRequestInformation(request, requestID: globalRequestID.add(1))
+        let logger = HTTPClient.loggingDisabled
         let taskEL: EventLoop
         switch eventLoopPreference.preference {
         case .indifferent:
@@ -422,16 +416,16 @@ public class HTTPClient {
         case .testOnly_exact(_, delegateOn: let delegateEL):
             taskEL = delegateEL
         }
-        logger.trace("selected EventLoop for task given the preference",
-                     metadata: ["ahc-eventloop": "\(taskEL)",
-                                "ahc-el-preference": "\(eventLoopPreference)"])
+//        logger.trace("selected EventLoop for task given the preference",
+//                     metadata: ["ahc-eventloop": "\(taskEL)",
+//                                "ahc-el-preference": "\(eventLoopPreference)"])
 
         let failedTask: Task<Delegate.Response>? = self.stateLock.withLock {
             switch state {
             case .upAndRunning:
                 return nil
             case .shuttingDown, .shutDown:
-                logger.debug("client is shutting down, failing request")
+//                logger.debug("client is shutting down, failing request")
                 return Task<Delegate.Response>.failedTask(eventLoop: taskEL,
                                                           error: HTTPClientError.alreadyShutdown,
                                                           logger: logger)
@@ -515,6 +509,7 @@ public class HTTPClient {
             }
         }.always { _ in
             setupComplete.succeed(())
+            span.end()
         }.whenFailure { error in
             taskHandler.callOutToDelegateFireAndForget { task in
                 delegate.didReceiveError(task: task, error)
