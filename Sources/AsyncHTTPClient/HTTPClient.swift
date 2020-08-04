@@ -230,7 +230,7 @@ public class HTTPClient {
     ///
     /// - parameters:
     ///     - url: Remote URL.
-    ///     - context: Metadata propagated for instrumentation.
+    ///     - context: Baggage context associated with this request
     ///     - deadline: Point in time by which the request must complete.
     public func get(url: String, context: BaggageContext, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         return self.execute(.GET, url: url, context: context, deadline: deadline)
@@ -240,7 +240,7 @@ public class HTTPClient {
     ///
     /// - parameters:
     ///     - url: Remote URL.
-    ///     - context: Metadata propagated for instrumentation.
+    ///     - context: Baggage context associated with this request
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     public func post(url: String, context: BaggageContext, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
@@ -251,7 +251,7 @@ public class HTTPClient {
     ///
     /// - parameters:
     ///     - url: Remote URL.
-    ///     - context: Metadata propagated for instrumentation.
+    ///     - context: Baggage context associated with this request
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     public func patch(url: String, context: BaggageContext, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
@@ -262,7 +262,7 @@ public class HTTPClient {
     ///
     /// - parameters:
     ///     - url: Remote URL.
-    ///     - context: Metadata propagated for instrumentation.
+    ///     - context: Baggage context associated with this request
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     public func put(url: String, context: BaggageContext, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
@@ -273,7 +273,7 @@ public class HTTPClient {
     ///
     /// - parameters:
     ///     - url: Remote URL.
-    ///     - context: Metadata propagated for instrumentation.
+    ///     - context: Baggage context associated with this request
     ///     - deadline: The time when the request must have been completed by.
     public func delete(url: String, context: BaggageContext, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         return self.execute(.DELETE, url: url, context: context, deadline: deadline)
@@ -284,7 +284,7 @@ public class HTTPClient {
     /// - parameters:
     ///     - method: Request method.
     ///     - url: Request url.
-    ///     - context: Metadata propagated for instrumentation.
+    ///     - context: Baggage context associated with this request
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     public func execute(_ method: HTTPMethod = .GET, url: String, context: BaggageContext, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
@@ -302,7 +302,7 @@ public class HTTPClient {
     ///     - method: Request method.
     ///     - socketPath: The path to the unix domain socket to connect to.
     ///     - urlPath: The URL path and query that will be sent to the server.
-    ///     - context: Metadata propagated for instrumentation.
+    ///     - context: Baggage context associated with this request
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     public func execute(_ method: HTTPMethod = .GET, socketPath: String, urlPath: String, context: BaggageContext, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
@@ -323,7 +323,7 @@ public class HTTPClient {
     ///     - method: Request method.
     ///     - secureSocketPath: The path to the unix domain socket to connect to.
     ///     - urlPath: The URL path and query that will be sent to the server.
-    ///     - context: Metadata propagated for instrumentation.
+    ///     - context: Baggage context associated with this request
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
@@ -343,7 +343,7 @@ public class HTTPClient {
     ///
     /// - parameters:
     ///     - request: HTTP request to execute.
-    ///     - context: Metadata propagated for instrumentation.
+    ///     - context: Baggage context associated with this request
     ///     - deadline: Point in time by which the request must complete.
     public func execute(request: Request, context: BaggageContext, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         let accumulator = ResponseAccumulator(request: request)
@@ -355,7 +355,7 @@ public class HTTPClient {
     /// - parameters:
     ///     - request: HTTP request to execute.
     ///     - eventLoop: NIO Event Loop preference.
-    ///     - context: Metadata propagated for instrumentation.
+    ///     - context: Baggage context associated with this request
     ///     - deadline: Point in time by which the request must complete.
     public func execute(request: Request, eventLoop: EventLoopPreference, context: BaggageContext, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         let accumulator = ResponseAccumulator(request: request)
@@ -367,7 +367,7 @@ public class HTTPClient {
     /// - parameters:
     ///     - request: HTTP request to execute.
     ///     - delegate: Delegate to process response parts.
-    ///     - context: Metadata propagated for instrumentation.
+    ///     - context: Baggage context associated with this request
     ///     - deadline: Point in time by which the request must complete.
     public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
                                                               delegate: Delegate,
@@ -382,7 +382,7 @@ public class HTTPClient {
     ///     - request: HTTP request to execute.
     ///     - delegate: Delegate to process response parts.
     ///     - eventLoop: NIO Event Loop preference.
-    ///     - context: Metadata propagated for instrumentation.
+    ///     - context: Baggage context associated with this request
     ///     - deadline: Point in time by which the request must complete.
     public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
                                                               delegate: Delegate,
