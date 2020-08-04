@@ -395,7 +395,6 @@ public class HTTPClient {
         span.attributes.http.target = request.uri
         span.attributes.http.host = request.host
 
-        // TODO: http.statusCode response status once request completed
         // TODO: net.peer.ip / Not required, but recommended
 
         var request = request
@@ -507,9 +506,15 @@ public class HTTPClient {
                 connection.release(closing: true, logger: logger)
                 return channel.eventLoop.makeFailedFuture(error)
             }
-        }.always { _ in
-            setupComplete.succeed(())
+        }
+        .and(task.futureResult)
+        .always { result in
+            if case let .success((_, response)) = result, let httpResponse = response as? HTTPClient.Response {
+                span.attributes.http.statusCode = Int(httpResponse.status.code)
+                span.attributes.http.statusText = httpResponse.status.reasonPhrase
+            }
             span.end()
+            setupComplete.succeed(())
         }.whenFailure { error in
             taskHandler.callOutToDelegateFireAndForget { task in
                 delegate.didReceiveError(task: task, error)
