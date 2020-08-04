@@ -394,6 +394,9 @@ public class HTTPClient {
         span.attributes.http.scheme = request.scheme
         span.attributes.http.target = request.uri
         span.attributes.http.host = request.host
+        if let requestContentLength = request.body?.length {
+            span.attributes.http.requestContentLength = requestContentLength
+        }
 
         // TODO: net.peer.ip / Not required, but recommended
 
@@ -512,6 +515,7 @@ public class HTTPClient {
             if case let .success((_, response)) = result, let httpResponse = response as? HTTPClient.Response {
                 span.attributes.http.statusCode = Int(httpResponse.status.code)
                 span.attributes.http.statusText = httpResponse.status.reasonPhrase
+                span.attributes.http.responseContentLength = httpResponse.body?.readableBytes ?? 0
             }
             span.end()
             setupComplete.succeed(())
