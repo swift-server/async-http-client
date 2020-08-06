@@ -56,6 +56,7 @@ extension HTTPClientTests {
             ("testProxyPlaintextWithCorrectlyAuthorization", testProxyPlaintextWithCorrectlyAuthorization),
             ("testProxyPlaintextWithIncorrectlyAuthorization", testProxyPlaintextWithIncorrectlyAuthorization),
             ("testUploadStreaming", testUploadStreaming),
+            ("testUploadStreaming2", testUploadStreaming2),
             ("testNoContentLengthForSSLUncleanShutdown", testNoContentLengthForSSLUncleanShutdown),
             ("testNoContentLengthWithIgnoreErrorForSSLUncleanShutdown", testNoContentLengthWithIgnoreErrorForSSLUncleanShutdown),
             ("testCorrectContentLengthForSSLUncleanShutdown", testCorrectContentLengthForSSLUncleanShutdown),

@@ -32,16 +32,59 @@ extension HTTPClient {
             ///
             /// - parameters:
             ///     - closure: function that will be called to write actual bytes to the channel.
+            @available(*, deprecated, message: "StreamWriter is deprecated, please use StreamWriter2")
             public init(closure: @escaping (IOData) -> EventLoopFuture<Void>) {
                 self.closure = closure
+            }
+
+            // This is needed so we don't have build warnings in the client itself
+            init(internalClosure: @escaping (IOData) -> EventLoopFuture<Void>) {
+                self.closure = internalClosure
             }
 
             /// Write data to server.
             ///
             /// - parameters:
             ///     - data: `IOData` to write.
+            @available(*, deprecated, message: "")
             public func write(_ data: IOData) -> EventLoopFuture<Void> {
                 return self.closure(data)
+            }
+        }
+
+        public struct StreamWriter2 {
+            public let allocator: ByteBufferAllocator
+            let onChunk: (IOData) -> EventLoopFuture<Void>
+            let onComplete: EventLoopPromise<Void>
+
+            public init(allocator: ByteBufferAllocator, onChunk: @escaping (IOData) -> EventLoopFuture<Void>, onComplete: EventLoopPromise<Void>) {
+                self.allocator = allocator
+                self.onChunk = onChunk
+                self.onComplete = onComplete
+            }
+
+            public func write(_ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+                self.onChunk(.byteBuffer(buffer))
+            }
+
+            public func write(_ data: IOData) -> EventLoopFuture<Void> {
+                self.onChunk(data)
+            }
+
+            public func write(_ buffer: ByteBuffer, promise: EventLoopPromise<Void>?) {
+                self.onChunk(.byteBuffer(buffer)).cascade(to: promise)
+            }
+
+            public func write(_ data: IOData, promise: EventLoopPromise<Void>?) {
+                self.onChunk(data).cascade(to: promise)
+            }
+
+            public func end() {
+                self.onComplete.succeed(())
+            }
+
+            public func fail(_ error: Error) {
+                self.onComplete.fail(error)
             }
         }
 
@@ -50,14 +93,31 @@ extension HTTPClient {
         public var length: Int?
         /// Body chunk provider.
         public var stream: (StreamWriter) -> EventLoopFuture<Void>
+        var stream2: ((StreamWriter2) -> Void)?
+
+        @available(*, deprecated, message: "")
+        init(length: Int?, stream: @escaping (StreamWriter) -> EventLoopFuture<Void>) {
+            self.length = length
+            self.stream = stream
+            self.stream2 = nil
+        }
+
+        init(length: Int?, stream: @escaping (StreamWriter2) -> Void) {
+            self.length = length
+            self.stream = { _ in
+                preconditionFailure("stream writer 2 was called")
+            }
+            self.stream2 = stream
+        }
 
         /// Create and stream body using `ByteBuffer`.
         ///
         /// - parameters:
         ///     - buffer: Body `ByteBuffer` representation.
         public static func byteBuffer(_ buffer: ByteBuffer) -> Body {
-            return Body(length: buffer.readableBytes) { writer in
-                writer.write(.byteBuffer(buffer))
+            return Body(length: buffer.readableBytes) { (writer: StreamWriter2) in
+                writer.write(.byteBuffer(buffer), promise: nil)
+                writer.end()
             }
         }
 
@@ -67,7 +127,18 @@ extension HTTPClient {
         ///     - length: Body size. Request validation will be failed with `HTTPClientErrors.contentLengthMissing` if nil,
         ///               unless `Transfer-Encoding: chunked` header is set.
         ///     - stream: Body chunk provider.
+        @available(*, deprecated, message: "StreamWriter is deprecated, please use StreamWriter2 instead")
         public static func stream(length: Int? = nil, _ stream: @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
+            return Body(length: length, stream: stream)
+        }
+
+        /// Create and stream body using `StreamWriter`.
+        ///
+        /// - parameters:
+        ///     - length: Body size. Request validation will be failed with `HTTPClientErrors.contentLengthMissing` if nil,
+        ///               unless `Transfer-Encoding: chunked` header is set.
+        ///     - stream: Body chunk provider.
+        public static func stream2(length: Int? = nil, _ stream: @escaping (StreamWriter2) -> Void) -> Body {
             return Body(length: length, stream: stream)
         }
 
@@ -76,8 +147,10 @@ extension HTTPClient {
         /// - parameters:
         ///     - data: Body `Data` representation.
         public static func data(_ data: Data) -> Body {
-            return Body(length: data.count) { writer in
-                writer.write(.byteBuffer(ByteBuffer(bytes: data)))
+            return Body(length: data.count) { (writer: StreamWriter2) in
+                let buffer = writer.allocator.buffer(data: data)
+                writer.write(.byteBuffer(buffer), promise: nil)
+                writer.end()
             }
         }
 
@@ -86,8 +159,10 @@ extension HTTPClient {
         /// - parameters:
         ///     - string: Body `String` representation.
         public static func string(_ string: String) -> Body {
-            return Body(length: string.utf8.count) { writer in
-                writer.write(.byteBuffer(ByteBuffer(string: string)))
+            return Body(length: string.utf8.count) { (writer: StreamWriter2) in
+                let buffer = writer.allocator.buffer(string: string)
+                writer.write(.byteBuffer(buffer), promise: nil)
+                writer.end()
             }
         }
     }
@@ -874,7 +949,32 @@ extension TaskHandler: ChannelDuplexHandler {
         let channel = context.channel
 
         func doIt() -> EventLoopFuture<Void> {
-            return body.stream(HTTPClient.Body.StreamWriter { part in
+            if let stream2 = body.stream2 {
+                let completion = channel.eventLoop.makePromise(of: Void.self)
+                stream2(HTTPClient.Body.StreamWriter2(allocator: channel.allocator, onChunk: { part in
+                    let promise = self.task.eventLoop.makePromise(of: Void.self)
+                    // All writes have to be switched to the channel EL if channel and task ELs differ
+                    if channel.eventLoop.inEventLoop {
+                        self.writeBodyPart(context: context, part: part, promise: promise)
+                    } else {
+                        channel.eventLoop.execute {
+                            self.writeBodyPart(context: context, part: part, promise: promise)
+                        }
+                    }
+
+                    promise.futureResult.whenFailure { error in
+                        completion.fail(error)
+                    }
+
+                    return promise.futureResult.map {
+                        self.callOutToDelegateFireAndForget(value: part, self.delegate.didSendRequestPart)
+                    }
+                }, onComplete: completion))
+
+                return completion.futureResult
+            }
+
+            return body.stream(HTTPClient.Body.StreamWriter(internalClosure: { part in
                 let promise = self.task.eventLoop.makePromise(of: Void.self)
                 // All writes have to be switched to the channel EL if channel and task ELs differ
                 if channel.eventLoop.inEventLoop {
@@ -888,7 +988,7 @@ extension TaskHandler: ChannelDuplexHandler {
                 return promise.futureResult.map {
                     self.callOutToDelegateFireAndForget(value: part, self.delegate.didSendRequestPart)
                 }
-            })
+            }))
         }
 
         // Callout to the user to start body streaming should be on task EL

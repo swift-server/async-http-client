@@ -659,6 +659,23 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual("12344321", data.data)
     }
 
+    func testUploadStreaming2() throws {
+        let body: HTTPClient.Body = .stream2(length: 8) { writer in
+            var buffer = ByteBuffer(string: "1234")
+            writer.write(.byteBuffer(buffer), promise: nil)
+            buffer = ByteBuffer(string: "4321")
+            writer.write(.byteBuffer(buffer), promise: nil)
+            writer.end()
+        }
+
+        let response = try self.defaultClient.post(url: self.defaultHTTPBinURLPrefix + "post", body: body).wait()
+        let bytes = response.body.flatMap { $0.getData(at: 0, length: $0.readableBytes) }
+        let data = try JSONDecoder().decode(RequestInfo.self, from: bytes!)
+
+        XCTAssertEqual(.ok, response.status)
+        XCTAssertEqual("12344321", data.data)
+    }
+
     func testNoContentLengthForSSLUncleanShutdown() throws {
         // NIOTS deals with ssl unclean shutdown internally
         guard !isTestingNIOTS() else { return }
@@ -1812,8 +1829,8 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testValidationErrorsAreSurfaced() throws {
-        let request = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get", method: .TRACE, body: .stream { _ in
-            self.defaultClient.eventLoopGroup.next().makeSucceededFuture(())
+        let request = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get", method: .TRACE, body: .stream2 { writer in
+            writer.end()
         })
         let runningRequest = self.defaultClient.execute(request: request)
         XCTAssertThrowsError(try runningRequest.wait()) { error in
@@ -1883,7 +1900,7 @@ class HTTPClientTests: XCTestCase {
         let bodyPromises = (0..<16).map { _ in group.next().makePromise(of: ByteBuffer.self) }
         let endPromise = group.next().makePromise(of: Void.self)
         let sentOffAllBodyPartsPromise = group.next().makePromise(of: Void.self)
-        let streamWriterPromise = group.next().makePromise(of: HTTPClient.Body.StreamWriter.self)
+        let writerPromise = group.next().makePromise(of: HTTPClient.Body.StreamWriter2.self)
 
         func makeServer() -> Channel? {
             return try? ServerBootstrap(group: group)
@@ -1907,9 +1924,11 @@ class HTTPClientTests: XCTestCase {
             return try? HTTPClient.Request(url: "http://\(localAddress.ipAddress!):\(localAddress.port!)",
                                            method: .POST,
                                            headers: ["transfer-encoding": "chunked"],
-                                           body: .stream { streamWriter in
-                                               streamWriterPromise.succeed(streamWriter)
-                                               return sentOffAllBodyPartsPromise.futureResult
+                                           body: .stream2 { writer in
+                                               writerPromise.succeed(writer)
+                                               sentOffAllBodyPartsPromise.futureResult.whenComplete { _ in
+                                                   writer.end()
+                                               }
                                            })
         }
 
@@ -1923,7 +1942,7 @@ class HTTPClientTests: XCTestCase {
 
         var buffer = ByteBufferAllocator().buffer(capacity: 1)
         let runningRequest = client.execute(request: request)
-        guard let streamWriter = try? streamWriterPromise.futureResult.wait() else {
+        guard let writer = try? writerPromise.futureResult.wait() else {
             XCTFail("didn't get StreamWriter")
             return
         }
@@ -1933,7 +1952,7 @@ class HTTPClientTests: XCTestCase {
             buffer.clear()
             buffer.writeString(String(bodyChunkNumber, radix: 16))
             XCTAssertEqual(1, buffer.readableBytes)
-            XCTAssertNoThrow(try streamWriter.write(.byteBuffer(buffer)).wait())
+            XCTAssertNoThrow(try writer.write(.byteBuffer(buffer)).wait())
             XCTAssertNoThrow(XCTAssertEqual(buffer, try bodyPromises[bodyChunkNumber].futureResult.wait()))
         }
         sentOffAllBodyPartsPromise.succeed(())
@@ -1942,15 +1961,13 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testUploadStreamingCallinToleratedFromOtsideEL() throws {
-        let request = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get", method: .POST, body: .stream(length: 4) { writer in
-            let promise = self.defaultClient.eventLoopGroup.next().makePromise(of: Void.self)
+        let request = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get", method: .POST, body: .stream2(length: 4) { writer in
             // We have to toleare callins from any thread
             DispatchQueue(label: "upload-streaming").async {
-                writer.write(.byteBuffer(ByteBuffer(string: "1234"))).whenComplete { _ in
-                    promise.succeed(())
+                writer.write(writer.allocator.buffer(string: "1234")).whenComplete { _ in
+                    writer.end()
                 }
             }
-            return promise.futureResult
         })
         XCTAssertNoThrow(try self.defaultClient.execute(request: request).wait())
     }
@@ -2395,8 +2412,9 @@ class HTTPClientTests: XCTestCase {
         }
 
         var request = try HTTPClient.Request(url: "http://localhost:\(server.serverPort)/")
-        request.body = .stream { writer in
-            writer.write(.byteBuffer(ByteBuffer(string: "1234")))
+        request.body = .stream2 { writer in
+            writer.write(writer.allocator.buffer(string: "1234"), promise: nil)
+            writer.end()
         }
 
         let future = client.execute(request: request)
@@ -2496,12 +2514,12 @@ class HTTPClientTests: XCTestCase {
         XCTAssertThrowsError(
             try self.defaultClient.execute(request:
                 Request(url: url,
-                        body: .stream(length: 10) { streamWriter in
-                            let promise = self.defaultClient.eventLoopGroup.next().makePromise(of: Void.self)
+                        body: .stream2(length: 10) { writer in
                             DispatchQueue(label: "content-length-test").async {
-                                streamWriter.write(.byteBuffer(ByteBuffer(string: "1"))).cascade(to: promise)
+                                writer.write(writer.allocator.buffer(string: "1")).whenComplete { _ in
+                                    writer.end()
+                                }
                             }
-                            return promise.futureResult
                         })).wait()) { error in
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.bodyLengthMismatch)
         }
@@ -2526,8 +2544,9 @@ class HTTPClientTests: XCTestCase {
         XCTAssertThrowsError(
             try self.defaultClient.execute(request:
                 Request(url: url,
-                        body: .stream(length: 1) { streamWriter in
-                            streamWriter.write(.byteBuffer(ByteBuffer(string: tooLong)))
+                        body: .stream2(length: 1) { writer in
+                            writer.write(writer.allocator.buffer(string: tooLong), promise: nil)
+                            writer.end()
                         })).wait()) { error in
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.bodyLengthMismatch)
         }
@@ -2549,14 +2568,14 @@ class HTTPClientTests: XCTestCase {
     func testBodyUploadAfterEndFails() {
         let url = self.defaultHTTPBinURLPrefix + "post"
 
-        func uploader(_ streamWriter: HTTPClient.Body.StreamWriter) -> EventLoopFuture<Void> {
-            let done = streamWriter.write(.byteBuffer(ByteBuffer(string: "X")))
+        func uploader(_ writer: HTTPClient.Body.StreamWriter2) {
+            let done = writer.write(.byteBuffer(ByteBuffer(string: "X")))
             done.recover { error -> Void in
                 XCTFail("unexpected error \(error)")
             }.whenSuccess {
                 // This is executed when we have already sent the end of the request.
                 done.eventLoop.execute {
-                    streamWriter.write(.byteBuffer(ByteBuffer(string: "BAD BAD BAD"))).whenComplete { result in
+                    writer.write(writer.allocator.buffer(string: "BAD BAD BAD")).whenComplete { result in
                         switch result {
                         case .success:
                             XCTFail("we succeeded writing bytes after the end!?")
@@ -2566,13 +2585,15 @@ class HTTPClientTests: XCTestCase {
                     }
                 }
             }
-            return done
+            done.whenComplete { _ in
+                writer.end()
+            }
         }
 
         XCTAssertThrowsError(
             try self.defaultClient.execute(request:
                 Request(url: url,
-                        body: .stream(length: 1, uploader))).wait()) { error in
+                        body: .stream2(length: 1, uploader))).wait()) { error in
             XCTAssertEqual(HTTPClientError.writeAfterRequestSent, error as? HTTPClientError)
         }
 
@@ -2590,8 +2611,9 @@ class HTTPClientTests: XCTestCase {
         let tooLong = "XBAD BAD BAD NOT HTTP/1.1\r\n\r\n"
         let future = self.defaultClient.execute(
             request: try Request(url: "http://localhost:\(server.serverPort)",
-                                 body: .stream(length: 1) { streamWriter in
-                                     streamWriter.write(.byteBuffer(ByteBuffer(string: tooLong)))
+                                 body: .stream2(length: 1) { writer in
+                                     writer.write(writer.allocator.buffer(string: tooLong), promise: nil)
+                                     writer.end()
                                  }))
 
         XCTAssertNoThrow(try server.readInbound()) // .head
