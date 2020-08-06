@@ -46,7 +46,7 @@ extension HTTPClient {
             ///
             /// - parameters:
             ///     - data: `IOData` to write.
-            @available(*, deprecated, message: "")
+            @available(*, deprecated, message: "StreamWriter is deprecated, please use StreamWriter2")
             public func write(_ data: IOData) -> EventLoopFuture<Void> {
                 return self.closure(data)
             }
@@ -64,11 +64,11 @@ extension HTTPClient {
             }
 
             public func write(_ buffer: ByteBuffer) -> EventLoopFuture<Void> {
-                self.onChunk(.byteBuffer(buffer))
+                return self.onChunk(.byteBuffer(buffer))
             }
 
             public func write(_ data: IOData) -> EventLoopFuture<Void> {
-                self.onChunk(data)
+                return self.onChunk(data)
             }
 
             public func write(_ buffer: ByteBuffer, promise: EventLoopPromise<Void>?) {
@@ -95,7 +95,7 @@ extension HTTPClient {
         public var stream: (StreamWriter) -> EventLoopFuture<Void>
         var stream2: ((StreamWriter2) -> Void)?
 
-        @available(*, deprecated, message: "")
+        @available(*, deprecated, message: "StreamWriter is deprecated, please use StreamWriter2")
         init(length: Int?, stream: @escaping (StreamWriter) -> EventLoopFuture<Void>) {
             self.length = length
             self.stream = stream

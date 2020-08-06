@@ -643,23 +643,6 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testUploadStreaming() throws {
-        let body: HTTPClient.Body = .stream(length: 8) { writer in
-            let buffer = ByteBuffer(string: "1234")
-            return writer.write(.byteBuffer(buffer)).flatMap {
-                let buffer = ByteBuffer(string: "4321")
-                return writer.write(.byteBuffer(buffer))
-            }
-        }
-
-        let response = try self.defaultClient.post(url: self.defaultHTTPBinURLPrefix + "post", body: body).wait()
-        let bytes = response.body.flatMap { $0.getData(at: 0, length: $0.readableBytes) }
-        let data = try JSONDecoder().decode(RequestInfo.self, from: bytes!)
-
-        XCTAssertEqual(.ok, response.status)
-        XCTAssertEqual("12344321", data.data)
-    }
-
-    func testUploadStreaming2() throws {
         let body: HTTPClient.Body = .stream2(length: 8) { writer in
             var buffer = ByteBuffer(string: "1234")
             writer.write(.byteBuffer(buffer), promise: nil)
