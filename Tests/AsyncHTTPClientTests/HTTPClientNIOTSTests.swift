@@ -61,7 +61,7 @@ class HTTPClientNIOTSTests: XCTestCase {
             }
 
             do {
-                _ = try httpClient.get(url: "https://localhost:\(httpBin.port)/get", context: BaggageContext()).wait()
+                _ = try httpClient.get(url: "https://localhost:\(httpBin.port)/get", context: testContext()).wait()
                 XCTFail("This should have failed")
             } catch let error as HTTPClient.NWTLSError {
                 XCTAssert(error.status == errSSLHandshakeFail || error.status == errSSLBadCert,
@@ -86,7 +86,7 @@ class HTTPClientNIOTSTests: XCTestCase {
         let port = httpBin.port
         XCTAssertNoThrow(try httpBin.shutdown())
 
-        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(port)/get", context: BaggageContext()).wait()) { error in
+        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(port)/get", context: testContext()).wait()) { error in
             XCTAssertEqual(.connectTimeout(.milliseconds(100)), error as? ChannelError)
         }
     }
@@ -104,7 +104,7 @@ class HTTPClientNIOTSTests: XCTestCase {
                 XCTAssertNoThrow(try httpBin.shutdown())
             }
 
-            XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/get", context: BaggageContext()).wait()) { error in
+            XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/get", context: testContext()).wait()) { error in
                 XCTAssertEqual((error as? HTTPClient.NWTLSError)?.status, errSSLHandshakeFail)
             }
         #endif

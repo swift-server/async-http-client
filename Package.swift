@@ -26,7 +26,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.3.0"),
         .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.5.1"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.4.0"),
-        .package(url: "https://github.com/slashmo/gsoc-swift-tracing.git", .branch("main"))
+        .package(url: "https://github.com/slashmo/gsoc-swift-tracing.git", .branch("main")),
+        .package(url: "https://github.com/slashmo/gsoc-swift-baggage-context.git", from: "0.2.0"),
     ],
     targets: [
         .target(
@@ -35,7 +36,8 @@ let package = Package(
                            "NIOFoundationCompat", "NIOTransportServices", "Logging",
                            .product(name: "TracingInstrumentation", package: "gsoc-swift-tracing"),
                            .product(name: "OpenTelemetryInstrumentationSupport", package: "gsoc-swift-tracing"),
-                           .product(name: "NIOInstrumentation", package: "gsoc-swift-tracing")]
+                           .product(name: "NIOInstrumentation", package: "gsoc-swift-tracing"),
+                           .product(name: "BaggageLogging", package: "swift-baggage-context")]
         ),
         .testTarget(
             name: "AsyncHTTPClientTests",
