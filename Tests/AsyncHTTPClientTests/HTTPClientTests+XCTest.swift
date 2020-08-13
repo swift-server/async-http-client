@@ -66,6 +66,7 @@ extension HTTPClientTests {
             ("testNoResponseWithIgnoreErrorForSSLUncleanShutdown", testNoResponseWithIgnoreErrorForSSLUncleanShutdown),
             ("testWrongContentLengthForSSLUncleanShutdown", testWrongContentLengthForSSLUncleanShutdown),
             ("testWrongContentLengthWithIgnoreErrorForSSLUncleanShutdown", testWrongContentLengthWithIgnoreErrorForSSLUncleanShutdown),
+// TODO: Comment back in once failure was resolved
 //            ("testEventLoopArgument", testEventLoopArgument),
             ("testDecompression", testDecompression),
             ("testDecompressionLimit", testDecompressionLimit),
@@ -90,6 +91,7 @@ extension HTTPClientTests {
             ("testUncleanShutdownCancelsTasks", testUncleanShutdownCancelsTasks),
             ("testDoubleShutdown", testDoubleShutdown),
             ("testTaskFailsWhenClientIsShutdown", testTaskFailsWhenClientIsShutdown),
+// TODO: Comment back in once failure was resolved
 //            ("testRaceNewRequestsVsShutdown", testRaceNewRequestsVsShutdown),
             ("testVaryingLoopPreference", testVaryingLoopPreference),
             ("testMakeSecondRequestDuringCancelledCallout", testMakeSecondRequestDuringCancelledCallout),
