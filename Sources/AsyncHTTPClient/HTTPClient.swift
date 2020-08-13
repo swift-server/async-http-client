@@ -390,7 +390,7 @@ public class HTTPClient {
                                                               eventLoop eventLoopPreference: EventLoopPreference,
                                                               context: LoggingBaggageContextCarrier,
                                                               deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
-        var span = InstrumentationSystem.tracingInstrument.startSpan(named: request.method.rawValue, context: context, ofKind: .client, at: nil)
+        var span = InstrumentationSystem.tracingInstrument.startSpan(named: request.method.rawValue, context: context, ofKind: .client)
         span.attributes.http.method = request.method.rawValue
         span.attributes.http.scheme = request.scheme
         span.attributes.http.target = request.uri
