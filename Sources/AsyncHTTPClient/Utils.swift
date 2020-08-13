@@ -21,6 +21,7 @@ import NIOHTTP1
 import NIOHTTPCompression
 import NIOSSL
 import NIOTransportServices
+import TracingInstrumentation
 
 internal extension String {
     var isIPAddress: Bool {
@@ -145,5 +146,39 @@ extension Connection {
         return self.channel.pipeline.handler(type: type).flatMap { handler in
             self.channel.pipeline.removeHandler(handler)
         }.recover { _ in }
+    }
+}
+
+extension SpanStatus {
+    /// Map status code to canonical code according to OTel spec
+    ///
+    /// - SeeAlso: https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/semantic_conventions/http.md#status
+    init(_ responseStatus: HTTPResponseStatus) {
+        switch responseStatus.code {
+        case 100...399:
+            self = SpanStatus(canonicalCode: .ok)
+        case 400, 402, 405 ... 428, 430 ... 498:
+            self = SpanStatus(canonicalCode: .invalidArgument, message: responseStatus.reasonPhrase)
+        case 401:
+            self = SpanStatus(canonicalCode: .unauthenticated, message: responseStatus.reasonPhrase)
+        case 403:
+            self = SpanStatus(canonicalCode: .permissionDenied, message: responseStatus.reasonPhrase)
+        case 404:
+            self = SpanStatus(canonicalCode: .notFound, message: responseStatus.reasonPhrase)
+        case 429:
+            self = SpanStatus(canonicalCode: .resourceExhausted, message: responseStatus.reasonPhrase)
+        case 499:
+            self = SpanStatus(canonicalCode: .cancelled, message: responseStatus.reasonPhrase)
+        case 500, 505 ... 599:
+            self = SpanStatus(canonicalCode: .internal, message: responseStatus.reasonPhrase)
+        case 501:
+            self = SpanStatus(canonicalCode: .unimplemented, message: responseStatus.reasonPhrase)
+        case 503:
+            self = SpanStatus(canonicalCode: .unavailable, message: responseStatus.reasonPhrase)
+        case 504:
+            self = SpanStatus(canonicalCode: .deadlineExceeded, message: responseStatus.reasonPhrase)
+        default:
+            self = SpanStatus(canonicalCode: .unknown, message: responseStatus.reasonPhrase)
+        }
     }
 }

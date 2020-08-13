@@ -402,7 +402,7 @@ public class HTTPClient {
         // TODO: net.peer.ip / Not required, but recommended
 
         var request = request
-        InstrumentationSystem.instrument.inject(context.baggage, into: &request.headers, using: HTTPHeadersInjector())
+        InstrumentationSystem.instrument.inject(span.context.baggage, into: &request.headers, using: HTTPHeadersInjector())
 
         let logger = context.logger.attachingRequestInformation(request, requestID: globalRequestID.add(1))
 
@@ -479,7 +479,6 @@ public class HTTPClient {
                                     "ahc-request": "\(request.method) \(request.url)",
                                     "ahc-channel-el": "\(connection.channel.eventLoop)",
                                     "ahc-task-el": "\(taskEL)"])
-
             let channel = connection.channel
             let future: EventLoopFuture<Void>
             if let timeout = self.resolve(timeout: self.configuration.timeout.read, deadline: deadline) {
@@ -513,10 +512,15 @@ public class HTTPClient {
         }
         .and(task.futureResult)
         .always { result in
-            if case let .success((_, response)) = result, let httpResponse = response as? HTTPClient.Response {
+            switch result {
+            case .success(let (_, response)):
+                guard let httpResponse = response as? HTTPClient.Response else { return }
+                span.status = .init(httpResponse.status)
                 span.attributes.http.statusCode = Int(httpResponse.status.code)
                 span.attributes.http.statusText = httpResponse.status.reasonPhrase
                 span.attributes.http.responseContentLength = httpResponse.body?.readableBytes ?? 0
+            case .failure(let error):
+                span.recordError(error)
             }
             span.end()
             setupComplete.succeed(())
