@@ -1080,4 +1080,43 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertNoThrow(try channel.readOutbound(as: HTTPClientRequestPart.self)) // .head
         XCTAssertNoThrow(XCTAssertTrue(try channel.finish().isClean))
     }
+
+    func testHandlerDoubleError() throws {
+        class ErrorCountingDelegate: HTTPClientResponseDelegate {
+            typealias Response = Void
+
+            var count = 0
+
+            func didReceiveError(task: HTTPClient.Task<Response>, _: Error) {
+                self.count += 1
+            }
+
+            func didFinishRequest(task: HTTPClient.Task<Void>) throws -> Void {
+                return ()
+            }
+        }
+
+        class SendTwoErrorsHandler: ChannelInboundHandler {
+            typealias InboundIn = Any
+
+            func handlerAdded(context: ChannelHandlerContext) {
+                context.fireErrorCaught(HTTPClientError.cancelled)
+                context.fireErrorCaught(HTTPClientError.cancelled)
+            }
+        }
+
+        let channel = EmbeddedChannel()
+        let task = Task<Void>(eventLoop: channel.eventLoop, logger: HTTPClient.loggingDisabled)
+        let delegate = ErrorCountingDelegate()
+        try channel.pipeline.addHandler(TaskHandler(task: task,
+                                                    kind: .host,
+                                                    delegate: delegate,
+                                                    redirectHandler: nil,
+                                                    ignoreUncleanSSLShutdown: false,
+                                                    logger: HTTPClient.loggingDisabled)).wait()
+
+        try channel.pipeline.addHandler(SendTwoErrorsHandler()).wait()
+
+        XCTAssertEqual(delegate.count, 1)
+    }
 }
