@@ -2625,6 +2625,6 @@ class HTTPClientTests: XCTestCase {
 
         // We specify a deadline of 2 ms co that request will be timed out before all chunks are writtent,
         // we need to verify that second error on write after timeout does not lead to double-release.
-        XCTAssertThrowsError(try defaultClient.execute(request: request, deadline: .now() + .milliseconds(2)).wait())
+        XCTAssertThrowsError(try self.defaultClient.execute(request: request, deadline: .now() + .milliseconds(2)).wait())
     }
 }

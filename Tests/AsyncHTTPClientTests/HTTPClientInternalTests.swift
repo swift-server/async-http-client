@@ -1091,7 +1091,7 @@ class HTTPClientInternalTests: XCTestCase {
                 self.count += 1
             }
 
-            func didFinishRequest(task: HTTPClient.Task<Void>) throws -> Void {
+            func didFinishRequest(task: HTTPClient.Task<Void>) throws {
                 return ()
             }
         }
