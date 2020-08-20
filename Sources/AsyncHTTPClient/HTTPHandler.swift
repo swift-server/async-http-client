@@ -814,9 +814,8 @@ extension TaskHandler: ChannelDuplexHandler {
         do {
             try headers.validate(method: request.method, body: request.body)
         } catch {
+            self.errorCaught(context: context, error: error)
             promise?.fail(error)
-            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
-            self.state = .endOrError
             return
         }
 
@@ -843,9 +842,8 @@ extension TaskHandler: ChannelDuplexHandler {
             self.state = .bodySent
             context.eventLoop.assertInEventLoop()
             if let expectedBodyLength = self.expectedBodyLength, expectedBodyLength != self.actualBodyLength {
-                self.state = .endOrError
                 let error = HTTPClientError.bodyLengthMismatch
-                self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+                self.errorCaught(context: context, error: error)
                 return context.eventLoop.makeFailedFuture(error)
             }
             return context.writeAndFlush(self.wrapOutboundOut(.end(nil)))
@@ -855,13 +853,7 @@ extension TaskHandler: ChannelDuplexHandler {
             self.callOutToDelegateFireAndForget(self.delegate.didSendRequest)
         }.flatMapErrorThrowing { error in
             context.eventLoop.assertInEventLoop()
-            switch self.state {
-            case .endOrError:
-                break
-            default:
-                self.state = .endOrError
-                self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
-            }
+            self.errorCaught(context: context, error: error)
             throw error
         }.cascade(to: promise)
     }
@@ -906,8 +898,7 @@ extension TaskHandler: ChannelDuplexHandler {
         case .idle:
             if let limit = self.expectedBodyLength, self.actualBodyLength + part.readableBytes > limit {
                 let error = HTTPClientError.bodyLengthMismatch
-                self.state = .endOrError
-                self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+                self.errorCaught(context: context, error: error)
                 promise.fail(error)
                 return
             }
@@ -915,8 +906,7 @@ extension TaskHandler: ChannelDuplexHandler {
             context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
         default:
             let error = HTTPClientError.writeAfterRequestSent
-            self.state = .endOrError
-            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+            self.errorCaught(context: context, error: error)
             promise.fail(error)
         }
     }
@@ -983,16 +973,13 @@ extension TaskHandler: ChannelDuplexHandler {
                 context.read()
             }
         case .failure(let error):
-            self.state = .endOrError
-            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+            self.errorCaught(context: context, error: error)
         }
     }
 
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
         if (event as? IdleStateHandler.IdleStateEvent) == .read {
-            self.state = .endOrError
-            let error = HTTPClientError.readTimeout
-            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+            self.errorCaught(context: context, error: HTTPClientError.readTimeout)
         } else {
             context.fireUserInboundEventTriggered(event)
         }
@@ -1000,9 +987,7 @@ extension TaskHandler: ChannelDuplexHandler {
 
     func triggerUserOutboundEvent(context: ChannelHandlerContext, event: Any, promise: EventLoopPromise<Void>?) {
         if (event as? TaskCancelEvent) != nil {
-            self.state = .endOrError
-            let error = HTTPClientError.cancelled
-            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+            self.errorCaught(context: context, error: HTTPClientError.cancelled)
             promise?.succeed(())
         } else {
             context.triggerUserOutboundEvent(event, promise: promise)
@@ -1014,9 +999,7 @@ extension TaskHandler: ChannelDuplexHandler {
         case .endOrError:
             break
         case .body, .head, .idle, .redirected, .sent, .bodySent:
-            self.state = .endOrError
-            let error = HTTPClientError.remoteConnectionClosed
-            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+            self.errorCaught(context: context, error: HTTPClientError.remoteConnectionClosed)
         }
         context.fireChannelInactive()
     }
@@ -1038,14 +1021,20 @@ extension TaskHandler: ChannelDuplexHandler {
                 self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
             }
         default:
-            self.state = .endOrError
-            self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+            switch self.state {
+            case .idle, .bodySent, .sent, .head, .redirected, .body:
+                self.state = .endOrError
+                self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
+            case .endOrError:
+                // error was already handled
+                break
+            }
         }
     }
 
     func handlerAdded(context: ChannelHandlerContext) {
         guard context.channel.isActive else {
-            self.failTaskAndNotifyDelegate(error: HTTPClientError.remoteConnectionClosed, self.delegate.didReceiveError)
+            self.errorCaught(context: context, error: HTTPClientError.remoteConnectionClosed)
             return
         }
     }

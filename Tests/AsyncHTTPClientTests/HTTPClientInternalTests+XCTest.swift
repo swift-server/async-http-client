@@ -46,6 +46,7 @@ extension HTTPClientInternalTests {
             ("testConnectErrorCalloutOnCorrectEL", testConnectErrorCalloutOnCorrectEL),
             ("testInternalRequestURI", testInternalRequestURI),
             ("testBodyPartStreamStateChangedBeforeNotification", testBodyPartStreamStateChangedBeforeNotification),
+            ("testHandlerDoubleError", testHandlerDoubleError),
         ]
     }
 }

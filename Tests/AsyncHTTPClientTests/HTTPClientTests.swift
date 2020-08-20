@@ -2602,4 +2602,29 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertThrowsError(try future.wait())
     }
+
+    func testDoubleError() throws {
+        // This is needed to that connection pool will not get into closed state when we release
+        // second connection.
+        _ = self.defaultClient.get(url: "http://localhost:\(self.defaultHTTPBin.port)/events/10/1")
+
+        var request = try HTTPClient.Request(url: "http://localhost:\(self.defaultHTTPBin.port)/wait", method: .POST)
+        request.body = .stream { writer in
+            // Start writing chunks so tha we will try to write after read timeout is thrown
+            for _ in 1...10 {
+                _ = writer.write(.byteBuffer(ByteBuffer(string: "1234")))
+            }
+
+            let promise = self.clientGroup.next().makePromise(of: Void.self)
+            self.clientGroup.next().scheduleTask(in: .milliseconds(3)) {
+                writer.write(.byteBuffer(ByteBuffer(string: "1234"))).cascade(to: promise)
+            }
+
+            return promise.futureResult
+        }
+
+        // We specify a deadline of 2 ms co that request will be timed out before all chunks are writtent,
+        // we need to verify that second error on write after timeout does not lead to double-release.
+        XCTAssertThrowsError(try self.defaultClient.execute(request: request, deadline: .now() + .milliseconds(2)).wait())
+    }
 }
