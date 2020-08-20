@@ -562,7 +562,7 @@ extension HTTPClient {
         var connection: Connection?
         var cancelled: Bool
         let lock: Lock
-        let logger: Logger // We are okay to store the logger here because a Task is for only ond request.
+        let logger: Logger // We are okay to store the logger here because a Task is for only one request.
 
         init(eventLoop: EventLoop, logger: Logger) {
             self.eventLoop = eventLoop
