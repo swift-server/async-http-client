@@ -196,8 +196,9 @@ extension HTTP1ConnectionProvider {
                     return self.processNextWaiter()
                 }
             case .closed:
-                self.openedConnectionsCount -= 1
-                self.leasedConnections.remove(ConnectionKey(connection))
+                if nil != self.leasedConnections.remove(ConnectionKey(connection)) {
+                    self.openedConnectionsCount -= 1
+                }
 
                 return self.processNextWaiter()
             }
