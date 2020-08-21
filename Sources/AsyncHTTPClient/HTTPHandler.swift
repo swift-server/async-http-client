@@ -840,6 +840,14 @@ extension TaskHandler: ChannelDuplexHandler {
             self.writeBody(request: request, context: context)
         }.flatMap {
             context.eventLoop.assertInEventLoop()
+
+            switch self.state {
+            case .endOrError:
+                preconditionFailure("unexpected state on body sent")
+            default:
+                break
+            }
+
             self.state = .bodySent
             if let expectedBodyLength = self.expectedBodyLength, expectedBodyLength != self.actualBodyLength {
                 let error = HTTPClientError.bodyLengthMismatch
@@ -849,6 +857,14 @@ extension TaskHandler: ChannelDuplexHandler {
             return context.writeAndFlush(self.wrapOutboundOut(.end(nil)))
         }.map {
             context.eventLoop.assertInEventLoop()
+
+            switch self.state {
+            case .endOrError:
+                preconditionFailure("unexpected state on sent")
+            default:
+                break
+            }
+
             self.state = .sent
             self.callOutToDelegateFireAndForget(self.delegate.didSendRequest)
         }.flatMapErrorThrowing { error in
