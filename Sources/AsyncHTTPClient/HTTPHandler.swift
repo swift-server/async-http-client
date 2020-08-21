@@ -840,15 +840,22 @@ extension TaskHandler: ChannelDuplexHandler {
             self.writeBody(request: request, context: context)
         }.flatMap {
             context.eventLoop.assertInEventLoop()
+            if case .endOrError = self.state {
+                return context.eventLoop.makeSucceededFuture(())
+            }
+
             self.state = .bodySent
             if let expectedBodyLength = self.expectedBodyLength, expectedBodyLength != self.actualBodyLength {
                 let error = HTTPClientError.bodyLengthMismatch
-                self.errorCaught(context: context, error: error)
                 return context.eventLoop.makeFailedFuture(error)
             }
             return context.writeAndFlush(self.wrapOutboundOut(.end(nil)))
         }.map {
             context.eventLoop.assertInEventLoop()
+            if case .endOrError = self.state {
+                return
+            }
+
             self.state = .sent
             self.callOutToDelegateFireAndForget(self.delegate.didSendRequest)
         }.flatMapErrorThrowing { error in
@@ -924,31 +931,28 @@ extension TaskHandler: ChannelDuplexHandler {
         let response = self.unwrapInboundIn(data)
         switch response {
         case .head(let head):
-            switch self.state {
-            case .endOrError:
-                preconditionFailure("unexpected state on .head")
-            default:
-                if !head.isKeepAlive {
-                    self.closing = true
-                }
+            if case .endOrError = self.state {
+                return
+            }
 
-                if let redirectURL = self.redirectHandler?.redirectTarget(status: head.status, headers: head.headers) {
-                    self.state = .redirected(head, redirectURL)
-                } else {
-                    self.state = .head
-                    self.mayRead = false
-                    self.callOutToDelegate(value: head, channelEventLoop: context.eventLoop, self.delegate.didReceiveHead)
-                        .whenComplete { result in
-                            self.handleBackpressureResult(context: context, result: result)
-                        }
-                }
+            if !head.isKeepAlive {
+                self.closing = true
+            }
+
+            if let redirectURL = self.redirectHandler?.redirectTarget(status: head.status, headers: head.headers) {
+                self.state = .redirected(head, redirectURL)
+            } else {
+                self.state = .head
+                self.mayRead = false
+                self.callOutToDelegate(value: head, channelEventLoop: context.eventLoop, self.delegate.didReceiveHead)
+                    .whenComplete { result in
+                        self.handleBackpressureResult(context: context, result: result)
+                    }
             }
         case .body(let body):
             switch self.state {
-            case .redirected:
+            case .redirected, .endOrError:
                 break
-            case .endOrError:
-                preconditionFailure("unexpected state on .body")
             default:
                 self.state = .body
                 self.mayRead = false
@@ -960,7 +964,7 @@ extension TaskHandler: ChannelDuplexHandler {
         case .end:
             switch self.state {
             case .endOrError:
-                preconditionFailure("unexpected state on .end")
+                break
             case .redirected(let head, let redirectURL):
                 self.state = .endOrError
                 self.task.releaseAssociatedConnection(delegateType: Delegate.self, closing: self.closing).whenSuccess {

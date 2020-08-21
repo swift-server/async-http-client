@@ -1119,4 +1119,48 @@ class HTTPClientInternalTests: XCTestCase {
 
         XCTAssertEqual(delegate.count, 1)
     }
+
+    func testTaskHandlerStateChangeAfterError() throws {
+        let channel = EmbeddedChannel()
+        let task = Task<Void>(eventLoop: channel.eventLoop, logger: HTTPClient.loggingDisabled)
+
+        let handler = TaskHandler(task: task,
+                                  kind: .host,
+                                  delegate: TestHTTPDelegate(),
+                                  redirectHandler: nil,
+                                  ignoreUncleanSSLShutdown: false,
+                                  logger: HTTPClient.loggingDisabled)
+
+        try channel.pipeline.addHandler(handler).wait()
+
+        var request = try Request(url: "http://localhost:8080/get")
+        request.headers.add(name: "X-Test-Header", value: "X-Test-Value")
+        request.body = .stream(length: 4) { writer in
+            writer.write(.byteBuffer(channel.allocator.buffer(string: "1234"))).map {
+                handler.state = .endOrError
+            }
+        }
+
+        XCTAssertNoThrow(try channel.writeOutbound(request))
+
+        try channel.writeInbound(HTTPClientResponsePart.head(.init(version: .init(major: 1, minor: 1), status: .ok)))
+        XCTAssertTrue(handler.state.isEndOrError)
+
+        try channel.writeInbound(HTTPClientResponsePart.body(channel.allocator.buffer(string: "1234")))
+        XCTAssertTrue(handler.state.isEndOrError)
+
+        try channel.writeInbound(HTTPClientResponsePart.end(nil))
+        XCTAssertTrue(handler.state.isEndOrError)
+    }
+}
+
+extension TaskHandler.State {
+    var isEndOrError: Bool {
+        switch self {
+        case .endOrError:
+            return true
+        default:
+            return false
+        }
+    }
 }

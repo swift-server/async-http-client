@@ -47,6 +47,7 @@ extension HTTPClientInternalTests {
             ("testInternalRequestURI", testInternalRequestURI),
             ("testBodyPartStreamStateChangedBeforeNotification", testBodyPartStreamStateChangedBeforeNotification),
             ("testHandlerDoubleError", testHandlerDoubleError),
+            ("testTaskHandlerStateChangeAfterError", testTaskHandlerStateChangeAfterError),
         ]
     }
 }
