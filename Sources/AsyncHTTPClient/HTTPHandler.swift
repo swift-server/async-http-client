@@ -839,16 +839,23 @@ extension TaskHandler: ChannelDuplexHandler {
         }.flatMap {
             self.writeBody(request: request, context: context)
         }.flatMap {
-            self.state = .bodySent
             context.eventLoop.assertInEventLoop()
+            if case .endOrError = self.state {
+                return context.eventLoop.makeSucceededFuture(())
+            }
+
+            self.state = .bodySent
             if let expectedBodyLength = self.expectedBodyLength, expectedBodyLength != self.actualBodyLength {
                 let error = HTTPClientError.bodyLengthMismatch
-                self.errorCaught(context: context, error: error)
                 return context.eventLoop.makeFailedFuture(error)
             }
             return context.writeAndFlush(self.wrapOutboundOut(.end(nil)))
         }.map {
             context.eventLoop.assertInEventLoop()
+            if case .endOrError = self.state {
+                return
+            }
+
             self.state = .sent
             self.callOutToDelegateFireAndForget(self.delegate.didSendRequest)
         }.flatMapErrorThrowing { error in
@@ -924,6 +931,10 @@ extension TaskHandler: ChannelDuplexHandler {
         let response = self.unwrapInboundIn(data)
         switch response {
         case .head(let head):
+            if case .endOrError = self.state {
+                return
+            }
+
             if !head.isKeepAlive {
                 self.closing = true
             }
@@ -940,7 +951,7 @@ extension TaskHandler: ChannelDuplexHandler {
             }
         case .body(let body):
             switch self.state {
-            case .redirected:
+            case .redirected, .endOrError:
                 break
             default:
                 self.state = .body
@@ -952,6 +963,8 @@ extension TaskHandler: ChannelDuplexHandler {
             }
         case .end:
             switch self.state {
+            case .endOrError:
+                break
             case .redirected(let head, let redirectURL):
                 self.state = .endOrError
                 self.task.releaseAssociatedConnection(delegateType: Delegate.self, closing: self.closing).whenSuccess {
