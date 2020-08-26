@@ -515,7 +515,7 @@ public class HTTPClient {
             switch result {
             case .success(let (_, response)):
                 guard let httpResponse = response as? HTTPClient.Response else { return }
-                span.status = .init(httpResponse.status)
+                span.setStatus(.init(httpResponse.status))
                 span.attributes.http.statusCode = Int(httpResponse.status.code)
                 span.attributes.http.statusText = httpResponse.status.reasonPhrase
                 span.attributes.http.responseContentLength = httpResponse.body?.readableBytes ?? 0
