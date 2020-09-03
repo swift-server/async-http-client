@@ -183,6 +183,23 @@ enum TemporaryFileHelpers {
         return try body(shortEnoughPath)
     }
 
+    /// This function creates a filename that can be used as a temporary file.
+    internal static func withTemporaryFilePath<T>(
+        directory: String = temporaryDirectory,
+        _ body: (String) throws -> T
+    ) throws -> T {
+        let (fd, path) = self.openTemporaryFile()
+        close(fd)
+        try! FileManager.default.removeItem(atPath: path)
+
+        defer {
+            if FileManager.default.fileExists(atPath: path) {
+                try? FileManager.default.removeItem(atPath: path)
+            }
+        }
+        return try body(path)
+    }
+
     internal static func fileSize(path: String) throws -> Int? {
         return try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int
     }

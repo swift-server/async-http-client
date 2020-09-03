@@ -493,7 +493,7 @@ class HTTPClientTests: XCTestCase {
         request.headers.add(name: "Accept", value: "text/event-stream")
 
         let (totalBytes, receivedBytes) =
-            try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path -> (Int?, Int) in
+            try TemporaryFileHelpers.withTemporaryFilePath { path -> (Int?, Int) in
                 let delegate = try FileDownloadDelegate(path: path)
 
                 let (totalBytes, receivedBytes) = try self.defaultClient.execute(

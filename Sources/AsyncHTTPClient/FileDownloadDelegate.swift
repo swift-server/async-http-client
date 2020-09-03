@@ -37,7 +37,9 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     ///     - pool: A thread pool to use for asynchronous file I/O.
     ///     - reportHeaders: A closure called when the response headers are available.
     ///     - reportProgress: A closure called when a body chunk has been downloaded, with
-    ///       the total byte count and download byte count passed to it as arguments.
+    ///       the total byte count and download byte count passed to it as arguments. The callbacks 
+    ///       will be invoked in the same threading context that the delegate itself is invoked, 
+    ///       as controlled by `EventLoopPreference`.
     public init(
         path: String,
         pool: NIOThreadPool = NIOThreadPool(numberOfThreads: 1),
@@ -79,9 +81,9 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     }
 
     public func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
-        self.writeFuture?.whenComplete { [weak self] _ in
-            try! self?.handle.close()
-            self?.writeFuture = nil
+        self.writeFuture?.whenComplete { _ in
+            try! self.handle.close()
+            self.writeFuture = nil
         }
         return (self.totalBytes, self.receivedBytes)
     }
