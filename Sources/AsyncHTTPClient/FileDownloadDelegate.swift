@@ -95,7 +95,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
             }
         } else {
             let fileHandleFuture = self.io.openFile(
-                path: filePath,
+                path: self.filePath,
                 mode: .write,
                 flags: .allowFileCreation(),
                 eventLoop: task.eventLoop
