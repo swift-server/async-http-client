@@ -64,7 +64,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         to fileHandle: NIOFileHandle,
         eventLoop: EventLoop
     ) -> EventLoopFuture<Void> {
-        self.io.write(fileHandle: fileHandle, buffer: buffer, eventLoop: eventLoop)
+        return self.io.write(fileHandle: fileHandle, buffer: buffer, eventLoop: eventLoop)
     }
 
     public func didReceiveHead(
