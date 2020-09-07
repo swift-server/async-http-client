@@ -19,15 +19,19 @@ import NIOHTTP1
 public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     /// The response type for this delegate: the total count of bytes as reported by the response
     /// "Content-Length" header (if available) and the count of bytes downloaded.
-    public typealias Response = (totalBytes: Int?, receivedBytes: Int)
+    public struct Progress {
+        public var totalBytes: Int?
+        public var receivedBytes: Int
+    }
 
-    private var totalBytes: Int?
-    private var receivedBytes = 0
+    private var progress = Progress(totalBytes: nil, receivedBytes: 0)
 
-    private let handle: NIOFileHandle
+    public typealias Response = Progress
+
+    private let handle: EventLoopFuture<NIOFileHandle>
     private let io: NonBlockingFileIO
     private let reportHeaders: ((HTTPHeaders) -> Void)?
-    private let reportProgress: ((_ totalBytes: Int?, _ receivedBytes: Int) -> Void)?
+    private let reportProgress: ((Progress) -> Void)?
 
     private var writeFuture: EventLoopFuture<Void>?
 
@@ -44,9 +48,13 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         path: String,
         pool: NIOThreadPool = NIOThreadPool(numberOfThreads: 1),
         reportHeaders: ((HTTPHeaders) -> Void)? = nil,
-        reportProgress: ((_ totalBytes: Int?, _ receivedBytes: Int) -> Void)? = nil
+        reportProgress: ((Progress) -> Void)? = nil
     ) throws {
-        self.handle = try NIOFileHandle(path: path, mode: .write, flags: .allowFileCreation())
+        self.handle = try self.io.openFile(
+            path: path,
+            mode: .write,
+            flags: .allowFileCreation()
+        )
         pool.start()
         self.io = NonBlockingFileIO(threadPool: pool)
 
@@ -62,7 +70,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
 
         if let totalBytesString = head.headers.first(name: "Content-Length"),
             let totalBytes = Int(totalBytesString) {
-            self.totalBytes = totalBytes
+            self.progress.totalBytes = totalBytes
         }
 
         return task.eventLoop.makeSucceededFuture(())
@@ -72,19 +80,26 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         task: HTTPClient.Task<Response>,
         _ buffer: ByteBuffer
     ) -> EventLoopFuture<Void> {
-        self.receivedBytes += buffer.readableBytes
-        self.reportProgress?(self.totalBytes, self.receivedBytes)
+        self.progress.receivedBytes += buffer.readableBytes
+        self.reportProgress?(self.progress)
 
-        let writeFuture = self.io.write(fileHandle: self.handle, buffer: buffer, eventLoop: task.eventLoop)
+        let writeFuture = self.handle.flatMap {
+            self.io.write(fileHandle: $0, buffer: buffer, eventLoop: task.eventLoop)
+        }
+
         self.writeFuture = writeFuture
         return writeFuture
     }
 
     public func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
-        self.writeFuture?.whenComplete { _ in
-            try! self.handle.close()
-            self.writeFuture = nil
+        if let writeFuture = self.writeFuture {
+            writeFuture.whenComplete { _ in
+                self.handle.whenSuccess { try! $0.close() }
+                self.writeFuture = nil
+            }
+        } else {
+            self.handle.whenSuccess { try! $0.close() }
         }
-        return (self.totalBytes, self.receivedBytes)
+        return self.progress
     }
 }
