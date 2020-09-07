@@ -50,13 +50,15 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         reportHeaders: ((HTTPHeaders) -> Void)? = nil,
         reportProgress: ((Progress) -> Void)? = nil
     ) throws {
-        self.handle = try self.io.openFile(
-            path: path,
-            mode: .write,
-            flags: .allowFileCreation()
-        )
         pool.start()
         self.io = NonBlockingFileIO(threadPool: pool)
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        self.handle = self.io.openFile(
+            path: path,
+            mode: .write,
+            flags: .allowFileCreation(),
+            eventLoop: eventLoopGroup.next()
+        )
 
         self.reportHeaders = reportHeaders
         self.reportProgress = reportProgress
