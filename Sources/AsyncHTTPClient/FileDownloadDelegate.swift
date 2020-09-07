@@ -91,7 +91,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         let writeFuture: EventLoopFuture<Void>
         if let fileHandleFuture = self.fileHandleFuture {
             writeFuture = fileHandleFuture.flatMap {
-                return self.write(buffer: buffer, to: $0, eventLoop: task.eventLoop)
+                self.write(buffer: buffer, to: $0, eventLoop: task.eventLoop)
             }
         } else {
             let fileHandleFuture = self.io.openFile(
@@ -102,7 +102,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
             )
             self.fileHandleFuture = fileHandleFuture
             writeFuture = fileHandleFuture.flatMap {
-                return self.write(buffer: buffer, to: $0, eventLoop: task.eventLoop)
+                self.write(buffer: buffer, to: $0, eventLoop: task.eventLoop)
             }
         }
 
