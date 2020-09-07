@@ -116,7 +116,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     }
 
     public func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
-        if let writeFuture = self.fileHandleFuture {
+        if let writeFuture = self.writeFuture {
             writeFuture.whenComplete { _ in
                 self.fileHandleFuture?.whenSuccess(self.close(fileHandle:))
                 self.writeFuture = nil
