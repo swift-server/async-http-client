@@ -28,11 +28,12 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
 
     public typealias Response = Progress
 
-    private let handle: EventLoopFuture<NIOFileHandle>
+    private let filePath: String
     private let io: NonBlockingFileIO
     private let reportHeaders: ((HTTPHeaders) -> Void)?
     private let reportProgress: ((Progress) -> Void)?
 
+    private var fileHandleFuture: EventLoopFuture<NIOFileHandle>?
     private var writeFuture: EventLoopFuture<Void>?
 
     /// Initializes a new file download delegate.
@@ -52,16 +53,18 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     ) throws {
         pool.start()
         self.io = NonBlockingFileIO(threadPool: pool)
-        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-        self.handle = self.io.openFile(
-            path: path,
-            mode: .write,
-            flags: .allowFileCreation(),
-            eventLoop: eventLoopGroup.next()
-        )
+        self.filePath = path
 
         self.reportHeaders = reportHeaders
         self.reportProgress = reportProgress
+    }
+
+    private func write(
+        buffer: ByteBuffer,
+        to fileHandle: NIOFileHandle,
+        eventLoop: EventLoop
+    ) -> EventLoopFuture<Void> {
+        self.io.write(fileHandle: fileHandle, buffer: buffer, eventLoop: eventLoop)
     }
 
     public func didReceiveHead(
@@ -85,22 +88,41 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         self.progress.receivedBytes += buffer.readableBytes
         self.reportProgress?(self.progress)
 
-        let writeFuture = self.handle.flatMap {
-            self.io.write(fileHandle: $0, buffer: buffer, eventLoop: task.eventLoop)
+        let writeFuture: EventLoopFuture<Void>
+        if let fileHandleFuture = self.fileHandleFuture {
+            writeFuture = fileHandleFuture.flatMap {
+                self.write(buffer: buffer, to: $0, eventLoop: task.eventLoop)
+            }
+        } else {
+            let fileHandleFuture = self.io.openFile(
+                path: filePath,
+                mode: .write,
+                flags: .allowFileCreation(),
+                eventLoop: task.eventLoop
+            )
+            self.fileHandleFuture = fileHandleFuture
+            writeFuture = fileHandleFuture.flatMap {
+                self.write(buffer: buffer, to: $0, eventLoop: task.eventLoop)
+            }
         }
 
         self.writeFuture = writeFuture
         return writeFuture
     }
 
+    private func close(fileHandle: NIOFileHandle) {
+        try! fileHandle.close()
+        self.fileHandleFuture = nil
+    }
+
     public func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
-        if let writeFuture = self.writeFuture {
+        if let writeFuture = self.fileHandleFuture {
             writeFuture.whenComplete { _ in
-                self.handle.whenSuccess { try! $0.close() }
+                self.fileHandleFuture?.whenSuccess(self.close(fileHandle:))
                 self.writeFuture = nil
             }
         } else {
-            self.handle.whenSuccess { try! $0.close() }
+            self.fileHandleFuture?.whenSuccess(self.close(fileHandle:))
         }
         return self.progress
     }
