@@ -197,19 +197,19 @@ class Connection {
     ///
     /// - Warning: This only releases the connection and doesn't take care of cleaning handlers in the `Channel` pipeline.
     func release(closing: Bool, logger: Logger) {
-        assert(self.channel.eventLoop.inEventLoop)
+        self.channel.eventLoop.assertInEventLoop()
         self.provider.release(connection: self, closing: closing, logger: logger)
     }
 
     /// Called when channel exceeds idle time in pool.
     func timeout(logger: Logger) {
-        assert(self.channel.eventLoop.inEventLoop)
+        self.channel.eventLoop.assertInEventLoop()
         self.provider.timeout(connection: self, logger: logger)
     }
 
     /// Called when channel goes inactive while in the pool.
     func remoteClosed(logger: Logger) {
-        assert(self.channel.eventLoop.inEventLoop)
+        self.channel.eventLoop.assertInEventLoop()
         self.provider.remoteClosed(connection: self, logger: logger)
     }
 
