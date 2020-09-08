@@ -17,7 +17,7 @@ set -e
 
 my_path="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 root_path="$my_path/.."
-version=$(git describe --abbrev=0 --tags || echo "master")
+version=$(git describe --abbrev=0 --tags || echo "main")
 modules=(AsyncHTTPClient)
 
 if [[ "$(uname -s)" == "Linux" ]]; then
