@@ -489,7 +489,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testFileDownload() throws {
-        var request = try Request(url: self.defaultHTTPBinURLPrefix + "events/10/1")
+        var request = try Request(url: self.defaultHTTPBinURLPrefix + "events/10/content-length")
         request.headers.add(name: "Accept", value: "text/event-stream")
 
         let progress =
@@ -509,6 +509,31 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertEqual(50, progress.totalBytes)
         XCTAssertEqual(50, progress.receivedBytes)
+    }
+
+    func testFileDownloadError() throws {
+        var request = try Request(url: self.defaultHTTPBinURLPrefix + "not-found")
+        request.headers.add(name: "Accept", value: "text/event-stream")
+
+        let progress =
+            try TemporaryFileHelpers.withTemporaryFilePath { path -> FileDownloadDelegate.Progress in
+                let delegate = try FileDownloadDelegate(path: path, reportHead: {
+                    XCTAssertEqual($0.status, .notFound)
+                })
+
+                let progress = try self.defaultClient.execute(
+                    request: request,
+                    delegate: delegate
+                )
+                .wait()
+
+                XCTAssertFalse(TemporaryFileHelpers.fileExists(path: path))
+
+                return progress
+            }
+
+        XCTAssertEqual(nil, progress.totalBytes)
+        XCTAssertEqual(0, progress.receivedBytes)
     }
 
     func testRemoteClose() throws {

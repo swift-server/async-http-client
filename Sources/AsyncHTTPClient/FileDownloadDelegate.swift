@@ -30,7 +30,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
 
     private let filePath: String
     private let io: NonBlockingFileIO
-    private let reportHeaders: ((HTTPHeaders) -> Void)?
+    private let reportHead: ((HTTPResponseHead) -> Void)?
     private let reportProgress: ((Progress) -> Void)?
 
     private var fileHandleFuture: EventLoopFuture<NIOFileHandle>?
@@ -40,7 +40,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     /// - parameters:
     ///     - path: Path to a file you'd like to write the download to.
     ///     - pool: A thread pool to use for asynchronous file I/O.
-    ///     - reportHeaders: A closure called when the response headers are available.
+    ///     - reportHead: A closure called when the response head is available.
     ///     - reportProgress: A closure called when a body chunk has been downloaded, with
     ///       the total byte count and download byte count passed to it as arguments. The callbacks
     ///       will be invoked in the same threading context that the delegate itself is invoked,
@@ -48,14 +48,14 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     public init(
         path: String,
         pool: NIOThreadPool = NIOThreadPool(numberOfThreads: 1),
-        reportHeaders: ((HTTPHeaders) -> Void)? = nil,
+        reportHead: ((HTTPResponseHead) -> Void)? = nil,
         reportProgress: ((Progress) -> Void)? = nil
     ) throws {
         pool.start()
         self.io = NonBlockingFileIO(threadPool: pool)
         self.filePath = path
 
-        self.reportHeaders = reportHeaders
+        self.reportHead = reportHead
         self.reportProgress = reportProgress
     }
 
@@ -63,7 +63,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         task: HTTPClient.Task<Response>,
         _ head: HTTPResponseHead
     ) -> EventLoopFuture<Void> {
-        self.reportHeaders?(head.headers)
+        self.reportHead?(head)
 
         if let totalBytesString = head.headers.first(name: "Content-Length"),
             let totalBytes = Int(totalBytesString) {
@@ -107,7 +107,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         self.fileHandleFuture = nil
     }
 
-    public func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
+    private func finalize() {
         if let writeFuture = self.writeFuture {
             writeFuture.whenComplete { _ in
                 self.fileHandleFuture?.whenSuccess(self.close(fileHandle:))
@@ -116,6 +116,14 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         } else {
             self.fileHandleFuture?.whenSuccess(self.close(fileHandle:))
         }
+    }
+
+    public func didReceiveError(task: HTTPClient.Task<Progress>, _ error: Error) {
+        self.finalize()
+    }
+
+    public func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
+        self.finalize()
         return self.progress
     }
 }
