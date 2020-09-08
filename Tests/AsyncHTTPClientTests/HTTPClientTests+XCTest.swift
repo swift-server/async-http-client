@@ -45,6 +45,7 @@ extension HTTPClientTests {
             ("testMultipleContentLengthHeaders", testMultipleContentLengthHeaders),
             ("testStreaming", testStreaming),
             ("testFileDownload", testFileDownload),
+            ("testFileDownloadError", testFileDownloadError),
             ("testRemoteClose", testRemoteClose),
             ("testReadTimeout", testReadTimeout),
             ("testConnectTimeout", testConnectTimeout),
