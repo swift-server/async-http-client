@@ -59,14 +59,6 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         self.reportProgress = reportProgress
     }
 
-    private func write(
-        buffer: ByteBuffer,
-        to fileHandle: NIOFileHandle,
-        eventLoop: EventLoop
-    ) -> EventLoopFuture<Void> {
-        return self.io.write(fileHandle: fileHandle, buffer: buffer, eventLoop: eventLoop)
-    }
-
     public func didReceiveHead(
         task: HTTPClient.Task<Response>,
         _ head: HTTPResponseHead
@@ -91,7 +83,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         let writeFuture: EventLoopFuture<Void>
         if let fileHandleFuture = self.fileHandleFuture {
             writeFuture = fileHandleFuture.flatMap {
-                self.write(buffer: buffer, to: $0, eventLoop: task.eventLoop)
+                self.io.write(fileHandle: $0, buffer: buffer, eventLoop: task.eventLoop)
             }
         } else {
             let fileHandleFuture = self.io.openFile(
@@ -102,7 +94,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
             )
             self.fileHandleFuture = fileHandleFuture
             writeFuture = fileHandleFuture.flatMap {
-                self.write(buffer: buffer, to: $0, eventLoop: task.eventLoop)
+                self.io.write(fileHandle: $0, buffer: buffer, eventLoop: task.eventLoop)
             }
         }
 
