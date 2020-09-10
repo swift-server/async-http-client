@@ -179,18 +179,18 @@ let request = try HTTPClient.Request(
 )
 
 let delegate = try FileDownloadDelegate(path: "/tmp/latest-build.yml", reportProgress: {
-    if let totalSize = $0 {
-        print("Total bytes count: \(totalSize)")
+    if let totalBytes = $0.totalBytes {
+        print("Total bytes count: \(totalBytes)")
     }
-    print("Downloaded \($1) bytes so far")
+    print("Downloaded \($0.receivedBytes) bytes so far")
 })
 
 client.execute(request: request, delegate: delegate).futureResult
-    .whenSuccess { finalTotalBytes, downloadedBytes in
-        if let totalSize = $0 {
-            print("Final total bytes count: \(totalSize)")
+    .whenSuccess { progress in
+        if let totalBytes = progress.totalBytes {
+            print("Final total bytes count: \(totalBytes)")
         }
-        print("Downloaded finished with \($1) bytes downloaded")
+        print("Downloaded finished with \(progress.receivedBytes) bytes downloaded")
     }
 ```
 
