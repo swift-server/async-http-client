@@ -165,6 +165,35 @@ httpClient.execute(request: request, delegate: delegate).futureResult.whenSucces
 }
 ```
 
+### File downloads
+
+Based on the `HTTPClientResponseDelegate` example above you can build more complex delegates,
+the built-in `FileDownloadDelegate` is one of them. It allows streaming the downloaded data
+asynchronously, while reporting the download progress at the same time, like in the following
+example:
+
+```swift
+let client = HTTPClient(eventLoopGroupProvider: .createNew)
+let request = try HTTPClient.Request(
+    url: "https://swift.org/builds/development/ubuntu1804/latest-build.yml"
+)
+
+let delegate = try FileDownloadDelegate(path: "/tmp/latest-build.yml", reportProgress: {
+    if let totalSize = $0 {
+        print("Total bytes count: \(totalSize)")
+    }
+    print("Downloaded \($1) bytes so far")
+})
+
+client.execute(request: request, delegate: delegate).futureResult
+    .whenSuccess { finalTotalBytes, downloadedBytes in
+        if let totalSize = $0 {
+            print("Final total bytes count: \(totalSize)")
+        }
+        print("Downloaded finished with \($1) bytes downloaded")
+    }
+```
+
 ### Unix Domain Socket Paths
 Connecting to servers bound to socket paths is easy:
 ```swift

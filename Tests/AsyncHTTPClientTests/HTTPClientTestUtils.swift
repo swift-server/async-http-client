@@ -182,6 +182,31 @@ enum TemporaryFileHelpers {
         }
         return try body(shortEnoughPath)
     }
+
+    /// This function creates a filename that can be used as a temporary file.
+    internal static func withTemporaryFilePath<T>(
+        directory: String = temporaryDirectory,
+        _ body: (String) throws -> T
+    ) throws -> T {
+        let (fd, path) = self.openTemporaryFile()
+        close(fd)
+        try! FileManager.default.removeItem(atPath: path)
+
+        defer {
+            if FileManager.default.fileExists(atPath: path) {
+                try? FileManager.default.removeItem(atPath: path)
+            }
+        }
+        return try body(path)
+    }
+
+    internal static func fileSize(path: String) throws -> Int? {
+        return try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int
+    }
+
+    internal static func fileExists(path: String) -> Bool {
+        return FileManager.default.fileExists(atPath: path)
+    }
 }
 
 internal final class HTTPBin {
@@ -420,6 +445,25 @@ internal final class HttpBinHandler: ChannelInboundHandler {
         }
     }
 
+    func writeEvents(context: ChannelHandlerContext, isContentLengthRequired: Bool = false) {
+        let headers: HTTPHeaders
+        if isContentLengthRequired {
+            headers = HTTPHeaders([("Content-Length", "50")])
+        } else {
+            headers = HTTPHeaders()
+        }
+
+        context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))), promise: nil)
+        for i in 0..<10 {
+            let msg = "id: \(i)"
+            var buf = context.channel.allocator.buffer(capacity: msg.count)
+            buf.writeString(msg)
+            context.writeAndFlush(wrapOutboundOut(.body(.byteBuffer(buf))), promise: nil)
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+    }
+
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         self.isServingRequest = true
         switch self.unwrapInboundIn(data) {
@@ -531,16 +575,10 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 context.writeAndFlush(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
                 return
             case "/events/10/1": // TODO: parse path
-                context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
-                for i in 0..<10 {
-                    let msg = "id: \(i)"
-                    var buf = context.channel.allocator.buffer(capacity: msg.count)
-                    buf.writeString(msg)
-                    context.writeAndFlush(wrapOutboundOut(.body(.byteBuffer(buf))), promise: nil)
-                    Thread.sleep(forTimeInterval: 0.05)
-                }
-                context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+                self.writeEvents(context: context)
                 return
+            case "/events/10/content-length":
+                self.writeEvents(context: context, isContentLengthRequired: true)
             default:
                 context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .notFound))), promise: nil)
                 context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
