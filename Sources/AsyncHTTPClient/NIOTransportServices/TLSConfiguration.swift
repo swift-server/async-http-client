@@ -35,6 +35,7 @@
         }
     }
 
+    @available(iOS, introduced: 5.0, deprecated: 13.0)
     extension TLSVersion {
         /// return as SSL protocol
         var sslProtocol: SSLProtocol {
