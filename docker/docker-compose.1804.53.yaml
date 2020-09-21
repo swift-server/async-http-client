@@ -6,7 +6,8 @@ services:
     image: async-http-client:18.04-5.3
     build:
       args:
-        base_image: "swiftlang/swift:nightly-master-bionic"
+        ubuntu_version: "bionic"
+        swift_version: "5.3"
 
   test:
     image: async-http-client:18.04-5.3
