@@ -27,8 +27,6 @@ class ConnectionPoolTests: XCTestCase {
     var eventLoop: EmbeddedEventLoop!
     var http1ConnectionProvider: HTTP1ConnectionProvider!
 
-    struct TempError: Error {}
-
     func testPending() {
         var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
 
