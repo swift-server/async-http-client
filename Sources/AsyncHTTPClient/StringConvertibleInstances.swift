@@ -12,12 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-extension Connection: CustomStringConvertible {
-    var description: String {
-        return "\(self.channel)"
-    }
-}
-
 extension HTTP1ConnectionProvider.Waiter: CustomStringConvertible {
     var description: String {
         return "HTTP1ConnectionProvider.Waiter(\(self.preference))"
