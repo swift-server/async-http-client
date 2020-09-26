@@ -17,10 +17,10 @@ import NIO
 import XCTest
 
 extension ConnectionPoolTests {
-    func buildState(count: Int, release: Bool = true, eventLoop: EventLoop? = nil) -> (HTTP1ConnectionProvider.ConnectionsState, [Connection]) {
+    func buildState(count: Int, release: Bool = true, eventLoop: EventLoop? = nil) -> (HTTP1ConnectionProvider.ConnectionsState<Connection>, [Connection]) {
         let eventLoop = eventLoop ?? self.eventLoop!
 
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: eventLoop)
         var items: [Connection] = []
 
         if count == 0 {
@@ -60,7 +60,7 @@ extension ConnectionPoolTests {
     }
 }
 
-func XCTAssertState(_ state: HTTP1ConnectionProvider.ConnectionsState, available: Int, leased: Int, waiters: Int, pending: Int, opened: Int) {
+func XCTAssertState<ConnectionType>(_ state: HTTP1ConnectionProvider.ConnectionsState<ConnectionType>, available: Int, leased: Int, waiters: Int, pending: Int, opened: Int) {
     let snapshot = state.testsOnly_getInternalState()
     XCTAssertEqual(available, snapshot.availableConnections.count)
     XCTAssertEqual(leased, snapshot.leasedConnections.count)
@@ -69,7 +69,7 @@ func XCTAssertState(_ state: HTTP1ConnectionProvider.ConnectionsState, available
     XCTAssertEqual(opened, snapshot.openedConnectionsCount)
 }
 
-func XCTAssertState(_ state: HTTP1ConnectionProvider.ConnectionsState, available: Int, leased: Int, waiters: Int, pending: Int, opened: Int, isLeased connection: Connection) {
+func XCTAssertState<ConnectionType>(_ state: HTTP1ConnectionProvider.ConnectionsState<ConnectionType>, available: Int, leased: Int, waiters: Int, pending: Int, opened: Int, isLeased connection: ConnectionType) {
     let snapshot = state.testsOnly_getInternalState()
     XCTAssertEqual(available, snapshot.availableConnections.count)
     XCTAssertEqual(leased, snapshot.leasedConnections.count)
@@ -79,7 +79,7 @@ func XCTAssertState(_ state: HTTP1ConnectionProvider.ConnectionsState, available
     XCTAssertTrue(snapshot.leasedConnections.contains(ConnectionKey(connection)))
 }
 
-func XCTAssertState(_ state: HTTP1ConnectionProvider.ConnectionsState, available: Int, leased: Int, waiters: Int, pending: Int, opened: Int, isNotLeased connection: Connection) {
+func XCTAssertState<ConnectionType>(_ state: HTTP1ConnectionProvider.ConnectionsState<ConnectionType>, available: Int, leased: Int, waiters: Int, pending: Int, opened: Int, isNotLeased connection: ConnectionType) {
     let snapshot = state.testsOnly_getInternalState()
     XCTAssertEqual(available, snapshot.availableConnections.count)
     XCTAssertEqual(leased, snapshot.leasedConnections.count)
@@ -100,7 +100,7 @@ func XCTUnwrap<T>(_ value: T?) throws -> T {
 
 struct TempError: Error {}
 
-func XCTAssertStateClose(_ state: HTTP1ConnectionProvider.ConnectionsState, available: Int, leased: Int, waiters: Int, clean: Bool) throws {
+func XCTAssertStateClose<ConnectionType>(_ state: HTTP1ConnectionProvider.ConnectionsState<ConnectionType>, available: Int, leased: Int, waiters: Int, clean: Bool) throws {
     var state = state
 
     let (foundWaiters, foundAvailable, foundLeased, foundClean) = try XCTUnwrap(state.close())

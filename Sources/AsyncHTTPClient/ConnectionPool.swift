@@ -191,7 +191,7 @@ class HTTP1ConnectionProvider {
 
     var closePromise: EventLoopPromise<Void>
 
-    var state: ConnectionsState
+    var state: ConnectionsState<Connection>
 
     private let backgroundActivityLogger: Logger
 
@@ -222,7 +222,7 @@ class HTTP1ConnectionProvider {
         self.state.assertInvariants()
     }
 
-    func execute(_ action: Action, logger: Logger) {
+    func execute(_ action: Action<Connection>, logger: Logger) {
         switch action {
         case .lease(let connection, let waiter):
             // if connection is became inactive, we create a new one.
@@ -297,7 +297,7 @@ class HTTP1ConnectionProvider {
     func getConnection(preference: HTTPClient.EventLoopPreference,
                        setupComplete: EventLoopFuture<Void>,
                        logger: Logger) -> EventLoopFuture<Connection> {
-        let waiter = Waiter(promise: self.eventLoop.makePromise(), setupComplete: setupComplete, preference: preference)
+        let waiter = Waiter<Connection>(promise: self.eventLoop.makePromise(), setupComplete: setupComplete, preference: preference)
 
         let action: Action = self.lock.withLock {
             self.state.acquire(waiter: waiter)
@@ -309,10 +309,10 @@ class HTTP1ConnectionProvider {
     }
 
     func connect(_ result: Result<Channel, Error>,
-                 waiter: Waiter,
+                 waiter: Waiter<Connection>,
                  replacing closedConnection: Connection? = nil,
                  logger: Logger) {
-        let action: Action
+        let action: Action<Connection>
         switch result {
         case .success(let channel):
             logger.trace("successfully created connection",
@@ -478,9 +478,9 @@ class HTTP1ConnectionProvider {
     ///
     /// `Waiter`s are created when `maximumConcurrentConnections` is reached
     /// and we cannot create new connections anymore.
-    struct Waiter {
+    struct Waiter<ConnectionType: PoolManageableConnection> {
         /// The promise to complete once a connection is available
-        let promise: EventLoopPromise<Connection>
+        let promise: EventLoopPromise<ConnectionType>
 
         /// Future that will be succeeded when request timeout handler and `TaskHandler` are added to the pipeline.
         let setupComplete: EventLoopFuture<Void>

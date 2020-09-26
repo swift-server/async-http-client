@@ -28,7 +28,7 @@ class ConnectionPoolTests: XCTestCase {
     var http1ConnectionProvider: HTTP1ConnectionProvider!
 
     func testPending() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
 
         var snapshot = state.testsOnly_getInternalState()
         XCTAssertEqual(0, snapshot.availableConnections.count)
@@ -50,7 +50,7 @@ class ConnectionPoolTests: XCTestCase {
     // MARK: - Acquire Tests
 
     func testAcquireWhenEmpty() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
 
         var snapshot = state.testsOnly_getInternalState()
         XCTAssertEqual(0, snapshot.availableConnections.count)
@@ -155,7 +155,7 @@ class ConnectionPoolTests: XCTestCase {
     // MARK: - Acquire on Specific EL Tests
 
     func testAcquireWhenEmptySpecificEL() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
         var snapshot = state.testsOnly_getInternalState()
 
         XCTAssertEqual(0, snapshot.availableConnections.count)
@@ -301,7 +301,7 @@ class ConnectionPoolTests: XCTestCase {
     // MARK: - Acquire Errors Tests
 
     func testAcquireWhenClosed() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
         _ = state.close()
 
         XCTAssertFalse(state.enqueue())
@@ -317,7 +317,7 @@ class ConnectionPoolTests: XCTestCase {
     }
 
     func testConnectFailedWhenClosed() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
         _ = state.close()
 
         let action = state.connectFailed()
@@ -1222,7 +1222,7 @@ class ConnectionPoolTests: XCTestCase {
     // MARK: - Shutdown tests
 
     func testShutdownOnPendingAndSuccess() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
 
         XCTAssertTrue(state.enqueue())
 
@@ -1261,7 +1261,7 @@ class ConnectionPoolTests: XCTestCase {
     }
 
     func testShutdownOnPendingAndError() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
 
         XCTAssertTrue(state.enqueue())
 
@@ -1298,7 +1298,7 @@ class ConnectionPoolTests: XCTestCase {
     }
 
     func testShutdownTimeout() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
 
         var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
 
@@ -1333,7 +1333,7 @@ class ConnectionPoolTests: XCTestCase {
     }
 
     func testShutdownRemoteClosed() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
 
         var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
 

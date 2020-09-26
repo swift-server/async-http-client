@@ -153,14 +153,14 @@ extension Connection: CustomStringConvertible {
     }
 }
 
-struct ConnectionKey: Hashable {
-    let connection: Connection
+struct ConnectionKey<ConnectionType>: Hashable where ConnectionType: PoolManageableConnection {
+    let connection: ConnectionType
 
-    init(_ connection: Connection) {
+    init(_ connection: ConnectionType) {
         self.connection = connection
     }
 
-    static func == (lhs: ConnectionKey, rhs: ConnectionKey) -> Bool {
+    static func == (lhs: ConnectionKey<ConnectionType>, rhs: ConnectionKey<ConnectionType>) -> Bool {
         return ObjectIdentifier(lhs.connection) == ObjectIdentifier(rhs.connection)
     }
 
