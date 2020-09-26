@@ -74,15 +74,6 @@ extension HTTP1ConnectionProvider {
             return Snapshot(state: self.state, availableConnections: self.availableConnections, leasedConnections: self.leasedConnections, waiters: self.waiters, openedConnectionsCount: self.openedConnectionsCount, pending: self.pending)
         }
 
-        mutating func testsOnly_setInternalState(_ snapshot: Snapshot<ConnectionType>) {
-            self.state = snapshot.state
-            self.availableConnections = snapshot.availableConnections
-            self.leasedConnections = snapshot.leasedConnections
-            self.waiters = snapshot.waiters
-            self.openedConnectionsCount = snapshot.openedConnectionsCount
-            self.pending = snapshot.pending
-        }
-
         func assertInvariants() {
             assert(self.waiters.isEmpty)
             assert(self.availableConnections.isEmpty)
@@ -158,6 +149,12 @@ extension HTTP1ConnectionProvider {
 
                 if connection.isActiveEstimation, !closing { // If connection is alive, we can offer it to a next waiter
                     if let waiter = self.waiters.popFirst() {
+                        // There should be no case where we have both capacity and a waiter here.
+                        // Waiter can only exists if there was no capacity at aquire. If some connection
+                        // is released when we have waiter it can only indicate that we should lease (if EL are the same),
+                        // or replace (if they are different). But we cannot increase connection count here.
+                        assert(!self.hasCapacity)
+
                         let (eventLoop, required) = self.resolvePreference(waiter.preference)
 
                         // If returned connection is on same EL or we do not require special EL - lease it
@@ -165,23 +162,9 @@ extension HTTP1ConnectionProvider {
                             return .lease(connection, waiter)
                         }
 
-                        // If there is an opened connection on the same loop, lease it and park returned
-                        if let found = self.availableConnections.firstIndex(where: { $0.eventLoop === eventLoop }) {
-                            self.leasedConnections.remove(ConnectionKey(connection))
-                            let replacement = self.availableConnections.swap(at: found, with: connection)
-                            self.leasedConnections.insert(ConnectionKey(replacement))
-                            return .parkAnd(connection, .lease(replacement, waiter))
-                        }
-
-                        // If we can create new connection - do it
-                        if self.hasCapacity {
-                            self.leasedConnections.remove(ConnectionKey(connection))
-                            self.availableConnections.append(connection)
-                            self.openedConnectionsCount += 1
-                            return .parkAnd(connection, .create(waiter))
-                        }
-
                         // If we cannot create new connections, we will have to replace returned connection with a new one on the required loop
+                        // We will keep the `openedConnectionCount`, since .replace === .create, so we decrease and increase the `openedConnectionCount`
+                        self.leasedConnections.remove(ConnectionKey(connection))
                         return .replace(connection, waiter)
                     } else { // or park, if there are no waiters
                         self.leasedConnections.remove(ConnectionKey(connection))
@@ -211,15 +194,6 @@ extension HTTP1ConnectionProvider {
             case .closed: // This can happen when we close the client while connections was being established
                 self.openedConnectionsCount -= 1
                 return .closeAnd(connection, self.processNextWaiter())
-            }
-        }
-
-        mutating func drop(connection: ConnectionType) {
-            switch self.state {
-            case .active:
-                self.leasedConnections.remove(ConnectionKey(connection))
-            case .closed:
-                assertionFailure("should not happen")
             }
         }
 
@@ -287,20 +261,25 @@ extension HTTP1ConnectionProvider {
 
         mutating func processNextWaiter() -> Action<ConnectionType> {
             if let waiter = self.waiters.popFirst() {
-                let (eventLoop, required) = self.resolvePreference(waiter.preference)
+                // There should be no case where we have waiters and available connections at the same time.
+                //
+                // This method is called in following cases:
+                //
+                // 1. from `release` when connection is inactive and cannot be re-used
+                // 2. from `connectFailed` when we failed to establish a new connection
+                // 3. from `remoteClose` when connection was closed by the remote side and cannot be re-used
+                // 4. from `timeout` when connection was closed due to idle timeout and cannot be re-used.
+                //
+                // In all cases connection, which triggered the transition, will not be in `available` state.
+                //
+                // Given that the waiter can only be present in the pool if there were no available connections
+                // (otherwise it had been leased a connection immediately on getting the connection), we do not
+                // see a situation when we can lease another available connection, therefore the only course
+                // of action is to create a new connection for the waiter.
+                assert(self.availableConnections.isEmpty)
 
-                // If specific EL is required, we have only two options - find open one or create a new one
-                if required, let found = self.availableConnections.firstIndex(where: { $0.eventLoop === eventLoop }) {
-                    let connection = self.availableConnections.remove(at: found)
-                    self.leasedConnections.insert(ConnectionKey(connection))
-                    return .lease(connection, waiter)
-                } else if !required, let connection = self.availableConnections.popFirst() {
-                    self.leasedConnections.insert(ConnectionKey(connection))
-                    return .lease(connection, waiter)
-                } else {
-                    self.openedConnectionsCount += 1
-                    return .create(waiter)
-                }
+                self.openedConnectionsCount += 1
+                return .create(waiter)
             }
 
             // if capacity is at max and the are no waiters and no in-flight requests for connection, we are closing this provider

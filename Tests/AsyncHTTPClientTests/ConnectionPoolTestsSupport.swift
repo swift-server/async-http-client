@@ -16,23 +16,35 @@
 import NIO
 import XCTest
 
+class ConnectionForTests: PoolManageableConnection {
+    var eventLoop: EventLoop
+    var isActiveEstimation: Bool
+
+    init(eventLoop: EventLoop) {
+        self.eventLoop = eventLoop
+        self.isActiveEstimation = true
+    }
+
+    func cancel() -> EventLoopFuture<Void> {
+        return self.eventLoop.makeSucceededFuture(())
+    }
+}
+
 extension ConnectionPoolTests {
-    func buildState(count: Int, release: Bool = true, eventLoop: EventLoop? = nil) -> (HTTP1ConnectionProvider.ConnectionsState<Connection>, [Connection]) {
+    func buildState(count: Int, release: Bool = true, eventLoop: EventLoop? = nil) -> (HTTP1ConnectionProvider.ConnectionsState<ConnectionForTests>, [ConnectionForTests]) {
         let eventLoop = eventLoop ?? self.eventLoop!
 
-        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: eventLoop)
-        var items: [Connection] = []
+        var state = HTTP1ConnectionProvider.ConnectionsState<ConnectionForTests>(eventLoop: eventLoop)
+        var items: [ConnectionForTests] = []
 
         if count == 0 {
             return (state, items)
         }
 
-        let channel = ActiveChannel(eventLoop: self.eventLoop)
-
         for _ in 1...count {
             // Set up connection pool to have one available connection
             do {
-                let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
+                let connection = ConnectionForTests(eventLoop: eventLoop)
                 items.append(connection)
                 // First, we ask the empty pool for a connection, triggering connection creation
                 XCTAssertTrue(state.enqueue())

@@ -25,39 +25,19 @@ import XCTest
 
 class ConnectionPoolTests: XCTestCase {
     var eventLoop: EmbeddedEventLoop!
-    var http1ConnectionProvider: HTTP1ConnectionProvider!
 
     func testPending() {
-        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
-
-        var snapshot = state.testsOnly_getInternalState()
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(0, snapshot.openedConnectionsCount)
-
+        var state = HTTP1ConnectionProvider.ConnectionsState<ConnectionForTests>(eventLoop: self.eventLoop)
+        XCTAssertState(state, available: 0, leased: 0, waiters: 0, pending: 0, opened: 0)
         XCTAssertTrue(state.enqueue())
-
-        snapshot = state.testsOnly_getInternalState()
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(1, snapshot.pending)
-        XCTAssertEqual(0, snapshot.openedConnectionsCount)
+        XCTAssertState(state, available: 0, leased: 0, waiters: 0, pending: 1, opened: 0)
     }
 
     // MARK: - Acquire Tests
 
     func testAcquireWhenEmpty() {
-        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
-
-        var snapshot = state.testsOnly_getInternalState()
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(0, snapshot.openedConnectionsCount)
+        var state = HTTP1ConnectionProvider.ConnectionsState<ConnectionForTests>(eventLoop: self.eventLoop)
+        XCTAssertState(state, available: 0, leased: 0, waiters: 0, pending: 0, opened: 0)
 
         XCTAssertTrue(state.enqueue())
         let action = state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .indifferent))
@@ -68,105 +48,60 @@ class ConnectionPoolTests: XCTestCase {
             XCTFail("Unexpected action: \(action)")
         }
 
-        snapshot = state.testsOnly_getInternalState()
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
+        XCTAssertState(state, available: 0, leased: 0, waiters: 0, pending: 0, opened: 1)
     }
 
     func testAcquireWhenAvailable() throws {
-        let channel = EmbeddedChannel()
+        var (state, _) = self.buildState(count: 1)
 
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
+        // Validate that the pool has one available connection and it's internal state is correct
+        XCTAssertState(state, available: 1, leased: 0, waiters: 0, pending: 0, opened: 1)
 
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(connection)
-        snapshot.openedConnectionsCount = 1
+        XCTAssertTrue(state.enqueue())
 
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        XCTAssertTrue(self.http1ConnectionProvider.enqueue())
-
-        let action = self.http1ConnectionProvider.state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .indifferent))
+        let action = state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .indifferent))
         switch action {
         case .lease(let connection, let waiter):
-            waiter.promise.succeed(connection)
-
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(1, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(1, snapshot.openedConnectionsCount)
+            XCTAssertState(state, available: 0, leased: 1, waiters: 0, pending: 0, opened: 1)
 
             // cleanup
-            // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-            // (https://github.com/swift-server/async-http-client/issues/234)
-            self.http1ConnectionProvider.release(connection: connection, closing: true, logger: HTTPClient.loggingDisabled)
-        default:
-            XCTFail("Unexpected action: \(action)")
-        }
-    }
-
-    func testAcquireWhenUnavailable() throws {
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        snapshot.openedConnectionsCount = 8
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(8, snapshot.openedConnectionsCount)
-
-        XCTAssertTrue(self.http1ConnectionProvider.enqueue())
-
-        let action = self.http1ConnectionProvider.state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .indifferent))
-        switch action {
-        case .none:
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(0, snapshot.leasedConnections.count)
-            XCTAssertEqual(1, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(8, snapshot.openedConnectionsCount)
+            waiter.promise.succeed(connection)
         default:
             XCTFail("Unexpected action: \(action)")
         }
 
         // cleanup
-        // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-        // (https://github.com/swift-server/async-http-client/issues/234)
-        snapshot.openedConnectionsCount = 0
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
+        try XCTAssertStateClose(state, available: 0, leased: 1, waiters: 0, clean: false)
+    }
+
+    func testAcquireWhenUnavailable() throws {
+        var (state, _) = self.buildState(count: 8, release: false)
+        XCTAssertState(state, available: 0, leased: 8, waiters: 0, pending: 0, opened: 8)
+
+        XCTAssertTrue(state.enqueue())
+        let action = state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .indifferent))
+        switch action {
+        case .none:
+            XCTAssertState(state, available: 0, leased: 8, waiters: 1, pending: 0, opened: 8)
+        default:
+            XCTFail("Unexpected action: \(action)")
+        }
+
+        // cleanup
+        try XCTAssertStateClose(state, available: 0, leased: 8, waiters: 1, clean: false)
     }
 
     // MARK: - Acquire on Specific EL Tests
 
     func testAcquireWhenEmptySpecificEL() {
-        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
-        var snapshot = state.testsOnly_getInternalState()
+        let el: EventLoop = self.eventLoop
+        let preference: HTTPClient.EventLoopPreference = .delegateAndChannel(on: el)
 
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(0, snapshot.openedConnectionsCount)
+        var state = HTTP1ConnectionProvider.ConnectionsState<ConnectionForTests>(eventLoop: el)
+        XCTAssertState(state, available: 0, leased: 0, waiters: 0, pending: 0, opened: 0)
 
         XCTAssertTrue(state.enqueue())
-
-        let action = state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: self.eventLoop)))
+        let action = state.acquire(waiter: .init(promise: el.makePromise(), setupComplete: el.makeSucceededFuture(()), preference: preference))
         switch action {
         case .create(let waiter):
             waiter.promise.fail(TempError())
@@ -174,128 +109,69 @@ class ConnectionPoolTests: XCTestCase {
             XCTFail("Unexpected action: \(action)")
         }
 
-        snapshot = state.testsOnly_getInternalState()
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
+        XCTAssertState(state, available: 0, leased: 0, waiters: 0, pending: 0, opened: 1)
     }
 
     func testAcquireWhenAvailableSpecificEL() throws {
-        let channel = EmbeddedChannel()
+        let el: EventLoop = self.eventLoop
+        let preference: HTTPClient.EventLoopPreference = .delegateAndChannel(on: el)
+        var (state, _) = self.buildState(count: 1, eventLoop: el)
+        XCTAssertState(state, available: 1, leased: 0, waiters: 0, pending: 0, opened: 1)
 
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(connection)
-        snapshot.openedConnectionsCount = 1
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        XCTAssertTrue(self.http1ConnectionProvider.enqueue())
-
-        let action = self.http1ConnectionProvider.state.acquire(waiter: .init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: channel.eventLoop)))
+        XCTAssertTrue(state.enqueue())
+        let action = state.acquire(waiter: .init(promise: el.makePromise(), setupComplete: el.makeSucceededFuture(()), preference: preference))
         switch action {
         case .lease(let connection, let waiter):
             waiter.promise.succeed(connection)
-
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(1, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-            // cleanup
-            // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-            // (https://github.com/swift-server/async-http-client/issues/234)
-            self.http1ConnectionProvider.release(connection: connection, closing: true, logger: HTTPClient.loggingDisabled)
+            XCTAssertState(state, available: 0, leased: 1, waiters: 0, pending: 0, opened: 1)
         default:
             XCTFail("Unexpected action: \(action)")
         }
+
+        // cleanup
+        try XCTAssertStateClose(state, available: 0, leased: 1, waiters: 0, clean: false)
     }
 
     func testAcquireReplace() throws {
-        let channel = EmbeddedChannel()
+        let el: EventLoop = self.eventLoop
+        var (state, connections) = self.buildState(count: 8, release: false, eventLoop: el)
 
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
+        // release a connection
+        _ = state.release(connection: connections.first!, closing: false)
+        XCTAssertState(state, available: 1, leased: 7, waiters: 0, pending: 0, opened: 8)
 
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(connection)
-        snapshot.openedConnectionsCount = 8
+        // other eventLoop
+        let preference: HTTPClient.EventLoopPreference = .delegateAndChannel(on: EmbeddedEventLoop())
 
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(8, snapshot.openedConnectionsCount)
-
-        XCTAssertTrue(self.http1ConnectionProvider.enqueue())
-
-        let action = self.http1ConnectionProvider.state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: self.eventLoop)))
+        XCTAssertTrue(state.enqueue())
+        let action = state.acquire(waiter: .init(promise: el.makePromise(), setupComplete: el.makeSucceededFuture(()), preference: preference))
         switch action {
-        case .replace(_, let waiter):
+        case .replace(let connection, let waiter):
             waiter.promise.fail(TempError())
-
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(0, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(8, snapshot.openedConnectionsCount)
+            XCTAssertState(state, available: 0, leased: 7, waiters: 0, pending: 0, opened: 8, isNotLeased: connection)
         default:
             XCTFail("Unexpected action: \(action)")
         }
 
         // cleanup
-        // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-        // (https://github.com/swift-server/async-http-client/issues/234)
-        snapshot.openedConnectionsCount = 0
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
+        try XCTAssertStateClose(state, available: 0, leased: 7, waiters: 0, clean: false)
     }
 
     func testAcquireWhenUnavailableSpecificEL() throws {
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
+        var (state, _) = self.buildState(count: 8, release: false, eventLoop: self.eventLoop)
+        XCTAssertState(state, available: 0, leased: 8, waiters: 0, pending: 0, opened: 8)
 
-        snapshot.openedConnectionsCount = 8
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(8, snapshot.openedConnectionsCount)
-
-        XCTAssertTrue(self.http1ConnectionProvider.enqueue())
-
-        let action = self.http1ConnectionProvider.state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: self.eventLoop)))
+        XCTAssertTrue(state.enqueue())
+        let action = state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: self.eventLoop)))
         switch action {
         case .none:
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(0, snapshot.leasedConnections.count)
-            XCTAssertEqual(1, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(8, snapshot.openedConnectionsCount)
+            XCTAssertState(state, available: 0, leased: 8, waiters: 1, pending: 0, opened: 8)
         default:
             XCTFail("Unexpected action: \(action)")
         }
 
         // cleanup
-        // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-        // (https://github.com/swift-server/async-http-client/issues/234)
-        snapshot.openedConnectionsCount = 0
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
+        try XCTAssertStateClose(state, available: 0, leased: 8, waiters: 1, clean: false)
     }
 
     // MARK: - Acquire Errors Tests
@@ -303,6 +179,7 @@ class ConnectionPoolTests: XCTestCase {
     func testAcquireWhenClosed() {
         var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
         _ = state.close()
+        XCTAssertState(state, available: 0, leased: 0, waiters: 0, pending: 0, opened: 0)
 
         XCTAssertFalse(state.enqueue())
 
@@ -319,6 +196,7 @@ class ConnectionPoolTests: XCTestCase {
     func testConnectFailedWhenClosed() {
         var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
         _ = state.close()
+        XCTAssertState(state, available: 0, leased: 0, waiters: 0, pending: 0, opened: 0)
 
         let action = state.connectFailed()
         switch action {
@@ -332,732 +210,201 @@ class ConnectionPoolTests: XCTestCase {
     // MARK: - Release Tests
 
     func testReleaseAliveConnectionEmptyQueue() throws {
-        let channel = ActiveChannel(eventLoop: self.eventLoop)
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
+        var (state, connections) = self.buildState(count: 1, release: false)
+        XCTAssertState(state, available: 0, leased: 1, waiters: 0, pending: 0, opened: 1)
 
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 1
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.leasedConnections.insert(ConnectionKey(connection))
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(1, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.release(connection: connection, closing: false)
+        let connection = try XCTUnwrap(connections.first)
+        let action = state.release(connection: connection, closing: false)
         switch action {
         case .park:
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(1, snapshot.availableConnections.count)
-            XCTAssertEqual(0, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(1, snapshot.openedConnectionsCount)
+            XCTAssertState(state, available: 1, leased: 0, waiters: 0, pending: 0, opened: 1)
         default:
             XCTFail("Unexpected action: \(action)")
         }
 
         // cleanup
-        // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-        // (https://github.com/swift-server/async-http-client/issues/234)
-        connection.remoteClosed(logger: HTTPClient.loggingDisabled)
+        try XCTAssertStateClose(state, available: 1, leased: 0, waiters: 0, clean: true)
     }
 
     func testReleaseAliveButClosingConnectionEmptyQueue() throws {
-        let channel = ActiveChannel(eventLoop: self.eventLoop)
+        var (state, connections) = self.buildState(count: 1, release: false)
+        XCTAssertState(state, available: 0, leased: 1, waiters: 0, pending: 0, opened: 1)
 
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 1
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.leasedConnections.insert(ConnectionKey(connection))
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(1, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.release(connection: connection, closing: true)
+        let connection = try XCTUnwrap(connections.first)
+        // closing should be true to test that we can discard connection that is still active, but caller indicated that it will be closed soon
+        let action = state.release(connection: connection, closing: true)
         switch action {
         case .closeProvider:
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(0, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(0, snapshot.openedConnectionsCount)
+            XCTAssertState(state, available: 0, leased: 0, waiters: 0, pending: 0, opened: 0)
         default:
             XCTFail("Unexpected action: \(action)")
         }
 
         // cleanup
-        // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-        // (https://github.com/swift-server/async-http-client/issues/234)
-        self.http1ConnectionProvider.execute(action, logger: HTTPClient.loggingDisabled)
+        XCTAssertNil(state.close())
     }
 
     func testReleaseInactiveConnectionEmptyQueue() throws {
-        let channel = EmbeddedChannel()
+        var (state, connections) = self.buildState(count: 1, release: false)
+        XCTAssertState(state, available: 0, leased: 1, waiters: 0, pending: 0, opened: 1)
 
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 1
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.leasedConnections.insert(ConnectionKey(connection))
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(1, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.release(connection: connection, closing: true)
+        let connection = try XCTUnwrap(connections.first)
+        connection.isActiveEstimation = false
+        // closing should be false to test that we check connection state in order to decided if we need to discard the connection
+        let action = state.release(connection: connection, closing: false)
         switch action {
         case .closeProvider:
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(0, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(0, snapshot.openedConnectionsCount)
-
+            XCTAssertState(state, available: 0, leased: 0, waiters: 0, pending: 0, opened: 0)
         default:
             XCTFail("Unexpected action: \(action)")
         }
 
         // cleanup
-        // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-        // (https://github.com/swift-server/async-http-client/issues/234)
-        self.http1ConnectionProvider.execute(action, logger: HTTPClient.loggingDisabled)
+        XCTAssertNil(state.close())
     }
 
     func testReleaseInactiveConnectionEmptyQueueHasConnections() throws {
-        let channel = EmbeddedChannel()
+        var (state, connections) = self.buildState(count: 2, release: false)
+        XCTAssertState(state, available: 0, leased: 2, waiters: 0, pending: 0, opened: 2)
 
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
+        let connection = try XCTUnwrap(connections.first)
 
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 2
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.leasedConnections.insert(ConnectionKey(connection))
-        let available = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(available)
+        // Return a connection to the pool
+        _ = state.release(connection: try XCTUnwrap(connections.dropFirst().first), closing: false)
+        XCTAssertState(state, available: 1, leased: 1, waiters: 0, pending: 0, opened: 2)
 
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(1, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(2, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.release(connection: connection, closing: true)
+        let action = state.release(connection: connection, closing: true)
         switch action {
         case .none:
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(1, snapshot.availableConnections.count)
-            XCTAssertEqual(0, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(1, snapshot.openedConnectionsCount)
+            XCTAssertState(state, available: 1, leased: 0, waiters: 0, pending: 0, opened: 1)
         default:
             XCTFail("Unexpected action: \(action)")
         }
 
         // cleanup
-        // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-        // (https://github.com/swift-server/async-http-client/issues/234)
-        connection.remoteClosed(logger: HTTPClient.loggingDisabled)
+        try XCTAssertStateClose(state, available: 1, leased: 0, waiters: 0, clean: true)
     }
 
     func testReleaseAliveConnectionHasWaiter() throws {
-        let channel = ActiveChannel(eventLoop: self.eventLoop)
+        var (state, connections) = self.buildState(count: 8, release: false)
 
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
+        // Add one waiter to the pool
+        XCTAssertTrue(state.enqueue())
+        _ = state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .indifferent))
 
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 1
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.leasedConnections.insert(ConnectionKey(connection))
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .indifferent))
+        XCTAssertState(state, available: 0, leased: 8, waiters: 1, pending: 0, opened: 8)
 
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(1, snapshot.leasedConnections.count)
-        XCTAssertEqual(1, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.release(connection: connection, closing: false)
+        let connection = try XCTUnwrap(connections.first)
+        let action = state.release(connection: connection, closing: false)
         switch action {
         case .lease(let connection, let waiter):
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertTrue(snapshot.leasedConnections.contains(ConnectionKey(connection)))
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(1, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
+            XCTAssertState(state, available: 0, leased: 8, waiters: 0, pending: 0, opened: 8, isLeased: connection)
             // cleanup
-            // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-            // (https://github.com/swift-server/async-http-client/issues/234)
             waiter.promise.succeed(connection)
-            self.http1ConnectionProvider.release(connection: connection, closing: true, logger: HTTPClient.loggingDisabled)
         default:
             XCTFail("Unexpected action: \(action)")
         }
+
+        // cleanup
+        try XCTAssertStateClose(state, available: 0, leased: 8, waiters: 0, clean: false)
     }
 
     func testReleaseInactiveConnectionHasWaitersNoConnections() throws {
-        let channel = EmbeddedChannel()
+        var (state, connections) = self.buildState(count: 8, release: false)
+        XCTAssertState(state, available: 0, leased: 8, waiters: 0, pending: 0, opened: 8)
 
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
+        // Add one waiter to the pool
+        XCTAssertTrue(state.enqueue())
+        _ = state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .indifferent))
+        XCTAssertState(state, available: 0, leased: 8, waiters: 1, pending: 0, opened: 8)
 
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 1
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.leasedConnections.insert(ConnectionKey(connection))
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .indifferent))
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(1, snapshot.leasedConnections.count)
-        XCTAssertEqual(1, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.release(connection: connection, closing: true)
+        let connection = try XCTUnwrap(connections.first)
+        let action = state.release(connection: connection, closing: true)
         switch action {
         case .create(let waiter):
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(0, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
+            XCTAssertState(state, available: 0, leased: 7, waiters: 0, pending: 0, opened: 8)
             // cleanup
-            // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-            // (https://github.com/swift-server/async-http-client/issues/234)
-            // simulate create -> use -> release cycle
-            self.http1ConnectionProvider.connect(.failure(TempError()), waiter: waiter, logger: HTTPClient.loggingDisabled)
+            waiter.promise.fail(TempError())
         default:
             XCTFail("Unexpected action: \(action)")
         }
-    }
 
-    func testReleaseInactiveConnectionHasWaitersHasConnections() throws {
-        let channel = EmbeddedChannel()
-
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 2
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.leasedConnections.insert(ConnectionKey(connection))
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .indifferent))
-
-        let available = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(available)
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(1, snapshot.leasedConnections.count)
-        XCTAssertEqual(1, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(2, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.release(connection: connection, closing: false)
-        switch action {
-        case .lease(let connection, let waiter):
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(1, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-            // cleanup
-            // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-            // (https://github.com/swift-server/async-http-client/issues/234)
-            waiter.promise.succeed(connection)
-            self.http1ConnectionProvider.release(connection: connection, closing: true, logger: HTTPClient.loggingDisabled)
-        default:
-            XCTFail("Unexpected action: \(action)")
-        }
+        // cleanup
+        try XCTAssertStateClose(state, available: 0, leased: 7, waiters: 0, clean: false)
     }
 
     // MARK: - Release on Specific EL Tests
 
     func testReleaseAliveConnectionSameELHasWaiterSpecificEL() throws {
-        let channel = ActiveChannel(eventLoop: self.eventLoop)
+        var (state, connections) = self.buildState(count: 8, release: false)
+        XCTAssertState(state, available: 0, leased: 8, waiters: 0, pending: 0, opened: 8)
 
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
+        // Add one waiter to the pool
+        XCTAssertTrue(state.enqueue())
+        _ = state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: self.eventLoop)))
+        XCTAssertState(state, available: 0, leased: 8, waiters: 1, pending: 0, opened: 8)
 
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 1
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.leasedConnections.insert(ConnectionKey(connection))
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: channel.eventLoop)))
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(1, snapshot.leasedConnections.count)
-        XCTAssertEqual(1, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.release(connection: connection, closing: false)
+        let connection = try XCTUnwrap(connections.first)
+        let action = state.release(connection: connection, closing: false)
         switch action {
         case .lease(let connection, let waiter):
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertTrue(snapshot.leasedConnections.contains(ConnectionKey(connection)))
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(1, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
+            XCTAssertState(state, available: 0, leased: 8, waiters: 0, pending: 0, opened: 8, isLeased: connection)
             // cleanup
-            // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-            // (https://github.com/swift-server/async-http-client/issues/234)
             waiter.promise.succeed(connection)
-            self.http1ConnectionProvider.release(connection: connection, closing: true, logger: HTTPClient.loggingDisabled)
         default:
             XCTFail("Unexpected action: \(action)")
         }
-    }
 
-    func testReleaseAliveConnectionDifferentELNoSameELConnectionsHasWaiterSpecificEL() throws {
-        let differentEL = EmbeddedEventLoop()
-        defer {
-            XCTAssertNoThrow(try differentEL.syncShutdownGracefully())
-        }
-        let channel = ActiveChannel(eventLoop: differentEL) // Channel on different EL, that's important for the test.
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 1
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.leasedConnections.insert(ConnectionKey(connection))
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(of: Connection.self),
-                                      setupComplete: self.eventLoop.makeSucceededFuture(()),
-                                      preference: .delegateAndChannel(on: self.eventLoop)))
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(1, snapshot.leasedConnections.count)
-        XCTAssertEqual(1, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.release(connection: connection, closing: false)
-        switch action {
-        case .parkAnd(let connection, .create(let waiter)):
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertFalse(snapshot.leasedConnections.contains(ConnectionKey(connection)))
-            XCTAssertEqual(1, snapshot.availableConnections.count)
-            XCTAssertEqual(0, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(2, snapshot.openedConnectionsCount)
-
-            // cleanup
-            // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-            // (https://github.com/swift-server/async-http-client/issues/234)
-            // simulate create -> use -> release cycle
-            self.http1ConnectionProvider.connect(.failure(TempError()), waiter: waiter, logger: HTTPClient.loggingDisabled)
-            connection.remoteClosed(logger: HTTPClient.loggingDisabled)
-        default:
-            XCTFail("Unexpected action: \(action)")
-        }
-    }
-
-    func testReleaseAliveConnectionDifferentELHasSameELConnectionsHasWaiterSpecificEL() throws {
-        let channel = ActiveChannel(eventLoop: self.eventLoop)
-        let otherChannel = EmbeddedChannel()
-
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 2
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.leasedConnections.insert(ConnectionKey(connection))
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: otherChannel.eventLoop)))
-
-        let available = Connection(channel: otherChannel, provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(available)
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(1, snapshot.leasedConnections.count)
-        XCTAssertEqual(1, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(2, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.release(connection: connection, closing: false)
-        switch action {
-        case .parkAnd(let connection, .lease(let replacement, let waiter)):
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertFalse(snapshot.leasedConnections.contains(ConnectionKey(connection)))
-            XCTAssertTrue(snapshot.leasedConnections.contains(ConnectionKey(replacement)))
-            XCTAssertEqual(1, snapshot.availableConnections.count)
-            XCTAssertEqual(1, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(2, snapshot.openedConnectionsCount)
-
-            // cleanup
-            waiter.promise.succeed(replacement)
-            connection.remoteClosed(logger: HTTPClient.loggingDisabled)
-            self.http1ConnectionProvider.release(connection: replacement, closing: true, logger: HTTPClient.loggingDisabled)
-        default:
-            XCTFail("Unexpected action: \(action)")
-        }
+        try XCTAssertStateClose(state, available: 0, leased: 8, waiters: 0, clean: false)
     }
 
     func testReleaseAliveConnectionDifferentELNoSameELConnectionsOnLimitHasWaiterSpecificEL() throws {
-        let channel = ActiveChannel(eventLoop: self.eventLoop)
-        let otherChannel = EmbeddedChannel()
+        var (state, connections) = self.buildState(count: 8, release: false)
+        XCTAssertState(state, available: 0, leased: 8, waiters: 0, pending: 0, opened: 8)
 
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
+        let differentEL = EmbeddedEventLoop()
+        // Add one waiter to the pool
+        XCTAssertTrue(state.enqueue())
+        _ = state.acquire(waiter: .init(promise: differentEL.makePromise(), setupComplete: differentEL.makeSucceededFuture(()), preference: .delegateAndChannel(on: differentEL)))
+        XCTAssertState(state, available: 0, leased: 8, waiters: 1, pending: 0, opened: 8)
 
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 8
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.leasedConnections.insert(ConnectionKey(connection))
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: otherChannel.eventLoop)))
-
-        let available = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(available)
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(1, snapshot.leasedConnections.count)
-        XCTAssertEqual(1, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(8, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.release(connection: connection, closing: false)
+        let connection = try XCTUnwrap(connections.first)
+        let action = state.release(connection: connection, closing: false)
         switch action {
         case .replace(let connection, let waiter):
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertTrue(snapshot.leasedConnections.contains(ConnectionKey(connection)))
-            XCTAssertEqual(1, snapshot.availableConnections.count)
-            XCTAssertEqual(1, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(8, snapshot.openedConnectionsCount)
-
+            XCTAssertState(state, available: 0, leased: 7, waiters: 0, pending: 0, opened: 8, isNotLeased: connection)
             // cleanup
-            // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-            // (https://github.com/swift-server/async-http-client/issues/234)
             waiter.promise.fail(TempError())
-            snapshot.openedConnectionsCount = 2
-            self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-            snapshot.availableConnections.forEach { $0.remoteClosed(logger: HTTPClient.loggingDisabled) }
-            self.http1ConnectionProvider.release(connection: connection, closing: true, logger: HTTPClient.loggingDisabled)
         default:
             XCTFail("Unexpected action: \(action)")
         }
-    }
 
-    func testReleaseInactiveConnectionHasWaitersHasSameELConnectionsSpecificEL() throws {
-        let channel = EmbeddedChannel()
-        let otherChannel = EmbeddedChannel()
-
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 2
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.leasedConnections.insert(ConnectionKey(connection))
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: otherChannel.eventLoop)))
-
-        let available = Connection(channel: otherChannel, provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(available)
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(1, snapshot.leasedConnections.count)
-        XCTAssertEqual(1, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(2, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.release(connection: connection, closing: false)
-        switch action {
-        case .lease(let connection, let waiter):
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertTrue(connection === available)
-            XCTAssertTrue(snapshot.leasedConnections.contains(ConnectionKey(connection)))
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(1, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-            // cleanup
-            // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-            // (https://github.com/swift-server/async-http-client/issues/234)
-            waiter.promise.succeed(connection)
-            self.http1ConnectionProvider.release(connection: connection, closing: true, logger: HTTPClient.loggingDisabled)
-        default:
-            XCTFail("Unexpected action: \(action)")
-        }
-    }
-
-    func testReleaseInactiveConnectionHasWaitersNoSameELConnectionsSpecificEL() throws {
-        let channel = EmbeddedChannel()
-        let otherChannel = EmbeddedChannel()
-
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 2
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.leasedConnections.insert(ConnectionKey(connection))
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: otherChannel.eventLoop)))
-
-        let available = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(available)
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(1, snapshot.leasedConnections.count)
-        XCTAssertEqual(1, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(2, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.release(connection: connection, closing: false)
-        switch action {
-        case .create(let waiter):
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(1, snapshot.availableConnections.count)
-            XCTAssertEqual(0, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(2, snapshot.openedConnectionsCount)
-
-            // cleanup
-            // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-            // (https://github.com/swift-server/async-http-client/issues/234)s
-            self.http1ConnectionProvider.connect(.failure(TempError()), waiter: waiter, logger: HTTPClient.loggingDisabled)
-            snapshot.availableConnections.forEach { $0.remoteClosed(logger: HTTPClient.loggingDisabled) }
-        default:
-            XCTFail("Unexpected action: \(action)")
-        }
+        try XCTAssertStateClose(state, available: 0, leased: 7, waiters: 0, clean: false)
     }
 
     // MARK: - Next Waiter Tests
 
     func testNextWaiterEmptyQueue() throws {
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
+        var (state, _) = self.buildState(count: 0)
+        XCTAssertState(state, available: 0, leased: 0, waiters: 0, pending: 0, opened: 0)
 
-        snapshot.pending = 0
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(0, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.processNextWaiter()
+        let action = state.processNextWaiter()
         switch action {
         case .closeProvider:
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(0, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(0, snapshot.openedConnectionsCount)
+            XCTAssertState(state, available: 0, leased: 0, waiters: 0, pending: 0, opened: 0)
         default:
             XCTFail("Unexpected action: \(action)")
         }
-
-        // cleanup
-        // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-        // (https://github.com/swift-server/async-http-client/issues/234)
-        self.http1ConnectionProvider.execute(action, logger: HTTPClient.loggingDisabled)
     }
 
     func testNextWaiterEmptyQueueHasConnections() throws {
-        let channel = ActiveChannel(eventLoop: self.eventLoop)
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
+        var (state, _) = self.buildState(count: 1, release: true)
+        XCTAssertState(state, available: 1, leased: 0, waiters: 0, pending: 0, opened: 1)
 
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 1
-
-        let available = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(available)
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.processNextWaiter()
+        let action = state.processNextWaiter()
         switch action {
         case .none:
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(1, snapshot.availableConnections.count)
-            XCTAssertEqual(0, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-            // cleanup
-            // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-            // (https://github.com/swift-server/async-http-client/issues/234)
-            available.remoteClosed(logger: HTTPClient.loggingDisabled)
-        default:
-            XCTFail("Unexpected action: \(action)")
-        }
-    }
-
-    func testNextWaiterHasWaitersHasConnections() throws {
-        let channel = EmbeddedChannel()
-
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 1
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .indifferent))
-
-        let available = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(available)
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(1, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.processNextWaiter()
-        switch action {
-        case .lease(let connection, let waiter):
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertTrue(snapshot.leasedConnections.contains(ConnectionKey(connection)))
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(1, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-            // cleanup
-            // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-            // (https://github.com/swift-server/async-http-client/issues/234)
-            waiter.promise.fail(TempError())
-            self.http1ConnectionProvider.release(connection: connection, closing: true, logger: HTTPClient.loggingDisabled)
-        default:
-            XCTFail("Unexpected action: \(action)")
-        }
-    }
-
-    func testNextWaiterHasWaitersHasSameELConnectionsSpecificEL() throws {
-        let channel = EmbeddedChannel()
-
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 1
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: channel.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: channel.eventLoop)))
-
-        let available = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(available)
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(1, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.processNextWaiter()
-        switch action {
-        case .lease(let connection, let waiter):
-            let snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertTrue(snapshot.leasedConnections.contains(ConnectionKey(connection)))
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(1, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-            // cleanup
-            // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-            // (https://github.com/swift-server/async-http-client/issues/234)
-            waiter.promise.fail(TempError())
-            self.http1ConnectionProvider.release(connection: connection, closing: true, logger: HTTPClient.loggingDisabled)
-        default:
-            XCTFail("Unexpected action: \(action)")
-        }
-    }
-
-    func testNextWaiterHasWaitersHasDifferentELConnectionsSpecificEL() throws {
-        let channel = EmbeddedChannel()
-
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 1
-        snapshot.waiters.append(.init(promise: channel.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .delegateAndChannel(on: self.eventLoop)))
-
-        let available = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(available)
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(1, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.processNextWaiter()
-        switch action {
-        case .create(let waiter):
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(1, snapshot.availableConnections.count)
-            XCTAssertEqual(0, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(2, snapshot.openedConnectionsCount)
-
-            // cleanup
-            // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-            // (https://github.com/swift-server/async-http-client/issues/234)
-            // simulate create -> use -> release cycle
-            self.http1ConnectionProvider.connect(.failure(TempError()), waiter: waiter, logger: HTTPClient.loggingDisabled)
-            available.remoteClosed(logger: HTTPClient.loggingDisabled)
+            XCTAssertState(state, available: 1, leased: 0, waiters: 0, pending: 0, opened: 1)
         default:
             XCTFail("Unexpected action: \(action)")
         }
@@ -1066,61 +413,25 @@ class ConnectionPoolTests: XCTestCase {
     // MARK: - Timeout and Remote Close Tests
 
     func testTimeoutLeasedConnection() throws {
-        let channel = EmbeddedChannel()
+        var (state, connections) = self.buildState(count: 1, release: false)
+        XCTAssertState(state, available: 0, leased: 1, waiters: 0, pending: 0, opened: 1)
 
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 1
-        snapshot.leasedConnections.insert(ConnectionKey(connection))
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(1, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.timeout(connection: connection)
+        let connection = try XCTUnwrap(connections.first)
+        let action = state.timeout(connection: connection)
         switch action {
         case .none:
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(1, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(1, snapshot.openedConnectionsCount)
+            XCTAssertState(state, available: 0, leased: 1, waiters: 0, pending: 0, opened: 1)
         default:
             XCTFail("Unexpected action: \(action)")
         }
-
-        // cleanup
-        // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-        // (https://github.com/swift-server/async-http-client/issues/234)
-        self.http1ConnectionProvider.release(connection: connection, closing: true, logger: HTTPClient.loggingDisabled)
     }
 
     func testTimeoutAvailableConnection() throws {
-        let channel = EmbeddedChannel()
+        var (state, connections) = self.buildState(count: 1)
+        XCTAssertState(state, available: 1, leased: 0, waiters: 0, pending: 0, opened: 1)
 
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 1
-        snapshot.availableConnections.append(connection)
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.timeout(connection: connection)
+        let connection = try XCTUnwrap(connections.first)
+        let action = state.timeout(connection: connection)
         switch action {
         case .closeAnd(_, let after):
             switch after {
@@ -1129,104 +440,51 @@ class ConnectionPoolTests: XCTestCase {
             default:
                 XCTFail("Unexpected action: \(action)")
             }
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(0, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(0, snapshot.openedConnectionsCount)
+            XCTAssertState(state, available: 0, leased: 0, waiters: 0, pending: 0, opened: 0)
         default:
             XCTFail("Unexpected action: \(action)")
         }
-
-        // cleanup
-        // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-        // (https://github.com/swift-server/async-http-client/issues/234)
-        self.http1ConnectionProvider.execute(action, logger: HTTPClient.loggingDisabled)
     }
 
     func testRemoteClosedLeasedConnection() throws {
-        let channel = EmbeddedChannel()
+        var (state, connections) = self.buildState(count: 1, release: false)
 
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
+        XCTAssertState(state, available: 0, leased: 1, waiters: 0, pending: 0, opened: 1)
 
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 1
-        snapshot.leasedConnections.insert(ConnectionKey(connection))
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(1, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.remoteClosed(connection: connection)
+        // This can happen when just leased connection is closed before TaskHandler is added to pipeline
+        let connection = try XCTUnwrap(connections.first)
+        let action = state.remoteClosed(connection: connection)
         switch action {
         case .none:
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(1, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(1, snapshot.openedConnectionsCount)
+            XCTAssertState(state, available: 0, leased: 1, waiters: 0, pending: 0, opened: 1)
         default:
             XCTFail("Unexpected action: \(action)")
         }
-
-        // cleanup
-        // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-        // (https://github.com/swift-server/async-http-client/issues/234)
-        self.http1ConnectionProvider.release(connection: connection, closing: true, logger: HTTPClient.loggingDisabled)
     }
 
     func testRemoteClosedAvailableConnection() throws {
-        let channel = EmbeddedChannel()
+        var (state, connections) = self.buildState(count: 1)
 
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
+        XCTAssertState(state, available: 1, leased: 0, waiters: 0, pending: 0, opened: 1)
 
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.pending = 0
-        snapshot.openedConnectionsCount = 1
-        snapshot.availableConnections.append(connection)
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        let action = self.http1ConnectionProvider.state.remoteClosed(connection: connection)
+        let connection = try XCTUnwrap(connections.first)
+        let action = state.remoteClosed(connection: connection)
         switch action {
         case .closeProvider:
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(0, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(0, snapshot.openedConnectionsCount)
+            XCTAssertState(state, available: 0, leased: 0, waiters: 0, pending: 0, opened: 0)
         default:
             XCTFail("Unexpected action: \(action)")
         }
-
-        // cleanup
-        // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-        // (https://github.com/swift-server/async-http-client/issues/234)
-        self.http1ConnectionProvider.execute(action, logger: HTTPClient.loggingDisabled)
     }
 
     // MARK: - Shutdown tests
 
     func testShutdownOnPendingAndSuccess() {
-        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<ConnectionForTests>(eventLoop: self.eventLoop)
 
         XCTAssertTrue(state.enqueue())
 
-        let connectionPromise = self.eventLoop.makePromise(of: Connection.self)
+        let connectionPromise = self.eventLoop.makePromise(of: ConnectionForTests.self)
         let setupPromise = self.eventLoop.makePromise(of: Void.self)
         let waiter = HTTP1ConnectionProvider.Waiter(promise: connectionPromise, setupComplete: setupPromise.futureResult, preference: .indifferent)
         var action = state.acquire(waiter: waiter)
@@ -1248,7 +506,7 @@ class ConnectionPoolTests: XCTestCase {
             XCTFail("Expecting snapshot")
         }
 
-        let connection = Connection(channel: EmbeddedChannel(), provider: self.http1ConnectionProvider)
+        let connection = ConnectionForTests(eventLoop: self.eventLoop)
 
         action = state.offer(connection: connection)
         guard case .closeAnd(_, .closeProvider) = action else {
@@ -1261,11 +519,11 @@ class ConnectionPoolTests: XCTestCase {
     }
 
     func testShutdownOnPendingAndError() {
-        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<ConnectionForTests>(eventLoop: self.eventLoop)
 
         XCTAssertTrue(state.enqueue())
 
-        let connectionPromise = self.eventLoop.makePromise(of: Connection.self)
+        let connectionPromise = self.eventLoop.makePromise(of: ConnectionForTests.self)
         let setupPromise = self.eventLoop.makePromise(of: Void.self)
         let waiter = HTTP1ConnectionProvider.Waiter(promise: connectionPromise, setupComplete: setupPromise.futureResult, preference: .indifferent)
         var action = state.acquire(waiter: waiter)
@@ -1297,16 +555,8 @@ class ConnectionPoolTests: XCTestCase {
         setupPromise.succeed(())
     }
 
-    func testShutdownTimeout() {
-        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
-
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        let connection = Connection(channel: EmbeddedChannel(), provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(connection)
-        snapshot.openedConnectionsCount = 1
-
-        state.testsOnly_setInternalState(snapshot)
+    func testShutdownTimeout() throws {
+        var (state, connections) = self.buildState(count: 1)
 
         if let (waiters, available, leased, clean) = state.close() {
             XCTAssertTrue(waiters.isEmpty)
@@ -1317,6 +567,7 @@ class ConnectionPoolTests: XCTestCase {
             XCTFail("Expecting snapshot")
         }
 
+        let connection = try XCTUnwrap(connections.first)
         let action = state.timeout(connection: connection)
         switch action {
         case .closeAnd(_, let next):
@@ -1332,16 +583,8 @@ class ConnectionPoolTests: XCTestCase {
         }
     }
 
-    func testShutdownRemoteClosed() {
-        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
-
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        let connection = Connection(channel: EmbeddedChannel(), provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(connection)
-        snapshot.openedConnectionsCount = 1
-
-        state.testsOnly_setInternalState(snapshot)
+    func testShutdownRemoteClosed() throws {
+        var (state, connections) = self.buildState(count: 1)
 
         if let (waiters, available, leased, clean) = state.close() {
             XCTAssertTrue(waiters.isEmpty)
@@ -1352,6 +595,7 @@ class ConnectionPoolTests: XCTestCase {
             XCTFail("Expecting snapshot")
         }
 
+        let connection = try XCTUnwrap(connections.first)
         let action = state.remoteClosed(connection: connection)
         switch action {
         case .closeProvider:
@@ -1362,26 +606,14 @@ class ConnectionPoolTests: XCTestCase {
         }
     }
 
-    // MARK: - Helpers
-
     override func setUp() {
         XCTAssertNil(self.eventLoop)
-        XCTAssertNil(self.http1ConnectionProvider)
         self.eventLoop = EmbeddedEventLoop()
-        XCTAssertNoThrow(self.http1ConnectionProvider = try HTTP1ConnectionProvider(key: .init(.init(url: "http://some.test")),
-                                                                                    eventLoop: self.eventLoop,
-                                                                                    configuration: .init(),
-                                                                                    pool: .init(configuration: .init(),
-                                                                                                backgroundActivityLogger: HTTPClient.loggingDisabled),
-                                                                                    backgroundActivityLogger: HTTPClient.loggingDisabled))
     }
 
     override func tearDown() {
         XCTAssertNotNil(self.eventLoop)
-        XCTAssertNotNil(self.http1ConnectionProvider)
-        XCTAssertNoThrow(try self.http1ConnectionProvider.close().wait())
         XCTAssertNoThrow(try self.eventLoop.syncShutdownGracefully())
         self.eventLoop = nil
-        self.http1ConnectionProvider = nil
     }
 }
