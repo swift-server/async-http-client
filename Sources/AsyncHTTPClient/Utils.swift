@@ -21,7 +21,7 @@ import NIOHTTP1
 import NIOHTTPCompression
 import NIOSSL
 import NIOTransportServices
-import TracingInstrumentation
+import Tracing
 
 internal extension String {
     var isIPAddress: Bool {

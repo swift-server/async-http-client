@@ -12,11 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Baggage
-import BaggageLogging
+import BaggageContext
 import Foundation
 import Instrumentation
-import TracingInstrumentation
+import Tracing
 import Logging
 import NIO
 import NIOConcurrencyHelpers
@@ -233,7 +232,7 @@ public class HTTPClient {
     ///     - url: Remote URL.
     ///     - context: Baggage context associated with this request
     ///     - deadline: Point in time by which the request must complete.
-    public func get(url: String, context: LoggingBaggageContextCarrier, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+    public func get(url: String, context: BaggageContext, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         return self.execute(.GET, url: url, context: context, deadline: deadline)
     }
 
@@ -244,7 +243,7 @@ public class HTTPClient {
     ///     - context: Baggage context associated with this request
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
-    public func post(url: String, context: LoggingBaggageContextCarrier, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+    public func post(url: String, context: BaggageContext, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         return self.execute(.POST, url: url, context: context, body: body, deadline: deadline)
     }
 
@@ -255,7 +254,7 @@ public class HTTPClient {
     ///     - context: Baggage context associated with this request
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
-    public func patch(url: String, context: LoggingBaggageContextCarrier, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+    public func patch(url: String, context: BaggageContext, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         return self.execute(.PATCH, url: url, context: context, body: body, deadline: deadline)
     }
 
@@ -266,7 +265,7 @@ public class HTTPClient {
     ///     - context: Baggage context associated with this request
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
-    public func put(url: String, context: LoggingBaggageContextCarrier, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+    public func put(url: String, context: BaggageContext, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         return self.execute(.PUT, url: url, context: context, body: body, deadline: deadline)
     }
 
@@ -276,7 +275,7 @@ public class HTTPClient {
     ///     - url: Remote URL.
     ///     - context: Baggage context associated with this request
     ///     - deadline: The time when the request must have been completed by.
-    public func delete(url: String, context: LoggingBaggageContextCarrier, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+    public func delete(url: String, context: BaggageContext, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         return self.execute(.DELETE, url: url, context: context, deadline: deadline)
     }
 
@@ -288,7 +287,7 @@ public class HTTPClient {
     ///     - context: Baggage context associated with this request
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
-    public func execute(_ method: HTTPMethod = .GET, url: String, context: LoggingBaggageContextCarrier, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+    public func execute(_ method: HTTPMethod = .GET, url: String, context: BaggageContext, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try Request(url: url, method: method, body: body)
             return self.execute(request: request, context: context, deadline: deadline)
@@ -306,7 +305,7 @@ public class HTTPClient {
     ///     - context: Baggage context associated with this request
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
-    public func execute(_ method: HTTPMethod = .GET, socketPath: String, urlPath: String, context: LoggingBaggageContextCarrier, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+    public func execute(_ method: HTTPMethod = .GET, socketPath: String, urlPath: String, context: BaggageContext, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             guard let url = URL(httpURLWithSocketPath: socketPath, uri: urlPath) else {
                 throw HTTPClientError.invalidURL
@@ -328,7 +327,7 @@ public class HTTPClient {
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
-    public func execute(_ method: HTTPMethod = .GET, secureSocketPath: String, urlPath: String, context: LoggingBaggageContextCarrier, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+    public func execute(_ method: HTTPMethod = .GET, secureSocketPath: String, urlPath: String, context: BaggageContext, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             guard let url = URL(httpsURLWithSocketPath: secureSocketPath, uri: urlPath) else {
                 throw HTTPClientError.invalidURL
@@ -346,7 +345,7 @@ public class HTTPClient {
     ///     - request: HTTP request to execute.
     ///     - context: Baggage context associated with this request
     ///     - deadline: Point in time by which the request must complete.
-    public func execute(request: Request, context: LoggingBaggageContextCarrier, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+    public func execute(request: Request, context: BaggageContext, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         let accumulator = ResponseAccumulator(request: request)
         return self.execute(request: request, delegate: accumulator, context: context, deadline: deadline).futureResult
     }
@@ -358,7 +357,7 @@ public class HTTPClient {
     ///     - eventLoop: NIO Event Loop preference.
     ///     - context: Baggage context associated with this request
     ///     - deadline: Point in time by which the request must complete.
-    public func execute(request: Request, eventLoop: EventLoopPreference, context: LoggingBaggageContextCarrier, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+    public func execute(request: Request, eventLoop: EventLoopPreference, context: BaggageContext, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         let accumulator = ResponseAccumulator(request: request)
         return self.execute(request: request, delegate: accumulator, eventLoop: eventLoop, context: context, deadline: deadline).futureResult
     }
@@ -372,7 +371,7 @@ public class HTTPClient {
     ///     - deadline: Point in time by which the request must complete.
     public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
                                                               delegate: Delegate,
-                                                              context: LoggingBaggageContextCarrier,
+                                                              context: BaggageContext,
                                                               deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
         return self.execute(request: request, delegate: delegate, eventLoop: .indifferent, context: context, deadline: deadline)
     }
@@ -388,9 +387,9 @@ public class HTTPClient {
     public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
                                                               delegate: Delegate,
                                                               eventLoop eventLoopPreference: EventLoopPreference,
-                                                              context: LoggingBaggageContextCarrier,
+                                                              context: BaggageContext,
                                                               deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
-        var span = InstrumentationSystem.tracingInstrument.startSpan(named: request.method.rawValue, context: context, ofKind: .client)
+        let span = InstrumentationSystem.tracer.startSpan(named: request.method.rawValue, baggage: context.baggage, ofKind: .client)
         span.attributes.http.method = request.method.rawValue
         span.attributes.http.scheme = request.scheme
         span.attributes.http.target = request.uri
@@ -402,7 +401,7 @@ public class HTTPClient {
         // TODO: net.peer.ip / Not required, but recommended
 
         var request = request
-        InstrumentationSystem.instrument.inject(span.context.baggage, into: &request.headers, using: HTTPHeadersInjector())
+        InstrumentationSystem.instrument.inject(span.baggage, into: &request.headers, using: HTTPHeadersInjector())
 
         let logger = context.logger.attachingRequestInformation(request, requestID: globalRequestID.add(1))
 

@@ -13,8 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 @testable import AsyncHTTPClient
-import Baggage
-import BaggageLogging
+import BaggageContext
 import Logging
 import NIO
 import NIOConcurrencyHelpers
@@ -1177,14 +1176,6 @@ extension TaskHandler.State {
     }
 }
 
-private struct TestContext: LoggingBaggageContextCarrier {
-    var logger: Logger
-    var baggage: BaggageContext
-}
-
-func testContext(
-    _ context: BaggageContext = BaggageContext(),
-    logger: Logger = Logger(label: "test")
-) -> LoggingBaggageContextCarrier {
-    TestContext(logger: logger.with(context: context), baggage: context)
+func testContext(_ baggage: Baggage = .topLevel, logger: Logger = Logger(label: "test")) -> BaggageContext {
+    DefaultContext(baggage: baggage, logger: logger)
 }

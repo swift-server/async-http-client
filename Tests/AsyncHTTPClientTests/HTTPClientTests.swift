@@ -18,7 +18,7 @@
 #endif
 import Baggage
 import Instrumentation
-import TracingInstrumentation
+import Tracing
 import Logging
 import NIO
 import NIOConcurrencyHelpers
@@ -501,7 +501,8 @@ class HTTPClientTests: XCTestCase {
 
                 let progress = try self.defaultClient.execute(
                     request: request,
-                    delegate: delegate
+                    delegate: delegate,
+                    context: testContext()
                 )
                 .wait()
 
@@ -526,7 +527,8 @@ class HTTPClientTests: XCTestCase {
 
                 let progress = try self.defaultClient.execute(
                     request: request,
-                    delegate: delegate
+                    delegate: delegate,
+                    context: testContext()
                 )
                 .wait()
 
@@ -2664,7 +2666,7 @@ class HTTPClientTests: XCTestCase {
     func testDoubleError() throws {
         // This is needed to that connection pool will not get into closed state when we release
         // second connection.
-        _ = self.defaultClient.get(url: "http://localhost:\(self.defaultHTTPBin.port)/events/10/1")
+        _ = self.defaultClient.get(url: "http://localhost:\(self.defaultHTTPBin.port)/events/10/1", context: testContext())
 
         var request = try HTTPClient.Request(url: "http://localhost:\(self.defaultHTTPBin.port)/wait", method: .POST)
         request.body = .stream { writer in
@@ -2683,7 +2685,7 @@ class HTTPClientTests: XCTestCase {
 
         // We specify a deadline of 2 ms co that request will be timed out before all chunks are writtent,
         // we need to verify that second error on write after timeout does not lead to double-release.
-        XCTAssertThrowsError(try self.defaultClient.execute(request: request, deadline: .now() + .milliseconds(2)).wait())
+        XCTAssertThrowsError(try self.defaultClient.execute(request: request, context: testContext(), deadline: .now() + .milliseconds(2)).wait())
     }
     
     // MARK: - Tracing -
@@ -2708,19 +2710,16 @@ class HTTPClientTests: XCTestCase {
     }
 }
 
-private final class TestTracer: TracingInstrument {
+private final class TestTracer: Tracer {
     private(set) var recordedSpans = [TestSpan]()
 
     func startSpan(
         named operationName: String,
-        context: BaggageContextCarrier,
+        baggage: Baggage,
         ofKind kind: SpanKind,
         at timestamp: Timestamp
     ) -> Span {
-        let span = TestSpan(operationName: operationName,
-                            kind: kind,
-                            startTimestamp: timestamp,
-                            context: context.baggage)
+        let span = TestSpan(operationName: operationName, kind: kind, startTimestamp: timestamp, baggage: baggage)
         recordedSpans.append(span)
         return span
     }
@@ -2729,18 +2728,14 @@ private final class TestTracer: TracingInstrument {
 
     func extract<Carrier, Extractor>(
         _ carrier: Carrier,
-        into context: inout BaggageContext,
+        into baggage: inout Baggage,
         using extractor: Extractor
     )
     where
     Carrier == Extractor.Carrier,
     Extractor: ExtractorProtocol {}
 
-    func inject<Carrier, Injector>(
-        _ context: BaggageContext,
-        into carrier: inout Carrier,
-        using injector: Injector
-    )
+    func inject<Carrier, Injector>(_ baggage: Baggage, into carrier: inout Carrier, using injector: Injector)
     where
     Carrier == Injector.Carrier,
     Injector: InjectorProtocol {}
@@ -2748,7 +2743,7 @@ private final class TestTracer: TracingInstrument {
     final class TestSpan: Span {
         private let operationName: String
         private let kind: SpanKind
-        var context: BaggageContext
+        let baggage: Baggage
 
         private(set) var status: SpanStatus?
         private(set) var isRecording = false
@@ -2772,11 +2767,11 @@ private final class TestTracer: TracingInstrument {
             self.status = status
         }
 
-        init(operationName: String, kind: SpanKind, startTimestamp: Timestamp, context: BaggageContext) {
+        init(operationName: String, kind: SpanKind, startTimestamp: Timestamp, baggage: Baggage) {
             self.operationName = operationName
             self.kind = kind
             self.startTimestamp = startTimestamp
-            self.context = context
+            self.baggage = baggage
         }
     }
 }
