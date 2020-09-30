@@ -27,10 +27,8 @@ class ConnectionPoolTests: XCTestCase {
     var eventLoop: EmbeddedEventLoop!
     var http1ConnectionProvider: HTTP1ConnectionProvider!
 
-    struct TempError: Error {}
-
     func testPending() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
 
         var snapshot = state.testsOnly_getInternalState()
         XCTAssertEqual(0, snapshot.availableConnections.count)
@@ -52,7 +50,7 @@ class ConnectionPoolTests: XCTestCase {
     // MARK: - Acquire Tests
 
     func testAcquireWhenEmpty() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
 
         var snapshot = state.testsOnly_getInternalState()
         XCTAssertEqual(0, snapshot.availableConnections.count)
@@ -157,7 +155,7 @@ class ConnectionPoolTests: XCTestCase {
     // MARK: - Acquire on Specific EL Tests
 
     func testAcquireWhenEmptySpecificEL() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
         var snapshot = state.testsOnly_getInternalState()
 
         XCTAssertEqual(0, snapshot.availableConnections.count)
@@ -303,7 +301,7 @@ class ConnectionPoolTests: XCTestCase {
     // MARK: - Acquire Errors Tests
 
     func testAcquireWhenClosed() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
         _ = state.close()
 
         XCTAssertFalse(state.enqueue())
@@ -319,7 +317,7 @@ class ConnectionPoolTests: XCTestCase {
     }
 
     func testConnectFailedWhenClosed() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
         _ = state.close()
 
         let action = state.connectFailed()
@@ -1221,180 +1219,10 @@ class ConnectionPoolTests: XCTestCase {
         self.http1ConnectionProvider.execute(action, logger: HTTPClient.loggingDisabled)
     }
 
-    // MARK: - Connection Tests
-
-    func testConnectionReleaseActive() throws {
-        let channel = ActiveChannel(eventLoop: self.eventLoop)
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.openedConnectionsCount = 1
-        snapshot.leasedConnections.insert(ConnectionKey(connection))
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(1, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        connection.release(closing: false, logger: HTTPClient.loggingDisabled)
-
-        // XCTAssertFalse(connection.isInUse)
-        snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        // cleanup
-        // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-        // (https://github.com/swift-server/async-http-client/issues/234)
-        connection.remoteClosed(logger: HTTPClient.loggingDisabled)
-    }
-
-    func testConnectionReleaseInactive() throws {
-        let channel = EmbeddedChannel()
-
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.openedConnectionsCount = 1
-        snapshot.leasedConnections.insert(ConnectionKey(connection))
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(1, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        connection.release(closing: true, logger: HTTPClient.loggingDisabled)
-
-        snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(0, snapshot.openedConnectionsCount)
-    }
-
-    func testConnectionRemoteCloseRelease() throws {
-        let channel = EmbeddedChannel()
-
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(connection)
-        snapshot.openedConnectionsCount = 1
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        connection.remoteClosed(logger: HTTPClient.loggingDisabled)
-
-        snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(0, snapshot.openedConnectionsCount)
-    }
-
-    func testConnectionTimeoutRelease() throws {
-        let channel = EmbeddedChannel()
-
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(connection)
-        snapshot.openedConnectionsCount = 1
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        connection.timeout(logger: HTTPClient.loggingDisabled)
-
-        snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-        XCTAssertEqual(0, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(0, snapshot.openedConnectionsCount)
-    }
-
-    func testAcquireAvailableBecomesUnavailable() throws {
-        let channel = ActiveChannel(eventLoop: self.eventLoop)
-        var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-
-        let connection = Connection(channel: channel, provider: self.http1ConnectionProvider)
-        snapshot.availableConnections.append(connection)
-        snapshot.openedConnectionsCount = 1
-
-        self.http1ConnectionProvider.state.testsOnly_setInternalState(snapshot)
-
-        XCTAssertEqual(1, snapshot.availableConnections.count)
-        XCTAssertEqual(0, snapshot.leasedConnections.count)
-        XCTAssertEqual(0, snapshot.waiters.count)
-        XCTAssertEqual(0, snapshot.pending)
-        XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-        XCTAssertTrue(self.http1ConnectionProvider.enqueue())
-
-        let action = self.http1ConnectionProvider.state.acquire(waiter: .init(promise: self.eventLoop.makePromise(), setupComplete: self.eventLoop.makeSucceededFuture(()), preference: .indifferent))
-        switch action {
-        case .lease(let connection, let waiter):
-            // Since this connection is already in use, this should be a no-op and state should not have changed from normal lease
-            connection.timeout(logger: HTTPClient.loggingDisabled)
-
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertTrue(connection.isActiveEstimation)
-            XCTAssertTrue(snapshot.leasedConnections.contains(ConnectionKey(connection)))
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(1, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-            // This is unrecoverable, but in this case we create a new connection, so state again should not change, even though release will be called
-            // This is important to preventself.http1ConnectionProvider deletion since connection is released and there could be 0 waiters
-            connection.remoteClosed(logger: HTTPClient.loggingDisabled)
-
-            snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
-            XCTAssertTrue(snapshot.leasedConnections.contains(ConnectionKey(connection)))
-            XCTAssertEqual(0, snapshot.availableConnections.count)
-            XCTAssertEqual(1, snapshot.leasedConnections.count)
-            XCTAssertEqual(0, snapshot.waiters.count)
-            XCTAssertEqual(0, snapshot.pending)
-            XCTAssertEqual(1, snapshot.openedConnectionsCount)
-
-            // cleanup
-            // this cleanup code needs to go and use HTTP1ConnectionProvider's API instead
-            // (https://github.com/swift-server/async-http-client/issues/234)
-            waiter.promise.fail(TempError())
-            self.http1ConnectionProvider.release(connection: connection, closing: true, logger: HTTPClient.loggingDisabled)
-        default:
-            XCTFail("Unexpected action: \(action)")
-        }
-    }
-
     // MARK: - Shutdown tests
 
     func testShutdownOnPendingAndSuccess() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
 
         XCTAssertTrue(state.enqueue())
 
@@ -1433,7 +1261,7 @@ class ConnectionPoolTests: XCTestCase {
     }
 
     func testShutdownOnPendingAndError() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
 
         XCTAssertTrue(state.enqueue())
 
@@ -1470,7 +1298,7 @@ class ConnectionPoolTests: XCTestCase {
     }
 
     func testShutdownTimeout() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
 
         var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
 
@@ -1505,7 +1333,7 @@ class ConnectionPoolTests: XCTestCase {
     }
 
     func testShutdownRemoteClosed() {
-        var state = HTTP1ConnectionProvider.ConnectionsState(eventLoop: self.eventLoop)
+        var state = HTTP1ConnectionProvider.ConnectionsState<Connection>(eventLoop: self.eventLoop)
 
         var snapshot = self.http1ConnectionProvider.state.testsOnly_getInternalState()
 
@@ -1555,81 +1383,5 @@ class ConnectionPoolTests: XCTestCase {
         XCTAssertNoThrow(try self.eventLoop.syncShutdownGracefully())
         self.eventLoop = nil
         self.http1ConnectionProvider = nil
-    }
-}
-
-class ActiveChannel: Channel, ChannelCore {
-    struct NotImplementedError: Error {}
-
-    func localAddress0() throws -> SocketAddress {
-        throw NotImplementedError()
-    }
-
-    func remoteAddress0() throws -> SocketAddress {
-        throw NotImplementedError()
-    }
-
-    func register0(promise: EventLoopPromise<Void>?) {
-        promise?.fail(NotImplementedError())
-    }
-
-    func bind0(to: SocketAddress, promise: EventLoopPromise<Void>?) {
-        promise?.fail(NotImplementedError())
-    }
-
-    func connect0(to: SocketAddress, promise: EventLoopPromise<Void>?) {
-        promise?.fail(NotImplementedError())
-    }
-
-    func write0(_ data: NIOAny, promise: EventLoopPromise<Void>?) {
-        promise?.fail(NotImplementedError())
-    }
-
-    func flush0() {}
-
-    func read0() {}
-
-    func close0(error: Error, mode: CloseMode, promise: EventLoopPromise<Void>?) {
-        promise?.succeed(())
-    }
-
-    func triggerUserOutboundEvent0(_ event: Any, promise: EventLoopPromise<Void>?) {
-        promise?.fail(NotImplementedError())
-    }
-
-    func channelRead0(_: NIOAny) {}
-
-    func errorCaught0(error: Error) {}
-
-    var allocator: ByteBufferAllocator
-    var closeFuture: EventLoopFuture<Void>
-    var eventLoop: EventLoop
-
-    var localAddress: SocketAddress?
-    var remoteAddress: SocketAddress?
-    var parent: Channel?
-    var isWritable: Bool = true
-    var isActive: Bool = true
-
-    init(eventLoop: EmbeddedEventLoop) {
-        self.allocator = ByteBufferAllocator()
-        self.eventLoop = eventLoop
-        self.closeFuture = self.eventLoop.makeSucceededFuture(())
-    }
-
-    var _channelCore: ChannelCore {
-        return self
-    }
-
-    var pipeline: ChannelPipeline {
-        return ChannelPipeline(channel: self)
-    }
-
-    func setOption<Option>(_ option: Option, value: Option.Value) -> EventLoopFuture<Void> where Option: ChannelOption {
-        preconditionFailure("Not implemented")
-    }
-
-    func getOption<Option>(_: Option) -> EventLoopFuture<Option.Value> where Option: ChannelOption {
-        preconditionFailure("Not implemented")
     }
 }
