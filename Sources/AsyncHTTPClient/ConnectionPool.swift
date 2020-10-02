@@ -235,7 +235,7 @@ class HTTP1ConnectionProvider {
                     logger.trace("opening fresh connection (found matching but inactive connection)",
                                  metadata: ["ahc-dead-connection": "\(connection)"])
                     self.makeChannel(preference: waiter.preference).whenComplete { result in
-                        self.connect(result, waiter: waiter, replacing: connection, logger: logger)
+                        self.connect(result, waiter: waiter, logger: logger)
                     }
                 }
             }
@@ -252,7 +252,7 @@ class HTTP1ConnectionProvider {
                              metadata: ["ahc-old-connection": "\(connection)",
                                         "ahc-waiter": "\(waiter)"])
                 self.makeChannel(preference: waiter.preference).whenComplete { result in
-                    self.connect(result, waiter: waiter, replacing: connection, logger: logger)
+                    self.connect(result, waiter: waiter, logger: logger)
                 }
             }
         case .park(let connection):
@@ -308,10 +308,7 @@ class HTTP1ConnectionProvider {
         return waiter.promise.futureResult
     }
 
-    func connect(_ result: Result<Channel, Error>,
-                 waiter: Waiter<Connection>,
-                 replacing closedConnection: Connection? = nil,
-                 logger: Logger) {
+    func connect(_ result: Result<Channel, Error>, waiter: Waiter<Connection>, logger: Logger) {
         let action: Action<Connection>
         switch result {
         case .success(let channel):
@@ -319,10 +316,7 @@ class HTTP1ConnectionProvider {
                          metadata: ["ahc-connection": "\(channel)"])
             let connection = Connection(channel: channel, provider: self)
             action = self.lock.withLock {
-                if let closedConnection = closedConnection {
-                    self.state.drop(connection: closedConnection)
-                }
-                return self.state.offer(connection: connection)
+                self.state.offer(connection: connection)
             }
 
             switch action {
@@ -367,7 +361,7 @@ class HTTP1ConnectionProvider {
             // This is needed to start a new stack, otherwise, since this is called on a previous
             // future completion handler chain, it will be growing indefinitely until the connection is closed.
             // We might revisit this when https://github.com/apple/swift-nio/issues/970 is resolved.
-            connection.channel.eventLoop.execute {
+            connection.eventLoop.execute {
                 self.execute(action, logger: logger)
             }
         }
@@ -418,59 +412,7 @@ class HTTP1ConnectionProvider {
     }
 
     private func makeChannel(preference: HTTPClient.EventLoopPreference) -> EventLoopFuture<Channel> {
-        let channelEventLoop = preference.bestEventLoop ?? self.eventLoop
-        let requiresTLS = self.key.scheme.requiresTLS
-        let bootstrap: NIOClientTCPBootstrap
-        do {
-            bootstrap = try NIOClientTCPBootstrap.makeHTTPClientBootstrapBase(on: channelEventLoop, host: self.key.host, port: self.key.port, requiresTLS: requiresTLS, configuration: self.configuration)
-        } catch {
-            return channelEventLoop.makeFailedFuture(error)
-        }
-
-        let channel: EventLoopFuture<Channel>
-        switch self.key.scheme {
-        case .http, .https:
-            let address = HTTPClient.resolveAddress(host: self.key.host, port: self.key.port, proxy: self.configuration.proxy)
-            channel = bootstrap.connect(host: address.host, port: address.port)
-        case .unix, .http_unix, .https_unix:
-            channel = bootstrap.connect(unixDomainSocketPath: self.key.unixPath)
-        }
-
-        return channel.flatMap { channel in
-            let requiresSSLHandler = self.configuration.proxy != nil && self.key.scheme.requiresTLS
-            let handshakePromise = channel.eventLoop.makePromise(of: Void.self)
-
-            channel.pipeline.addSSLHandlerIfNeeded(for: self.key, tlsConfiguration: self.configuration.tlsConfiguration, addSSLClient: requiresSSLHandler, handshakePromise: handshakePromise)
-
-            return handshakePromise.futureResult.flatMap {
-                channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
-            }.flatMap {
-                #if canImport(Network)
-                    if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), bootstrap.underlyingBootstrap is NIOTSConnectionBootstrap {
-                        return channel.pipeline.addHandler(HTTPClient.NWErrorHandler(), position: .first)
-                    }
-                #endif
-                return channel.eventLoop.makeSucceededFuture(())
-            }.flatMap {
-                switch self.configuration.decompression {
-                case .disabled:
-                    return channel.eventLoop.makeSucceededFuture(())
-                case .enabled(let limit):
-                    let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
-                    return channel.pipeline.addHandler(decompressHandler)
-                }
-            }.map {
-                channel
-            }
-        }.flatMapError { error in
-            #if canImport(Network)
-                var error = error
-                if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), bootstrap.underlyingBootstrap is NIOTSConnectionBootstrap {
-                    error = HTTPClient.NWErrorHandler.translateError(error)
-                }
-            #endif
-            return channelEventLoop.makeFailedFuture(error)
-        }
+        return NIOClientTCPBootstrap.makeHTTP1Channel(destination: self.key, eventLoop: self.eventLoop, configuration: self.configuration, preference: preference)
     }
 
     /// A `Waiter` represents a request that waits for a connection when none is
