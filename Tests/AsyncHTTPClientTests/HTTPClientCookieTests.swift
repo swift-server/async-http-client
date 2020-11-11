@@ -82,4 +82,12 @@ class HTTPClientCookieTests: XCTestCase {
         XCTAssertNil(HTTPClient.Cookie(header: "=;", defaultDomain: "exampe.org"))
         XCTAssertNil(HTTPClient.Cookie(header: "=value;", defaultDomain: "exampe.org"))
     }
+
+    func testCookieExpiresDateParsing() {
+        var c = HTTPClient.Cookie(header: "key=value; eXpIRes=Sun, 06 Nov 1994 08:49:37 GMT;", defaultDomain: "example.org")!
+        XCTAssertEqual(Date(timeIntervalSince1970: 784_111_777), c.expires)
+
+        c = HTTPClient.Cookie(header: "key=value; eXpIRes=Sunday, 06-Nov-94 08:49:37 GMT;", defaultDomain: "example.org")!
+        XCTAssertEqual(Date(timeIntervalSince1970: 784_111_777), c.expires)
+    }
 }
