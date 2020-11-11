@@ -125,6 +125,7 @@ extension HTTPClientTests {
             ("testBodyUploadAfterEndFails", testBodyUploadAfterEndFails),
             ("testNoBytesSentOverBodyLimit", testNoBytesSentOverBodyLimit),
             ("testDoubleError", testDoubleError),
+            ("testSSLHandshakeErrorPropagation", testSSLHandshakeErrorPropagation),
         ]
     }
 }
