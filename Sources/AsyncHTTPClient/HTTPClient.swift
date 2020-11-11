@@ -639,7 +639,7 @@ public class HTTPClient {
         ///  - `307: Temporary Redirect`
         ///  - `308: Permanent Redirect`
         public var redirectConfiguration: RedirectConfiguration
-        /// Default client timeout, defaults to no timeouts.
+        /// Default client timeout, defaults to no `read` timeout and 10 seconds `connect` timeout.
         public var timeout: Timeout
         /// Connection pool configuration.
         public var connectionPool: ConnectionPool
