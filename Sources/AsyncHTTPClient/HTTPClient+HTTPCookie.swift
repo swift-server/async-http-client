@@ -98,6 +98,12 @@ extension HTTPClient {
                     formatter.dateFormat = "EEE, dd-MMM-yy HH:mm:ss z"
                     if let date = formatter.date(from: value) {
                         self.expires = date
+                        continue
+                    }
+
+                    formatter.dateFormat = "EEE MMM d hh:mm:s yyyy"
+                    if let date = formatter.date(from: value) {
+                        self.expires = date
                     }
                 case ("max-age", let value):
                     self.maxAge = value.flatMap(Int.init)

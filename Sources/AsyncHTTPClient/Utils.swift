@@ -138,6 +138,65 @@ extension NIOClientTCPBootstrap {
                 return channelAddedFuture
             }
     }
+
+    static func makeHTTP1Channel(destination: ConnectionPool.Key, eventLoop: EventLoop, configuration: HTTPClient.Configuration, preference: HTTPClient.EventLoopPreference) -> EventLoopFuture<Channel> {
+        let channelEventLoop = preference.bestEventLoop ?? eventLoop
+
+        let key = destination
+
+        let requiresTLS = key.scheme.requiresTLS
+        let bootstrap: NIOClientTCPBootstrap
+        do {
+            bootstrap = try NIOClientTCPBootstrap.makeHTTPClientBootstrapBase(on: channelEventLoop, host: key.host, port: key.port, requiresTLS: requiresTLS, configuration: configuration)
+        } catch {
+            return channelEventLoop.makeFailedFuture(error)
+        }
+
+        let channel: EventLoopFuture<Channel>
+        switch key.scheme {
+        case .http, .https:
+            let address = HTTPClient.resolveAddress(host: key.host, port: key.port, proxy: configuration.proxy)
+            channel = bootstrap.connect(host: address.host, port: address.port)
+        case .unix, .http_unix, .https_unix:
+            channel = bootstrap.connect(unixDomainSocketPath: key.unixPath)
+        }
+
+        return channel.flatMap { channel in
+            let requiresSSLHandler = configuration.proxy != nil && key.scheme.requiresTLS
+            let handshakePromise = channel.eventLoop.makePromise(of: Void.self)
+
+            channel.pipeline.addSSLHandlerIfNeeded(for: key, tlsConfiguration: configuration.tlsConfiguration, addSSLClient: requiresSSLHandler, handshakePromise: handshakePromise)
+
+            return handshakePromise.futureResult.flatMap {
+                channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
+            }.flatMap {
+                #if canImport(Network)
+                    if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), bootstrap.underlyingBootstrap is NIOTSConnectionBootstrap {
+                        return channel.pipeline.addHandler(HTTPClient.NWErrorHandler(), position: .first)
+                    }
+                #endif
+                return channel.eventLoop.makeSucceededFuture(())
+            }.flatMap {
+                switch configuration.decompression {
+                case .disabled:
+                    return channel.eventLoop.makeSucceededFuture(())
+                case .enabled(let limit):
+                    let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
+                    return channel.pipeline.addHandler(decompressHandler)
+                }
+            }.map {
+                channel
+            }
+        }.flatMapError { error in
+            #if canImport(Network)
+                var error = error
+                if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), bootstrap.underlyingBootstrap is NIOTSConnectionBootstrap {
+                    error = HTTPClient.NWErrorHandler.translateError(error)
+                }
+            #endif
+            return channelEventLoop.makeFailedFuture(error)
+        }
+    }
 }
 
 extension Connection {

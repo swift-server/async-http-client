@@ -89,5 +89,8 @@ class HTTPClientCookieTests: XCTestCase {
 
         c = HTTPClient.Cookie(header: "key=value; eXpIRes=Sunday, 06-Nov-94 08:49:37 GMT;", defaultDomain: "example.org")!
         XCTAssertEqual(Date(timeIntervalSince1970: 784_111_777), c.expires)
+
+        c = HTTPClient.Cookie(header: "key=value; eXpIRes=Sun Nov  6 08:49:37 1994;", defaultDomain: "example.org")!
+        XCTAssertEqual(Date(timeIntervalSince1970: 784_111_777), c.expires)
     }
 }
