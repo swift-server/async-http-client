@@ -81,11 +81,30 @@ extension HTTPClient {
                 case ("domain", .some(let value)):
                     self.domain = value
                 case ("expires", let value):
+                    guard let value = value else {
+                        continue
+                    }
+
                     let formatter = DateFormatter()
                     formatter.locale = Locale(identifier: "en_US")
                     formatter.timeZone = TimeZone(identifier: "GMT")
+
                     formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss z"
-                    self.expires = value.flatMap { formatter.date(from: $0) }
+                    if let date = formatter.date(from: value) {
+                        self.expires = date
+                        continue
+                    }
+
+                    formatter.dateFormat = "EEE, dd-MMM-yy HH:mm:ss z"
+                    if let date = formatter.date(from: value) {
+                        self.expires = date
+                        continue
+                    }
+
+                    formatter.dateFormat = "EEE MMM d hh:mm:s yyyy"
+                    if let date = formatter.date(from: value) {
+                        self.expires = date
+                    }
                 case ("max-age", let value):
                     self.maxAge = value.flatMap(Int.init)
                 case ("secure", nil):
