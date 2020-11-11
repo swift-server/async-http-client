@@ -2675,4 +2675,41 @@ class HTTPClientTests: XCTestCase {
         // we need to verify that second error on write after timeout does not lead to double-release.
         XCTAssertThrowsError(try self.defaultClient.execute(request: request, deadline: .now() + .milliseconds(2)).wait())
     }
+
+    func testSSLHandshakeErrorPropagation() throws {
+        class CloseHandler: ChannelInboundHandler {
+            typealias InboundIn = Any
+
+            func channelActive(context: ChannelHandlerContext) {
+                context.close(promise: nil)
+            }
+        }
+
+        let server = try ServerBootstrap(group: self.serverGroup)
+            .childChannelOption(ChannelOptions.autoRead, value: false)
+            .childChannelInitializer { channel in
+                channel.pipeline.addHandler(CloseHandler())
+            }
+            .bind(host: "127.0.0.1", port: 0)
+            .wait()
+
+        defer {
+            XCTAssertNoThrow(try server.close().wait())
+        }
+
+        let request = try Request(url: "https://localhost:\(server.localAddress!.port!)", method: .GET)
+        let task = self.defaultClient.execute(request: request, delegate: TestHTTPDelegate())
+
+        XCTAssertThrowsError(try task.wait()) { error in
+            #if os(Linux)
+                XCTAssertEqual(error as? NIOSSLError, NIOSSLError.uncleanShutdown)
+            #else
+                if isTestingNIOTS() {
+                    XCTAssertEqual((error as? AsyncHTTPClient.HTTPClient.NWTLSError).map { $0.status }, errSSLClosedNoNotify)
+                } else {
+                    XCTAssertEqual((error as? IOError).map { $0.errnoCode }, 54)
+                }
+            #endif
+        }
+    }
 }

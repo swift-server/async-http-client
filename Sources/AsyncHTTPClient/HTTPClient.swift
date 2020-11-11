@@ -935,16 +935,9 @@ class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
     }
 
     func errorCaught(context: ChannelHandlerContext, error: Error) {
-        if let sslError = error as? NIOSSLError {
-            switch sslError {
-            case .handshakeFailed:
-                self.completionPromise?.fail(error)
-                self.completionPromise = nil
-                context.pipeline.removeHandler(self, promise: nil)
-            default:
-                break
-            }
-        }
+        self.completionPromise?.fail(error)
+        self.completionPromise = nil
+        context.pipeline.removeHandler(self, promise: nil)
         context.fireErrorCaught(error)
     }
 
