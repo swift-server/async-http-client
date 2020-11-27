@@ -110,7 +110,9 @@ final class ConnectionPool {
     }
 
     var count: Int {
-        return self.providers.count
+        return self.lock.withLock {
+            return self.providers.count
+        }
     }
 
     /// Used by the `ConnectionPool` to index its `HTTP1ConnectionProvider`s
