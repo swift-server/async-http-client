@@ -628,6 +628,10 @@ public class HTTPClient {
     public struct Configuration {
         /// TLS configuration, defaults to `TLSConfiguration.forClient()`.
         public var tlsConfiguration: Optional<TLSConfiguration>
+        #if canImport(Network)
+            /// TLS configuration, defaults to `TLSConfiguration.forClient()`.
+            public var tsTlsConfiguration: Optional<TSTLSConfiguration>
+        #endif
         /// Enables following 3xx redirects automatically, defaults to `RedirectConfiguration()`.
         ///
         /// Following redirects are supported:
@@ -658,6 +662,9 @@ public class HTTPClient {
                     ignoreUncleanSSLShutdown: Bool = false,
                     decompression: Decompression = .disabled) {
             self.tlsConfiguration = tlsConfiguration
+            #if canImport(Network)
+                self.tsTlsConfiguration = nil
+            #endif
             self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
             self.timeout = timeout
             self.connectionPool = connectionPool
@@ -665,6 +672,26 @@ public class HTTPClient {
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
             self.decompression = decompression
         }
+
+        #if canImport(Network)
+            @available(macOS 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *)
+            public init(tsTlsConfiguration: TSTLSConfiguration,
+                        redirectConfiguration: RedirectConfiguration? = nil,
+                        timeout: Timeout = Timeout(),
+                        connectionPool: ConnectionPool = ConnectionPool(),
+                        proxy: Proxy? = nil,
+                        ignoreUncleanSSLShutdown: Bool = false,
+                        decompression: Decompression = .disabled) {
+                self.tlsConfiguration = nil
+                self.tsTlsConfiguration = tsTlsConfiguration
+                self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
+                self.timeout = timeout
+                self.connectionPool = connectionPool
+                self.proxy = proxy
+                self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
+                self.decompression = decompression
+            }
+        #endif
 
         public init(tlsConfiguration: TLSConfiguration? = nil,
                     redirectConfiguration: RedirectConfiguration? = nil,

@@ -14,10 +14,8 @@
 
 #if canImport(Network)
 
-    import Foundation
     import Network
     import NIOSSL
-    import NIOTransportServices
 
     extension TLSVersion {
         /// return Network framework TLS protocol version

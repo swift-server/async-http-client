@@ -88,8 +88,14 @@ extension NIOClientTCPBootstrap {
                     bootstrap = NIOClientTCPBootstrap(tsBootstrap, tls: NIOInsecureNoTLS())
                 } else {
                     // create NIOClientTCPBootstrap with NIOTS TLS provider
-                    let tlsConfiguration = configuration.tlsConfiguration ?? TLSConfiguration.forClient()
-                    let parameters = tlsConfiguration.getNWProtocolTLSOptions()
+                    let parameters: NWProtocolTLS.Options
+                    if let tsTlsConfiguration = configuration.tsTlsConfiguration {
+                        parameters = tsTlsConfiguration.getNWProtocolTLSOptions()
+                    } else if let tlsConfiguration = configuration.tlsConfiguration {
+                        parameters = tlsConfiguration.getNWProtocolTLSOptions()
+                    } else {
+                        parameters = .init()
+                    }
                     let tlsProvider = NIOTSClientTLSProvider(tlsOptions: parameters)
                     bootstrap = NIOClientTCPBootstrap(tsBootstrap, tls: tlsProvider)
                 }

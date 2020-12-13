@@ -96,7 +96,7 @@ class HTTPClientNIOTSTests: XCTestCase {
             let httpBin = HTTPBin(ssl: true)
             let httpClient = HTTPClient(
                 eventLoopGroupProvider: .shared(self.clientGroup),
-                configuration: .init(tlsConfiguration: TLSConfiguration.forClient(minimumTLSVersion: .tlsv11, maximumTLSVersion: .tlsv1, certificateVerification: .none))
+                configuration: .init(tsTlsConfiguration: .init(minimumTLSVersion: .TLSv11, maximumTLSVersion: .TLSv10, certificateVerification: .none))
             )
             defer {
                 XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
@@ -106,6 +106,22 @@ class HTTPClientNIOTSTests: XCTestCase {
             XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()) { error in
                 XCTAssertEqual((error as? HTTPClient.NWTLSError)?.status, errSSLHandshakeFail)
             }
+        #endif
+    }
+
+    func testHTTPS() throws {
+        guard isTestingNIOTS() else { return }
+        #if canImport(Network)
+            let localHTTPBin = HTTPBin(ssl: true)
+            let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                         configuration: .init(tsTlsConfiguration: .init(certificateVerification: .none)))
+            defer {
+                XCTAssertNoThrow(try localClient.syncShutdown())
+                XCTAssertNoThrow(try localHTTPBin.shutdown())
+            }
+
+            let response = try localClient.get(url: "https://localhost:\(localHTTPBin.port)/get").wait()
+            XCTAssertEqual(.ok, response.status)
         #endif
     }
 }
