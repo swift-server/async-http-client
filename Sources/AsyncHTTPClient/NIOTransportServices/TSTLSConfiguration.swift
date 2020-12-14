@@ -133,9 +133,6 @@
                         }
                         if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
                             SecTrustEvaluateAsyncWithError(trust, Self.tlsDispatchQueue) { _, result, error in
-                                if let error = error {
-                                    print("Trust failed: \(error.localizedDescription)")
-                                }
                                 sec_protocol_verify_complete(result)
                             }
                         } else {
