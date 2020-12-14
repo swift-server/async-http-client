@@ -132,7 +132,7 @@
                             SecTrustSetAnchorCertificates(trust, trustRootCertificates as CFArray)
                         }
                         if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
-                            SecTrustEvaluateAsyncWithError(trust, Self.tlsDispatchQueue) { _, result, error in
+                            SecTrustEvaluateAsyncWithError(trust, Self.tlsDispatchQueue) { _, result, _ in
                                 sec_protocol_verify_complete(result)
                             }
                         } else {
