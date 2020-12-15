@@ -629,7 +629,7 @@ public class HTTPClient {
         /// TLS configuration, defaults to `TLSConfiguration.forClient()`.
         public var tlsConfiguration: Optional<TLSConfiguration>
         #if canImport(Network)
-            /// TLS configuration, defaults to `TLSConfiguration.forClient()`.
+            /// TLS configuration for NIO Transport services.
             public var tsTlsConfiguration: Optional<TSTLSConfiguration>
         #endif
         /// Enables following 3xx redirects automatically, defaults to `RedirectConfiguration()`.
