@@ -2712,4 +2712,30 @@ class HTTPClientTests: XCTestCase {
             #endif
         }
     }
+
+    func testWeCloseConnectionsWhenConnectionCloseSetByServer() throws {
+        let group = DispatchGroup()
+        group.enter()
+
+        let server = try ServerBootstrap(group: self.serverGroup)
+            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            .childChannelInitializer { channel in
+                channel.pipeline.configureHTTPServerPipeline().flatMap {
+                    channel.pipeline.addHandler(CloseWithoutClosingServerHandler(group.leave))
+                }
+            }
+            .bind(host: "localhost", port: 0)
+            .wait()
+
+        defer {
+            server.close(promise: nil)
+        }
+
+        // Simple request, should go great.
+        XCTAssertNoThrow(try self.defaultClient.get(url: "http://localhost:\(server.localAddress!.port!)/").wait())
+
+        // Shouldn't need more than 100ms of waiting to see the close.
+        let result = group.wait(timeout: DispatchTime.now() + DispatchTimeInterval.milliseconds(100))
+        XCTAssertEqual(result, .success, "we never closed the connection!")
+    }
 }

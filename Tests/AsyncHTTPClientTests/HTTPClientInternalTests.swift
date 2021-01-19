@@ -812,7 +812,7 @@ class HTTPClientInternalTests: XCTestCase {
 
         XCTAssert(connection !== connection2)
         try! connection2.channel.eventLoop.submit {
-            connection2.release(closing: true, logger: HTTPClient.loggingDisabled)
+            connection2.release(closing: false, logger: HTTPClient.loggingDisabled)
         }.wait()
         XCTAssertTrue(connection2.channel.isActive)
     }
