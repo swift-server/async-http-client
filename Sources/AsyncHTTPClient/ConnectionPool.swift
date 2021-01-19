@@ -352,6 +352,14 @@ class HTTP1ConnectionProvider {
             self.state.release(connection: connection, closing: closing)
         }
 
+        // We close defensively here: we may have failed to actually close on other codepaths,
+        // or we may be expecting the server to close. In either case, we want our FD back, so
+        // we close now to cover our backs. We don't care about the result: if the channel is
+        // _already_ closed, that's fine by us.
+        if closing {
+            connection.close(promise: nil)
+        }
+
         switch action {
         case .none:
             break

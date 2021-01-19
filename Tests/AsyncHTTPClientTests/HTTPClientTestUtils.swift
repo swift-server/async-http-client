@@ -772,6 +772,53 @@ internal final class HttpBinForSSLUncleanShutdownHandler: ChannelInboundHandler 
     }
 }
 
+internal final class CloseWithoutClosingServerHandler: ChannelInboundHandler {
+    typealias InboundIn = HTTPServerRequestPart
+    typealias OutboundOut = HTTPServerResponsePart
+
+    private var callback: (() -> Void)?
+    private var onClosePromise: EventLoopPromise<Void>?
+
+    init(_ callback: @escaping () -> Void) {
+        self.callback = callback
+    }
+
+    func handlerAdded(context: ChannelHandlerContext) {
+        self.onClosePromise = context.eventLoop.makePromise()
+        self.onClosePromise!.futureResult.whenSuccess(self.callback!)
+        self.callback = nil
+    }
+
+    func handlerRemoved(context: ChannelHandlerContext) {
+        assert(self.onClosePromise == nil)
+    }
+
+    func channelInactive(context: ChannelHandlerContext) {
+        if let onClosePromise = self.onClosePromise {
+            self.onClosePromise = nil
+            onClosePromise.succeed(())
+        }
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        guard case .end = self.unwrapInboundIn(data) else {
+            return
+        }
+
+        // We're gonna send a response back here, with Connection: close, but we will
+        // not close the connection. This reproduces #324.
+        let headers = HTTPHeaders([
+            ("Host", "CloseWithoutClosingServerHandler"),
+            ("Content-Length", "0"),
+            ("Connection", "close"),
+        ])
+        let head = HTTPResponseHead(version: .init(major: 1, minor: 1), status: .ok, headers: headers)
+
+        context.write(self.wrapOutboundOut(.head(head)), promise: nil)
+        context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+    }
+}
+
 struct EventLoopFutureTimeoutError: Error {}
 
 extension EventLoopFuture {

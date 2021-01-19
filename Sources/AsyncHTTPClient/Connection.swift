@@ -72,6 +72,10 @@ extension Connection {
     func close() -> EventLoopFuture<Void> {
         return self.channel.close()
     }
+
+    func close(promise: EventLoopPromise<Void>?) {
+        return self.channel.close(promise: promise)
+    }
 }
 
 /// Methods of Connection which are used in ConnectionsState extracted as protocol
