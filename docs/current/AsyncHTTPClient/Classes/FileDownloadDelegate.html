@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>FileDownloadDelegate Class Reference</title>
+    <link rel="stylesheet" type="text/css" href="../css/jazzy.css" />
+    <link rel="stylesheet" type="text/css" href="../css/highlight.css" />
+    <meta charset="utf-8">
+    <script src="../js/jquery.min.js" defer></script>
+    <script src="../js/jazzy.js" defer></script>
+    
+    <script src="../js/lunr.min.js" defer></script>
+    <script src="../js/typeahead.jquery.js" defer></script>
+    <script src="../js/jazzy.search.js" defer></script>
+  </head>
+  <body>
+
+    <a name="//apple_ref/swift/Class/FileDownloadDelegate" class="dashAnchor"></a>
+
+    <a title="FileDownloadDelegate Class Reference"></a>
+
+    <header class="header">
+      <p class="header-col header-col--primary">
+        <a class="header-link" href="../index.html">
+          AsyncHTTPClient 1.2.3 Docs
+        </a>
+         (88% documented)
+      </p>
+    
+      <p class="header-col--secondary">
+        <form role="search" action="../search.json">
+          <input type="text" placeholder="Search documentation" data-typeahead>
+        </form>
+      </p>
+    
+        <p class="header-col header-col--secondary">
+          <a class="header-link" href="https://github.com/swift-server/async-http-client">
+            <img class="header-icon" src="../img/gh.png"/>
+            View on GitHub
+          </a>
+        </p>
+    
+        <p class="header-col header-col--secondary">
+          <a class="header-link" href="dash-feed://https%3A%2F%2Fswift-server.github.io%2Fasync-http-client%2Fdocs%2F1.2.3%2FAsyncHTTPClient%2Fdocsets%2FAsyncHTTPClient.xml">
+            <img class="header-icon" src="../img/dash.png"/>
+            Install in Dash
+          </a>
+        </p>
+    </header>
+
+    <p class="breadcrumbs">
+      <a class="breadcrumb" href="../index.html">AsyncHTTPClient Reference</a>
+      <img class="carat" src="../img/carat.png" />
+      FileDownloadDelegate Class Reference
+    </p>
+
+    <div class="content-wrapper">
+      <nav class="navigation">
+        <ul class="nav-groups">
+          <li class="nav-group-name">
+            <a class="nav-group-name-link" href="../Classes.html">Classes</a>
+            <ul class="nav-group-tasks">
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/FileDownloadDelegate.html">FileDownloadDelegate</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/FileDownloadDelegate/Progress.html">– Progress</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient.html">HTTPClient</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient/Configuration.html">– Configuration</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient/EventLoopGroupProvider.html">– EventLoopGroupProvider</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient/EventLoopPreference.html">– EventLoopPreference</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient/Decompression.html">– Decompression</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient/Cookie.html">– Cookie</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient/Response.html">– Response</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient/Body.html">– Body</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient/Request.html">– Request</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient/Authorization.html">– Authorization</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClient/Task.html">– Task</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/HTTPClientCopyingDelegate.html">HTTPClientCopyingDelegate</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Classes/ResponseAccumulator.html">ResponseAccumulator</a>
+              </li>
+            </ul>
+          </li>
+          <li class="nav-group-name">
+            <a class="nav-group-name-link" href="../Extensions.html">Extensions</a>
+            <ul class="nav-group-tasks">
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Extensions.html#/HTTP1ConnectionProvider">HTTP1ConnectionProvider</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Extensions/HTTPClient.html">HTTPClient</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Extensions/HTTPClient/NWPOSIXError.html">– NWPOSIXError</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Extensions/HTTPClient/NWTLSError.html">– NWTLSError</a>
+              </li>
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Extensions/URL.html">URL</a>
+              </li>
+            </ul>
+          </li>
+          <li class="nav-group-name">
+            <a class="nav-group-name-link" href="../Protocols.html">Protocols</a>
+            <ul class="nav-group-tasks">
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Protocols/HTTPClientResponseDelegate.html">HTTPClientResponseDelegate</a>
+              </li>
+            </ul>
+          </li>
+          <li class="nav-group-name">
+            <a class="nav-group-name-link" href="../Structs.html">Structures</a>
+            <ul class="nav-group-tasks">
+              <li class="nav-group-task">
+                <a class="nav-group-task-link" href="../Structs/HTTPClientError.html">HTTPClientError</a>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </nav>
+      <article class="main-content">
+
+        <section class="section">
+          <div class="section-content top-matter">
+            <h1>FileDownloadDelegate</h1>
+              <div class="declaration">
+                <div class="language">
+                  
+                  <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">final</span> <span class="kd">class</span> <span class="kt">FileDownloadDelegate</span> <span class="p">:</span> <span class="kt"><a href="../Protocols/HTTPClientResponseDelegate.html">HTTPClientResponseDelegate</a></span></code></pre>
+
+                </div>
+              </div>
+            <p>Handles a streaming download to a given file path, allowing headers and progress to be reported.</p>
+
+              <div class="slightly-smaller">
+                <a href="https://github.com/swift-server/async-http-client/tree/1.2.3/Sources/AsyncHTTPClient/FileDownloadDelegate.swift#L19-L129">Show on GitHub</a>
+              </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-content">
+            <div class="task-group">
+              <ul class="item-container">
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:15AsyncHTTPClient20FileDownloadDelegateC8ProgressV"></a>
+                    <a name="//apple_ref/swift/Struct/Progress" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient20FileDownloadDelegateC8ProgressV">Progress</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        <p>The response type for this delegate: the total count of bytes as reported by the response
+&ldquo;Content-Length&rdquo; header (if available) and the count of bytes downloaded.</p>
+
+                        <a href="../Classes/FileDownloadDelegate/Progress.html" class="slightly-smaller">See more</a>
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">struct</span> <span class="kt">Progress</span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.2.3/Sources/AsyncHTTPClient/FileDownloadDelegate.swift#L22-L25">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:15AsyncHTTPClient20FileDownloadDelegateC8Responsea"></a>
+                    <a name="//apple_ref/swift/Alias/Response" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient20FileDownloadDelegateC8Responsea">Response</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        <p>Undocumented</p>
+
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">typealias</span> <span class="kt">Response</span> <span class="o">=</span> <span class="kt"><a href="../Classes/FileDownloadDelegate/Progress.html">Progress</a></span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.2.3/Sources/AsyncHTTPClient/FileDownloadDelegate.swift#L">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:15AsyncHTTPClient20FileDownloadDelegateC4path4pool10reportHead0H8ProgressACSS_3NIO13NIOThreadPoolCy8NIOHTTP1012HTTPResponseI0VcSgyAC0J0VcSgtKcfc"></a>
+                    <a name="//apple_ref/swift/Method/init(path:pool:reportHead:reportProgress:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient20FileDownloadDelegateC4path4pool10reportHead0H8ProgressACSS_3NIO13NIOThreadPoolCy8NIOHTTP1012HTTPResponseI0VcSgyAC0J0VcSgtKcfc">init(path:<wbr>pool:<wbr>reportHead:<wbr>reportProgress:<wbr>)</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        <p>Initializes a new file download delegate.</p>
+
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="nf">init</span><span class="p">(</span>
+    <span class="nv">path</span><span class="p">:</span> <span class="kt">String</span><span class="p">,</span>
+    <span class="nv">pool</span><span class="p">:</span> <span class="kt">NIOThreadPool</span> <span class="o">=</span> <span class="kt">NIOThreadPool</span><span class="p">(</span><span class="nv">numberOfThreads</span><span class="p">:</span> <span class="mi">1</span><span class="p">),</span>
+    <span class="nv">reportHead</span><span class="p">:</span> <span class="p">((</span><span class="kt">HTTPResponseHead</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">Void</span><span class="p">)?</span> <span class="o">=</span> <span class="kc">nil</span><span class="p">,</span>
+    <span class="nv">reportProgress</span><span class="p">:</span> <span class="p">((</span><span class="kt"><a href="../Classes/FileDownloadDelegate/Progress.html">Progress</a></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">Void</span><span class="p">)?</span> <span class="o">=</span> <span class="kc">nil</span>
+<span class="p">)</span> <span class="k">throws</span></code></pre>
+
+                        </div>
+                      </div>
+                      <div>
+                        <h4>Parameters</h4>
+                        <table class="graybox">
+                          <tbody>
+                            <tr>
+                              <td>
+                                <code>
+                                <em>path</em>
+                                </code>
+                              </td>
+                              <td>
+                                <div>
+                                  <p>Path to a file you&rsquo;d like to write the download to.</p>
+                                </div>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>
+                                <code>
+                                <em>pool</em>
+                                </code>
+                              </td>
+                              <td>
+                                <div>
+                                  <p>A thread pool to use for asynchronous file I/O.</p>
+                                </div>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>
+                                <code>
+                                <em>reportHead</em>
+                                </code>
+                              </td>
+                              <td>
+                                <div>
+                                  <p>A closure called when the response head is available.</p>
+                                </div>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>
+                                <code>
+                                <em>reportProgress</em>
+                                </code>
+                              </td>
+                              <td>
+                                <div>
+                                  <p>A closure called when a body chunk has been downloaded, with
+the total byte count and download byte count passed to it as arguments. The callbacks
+will be invoked in the same threading context that the delegate itself is invoked,
+as controlled by <code>EventLoopPreference</code>.</p>
+                                </div>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.2.3/Sources/AsyncHTTPClient/FileDownloadDelegate.swift#L48-L60">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:15AsyncHTTPClient0B16ResponseDelegateP14didReceiveHead4task_3NIO15EventLoopFutureCyytGAA0B0C4TaskCy_0C0QzG_8NIOHTTP1012HTTPResponseG0VtF"></a>
+                    <a name="//apple_ref/swift/Method/didReceiveHead(task:_:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B16ResponseDelegateP14didReceiveHead4task_3NIO15EventLoopFutureCyytGAA0B0C4TaskCy_0C0QzG_8NIOHTTP1012HTTPResponseG0VtF">didReceiveHead(task:<wbr>_:<wbr>)</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">func</span> <span class="nf">didReceiveHead</span><span class="p">(</span>
+    <span class="nv">task</span><span class="p">:</span> <span class="kt"><a href="../Classes/HTTPClient.html">HTTPClient</a></span><span class="o">.</span><span class="kt">Task</span><span class="o">&lt;</span><span class="kt"><a href="../Classes/FileDownloadDelegate.html#/s:15AsyncHTTPClient20FileDownloadDelegateC8Responsea">Response</a></span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="n">_</span> <span class="nv">head</span><span class="p">:</span> <span class="kt">HTTPResponseHead</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">EventLoopFuture</span><span class="o">&lt;</span><span class="kt">Void</span><span class="o">&gt;</span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.2.3/Sources/AsyncHTTPClient/FileDownloadDelegate.swift#L62-L74">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:15AsyncHTTPClient0B16ResponseDelegateP18didReceiveBodyPart4task_3NIO15EventLoopFutureCyytGAA0B0C4TaskCy_0C0QzG_AF10ByteBufferVtF"></a>
+                    <a name="//apple_ref/swift/Method/didReceiveBodyPart(task:_:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B16ResponseDelegateP18didReceiveBodyPart4task_3NIO15EventLoopFutureCyytGAA0B0C4TaskCy_0C0QzG_AF10ByteBufferVtF">didReceiveBodyPart(task:<wbr>_:<wbr>)</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">func</span> <span class="nf">didReceiveBodyPart</span><span class="p">(</span>
+    <span class="nv">task</span><span class="p">:</span> <span class="kt"><a href="../Classes/HTTPClient.html">HTTPClient</a></span><span class="o">.</span><span class="kt">Task</span><span class="o">&lt;</span><span class="kt"><a href="../Classes/FileDownloadDelegate.html#/s:15AsyncHTTPClient20FileDownloadDelegateC8Responsea">Response</a></span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="n">_</span> <span class="nv">buffer</span><span class="p">:</span> <span class="kt">ByteBuffer</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">EventLoopFuture</span><span class="o">&lt;</span><span class="kt">Void</span><span class="o">&gt;</span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.2.3/Sources/AsyncHTTPClient/FileDownloadDelegate.swift#L76-L103">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:15AsyncHTTPClient0B16ResponseDelegateP15didReceiveError4task_yAA0B0C4TaskCy_0C0QzG_s0G0_ptF"></a>
+                    <a name="//apple_ref/swift/Method/didReceiveError(task:_:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B16ResponseDelegateP15didReceiveError4task_yAA0B0C4TaskCy_0C0QzG_s0G0_ptF">didReceiveError(task:<wbr>_:<wbr>)</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">func</span> <span class="nf">didReceiveError</span><span class="p">(</span><span class="nv">task</span><span class="p">:</span> <span class="kt"><a href="../Classes/HTTPClient.html">HTTPClient</a></span><span class="o">.</span><span class="kt">Task</span><span class="o">&lt;</span><span class="kt"><a href="../Classes/FileDownloadDelegate/Progress.html">Progress</a></span><span class="o">&gt;</span><span class="p">,</span> <span class="n">_</span> <span class="nv">error</span><span class="p">:</span> <span class="kt">Error</span><span class="p">)</span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.2.3/Sources/AsyncHTTPClient/FileDownloadDelegate.swift#L121-L123">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+                <li class="item">
+                  <div>
+                    <code>
+                    <a name="/s:15AsyncHTTPClient0B16ResponseDelegateP16didFinishRequest4task0C0QzAA0B0C4TaskCy_AGG_tKF"></a>
+                    <a name="//apple_ref/swift/Method/didFinishRequest(task:)" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B16ResponseDelegateP16didFinishRequest4task0C0QzAA0B0C4TaskCy_AGG_tKF">didFinishRequest(task:<wbr>)</a>
+                    </code>
+                  </div>
+                  <div class="height-container">
+                    <div class="pointer-container"></div>
+                    <section class="section">
+                      <div class="pointer"></div>
+                      <div class="abstract">
+                        
+                      </div>
+                      <div class="declaration">
+                        <h4>Declaration</h4>
+                        <div class="language">
+                          <p class="aside-title">Swift</p>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">func</span> <span class="nf">didFinishRequest</span><span class="p">(</span><span class="nv">task</span><span class="p">:</span> <span class="kt"><a href="../Classes/HTTPClient.html">HTTPClient</a></span><span class="o">.</span><span class="kt">Task</span><span class="o">&lt;</span><span class="kt"><a href="../Classes/FileDownloadDelegate.html#/s:15AsyncHTTPClient20FileDownloadDelegateC8Responsea">Response</a></span><span class="o">&gt;</span><span class="p">)</span> <span class="k">throws</span> <span class="o">-&gt;</span> <span class="kt"><a href="../Classes/FileDownloadDelegate.html#/s:15AsyncHTTPClient20FileDownloadDelegateC8Responsea">Response</a></span></code></pre>
+
+                        </div>
+                      </div>
+                      <div class="slightly-smaller">
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.2.3/Sources/AsyncHTTPClient/FileDownloadDelegate.swift#L125-L128">Show on GitHub</a>
+                      </div>
+                    </section>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+      </article>
+    </div>
+    <section class="footer">
+      <p>&copy; 2021 <a class="link" href="https://github.com/swift-server/async-http-client" target="_blank" rel="external">AsyncHTTPClient team</a>. All rights reserved. (Last updated: 2021-01-25)</p>
+      <p>Generated by <a class="link" href="https://github.com/realm/jazzy" target="_blank" rel="external">jazzy ♪♫ v0.13.6</a>, a <a class="link" href="https://realm.io" target="_blank" rel="external">Realm</a> project.</p>
+    </section>
+  </body>
+</div>
+</html>
