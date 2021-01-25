@@ -2680,13 +2680,12 @@ class HTTPClientTests: XCTestCase {
         class CloseHandler: ChannelInboundHandler {
             typealias InboundIn = Any
 
-            func channelActive(context: ChannelHandlerContext) {
+            func channelRead(context: ChannelHandlerContext, data: NIOAny) {
                 context.close(promise: nil)
             }
         }
 
         let server = try ServerBootstrap(group: self.serverGroup)
-            .childChannelOption(ChannelOptions.autoRead, value: false)
             .childChannelInitializer { channel in
                 channel.pipeline.addHandler(CloseHandler())
             }
@@ -2697,17 +2696,73 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try server.close().wait())
         }
 
-        let request = try Request(url: "https://localhost:\(server.localAddress!.port!)", method: .GET)
-        let task = self.defaultClient.execute(request: request, delegate: TestHTTPDelegate())
+        // We set the connect timeout down very low here because on NIOTS this manifests as a connect
+        // timeout.
+        let config = HTTPClient.Configuration(timeout: HTTPClient.Configuration.Timeout(connect: .milliseconds(100), read: nil))
+        let client = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: config)
+        defer {
+            XCTAssertNoThrow(try client.syncShutdown())
+        }
+
+        let request = try Request(url: "https://127.0.0.1:\(server.localAddress!.port!)", method: .GET)
+        let task = client.execute(request: request, delegate: TestHTTPDelegate())
 
         XCTAssertThrowsError(try task.wait()) { error in
             #if os(Linux)
                 XCTAssertEqual(error as? NIOSSLError, NIOSSLError.uncleanShutdown)
             #else
                 if isTestingNIOTS() {
-                    XCTAssertEqual((error as? AsyncHTTPClient.HTTPClient.NWTLSError).map { $0.status }, errSSLClosedNoNotify)
+                    XCTAssertEqual(error as? ChannelError, .connectTimeout(.milliseconds(100)))
                 } else {
-                    XCTAssertEqual((error as? IOError).map { $0.errnoCode }, 54)
+                    XCTAssertEqual((error as? IOError).map { $0.errnoCode }, ECONNRESET)
+                }
+            #endif
+        }
+    }
+
+    func testSSLHandshakeErrorPropagationDelayedClose() throws {
+        // This is as the test above, but the close handler delays its close action by a few hundred ms.
+        // This will tend to catch the pipeline at different weird stages, and flush out different bugs.
+        class CloseHandler: ChannelInboundHandler {
+            typealias InboundIn = Any
+
+            func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+                context.eventLoop.scheduleTask(in: .milliseconds(100)) {
+                    context.close(promise: nil)
+                }
+            }
+        }
+
+        let server = try ServerBootstrap(group: self.serverGroup)
+            .childChannelInitializer { channel in
+                channel.pipeline.addHandler(CloseHandler())
+            }
+            .bind(host: "127.0.0.1", port: 0)
+            .wait()
+
+        defer {
+            XCTAssertNoThrow(try server.close().wait())
+        }
+
+        // We set the connect timeout down very low here because on NIOTS this manifests as a connect
+        // timeout.
+        let config = HTTPClient.Configuration(timeout: HTTPClient.Configuration.Timeout(connect: .milliseconds(200), read: nil))
+        let client = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: config)
+        defer {
+            XCTAssertNoThrow(try client.syncShutdown())
+        }
+
+        let request = try Request(url: "https://127.0.0.1:\(server.localAddress!.port!)", method: .GET)
+        let task = client.execute(request: request, delegate: TestHTTPDelegate())
+
+        XCTAssertThrowsError(try task.wait()) { error in
+            #if os(Linux)
+                XCTAssertEqual(error as? NIOSSLError, NIOSSLError.uncleanShutdown)
+            #else
+                if isTestingNIOTS() {
+                    XCTAssertEqual(error as? ChannelError, .connectTimeout(.milliseconds(200)))
+                } else {
+                    XCTAssertEqual((error as? IOError).map { $0.errnoCode }, ECONNRESET)
                 }
             #endif
         }

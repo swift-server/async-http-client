@@ -126,6 +126,7 @@ extension HTTPClientTests {
             ("testNoBytesSentOverBodyLimit", testNoBytesSentOverBodyLimit),
             ("testDoubleError", testDoubleError),
             ("testSSLHandshakeErrorPropagation", testSSLHandshakeErrorPropagation),
+            ("testSSLHandshakeErrorPropagationDelayedClose", testSSLHandshakeErrorPropagationDelayedClose),
             ("testWeCloseConnectionsWhenConnectionCloseSetByServer", testWeCloseConnectionsWhenConnectionCloseSetByServer),
         ]
     }
