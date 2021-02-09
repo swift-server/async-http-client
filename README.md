@@ -24,7 +24,7 @@ Add the following entry in your <code>Package.swift</code> to start using <code>
 ```
 and  `AsyncHTTPClient` dependency to your target:
 ```swift
-.target(name: "MyApp", dependencies: ["AsyncHTTPClient"]),
+.target(name: "MyApp", dependencies: [.product(name: "AsyncHTTPClient", package: "async-http-client")]),
 ```
 
 #### Request-Response API
