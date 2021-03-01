@@ -128,6 +128,7 @@ extension HTTPClientTests {
             ("testSSLHandshakeErrorPropagation", testSSLHandshakeErrorPropagation),
             ("testSSLHandshakeErrorPropagationDelayedClose", testSSLHandshakeErrorPropagationDelayedClose),
             ("testWeCloseConnectionsWhenConnectionCloseSetByServer", testWeCloseConnectionsWhenConnectionCloseSetByServer),
+            ("testBiDirectionalStreaming", testBiDirectionalStreaming),
         ]
     }
 }
