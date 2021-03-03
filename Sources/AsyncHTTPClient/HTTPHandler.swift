@@ -634,6 +634,9 @@ extension HTTPClient {
                         self.promise.fail(error)
                         connection.channel.close(promise: nil)
                     }
+            } else {
+                // this is used in tests where we don't want to bootstrap the whole connection pool
+                self.promise.fail(error)
             }
         }
 
@@ -665,11 +668,11 @@ internal struct TaskCancelEvent {}
 internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: RemovableChannelHandler {
     enum State {
         case idle
-        case bodySent
-        case sent
-        case head
+        case sendingBodyWaitingResponseHead
+        case sendingBodyResponseHeadReceived
+        case bodySentWaitingResponseHead
+        case bodySentResponseHeadReceived
         case redirected(HTTPResponseHead, URL)
-        case body
         case endOrError
     }
 
@@ -794,7 +797,8 @@ extension TaskHandler: ChannelDuplexHandler {
     typealias OutboundOut = HTTPClientRequestPart
 
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
-        self.state = .idle
+        self.state = .sendingBodyWaitingResponseHead
+
         let request = self.unwrapOutboundIn(data)
 
         var head = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1),
@@ -840,11 +844,25 @@ extension TaskHandler: ChannelDuplexHandler {
             self.writeBody(request: request, context: context)
         }.flatMap {
             context.eventLoop.assertInEventLoop()
-            if case .endOrError = self.state {
+            switch self.state {
+            case .idle:
+                // since this code path is called from `write` and write sets state to sendingBody
+                preconditionFailure("should not happen")
+            case .sendingBodyWaitingResponseHead:
+                self.state = .bodySentWaitingResponseHead
+            case .sendingBodyResponseHeadReceived:
+                self.state = .bodySentResponseHeadReceived
+            case .bodySentWaitingResponseHead, .bodySentResponseHeadReceived:
+                preconditionFailure("should not happen, state is \(self.state)")
+            case .redirected:
+                break
+            case .endOrError:
+                // If the state is .endOrError, it means that request was failed and there is nothing to do here:
+                // we cannot write .end since channel is most likely closed, and we should not fail the future,
+                // since the task would already be failed, no need to fail the writer too.
                 return context.eventLoop.makeSucceededFuture(())
             }
 
-            self.state = .bodySent
             if let expectedBodyLength = self.expectedBodyLength, expectedBodyLength != self.actualBodyLength {
                 let error = HTTPClientError.bodyLengthMismatch
                 return context.eventLoop.makeFailedFuture(error)
@@ -852,11 +870,11 @@ extension TaskHandler: ChannelDuplexHandler {
             return context.writeAndFlush(self.wrapOutboundOut(.end(nil)))
         }.map {
             context.eventLoop.assertInEventLoop()
+
             if case .endOrError = self.state {
                 return
             }
 
-            self.state = .sent
             self.callOutToDelegateFireAndForget(self.delegate.didSendRequest)
         }.flatMapErrorThrowing { error in
             context.eventLoop.assertInEventLoop()
@@ -903,6 +921,9 @@ extension TaskHandler: ChannelDuplexHandler {
     private func writeBodyPart(context: ChannelHandlerContext, part: IOData, promise: EventLoopPromise<Void>) {
         switch self.state {
         case .idle:
+            // this function is called on the codepath starting with write, so it cannot be in state .idle
+            preconditionFailure("should not happen")
+        case .sendingBodyWaitingResponseHead, .sendingBodyResponseHeadReceived, .redirected:
             if let limit = self.expectedBodyLength, self.actualBodyLength + part.readableBytes > limit {
                 let error = HTTPClientError.bodyLengthMismatch
                 self.errorCaught(context: context, error: error)
@@ -911,7 +932,7 @@ extension TaskHandler: ChannelDuplexHandler {
             }
             self.actualBodyLength += part.readableBytes
             context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
-        default:
+        case .bodySentWaitingResponseHead, .bodySentResponseHeadReceived, .endOrError:
             let error = HTTPClientError.writeAfterRequestSent
             self.errorCaught(context: context, error: error)
             promise.fail(error)
@@ -931,7 +952,18 @@ extension TaskHandler: ChannelDuplexHandler {
         let response = self.unwrapInboundIn(data)
         switch response {
         case .head(let head):
-            if case .endOrError = self.state {
+            switch self.state {
+            case .idle:
+                // should be prevented by NIO HTTP1 pipeline, see testHTTPResponseHeadBeforeRequestHead
+                preconditionFailure("should not happen")
+            case .sendingBodyWaitingResponseHead:
+                self.state = .sendingBodyResponseHeadReceived
+            case .bodySentWaitingResponseHead:
+                self.state = .bodySentResponseHeadReceived
+            case .sendingBodyResponseHeadReceived, .bodySentResponseHeadReceived, .redirected:
+                // should be prevented by NIO HTTP1 pipeline, aee testHTTPResponseDoubleHead
+                preconditionFailure("should not happen")
+            case .endOrError:
                 return
             }
 
@@ -942,7 +974,6 @@ extension TaskHandler: ChannelDuplexHandler {
             if let redirectURL = self.redirectHandler?.redirectTarget(status: head.status, headers: head.headers) {
                 self.state = .redirected(head, redirectURL)
             } else {
-                self.state = .head
                 self.mayRead = false
                 self.callOutToDelegate(value: head, channelEventLoop: context.eventLoop, self.delegate.didReceiveHead)
                     .whenComplete { result in
@@ -954,7 +985,6 @@ extension TaskHandler: ChannelDuplexHandler {
             case .redirected, .endOrError:
                 break
             default:
-                self.state = .body
                 self.mayRead = false
                 self.callOutToDelegate(value: body, channelEventLoop: context.eventLoop, self.delegate.didReceiveBodyPart)
                     .whenComplete { result in
@@ -1009,10 +1039,10 @@ extension TaskHandler: ChannelDuplexHandler {
 
     func channelInactive(context: ChannelHandlerContext) {
         switch self.state {
+        case .idle, .sendingBodyWaitingResponseHead, .sendingBodyResponseHeadReceived, .bodySentWaitingResponseHead, .bodySentResponseHeadReceived, .redirected:
+            self.errorCaught(context: context, error: HTTPClientError.remoteConnectionClosed)
         case .endOrError:
             break
-        case .body, .head, .idle, .redirected, .sent, .bodySent:
-            self.errorCaught(context: context, error: HTTPClientError.remoteConnectionClosed)
         }
         context.fireChannelInactive()
     }
@@ -1025,8 +1055,8 @@ extension TaskHandler: ChannelDuplexHandler {
                 /// Some HTTP Servers can 'forget' to respond with CloseNotify when client is closing connection,
                 /// this could lead to incomplete SSL shutdown. But since request is already processed, we can ignore this error.
                 break
-            case .head where self.ignoreUncleanSSLShutdown,
-                 .body where self.ignoreUncleanSSLShutdown:
+            case .sendingBodyResponseHeadReceived where self.ignoreUncleanSSLShutdown,
+                 .bodySentResponseHeadReceived where self.ignoreUncleanSSLShutdown:
                 /// We can also ignore this error like `.end`.
                 break
             default:
@@ -1035,7 +1065,7 @@ extension TaskHandler: ChannelDuplexHandler {
             }
         default:
             switch self.state {
-            case .idle, .bodySent, .sent, .head, .redirected, .body:
+            case .idle, .sendingBodyWaitingResponseHead, .sendingBodyResponseHeadReceived, .bodySentWaitingResponseHead, .bodySentResponseHeadReceived, .redirected:
                 self.state = .endOrError
                 self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
             case .endOrError:

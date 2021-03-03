@@ -896,6 +896,30 @@ struct CollectEverythingLogHandler: LogHandler {
     }
 }
 
+class HTTPEchoHandler: ChannelInboundHandler {
+    typealias InboundIn = HTTPServerRequestPart
+    typealias OutboundOut = HTTPServerResponsePart
+
+    var promises: CircularBuffer<EventLoopPromise<Void>> = CircularBuffer()
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        let request = self.unwrapInboundIn(data)
+        switch request {
+        case .head:
+            context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .init(major: 1, minor: 1), status: .ok))), promise: nil)
+        case .body(let bytes):
+            context.writeAndFlush(self.wrapOutboundOut(.body(.byteBuffer(bytes)))).whenSuccess {
+                if let promise = self.promises.popFirst() {
+                    promise.succeed(())
+                }
+            }
+        case .end:
+            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+            context.close(promise: nil)
+        }
+    }
+}
+
 private let cert = """
 -----BEGIN CERTIFICATE-----
 MIICmDCCAYACCQCPC8JDqMh1zzANBgkqhkiG9w0BAQsFADANMQswCQYDVQQGEwJ1

@@ -2708,15 +2708,11 @@ class HTTPClientTests: XCTestCase {
         let task = client.execute(request: request, delegate: TestHTTPDelegate())
 
         XCTAssertThrowsError(try task.wait()) { error in
-            #if os(Linux)
+            if isTestingNIOTS() {
+                XCTAssertEqual(error as? ChannelError, .connectTimeout(.milliseconds(100)))
+            } else {
                 XCTAssertEqual(error as? NIOSSLError, NIOSSLError.uncleanShutdown)
-            #else
-                if isTestingNIOTS() {
-                    XCTAssertEqual(error as? ChannelError, .connectTimeout(.milliseconds(100)))
-                } else {
-                    XCTAssertEqual((error as? IOError).map { $0.errnoCode }, ECONNRESET)
-                }
-            #endif
+            }
         }
     }
 
@@ -2756,15 +2752,11 @@ class HTTPClientTests: XCTestCase {
         let task = client.execute(request: request, delegate: TestHTTPDelegate())
 
         XCTAssertThrowsError(try task.wait()) { error in
-            #if os(Linux)
+            if isTestingNIOTS() {
+                XCTAssertEqual(error as? ChannelError, .connectTimeout(.milliseconds(200)))
+            } else {
                 XCTAssertEqual(error as? NIOSSLError, NIOSSLError.uncleanShutdown)
-            #else
-                if isTestingNIOTS() {
-                    XCTAssertEqual(error as? ChannelError, .connectTimeout(.milliseconds(200)))
-                } else {
-                    XCTAssertEqual((error as? IOError).map { $0.errnoCode }, ECONNRESET)
-                }
-            #endif
+            }
         }
     }
 
@@ -2792,5 +2784,41 @@ class HTTPClientTests: XCTestCase {
         // Shouldn't need more than 100ms of waiting to see the close.
         let result = group.wait(timeout: DispatchTime.now() + DispatchTimeInterval.milliseconds(100))
         XCTAssertEqual(result, .success, "we never closed the connection!")
+    }
+
+    func testBiDirectionalStreaming() throws {
+        let handler = HTTPEchoHandler()
+
+        let server = try ServerBootstrap(group: self.serverGroup)
+            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            .childChannelInitializer { channel in
+                channel.pipeline.configureHTTPServerPipeline().flatMap {
+                    channel.pipeline.addHandler(handler)
+                }
+            }
+            .bind(host: "localhost", port: 0)
+            .wait()
+
+        defer {
+            server.close(promise: nil)
+        }
+
+        let body: HTTPClient.Body = .stream { writer in
+            let promise = self.clientGroup.next().makePromise(of: Void.self)
+            handler.promises.append(promise)
+            return writer.write(.byteBuffer(ByteBuffer(string: "hello"))).flatMap {
+                promise.futureResult
+            }.flatMap {
+                let promise = self.clientGroup.next().makePromise(of: Void.self)
+                handler.promises.append(promise)
+                return writer.write(.byteBuffer(ByteBuffer(string: "hello2"))).flatMap {
+                    promise.futureResult
+                }
+            }
+        }
+
+        let future = self.defaultClient.execute(url: "http://localhost:\(server.localAddress!.port!)", body: body)
+
+        XCTAssertNoThrow(try future.wait())
     }
 }
