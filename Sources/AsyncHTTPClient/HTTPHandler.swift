@@ -380,6 +380,11 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
         case .head(let head):
             self.state = .body(head, part)
         case .body(let head, var body):
+            // The compiler can't prove that `self.state` is dead here (and it kinda isn't, there's
+            // a cross-module call in the way) so we need to drop the original reference to `body` in
+            // `self.state` or we'll get a CoW. To fix that we temporarily set the state to `.end` (which
+            // has no associated data). We'll fix it at the bottom of this block.
+            self.state = .end
             var part = part
             body.writeBuffer(&part)
             self.state = .body(head, body)
