@@ -128,14 +128,14 @@ extension NIOClientTCPBootstrap {
         return try self.makeBootstrap(on: eventLoop, host: host, requiresTLS: requiresTLS, configuration: configuration)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
             .channelInitializer { channel in
-                let channelAddedFuture: EventLoopFuture<Void>
-                switch configuration.proxy {
-                case .none:
-                    channelAddedFuture = eventLoop.makeSucceededFuture(())
-                case .some:
-                    channelAddedFuture = channel.pipeline.addProxyHandler(host: host, port: port, authorization: configuration.proxy?.authorization)
+                do {
+                    if let proxy = configuration.proxy {
+                        try channel.pipeline.syncAddProxyHandler(host: host, port: port, authorization: proxy.authorization)
+                    }
+                    return channel.eventLoop.makeSucceededVoidFuture()
+                } catch {
+                    return channel.eventLoop.makeFailedFuture(error)
                 }
-                return channelAddedFuture
             }
     }
 
@@ -165,27 +165,28 @@ extension NIOClientTCPBootstrap {
             let requiresSSLHandler = configuration.proxy != nil && key.scheme.requiresTLS
             let handshakePromise = channel.eventLoop.makePromise(of: Void.self)
 
-            channel.pipeline.addSSLHandlerIfNeeded(for: key, tlsConfiguration: configuration.tlsConfiguration, addSSLClient: requiresSSLHandler, handshakePromise: handshakePromise)
+            channel.pipeline.syncAddSSLHandlerIfNeeded(for: key, tlsConfiguration: configuration.tlsConfiguration, addSSLClient: requiresSSLHandler, handshakePromise: handshakePromise)
 
-            return handshakePromise.futureResult.flatMap {
-                channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
-            }.flatMap {
+            return handshakePromise.futureResult.flatMapThrowing {
+                let syncOperations = channel.pipeline.syncOperations
+
+                try syncOperations.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
+
                 #if canImport(Network)
                     if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), bootstrap.underlyingBootstrap is NIOTSConnectionBootstrap {
-                        return channel.pipeline.addHandler(HTTPClient.NWErrorHandler(), position: .first)
+                        try syncOperations.addHandler(HTTPClient.NWErrorHandler(), position: .first)
                     }
                 #endif
-                return channel.eventLoop.makeSucceededFuture(())
-            }.flatMap {
+
                 switch configuration.decompression {
                 case .disabled:
-                    return channel.eventLoop.makeSucceededFuture(())
+                    ()
                 case .enabled(let limit):
                     let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
-                    return channel.pipeline.addHandler(decompressHandler)
+                    try syncOperations.addHandler(decompressHandler)
                 }
-            }.map {
-                channel
+
+                return channel
             }
         }.flatMapError { error in
             #if canImport(Network)
