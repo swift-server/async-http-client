@@ -900,27 +900,25 @@ extension ChannelPipeline {
         try sync.addHandler(handler)
     }
 
-    func syncAddSSLHandlerIfNeeded(for key: ConnectionPool.Key, tlsConfiguration: TLSConfiguration?, addSSLClient: Bool, handshakePromise: EventLoopPromise<Void>) {
-        guard key.scheme.requiresTLS else {
-            handshakePromise.succeed(())
-            return
-        }
+    func syncAddLateSSLHandlerIfNeeded(for key: ConnectionPool.Key, tlsConfiguration: TLSConfiguration?, handshakePromise: EventLoopPromise<Void>) {
+        precondition(key.scheme.requiresTLS)
 
         do {
             let synchronousPipelineView = self.syncOperations
 
             // We add the TLSEventsHandler first so that it's always in the pipeline before any other TLS handler we add.
+            // If we're here, we must not have one in the channel already.
+            assert((try? synchronousPipelineView.context(name: TLSEventsHandler.handlerName)) == nil)
             let eventsHandler = TLSEventsHandler(completionPromise: handshakePromise)
-            try synchronousPipelineView.addHandler(eventsHandler)
+            try synchronousPipelineView.addHandler(eventsHandler, name: TLSEventsHandler.handlerName)
 
-            if addSSLClient {
-                let tlsConfiguration = tlsConfiguration ?? TLSConfiguration.forClient()
-                let context = try NIOSSLContext(configuration: tlsConfiguration)
-                try synchronousPipelineView.addHandler(
-                    try NIOSSLClientHandler(context: context, serverHostname: (key.host.isIPAddress || key.host.isEmpty) ? nil : key.host),
-                    position: .before(eventsHandler)
-                )
-            }
+            // Then we add the SSL handler.
+            let tlsConfiguration = tlsConfiguration ?? TLSConfiguration.forClient()
+            let context = try NIOSSLContext(configuration: tlsConfiguration)
+            try synchronousPipelineView.addHandler(
+                try NIOSSLClientHandler(context: context, serverHostname: (key.host.isIPAddress || key.host.isEmpty) ? nil : key.host),
+                position: .before(eventsHandler)
+            )
         } catch {
             handshakePromise.fail(error)
         }
@@ -930,7 +928,9 @@ extension ChannelPipeline {
 class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
     typealias InboundIn = NIOAny
 
-    var completionPromise: EventLoopPromise<Void>?
+    static let handlerName: String = "AsyncHTTPClient.HTTPClient.TLSEventsHandler"
+
+    var completionPromise: EventLoopPromise<Void>
 
     init(completionPromise: EventLoopPromise<Void>) {
         self.completionPromise = completionPromise
@@ -940,9 +940,7 @@ class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
         if let tlsEvent = event as? TLSUserEvent {
             switch tlsEvent {
             case .handshakeCompleted:
-                self.completionPromise?.succeed(())
-                self.completionPromise = nil
-                context.pipeline.removeHandler(self, promise: nil)
+                self.completionPromise.succeed(())
             case .shutdownCompleted:
                 break
             }
@@ -951,15 +949,13 @@ class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
     }
 
     func errorCaught(context: ChannelHandlerContext, error: Error) {
-        self.completionPromise?.fail(error)
-        self.completionPromise = nil
-        context.pipeline.removeHandler(self, promise: nil)
+        self.completionPromise.fail(error)
         context.fireErrorCaught(error)
     }
 
     func handlerRemoved(context: ChannelHandlerContext) {
         struct NoResult: Error {}
-        self.completionPromise?.fail(NoResult())
+        self.completionPromise.fail(NoResult())
     }
 }
 
