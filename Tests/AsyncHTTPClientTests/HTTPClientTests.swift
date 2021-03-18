@@ -2821,4 +2821,27 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertNoThrow(try future.wait())
     }
+
+    func testSynchronousHandshakeErrorReporting() throws {
+        // This only affects cases where we use NIOSSL.
+        guard !isTestingNIOTS() else { return }
+
+        // We use a specially crafted client that has no cipher suites to offer. To do this we ask
+        // only for cipher suites incompatible with our TLS version.
+        let tlsConfig = TLSConfiguration.forClient(minimumTLSVersion: .tlsv13, maximumTLSVersion: .tlsv12, certificateVerification: .none)
+        let localHTTPBin = HTTPBin(ssl: true)
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                     configuration: HTTPClient.Configuration(tlsConfiguration: tlsConfig))
+        defer {
+            XCTAssertNoThrow(try localClient.syncShutdown())
+            XCTAssertNoThrow(try localHTTPBin.shutdown())
+        }
+
+        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/").wait()) { error in
+            guard let clientError = error as? NIOSSLError, case NIOSSLError.handshakeFailed = clientError else {
+                XCTFail("Unexpected error: \(error)")
+                return
+            }
+        }
+    }
 }

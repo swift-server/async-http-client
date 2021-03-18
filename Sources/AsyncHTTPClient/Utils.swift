@@ -131,6 +131,11 @@ extension NIOClientTCPBootstrap {
                 do {
                     if let proxy = configuration.proxy {
                         try channel.pipeline.syncAddProxyHandler(host: host, port: port, authorization: proxy.authorization)
+                    } else if requiresTLS {
+                        // We only add the handshake verifier if we need TLS and we're not going through a proxy. If we're going
+                        // through a proxy we add it later.
+                        let completionPromise = channel.eventLoop.makePromise(of: Void.self)
+                        try channel.pipeline.syncOperations.addHandler(TLSEventsHandler(completionPromise: completionPromise), name: TLSEventsHandler.handlerName)
                     }
                     return channel.eventLoop.makeSucceededVoidFuture()
                 } catch {
@@ -162,13 +167,31 @@ extension NIOClientTCPBootstrap {
         }
 
         return channel.flatMap { channel in
-            let requiresSSLHandler = configuration.proxy != nil && key.scheme.requiresTLS
-            let handshakePromise = channel.eventLoop.makePromise(of: Void.self)
+            let requiresTLS = key.scheme.requiresTLS
+            let requiresLateSSLHandler = configuration.proxy != nil && requiresTLS
+            let handshakeFuture: EventLoopFuture<Void>
 
-            channel.pipeline.syncAddSSLHandlerIfNeeded(for: key, tlsConfiguration: configuration.tlsConfiguration, addSSLClient: requiresSSLHandler, handshakePromise: handshakePromise)
+            if requiresLateSSLHandler {
+                let handshakePromise = channel.eventLoop.makePromise(of: Void.self)
+                channel.pipeline.syncAddLateSSLHandlerIfNeeded(for: key, tlsConfiguration: configuration.tlsConfiguration, handshakePromise: handshakePromise)
+                handshakeFuture = handshakePromise.futureResult
+            } else if requiresTLS {
+                do {
+                    handshakeFuture = try channel.pipeline.syncOperations.handler(type: TLSEventsHandler.self).completionPromise.futureResult
+                } catch {
+                    return channel.eventLoop.makeFailedFuture(error)
+                }
+            } else {
+                handshakeFuture = channel.eventLoop.makeSucceededVoidFuture()
+            }
 
-            return handshakePromise.futureResult.flatMapThrowing {
+            return handshakeFuture.flatMapThrowing {
                 let syncOperations = channel.pipeline.syncOperations
+
+                // If we got here and we had a TLSEventsHandler in the pipeline, we can remove it ow.
+                if requiresTLS {
+                    channel.pipeline.removeHandler(name: TLSEventsHandler.handlerName, promise: nil)
+                }
 
                 try syncOperations.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
 
