@@ -109,6 +109,11 @@
                 preconditionFailure("TLSConfiguration.keyLogCallback is not supported. \(useMTELGExplainer)")
             }
 
+            // the certificate chain
+            if self.certificateChain.count > 0 {
+                preconditionFailure("TLSConfiguration.certificateChain is not supported")
+            }
+
             // private key
             if self.privateKey != nil {
                 preconditionFailure("TLSConfiguration.privateKey is not supported. \(useMTELGExplainer)")
@@ -117,20 +122,58 @@
             // renegotiation support key is unsupported
 
             // trust roots
-            if let trustRoots = self.trustRoots {
-                guard case .default = trustRoots else {
-                    preconditionFailure("TLSConfiguration.trustRoots != .default is not supported. \(useMTELGExplainer)")
+            var secTrustRoots: [SecCertificate]?
+            switch trustRoots {
+            case .some(.certificates(let certificates)):
+                do {
+                    secTrustRoots = try certificates.compactMap { certificate in
+                        return try SecCertificateCreateWithData(nil, Data(certificate.toDERBytes()) as CFData)
+                    }
+                } catch {
+                    // failed to load
                 }
+            case .some(.file):
+                preconditionFailure("TLSConfiguration.trustRoots.file is not supported")
+                break
+
+            case .some(.default), .none:
+                break
             }
 
-            switch self.certificateVerification {
-            case .none:
+            precondition(self.certificateVerification != .noHostnameVerification, "TLSConfiguration.certificateVerification = .noHostnameVerification is not supported")
+
+            if certificateVerification != .fullVerification || trustRoots != nil {
                 // add verify block to control certificate verification
                 sec_protocol_options_set_verify_block(
                     options.securityProtocolOptions,
-                    { _, _, sec_protocol_verify_complete in
-                        sec_protocol_verify_complete(true)
-                    }, TLSConfiguration.tlsDispatchQueue
+                    { sec_metadata, sec_trust, sec_protocol_verify_complete in
+                        guard self.certificateVerification != .none else {
+                            sec_protocol_verify_complete(true)
+                            return
+                        }
+
+                        let trust = sec_trust_copy_ref(sec_trust).takeRetainedValue()
+                        if let trustRootCertificates = secTrustRoots {
+                            SecTrustSetAnchorCertificates(trust, trustRootCertificates as CFArray)
+                        }
+                        if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
+                            SecTrustEvaluateAsyncWithError(trust, Self.tlsDispatchQueue) { (trust, result, error) in
+                                if let error = error {
+                                    print("Trust failed: \(error.localizedDescription)")
+                                }
+                                sec_protocol_verify_complete(result)
+                            }
+                        } else {
+                            SecTrustEvaluateAsync(trust, Self.tlsDispatchQueue) { (trust, result) in
+                                 switch result {
+                                 case .proceed, .unspecified:
+                                    sec_protocol_verify_complete(true)
+                                 default:
+                                    sec_protocol_verify_complete(false)
+                                 }
+                            }
+                        }
+                    }, Self.tlsDispatchQueue
                 )
 
             case .noHostnameVerification:
@@ -140,7 +183,6 @@
             case .fullVerification:
                 break
             }
-
             return options
         }
     }
