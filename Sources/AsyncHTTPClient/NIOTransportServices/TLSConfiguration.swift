@@ -127,14 +127,13 @@
             case .some(.certificates(let certificates)):
                 do {
                     secTrustRoots = try certificates.compactMap { certificate in
-                        return try SecCertificateCreateWithData(nil, Data(certificate.toDERBytes()) as CFData)
+                        try SecCertificateCreateWithData(nil, Data(certificate.toDERBytes()) as CFData)
                     }
                 } catch {
                     // failed to load
                 }
             case .some(.file):
                 preconditionFailure("TLSConfiguration.trustRoots.file is not supported")
-                break
 
             case .some(.default), .none:
                 break
@@ -146,7 +145,7 @@
                 // add verify block to control certificate verification
                 sec_protocol_options_set_verify_block(
                     options.securityProtocolOptions,
-                    { sec_metadata, sec_trust, sec_protocol_verify_complete in
+                    { _, sec_trust, sec_protocol_verify_complete in
                         guard self.certificateVerification != .none else {
                             sec_protocol_verify_complete(true)
                             return
@@ -157,20 +156,20 @@
                             SecTrustSetAnchorCertificates(trust, trustRootCertificates as CFArray)
                         }
                         if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
-                            SecTrustEvaluateAsyncWithError(trust, Self.tlsDispatchQueue) { (trust, result, error) in
+                            SecTrustEvaluateAsyncWithError(trust, Self.tlsDispatchQueue) { _, result, error in
                                 if let error = error {
                                     print("Trust failed: \(error.localizedDescription)")
                                 }
                                 sec_protocol_verify_complete(result)
                             }
                         } else {
-                            SecTrustEvaluateAsync(trust, Self.tlsDispatchQueue) { (trust, result) in
-                                 switch result {
-                                 case .proceed, .unspecified:
+                            SecTrustEvaluateAsync(trust, Self.tlsDispatchQueue) { _, result in
+                                switch result {
+                                case .proceed, .unspecified:
                                     sec_protocol_verify_complete(true)
-                                 default:
+                                default:
                                     sec_protocol_verify_complete(false)
-                                 }
+                                }
                             }
                         }
                     }, Self.tlsDispatchQueue
