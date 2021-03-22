@@ -60,7 +60,7 @@
         ///
         /// - Parameter queue: Dispatch queue to run `sec_protocol_options_set_verify_block` on.
         /// - Returns: Equivalent NWProtocolTLS Options
-        func getNWProtocolTLSOptions() -> NWProtocolTLS.Options {
+        func getNWProtocolTLSOptions() throws -> NWProtocolTLS.Options {
             let options = NWProtocolTLS.Options()
 
             let useMTELGExplainer = """
@@ -125,12 +125,8 @@
             var secTrustRoots: [SecCertificate]?
             switch trustRoots {
             case .some(.certificates(let certificates)):
-                do {
-                    secTrustRoots = try certificates.compactMap { certificate in
-                        try SecCertificateCreateWithData(nil, Data(certificate.toDERBytes()) as CFData)
-                    }
-                } catch {
-                    // failed to load
+                secTrustRoots = try certificates.compactMap { certificate in
+                    try SecCertificateCreateWithData(nil, Data(certificate.toDERBytes()) as CFData)
                 }
             case .some(.file):
                 preconditionFailure("TLSConfiguration.trustRoots.file is not supported")
