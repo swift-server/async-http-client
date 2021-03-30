@@ -130,6 +130,9 @@ extension HTTPClientTests {
             ("testWeCloseConnectionsWhenConnectionCloseSetByServer", testWeCloseConnectionsWhenConnectionCloseSetByServer),
             ("testBiDirectionalStreaming", testBiDirectionalStreaming),
             ("testSynchronousHandshakeErrorReporting", testSynchronousHandshakeErrorReporting),
+            ("testFileDownloadChunked", testFileDownloadChunked),
+            ("testCloseWhileBackpressureIsExertedIsFine", testCloseWhileBackpressureIsExertedIsFine),
+            ("testErrorAfterCloseWhileBackpressureExerted", testErrorAfterCloseWhileBackpressureExerted),
         ]
     }
 }
