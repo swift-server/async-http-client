@@ -111,4 +111,19 @@ class HTTPClientNIOTSTests: XCTestCase {
             }
         #endif
     }
+    
+    func testTrustRootCertificateLoadFail() {
+        guard isTestingNIOTS() else { return }
+        #if canImport(Network)
+        let tlsConfig = TLSConfiguration.forClient(trustRoots: .file("not/a/certificate"))
+        XCTAssertThrowsError(try tlsConfig.getNWProtocolTLSOptions()) { error in
+            switch error {
+            case let error as NIOSSL.NIOSSLError where error == .failedToLoadCertificate:
+                break
+            default:
+                XCTFail("\(error)")
+            }
+        }
+        #endif
+    }
 }

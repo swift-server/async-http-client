@@ -128,8 +128,11 @@
                 secTrustRoots = try certificates.compactMap { certificate in
                     try SecCertificateCreateWithData(nil, Data(certificate.toDERBytes()) as CFData)
                 }
-            case .some(.file):
-                preconditionFailure("TLSConfiguration.trustRoots.file is not supported")
+            case .some(.file(let file)):
+                let certificates = try NIOSSLCertificate.fromPEMFile(file)
+                secTrustRoots = try certificates.compactMap { certificate in
+                    try SecCertificateCreateWithData(nil, Data(certificate.toDERBytes()) as CFData)
+                }
 
             case .some(.default), .none:
                 break
