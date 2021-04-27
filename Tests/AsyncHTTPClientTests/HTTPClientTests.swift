@@ -2711,7 +2711,10 @@ class HTTPClientTests: XCTestCase {
             if isTestingNIOTS() {
                 XCTAssertEqual(error as? ChannelError, .connectTimeout(.milliseconds(100)))
             } else {
-                XCTAssertEqual(error as? NIOSSLError, NIOSSLError.uncleanShutdown)
+                switch error as? NIOSSLError {
+                case .some(.handshakeFailed(.sslError(_))): break
+                default: XCTFail("Handshake failed with unexpected error: \(String(describing: error))")
+                }
             }
         }
     }
@@ -2755,7 +2758,10 @@ class HTTPClientTests: XCTestCase {
             if isTestingNIOTS() {
                 XCTAssertEqual(error as? ChannelError, .connectTimeout(.milliseconds(200)))
             } else {
-                XCTAssertEqual(error as? NIOSSLError, NIOSSLError.uncleanShutdown)
+                switch error as? NIOSSLError {
+                case .some(.handshakeFailed(.sslError(_))): break
+                default: XCTFail("Handshake failed with unexpected error: \(String(describing: error))")
+                }
             }
         }
     }
