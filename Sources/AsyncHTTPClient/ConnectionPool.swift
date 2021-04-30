@@ -20,7 +20,6 @@ import NIOHTTP1
 import NIOHTTPCompression
 import NIOTLS
 import NIOTransportServices
-import NIOSSL
 
 /// A connection pool that manages and creates new connections to hosts respecting the specified preferences
 ///
