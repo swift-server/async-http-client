@@ -165,7 +165,8 @@ extension NIOClientTCPBootstrap {
             let requiresSSLHandler = configuration.proxy != nil && key.scheme.requiresTLS
             let handshakePromise = channel.eventLoop.makePromise(of: Void.self)
 
-            channel.pipeline.addSSLHandlerIfNeeded(for: key, tlsConfiguration: configuration.tlsConfiguration, addSSLClient: requiresSSLHandler, handshakePromise: handshakePromise)
+            let tlsConfiguration = key.tlsConfiguration?.base ?? configuration.tlsConfiguration
+            channel.pipeline.addSSLHandlerIfNeeded(for: key, tlsConfiguration: tlsConfiguration, addSSLClient: requiresSSLHandler, handshakePromise: handshakePromise)
 
             return handshakePromise.futureResult.flatMap {
                 channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)

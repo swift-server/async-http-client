@@ -186,6 +186,8 @@ extension HTTPClient {
         public var headers: HTTPHeaders
         /// Request body, defaults to no body.
         public var body: Body?
+        /// Request-specific TLS configuration, defaults to no request-specific TLS configuration.
+        public var tlsConfiguration: TLSConfiguration?
 
         struct RedirectState {
             var count: Int
@@ -208,7 +210,7 @@ extension HTTPClient {
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
-        public init(url: String, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+        public init(url: String, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration? = nil) throws {
             guard let url = URL(string: url) else {
                 throw HTTPClientError.invalidURL
             }
@@ -228,7 +230,7 @@ extension HTTPClient {
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
         ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
-        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration? = nil) throws {
             guard let scheme = url.scheme?.lowercased() else {
                 throw HTTPClientError.emptyScheme
             }
@@ -244,6 +246,7 @@ extension HTTPClient {
             self.scheme = scheme
             self.headers = headers
             self.body = body
+            self.tlsConfiguration = tlsConfiguration
         }
 
         /// Whether request will be executed using secure socket.

@@ -20,6 +20,7 @@ import NIOHTTP1
 import NIOHTTPCompression
 import NIOTLS
 import NIOTransportServices
+import NIOSSL
 
 /// A connection pool that manages and creates new connections to hosts respecting the specified preferences
 ///
@@ -139,12 +140,16 @@ final class ConnectionPool {
             self.port = request.port
             self.host = request.host
             self.unixPath = request.socketPath
+            if let tls = request.tlsConfiguration {
+                self.tlsConfiguration = BestEffortHashableTLSConfiguration(wrapping: tls)
+            }
         }
 
         var scheme: Scheme
         var host: String
         var port: Int
         var unixPath: String
+        var tlsConfiguration: BestEffortHashableTLSConfiguration?
 
         enum Scheme: Hashable {
             case http
