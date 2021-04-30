@@ -145,9 +145,14 @@ extension NIOClientTCPBootstrap {
         let key = destination
 
         let requiresTLS = key.scheme.requiresTLS
+        // Override specific key configuration.
+        var keyConfiguration = configuration
+        if let tlsConfiguration = destination.tlsConfiguration {
+            keyConfiguration.tlsConfiguration = tlsConfiguration.base
+        }
         let bootstrap: NIOClientTCPBootstrap
         do {
-            bootstrap = try NIOClientTCPBootstrap.makeHTTPClientBootstrapBase(on: channelEventLoop, host: key.host, port: key.port, requiresTLS: requiresTLS, configuration: configuration)
+            bootstrap = try NIOClientTCPBootstrap.makeHTTPClientBootstrapBase(on: channelEventLoop, host: key.host, port: key.port, requiresTLS: requiresTLS, configuration: keyConfiguration)
         } catch {
             return channelEventLoop.makeFailedFuture(error)
         }
@@ -155,18 +160,17 @@ extension NIOClientTCPBootstrap {
         let channel: EventLoopFuture<Channel>
         switch key.scheme {
         case .http, .https:
-            let address = HTTPClient.resolveAddress(host: key.host, port: key.port, proxy: configuration.proxy)
+            let address = HTTPClient.resolveAddress(host: key.host, port: key.port, proxy: keyConfiguration.proxy)
             channel = bootstrap.connect(host: address.host, port: address.port)
         case .unix, .http_unix, .https_unix:
             channel = bootstrap.connect(unixDomainSocketPath: key.unixPath)
         }
 
         return channel.flatMap { channel in
-            let requiresSSLHandler = configuration.proxy != nil && key.scheme.requiresTLS
+            let requiresSSLHandler = keyConfiguration.proxy != nil && key.scheme.requiresTLS
             let handshakePromise = channel.eventLoop.makePromise(of: Void.self)
 
-            let tlsConfiguration = key.tlsConfiguration?.base ?? configuration.tlsConfiguration
-            channel.pipeline.addSSLHandlerIfNeeded(for: key, tlsConfiguration: tlsConfiguration, addSSLClient: requiresSSLHandler, handshakePromise: handshakePromise)
+            channel.pipeline.addSSLHandlerIfNeeded(for: key, tlsConfiguration: keyConfiguration.tlsConfiguration, addSSLClient: requiresSSLHandler, handshakePromise: handshakePromise)
 
             return handshakePromise.futureResult.flatMap {
                 channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
