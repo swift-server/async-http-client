@@ -2711,7 +2711,10 @@ class HTTPClientTests: XCTestCase {
             if isTestingNIOTS() {
                 XCTAssertEqual(error as? ChannelError, .connectTimeout(.milliseconds(100)))
             } else {
-                XCTAssertEqual(error as? NIOSSLError, NIOSSLError.uncleanShutdown)
+                switch error as? NIOSSLError {
+                case .some(.handshakeFailed(.sslError(_))): break
+                default: XCTFail("Handshake failed with unexpected error: \(String(describing: error))")
+                }
             }
         }
     }
@@ -2755,7 +2758,10 @@ class HTTPClientTests: XCTestCase {
             if isTestingNIOTS() {
                 XCTAssertEqual(error as? ChannelError, .connectTimeout(.milliseconds(200)))
             } else {
-                XCTAssertEqual(error as? NIOSSLError, NIOSSLError.uncleanShutdown)
+                switch error as? NIOSSLError {
+                case .some(.handshakeFailed(.sslError(_))): break
+                default: XCTFail("Handshake failed with unexpected error: \(String(describing: error))")
+                }
             }
         }
     }
@@ -2820,5 +2826,94 @@ class HTTPClientTests: XCTestCase {
         let future = self.defaultClient.execute(url: "http://localhost:\(server.localAddress!.port!)", body: body)
 
         XCTAssertNoThrow(try future.wait())
+    }
+
+    func testSynchronousHandshakeErrorReporting() throws {
+        // This only affects cases where we use NIOSSL.
+        guard !isTestingNIOTS() else { return }
+
+        // We use a specially crafted client that has no cipher suites to offer. To do this we ask
+        // only for cipher suites incompatible with our TLS version.
+        let tlsConfig = TLSConfiguration.forClient(minimumTLSVersion: .tlsv13, maximumTLSVersion: .tlsv12, certificateVerification: .none)
+        let localHTTPBin = HTTPBin(ssl: true)
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                     configuration: HTTPClient.Configuration(tlsConfiguration: tlsConfig))
+        defer {
+            XCTAssertNoThrow(try localClient.syncShutdown())
+            XCTAssertNoThrow(try localHTTPBin.shutdown())
+        }
+
+        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/").wait()) { error in
+            guard let clientError = error as? NIOSSLError, case NIOSSLError.handshakeFailed = clientError else {
+                XCTFail("Unexpected error: \(error)")
+                return
+            }
+        }
+    }
+
+    func testFileDownloadChunked() throws {
+        var request = try Request(url: self.defaultHTTPBinURLPrefix + "chunked")
+        request.headers.add(name: "Accept", value: "text/event-stream")
+
+        let progress =
+            try TemporaryFileHelpers.withTemporaryFilePath { path -> FileDownloadDelegate.Progress in
+                let delegate = try FileDownloadDelegate(path: path)
+
+                let progress = try self.defaultClient.execute(
+                    request: request,
+                    delegate: delegate
+                )
+                .wait()
+
+                try XCTAssertEqual(50, TemporaryFileHelpers.fileSize(path: path))
+
+                return progress
+            }
+
+        XCTAssertEqual(nil, progress.totalBytes)
+        XCTAssertEqual(50, progress.receivedBytes)
+    }
+
+    func testCloseWhileBackpressureIsExertedIsFine() throws {
+        let request = try Request(url: self.defaultHTTPBinURLPrefix + "close-on-response")
+        let backpressurePromise = self.defaultClient.eventLoopGroup.next().makePromise(of: Void.self)
+
+        let resultFuture = self.defaultClient.execute(
+            request: request, delegate: DelayOnHeadDelegate(promise: backpressurePromise)
+        )
+
+        self.defaultClient.eventLoopGroup.next().scheduleTask(in: .milliseconds(50)) {
+            backpressurePromise.succeed(())
+        }
+
+        // The full response must be correctly delivered.
+        var data = try resultFuture.wait()
+        guard let info = try data.readJSONDecodable(RequestInfo.self, length: data.readableBytes) else {
+            XCTFail("Could not parse response")
+            return
+        }
+        XCTAssertEqual(info.data, "some body content")
+    }
+
+    func testErrorAfterCloseWhileBackpressureExerted() throws {
+        enum ExpectedError: Error {
+            case expected
+        }
+
+        let request = try Request(url: self.defaultHTTPBinURLPrefix + "close-on-response")
+        let backpressurePromise = self.defaultClient.eventLoopGroup.next().makePromise(of: Void.self)
+
+        let resultFuture = self.defaultClient.execute(
+            request: request, delegate: DelayOnHeadDelegate(promise: backpressurePromise)
+        )
+
+        self.defaultClient.eventLoopGroup.next().scheduleTask(in: .milliseconds(50)) {
+            backpressurePromise.fail(ExpectedError.expected)
+        }
+
+        // The task must be failed.
+        XCTAssertThrowsError(try resultFuture.wait()) { error in
+            XCTAssertEqual(error as? ExpectedError, .expected)
+        }
     }
 }
