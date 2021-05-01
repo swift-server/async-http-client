@@ -12,7 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+import BaggageContext
 import Foundation
+import Instrumentation
+import Tracing
 import Logging
 import NIO
 import NIOConcurrencyHelpers
@@ -21,6 +24,8 @@ import NIOHTTPCompression
 import NIOSSL
 import NIOTLS
 import NIOTransportServices
+import NIOInstrumentation
+import OpenTelemetryInstrumentationSupport
 
 extension Logger {
     private func requestInfo(_ request: HTTPClient.Request) -> Logger.Metadata.Value {
@@ -225,101 +230,53 @@ public class HTTPClient {
     ///
     /// - parameters:
     ///     - url: Remote URL.
+    ///     - context: Baggage context associated with this request
     ///     - deadline: Point in time by which the request must complete.
-    public func get(url: String, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        return self.get(url: url, deadline: deadline, logger: HTTPClient.loggingDisabled)
-    }
-
-    /// Execute `GET` request using specified URL.
-    ///
-    /// - parameters:
-    ///     - url: Remote URL.
-    ///     - deadline: Point in time by which the request must complete.
-    ///     - logger: The logger to use for this request.
-    public func get(url: String, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
-        return self.execute(.GET, url: url, deadline: deadline, logger: logger)
+    public func get(url: String, context: BaggageContext, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+        return self.execute(.GET, url: url, context: context, deadline: deadline)
     }
 
     /// Execute `POST` request using specified URL.
     ///
     /// - parameters:
     ///     - url: Remote URL.
+    ///     - context: Baggage context associated with this request
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
-    public func post(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        return self.post(url: url, body: body, deadline: deadline, logger: HTTPClient.loggingDisabled)
-    }
-
-    /// Execute `POST` request using specified URL.
-    ///
-    /// - parameters:
-    ///     - url: Remote URL.
-    ///     - body: Request body.
-    ///     - deadline: Point in time by which the request must complete.
-    ///     - logger: The logger to use for this request.
-    public func post(url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
-        return self.execute(.POST, url: url, body: body, deadline: deadline, logger: logger)
+    public func post(url: String, context: BaggageContext, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+        return self.execute(.POST, url: url, context: context, body: body, deadline: deadline)
     }
 
     /// Execute `PATCH` request using specified URL.
     ///
     /// - parameters:
     ///     - url: Remote URL.
+    ///     - context: Baggage context associated with this request
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
-    public func patch(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        return self.patch(url: url, body: body, deadline: deadline, logger: HTTPClient.loggingDisabled)
-    }
-
-    /// Execute `PATCH` request using specified URL.
-    ///
-    /// - parameters:
-    ///     - url: Remote URL.
-    ///     - body: Request body.
-    ///     - deadline: Point in time by which the request must complete.
-    ///     - logger: The logger to use for this request.
-    public func patch(url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
-        return self.execute(.PATCH, url: url, body: body, deadline: deadline, logger: logger)
+    public func patch(url: String, context: BaggageContext, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+        return self.execute(.PATCH, url: url, context: context, body: body, deadline: deadline)
     }
 
     /// Execute `PUT` request using specified URL.
     ///
     /// - parameters:
     ///     - url: Remote URL.
+    ///     - context: Baggage context associated with this request
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
-    public func put(url: String, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        return self.put(url: url, body: body, deadline: deadline, logger: HTTPClient.loggingDisabled)
-    }
-
-    /// Execute `PUT` request using specified URL.
-    ///
-    /// - parameters:
-    ///     - url: Remote URL.
-    ///     - body: Request body.
-    ///     - deadline: Point in time by which the request must complete.
-    ///     - logger: The logger to use for this request.
-    public func put(url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
-        return self.execute(.PUT, url: url, body: body, deadline: deadline, logger: logger)
+    public func put(url: String, context: BaggageContext, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+        return self.execute(.PUT, url: url, context: context, body: body, deadline: deadline)
     }
 
     /// Execute `DELETE` request using specified URL.
     ///
     /// - parameters:
     ///     - url: Remote URL.
+    ///     - context: Baggage context associated with this request
     ///     - deadline: The time when the request must have been completed by.
-    public func delete(url: String, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        return self.delete(url: url, deadline: deadline, logger: HTTPClient.loggingDisabled)
-    }
-
-    /// Execute `DELETE` request using specified URL.
-    ///
-    /// - parameters:
-    ///     - url: Remote URL.
-    ///     - deadline: The time when the request must have been completed by.
-    ///     - logger: The logger to use for this request.
-    public func delete(url: String, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
-        return self.execute(.DELETE, url: url, deadline: deadline, logger: logger)
+    public func delete(url: String, context: BaggageContext, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
+        return self.execute(.DELETE, url: url, context: context, deadline: deadline)
     }
 
     /// Execute arbitrary HTTP request using specified URL.
@@ -327,13 +284,13 @@ public class HTTPClient {
     /// - parameters:
     ///     - method: Request method.
     ///     - url: Request url.
+    ///     - context: Baggage context associated with this request
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
-    ///     - logger: The logger to use for this request.
-    public func execute(_ method: HTTPMethod = .GET, url: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger? = nil) -> EventLoopFuture<Response> {
+    public func execute(_ method: HTTPMethod = .GET, url: String, context: BaggageContext, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             let request = try Request(url: url, method: method, body: body)
-            return self.execute(request: request, deadline: deadline, logger: logger ?? HTTPClient.loggingDisabled)
+            return self.execute(request: request, context: context, deadline: deadline)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
@@ -345,16 +302,16 @@ public class HTTPClient {
     ///     - method: Request method.
     ///     - socketPath: The path to the unix domain socket to connect to.
     ///     - urlPath: The URL path and query that will be sent to the server.
+    ///     - context: Baggage context associated with this request
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
-    ///     - logger: The logger to use for this request.
-    public func execute(_ method: HTTPMethod = .GET, socketPath: String, urlPath: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger? = nil) -> EventLoopFuture<Response> {
+    public func execute(_ method: HTTPMethod = .GET, socketPath: String, urlPath: String, context: BaggageContext, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             guard let url = URL(httpURLWithSocketPath: socketPath, uri: urlPath) else {
                 throw HTTPClientError.invalidURL
             }
             let request = try Request(url: url, method: method, body: body)
-            return self.execute(request: request, deadline: deadline, logger: logger ?? HTTPClient.loggingDisabled)
+            return self.execute(request: request, context: context, deadline: deadline)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
@@ -366,16 +323,17 @@ public class HTTPClient {
     ///     - method: Request method.
     ///     - secureSocketPath: The path to the unix domain socket to connect to.
     ///     - urlPath: The URL path and query that will be sent to the server.
+    ///     - context: Baggage context associated with this request
     ///     - body: Request body.
     ///     - deadline: Point in time by which the request must complete.
     ///     - logger: The logger to use for this request.
-    public func execute(_ method: HTTPMethod = .GET, secureSocketPath: String, urlPath: String, body: Body? = nil, deadline: NIODeadline? = nil, logger: Logger? = nil) -> EventLoopFuture<Response> {
+    public func execute(_ method: HTTPMethod = .GET, secureSocketPath: String, urlPath: String, context: BaggageContext, body: Body? = nil, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         do {
             guard let url = URL(httpsURLWithSocketPath: secureSocketPath, uri: urlPath) else {
                 throw HTTPClientError.invalidURL
             }
             let request = try Request(url: url, method: method, body: body)
-            return self.execute(request: request, deadline: deadline, logger: logger ?? HTTPClient.loggingDisabled)
+            return self.execute(request: request, context: context, deadline: deadline)
         } catch {
             return self.eventLoopGroup.next().makeFailedFuture(error)
         }
@@ -385,20 +343,11 @@ public class HTTPClient {
     ///
     /// - parameters:
     ///     - request: HTTP request to execute.
+    ///     - context: Baggage context associated with this request
     ///     - deadline: Point in time by which the request must complete.
-    public func execute(request: Request, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        return self.execute(request: request, deadline: deadline, logger: HTTPClient.loggingDisabled)
-    }
-
-    /// Execute arbitrary HTTP request using specified URL.
-    ///
-    /// - parameters:
-    ///     - request: HTTP request to execute.
-    ///     - deadline: Point in time by which the request must complete.
-    ///     - logger: The logger to use for this request.
-    public func execute(request: Request, deadline: NIODeadline? = nil, logger: Logger) -> EventLoopFuture<Response> {
+    public func execute(request: Request, context: BaggageContext, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         let accumulator = ResponseAccumulator(request: request)
-        return self.execute(request: request, delegate: accumulator, deadline: deadline, logger: logger).futureResult
+        return self.execute(request: request, delegate: accumulator, context: context, deadline: deadline).futureResult
     }
 
     /// Execute arbitrary HTTP request using specified URL.
@@ -406,27 +355,11 @@ public class HTTPClient {
     /// - parameters:
     ///     - request: HTTP request to execute.
     ///     - eventLoop: NIO Event Loop preference.
+    ///     - context: Baggage context associated with this request
     ///     - deadline: Point in time by which the request must complete.
-    public func execute(request: Request, eventLoop: EventLoopPreference, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
-        return self.execute(request: request,
-                            eventLoop: eventLoop,
-                            deadline: deadline,
-                            logger: HTTPClient.loggingDisabled)
-    }
-
-    /// Execute arbitrary HTTP request and handle response processing using provided delegate.
-    ///
-    /// - parameters:
-    ///     - request: HTTP request to execute.
-    ///     - eventLoop: NIO Event Loop preference.
-    ///     - deadline: Point in time by which the request must complete.
-    ///     - logger: The logger to use for this request.
-    public func execute(request: Request,
-                        eventLoop eventLoopPreference: EventLoopPreference,
-                        deadline: NIODeadline? = nil,
-                        logger: Logger?) -> EventLoopFuture<Response> {
+    public func execute(request: Request, eventLoop: EventLoopPreference, context: BaggageContext, deadline: NIODeadline? = nil) -> EventLoopFuture<Response> {
         let accumulator = ResponseAccumulator(request: request)
-        return self.execute(request: request, delegate: accumulator, eventLoop: eventLoopPreference, deadline: deadline, logger: logger).futureResult
+        return self.execute(request: request, delegate: accumulator, eventLoop: eventLoop, context: context, deadline: deadline).futureResult
     }
 
     /// Execute arbitrary HTTP request and handle response processing using provided delegate.
@@ -434,25 +367,13 @@ public class HTTPClient {
     /// - parameters:
     ///     - request: HTTP request to execute.
     ///     - delegate: Delegate to process response parts.
+    ///     - context: Baggage context associated with this request
     ///     - deadline: Point in time by which the request must complete.
     public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
                                                               delegate: Delegate,
+                                                              context: BaggageContext,
                                                               deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
-        return self.execute(request: request, delegate: delegate, deadline: deadline, logger: HTTPClient.loggingDisabled)
-    }
-
-    /// Execute arbitrary HTTP request and handle response processing using provided delegate.
-    ///
-    /// - parameters:
-    ///     - request: HTTP request to execute.
-    ///     - delegate: Delegate to process response parts.
-    ///     - deadline: Point in time by which the request must complete.
-    ///     - logger: The logger to use for this request.
-    public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
-                                                              delegate: Delegate,
-                                                              deadline: NIODeadline? = nil,
-                                                              logger: Logger) -> Task<Delegate.Response> {
-        return self.execute(request: request, delegate: delegate, eventLoop: .indifferent, deadline: deadline, logger: logger)
+        return self.execute(request: request, delegate: delegate, eventLoop: .indifferent, context: context, deadline: deadline)
     }
 
     /// Execute arbitrary HTTP request and handle response processing using provided delegate.
@@ -461,32 +382,29 @@ public class HTTPClient {
     ///     - request: HTTP request to execute.
     ///     - delegate: Delegate to process response parts.
     ///     - eventLoop: NIO Event Loop preference.
+    ///     - context: Baggage context associated with this request
     ///     - deadline: Point in time by which the request must complete.
-    ///     - logger: The logger to use for this request.
     public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
                                                               delegate: Delegate,
                                                               eventLoop eventLoopPreference: EventLoopPreference,
+                                                              context: BaggageContext,
                                                               deadline: NIODeadline? = nil) -> Task<Delegate.Response> {
-        return self.execute(request: request,
-                            delegate: delegate,
-                            eventLoop: eventLoopPreference,
-                            deadline: deadline,
-                            logger: HTTPClient.loggingDisabled)
-    }
+        let span = InstrumentationSystem.tracer.startSpan(named: request.method.rawValue, baggage: context.baggage, ofKind: .client)
+        span.attributes.http.method = request.method.rawValue
+        span.attributes.http.scheme = request.scheme
+        span.attributes.http.target = request.uri
+        span.attributes.http.host = request.host
+        if let requestContentLength = request.body?.length {
+            span.attributes.http.requestContentLength = requestContentLength
+        }
 
-    /// Execute arbitrary HTTP request and handle response processing using provided delegate.
-    ///
-    /// - parameters:
-    ///     - request: HTTP request to execute.
-    ///     - delegate: Delegate to process response parts.
-    ///     - eventLoop: NIO Event Loop preference.
-    ///     - deadline: Point in time by which the request must complete.
-    public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
-                                                              delegate: Delegate,
-                                                              eventLoop eventLoopPreference: EventLoopPreference,
-                                                              deadline: NIODeadline? = nil,
-                                                              logger originalLogger: Logger?) -> Task<Delegate.Response> {
-        let logger = (originalLogger ?? HTTPClient.loggingDisabled).attachingRequestInformation(request, requestID: globalRequestID.add(1))
+        // TODO: net.peer.ip / Not required, but recommended
+
+        var request = request
+        InstrumentationSystem.instrument.inject(span.baggage, into: &request.headers, using: HTTPHeadersInjector())
+
+        let logger = context.logger.attachingRequestInformation(request, requestID: globalRequestID.add(1))
+
         let taskEL: EventLoop
         switch eventLoopPreference.preference {
         case .indifferent:
@@ -531,6 +449,7 @@ public class HTTPClient {
                 self.execute(request: newRequest,
                              delegate: delegate,
                              eventLoop: eventLoopPreference,
+                             context: context,
                              deadline: deadline)
             }
         case .disallow:
@@ -559,7 +478,6 @@ public class HTTPClient {
                                     "ahc-request": "\(request.method) \(request.url)",
                                     "ahc-channel-el": "\(connection.channel.eventLoop)",
                                     "ahc-task-el": "\(taskEL)"])
-
             let channel = connection.channel
 
             func prepareChannelForTask0() -> EventLoopFuture<Void> {
@@ -600,7 +518,20 @@ public class HTTPClient {
                     return prepareChannelForTask0()
                 }
             }
-        }.always { _ in
+        }
+        .and(task.futureResult)
+        .always { result in
+            switch result {
+            case .success(let (_, response)):
+                guard let httpResponse = response as? HTTPClient.Response else { return }
+                span.setStatus(.init(httpResponse.status))
+                span.attributes.http.statusCode = Int(httpResponse.status.code)
+                span.attributes.http.statusText = httpResponse.status.reasonPhrase
+                span.attributes.http.responseContentLength = httpResponse.body?.readableBytes ?? 0
+            case .failure(let error):
+                span.recordError(error)
+            }
+            span.end()
             setupComplete.succeed(())
         }.whenFailure { error in
             taskHandler.callOutToDelegateFireAndForget { task in

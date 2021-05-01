@@ -13,6 +13,8 @@
 //===----------------------------------------------------------------------===//
 
 @testable import AsyncHTTPClient
+import BaggageContext
+import Logging
 import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
@@ -271,13 +273,13 @@ class HTTPClientInternalTests: XCTestCase {
                 let delegate = HTTPClientCopyingDelegate { part in
                     writer.write(.byteBuffer(part))
                 }
-                return httpClient.execute(request: request, delegate: delegate).futureResult
+                return httpClient.execute(request: request, delegate: delegate, context: testContext()).futureResult
             } catch {
                 return httpClient.eventLoopGroup.next().makeFailedFuture(error)
             }
         }
 
-        let upload = try! httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait()
+        let upload = try! httpClient.post(url: "http://localhost:\(httpBin.port)/post", context: testContext(), body: body).wait()
         let data = upload.body.flatMap { try? JSONDecoder().decode(RequestInfo.self, from: $0) }
 
         XCTAssertEqual(.ok, upload.status)
@@ -296,7 +298,7 @@ class HTTPClientInternalTests: XCTestCase {
             httpClient.eventLoopGroup.next().makeFailedFuture(HTTPClientError.invalidProxyResponse)
         }
 
-        XCTAssertThrowsError(try httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait())
+        XCTAssertThrowsError(try httpClient.post(url: "http://localhost:\(httpBin.port)/post", context: testContext(), body: body).wait())
 
         body = .stream(length: 50) { _ in
             do {
@@ -306,13 +308,13 @@ class HTTPClientInternalTests: XCTestCase {
                 let delegate = HTTPClientCopyingDelegate { _ in
                     httpClient.eventLoopGroup.next().makeFailedFuture(HTTPClientError.invalidProxyResponse)
                 }
-                return httpClient.execute(request: request, delegate: delegate).futureResult
+                return httpClient.execute(request: request, delegate: delegate, context: testContext()).futureResult
             } catch {
                 return httpClient.eventLoopGroup.next().makeFailedFuture(error)
             }
         }
 
-        XCTAssertThrowsError(try httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait())
+        XCTAssertThrowsError(try httpClient.post(url: "http://localhost:\(httpBin.port)/post", context: testContext(), body: body).wait())
     }
 
     // In order to test backpressure we need to make sure that reads will not happen
@@ -382,7 +384,7 @@ class HTTPClientInternalTests: XCTestCase {
 
         let request = try Request(url: "http://localhost:\(httpBin.port)/custom")
         let delegate = BackpressureTestDelegate(eventLoop: httpClient.eventLoopGroup.next())
-        let future = httpClient.execute(request: request, delegate: delegate).futureResult
+        let future = httpClient.execute(request: request, delegate: delegate, context: testContext()).futureResult
 
         let channel = try promise.futureResult.wait()
 
@@ -540,7 +542,8 @@ class HTTPClientInternalTests: XCTestCase {
         let future = httpClient.execute(request: request,
                                         delegate: delegate,
                                         eventLoop: .init(.testOnly_exact(channelOn: channelEL,
-                                                                         delegateOn: delegateEL))).futureResult
+                                                                         delegateOn: delegateEL)),
+                                        context: testContext()).futureResult
 
         XCTAssertNoThrow(try server.readInbound()) // .head
         XCTAssertNoThrow(try server.readInbound()) // .body
@@ -613,7 +616,7 @@ class HTTPClientInternalTests: XCTestCase {
         let req = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get",
                                          method: .GET,
                                          headers: ["X-Send-Back-Header-Connection": "close"], body: nil)
-        _ = try! httpClient.execute(request: req).wait()
+        _ = try! httpClient.execute(request: req, context: testContext()).wait()
         let el = httpClient.eventLoopGroup.next()
         try! el.scheduleTask(in: .milliseconds(500)) {
             XCTAssertEqual(httpClient.pool.count, 0)
@@ -737,7 +740,7 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertEqual(0, sharedStateServerHandler.requestNumber.load())
         XCTAssertEqual(1, client.pool.count)
         XCTAssertTrue(connection.channel.isActive)
-        XCTAssertNoThrow(XCTAssertEqual(.ok, try client.get(url: url).wait().status))
+        XCTAssertNoThrow(XCTAssertEqual(.ok, try client.get(url: url, context: testContext()).wait().status))
         XCTAssertEqual(1, sharedStateServerHandler.connectionNumber.load())
         XCTAssertEqual(1, sharedStateServerHandler.requestNumber.load())
 
@@ -747,7 +750,7 @@ class HTTPClientInternalTests: XCTestCase {
 
         // Now that we should have learned that the connection is dead, a subsequent request should work and use a new
         // connection
-        XCTAssertNoThrow(XCTAssertEqual(.ok, try client.get(url: url).wait().status))
+        XCTAssertNoThrow(XCTAssertEqual(.ok, try client.get(url: url, context: testContext()).wait().status))
         XCTAssertEqual(2, sharedStateServerHandler.connectionNumber.load())
         XCTAssertEqual(2, sharedStateServerHandler.requestNumber.load())
     }
@@ -876,7 +879,7 @@ class HTTPClientInternalTests: XCTestCase {
             connection.release(closing: false, logger: HTTPClient.loggingDisabled)
         }.wait()
 
-        XCTAssertNoThrow(try client.execute(request: req).wait())
+        XCTAssertNoThrow(try client.execute(request: req, context: testContext()).wait())
 
         // Now, let's pretend the timeout happened
         channel.pipeline.fireUserInboundEventTriggered(IdleStateHandler.IdleStateEvent.write)
@@ -927,9 +930,9 @@ class HTTPClientInternalTests: XCTestCase {
         var futures = [EventLoopFuture<HTTPClient.Response>]()
         for _ in 1...100 {
             let el = group.next()
-            let req1 = client.execute(request: request, eventLoop: .delegate(on: el))
-            let req2 = client.execute(request: request, eventLoop: .delegateAndChannel(on: el))
-            let req3 = client.execute(request: request, eventLoop: .init(.testOnly_exact(channelOn: el, delegateOn: el)))
+            let req1 = client.execute(request: request, eventLoop: .delegate(on: el), context: testContext())
+            let req2 = client.execute(request: request, eventLoop: .delegateAndChannel(on: el), context: testContext())
+            let req3 = client.execute(request: request, eventLoop: .init(.testOnly_exact(channelOn: el, delegateOn: el)), context: testContext())
             XCTAssert(req1.eventLoop === el)
             XCTAssert(req2.eventLoop === el)
             XCTAssert(req3.eventLoop === el)
@@ -946,7 +949,7 @@ class HTTPClientInternalTests: XCTestCase {
 
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
 
-        _ = httpClient.get(url: "http://localhost:\(server.serverPort)/wait")
+        _ = httpClient.get(url: "http://localhost:\(server.serverPort)/wait", context: testContext())
 
         XCTAssertNoThrow(try server.readInbound()) // .head
         XCTAssertNoThrow(try server.readInbound()) // .end
@@ -992,7 +995,8 @@ class HTTPClientInternalTests: XCTestCase {
         let response = httpClient.execute(request: request,
                                           delegate: ResponseAccumulator(request: request),
                                           eventLoop: HTTPClient.EventLoopPreference(.testOnly_exact(channelOn: el2,
-                                                                                                    delegateOn: el1)))
+                                                                                                    delegateOn: el1)),
+                                          context: testContext())
         XCTAssert(el1 === response.eventLoop)
         XCTAssertNoThrow(try response.wait())
     }
@@ -1033,7 +1037,8 @@ class HTTPClientInternalTests: XCTestCase {
         let response = httpClient.execute(request: request,
                                           delegate: ResponseAccumulator(request: request),
                                           eventLoop: HTTPClient.EventLoopPreference(.testOnly_exact(channelOn: el2,
-                                                                                                    delegateOn: el1)))
+                                                                                                    delegateOn: el1)),
+                                          context: testContext())
         taskPromise.succeed(response)
         XCTAssert(el1 === response.eventLoop)
         XCTAssertNoThrow(try response.wait())
@@ -1055,7 +1060,10 @@ class HTTPClientInternalTests: XCTestCase {
 
         let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)//get")
         let delegate = ResponseAccumulator(request: request)
-        let task = client.execute(request: request, delegate: delegate, eventLoop: .init(.testOnly_exact(channelOn: el1, delegateOn: el2)))
+        let task = client.execute(request: request,
+                                  delegate: delegate,
+                                  eventLoop: .init(.testOnly_exact(channelOn: el1, delegateOn: el2)),
+                                  context: testContext())
         XCTAssertTrue(task.futureResult.eventLoop === el2)
         XCTAssertNoThrow(try task.wait())
     }
@@ -1094,7 +1102,10 @@ class HTTPClientInternalTests: XCTestCase {
         let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get")
         let delegate = TestDelegate(expectedEL: el1)
         XCTAssertNoThrow(try httpBin.shutdown())
-        let task = client.execute(request: request, delegate: delegate, eventLoop: .init(.testOnly_exact(channelOn: el2, delegateOn: el1)))
+        let task = client.execute(request: request,
+                                  delegate: delegate,
+                                  eventLoop: .init(.testOnly_exact(channelOn: el2, delegateOn: el1)),
+                                  context: testContext())
         XCTAssertThrowsError(try task.wait())
         XCTAssertTrue(delegate.receivedError)
     }
@@ -1257,4 +1268,8 @@ extension TaskHandler.State {
             return false
         }
     }
+}
+
+func testContext(_ baggage: Baggage = .topLevel, logger: Logger = Logger(label: "test")) -> BaggageContext {
+    DefaultContext(baggage: baggage, logger: logger)
 }

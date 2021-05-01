@@ -26,12 +26,16 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.3.0"),
         .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.5.1"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.4.0"),
+        .package(url: "https://github.com/slashmo/gsoc-swift-tracing.git", .branch("main")),
     ],
     targets: [
         .target(
             name: "AsyncHTTPClient",
             dependencies: ["NIO", "NIOHTTP1", "NIOSSL", "NIOConcurrencyHelpers", "NIOHTTPCompression",
-                           "NIOFoundationCompat", "NIOTransportServices", "Logging"]
+                           "NIOFoundationCompat", "NIOTransportServices", "Logging",
+                           .product(name: "Tracing", package: "gsoc-swift-tracing"),
+                           .product(name: "OpenTelemetryInstrumentationSupport", package: "gsoc-swift-tracing"),
+                           .product(name: "NIOInstrumentation", package: "gsoc-swift-tracing")]
         ),
         .testTarget(
             name: "AsyncHTTPClientTests",
