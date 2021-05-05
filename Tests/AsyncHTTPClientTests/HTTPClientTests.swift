@@ -2916,4 +2916,22 @@ class HTTPClientTests: XCTestCase {
             XCTAssertEqual(error as? ExpectedError, .expected)
         }
     }
+    
+    func testRequestSpecificTLS() throws {
+        let configuration = HTTPClient.Configuration(tlsConfiguration: nil,
+                                                     timeout: .init(),
+                                                     ignoreUncleanSSLShutdown: false,
+                                                     decompression: .disabled)
+        let localHTTPBin = HTTPBin(ssl: true)
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                     configuration: configuration)
+        defer {
+            XCTAssertNoThrow(try localClient.syncShutdown())
+            XCTAssertNoThrow(try localHTTPBin.shutdown())
+        }
+        
+        let request = try HTTPClient.Request(url: "https://localhost:\(localHTTPBin.port)/get", method: .GET, tlsConfiguration: .forClient(certificateVerification: .none))
+        let response = try localClient.execute(request: request).wait()
+        XCTAssertEqual(.ok, response.status)
+    }
 }

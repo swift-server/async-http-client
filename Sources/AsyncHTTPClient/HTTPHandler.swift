@@ -205,6 +205,7 @@ extension HTTPClient {
         ///     - method: HTTP method.
         ///     - headers: Custom HTTP headers.
         ///     - body: Request body.
+        ///     - tlsConfiguration: Request TLS configuration
         /// - throws:
         ///     - `invalidURL` if URL cannot be parsed.
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
@@ -215,7 +216,7 @@ extension HTTPClient {
                 throw HTTPClientError.invalidURL
             }
 
-            try self.init(url: url, method: method, headers: headers, body: body)
+            try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: tlsConfiguration)
         }
 
         /// Create an HTTP `Request`.
@@ -225,6 +226,7 @@ extension HTTPClient {
         ///     - method: HTTP method.
         ///     - headers: Custom HTTP headers.
         ///     - body: Request body.
+        ///     - tlsConfiguration: Request TLS configuration
         /// - throws:
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.

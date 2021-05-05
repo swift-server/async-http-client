@@ -150,9 +150,9 @@ extension NIOClientTCPBootstrap {
         let key = destination
 
         let requiresTLS = key.scheme.requiresTLS
-        // Override specific key configuration.
+        // Override optional connection pool configuration.
         var keyConfiguration = configuration
-        if let tlsConfiguration = destination.tlsConfiguration {
+        if let tlsConfiguration = key.tlsConfiguration {
             keyConfiguration.tlsConfiguration = tlsConfiguration.base
         }
         let bootstrap: NIOClientTCPBootstrap
