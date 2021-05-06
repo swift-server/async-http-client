@@ -205,20 +205,53 @@ extension HTTPClient {
         ///     - method: HTTP method.
         ///     - headers: Custom HTTP headers.
         ///     - body: Request body.
+        /// - throws:
+        ///     - `invalidURL` if URL cannot be parsed.
+        ///     - `emptyScheme` if URL does not contain HTTP scheme.
+        ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
+        ///     - `emptyHost` if URL does not contains a host.
+        public init(url: String, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+            try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: nil)
+        }
+        
+        /// Create HTTP request.
+        ///
+        /// - parameters:
+        ///     - url: Remote `URL`.
+        ///     - version: HTTP version.
+        ///     - method: HTTP method.
+        ///     - headers: Custom HTTP headers.
+        ///     - body: Request body.
         ///     - tlsConfiguration: Request TLS configuration
         /// - throws:
         ///     - `invalidURL` if URL cannot be parsed.
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
-        public init(url: String, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration? = nil) throws {
+        public init(url: String, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration?) throws {
             guard let url = URL(string: url) else {
                 throw HTTPClientError.invalidURL
             }
-
+            
             try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: tlsConfiguration)
         }
 
+        /// Create an HTTP `Request`.
+        ///
+        /// - parameters:
+        ///     - url: Remote `URL`.
+        ///     - method: HTTP method.
+        ///     - headers: Custom HTTP headers.
+        ///     - body: Request body.
+        /// - throws:
+        ///     - `emptyScheme` if URL does not contain HTTP scheme.
+        ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
+        ///     - `emptyHost` if URL does not contains a host.
+        ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
+        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+            try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: nil)
+        }
+        
         /// Create an HTTP `Request`.
         ///
         /// - parameters:
@@ -232,16 +265,16 @@ extension HTTPClient {
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
         ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
-        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration? = nil) throws {
+        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration?) throws {
             guard let scheme = url.scheme?.lowercased() else {
                 throw HTTPClientError.emptyScheme
             }
-
+            
             self.kind = try Kind(forScheme: scheme)
             self.host = try self.kind.hostFromURL(url)
             self.socketPath = try self.kind.socketPathFromURL(url)
             self.uri = self.kind.uriFromURL(url)
-
+            
             self.redirectState = nil
             self.url = url
             self.method = method
