@@ -13,6 +13,6 @@ struct BestEffortHashableTLSConfiguration: Hashable {
     }
     
     static func == (lhs: BestEffortHashableTLSConfiguration, rhs: BestEffortHashableTLSConfiguration) -> Bool {
-        lhs.base.bestEffortEquals(rhs.base)
+        return lhs.base.bestEffortEquals(rhs.base)
     }
 }
