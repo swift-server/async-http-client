@@ -2925,13 +2925,43 @@ class HTTPClientTests: XCTestCase {
         let localHTTPBin = HTTPBin(ssl: true)
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: configuration)
+        let decoder = JSONDecoder()
+        
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
             XCTAssertNoThrow(try localHTTPBin.shutdown())
         }
         
-        let request = try HTTPClient.Request(url: "https://localhost:\(localHTTPBin.port)/get", method: .GET, tlsConfiguration: .forClient(certificateVerification: .none))
-        let response = try localClient.execute(request: request).wait()
-        XCTAssertEqual(.ok, response.status)
+        // First two requests use identical TLS configurations.
+        let firstRequest = try HTTPClient.Request(url: "https://localhost:\(localHTTPBin.port)/get", method: .GET, tlsConfiguration: .forClient(certificateVerification: .none))
+        let firstResponse = try localClient.execute(request: firstRequest).wait()
+        guard let firstBody = firstResponse.body else {
+            XCTFail("No request body found")
+            return
+        }
+        let firstConnectionNumber = try decoder.decode(RequestInfo.self, from: firstBody).connectionNumber
+        
+        let secondRequest = try HTTPClient.Request(url: "https://localhost:\(localHTTPBin.port)/get", method: .GET, tlsConfiguration: .forClient(certificateVerification: .none))
+        let secondResponse = try localClient.execute(request: secondRequest).wait()
+        guard let secondBody = secondResponse.body else {
+            XCTFail("No request body found")
+            return
+        }
+        let secondConnectionNumber = try decoder.decode(RequestInfo.self, from: secondBody).connectionNumber
+        
+        // Uses a differrent TLS config.
+        let thirdRequest = try HTTPClient.Request(url: "https://localhost:\(localHTTPBin.port)/get", method: .GET, tlsConfiguration: .forClient(maximumTLSVersion: .tlsv1, certificateVerification: .none))
+        let thirdResponse = try localClient.execute(request: thirdRequest).wait()
+        guard let thirdBody = thirdResponse.body else {
+            XCTFail("No request body found")
+            return
+        }
+        let thirdConnectionNumber = try decoder.decode(RequestInfo.self, from: thirdBody).connectionNumber
+        
+        XCTAssertEqual(firstResponse.status, .ok)
+        XCTAssertEqual(secondResponse.status, .ok)
+        XCTAssertEqual(thirdResponse.status, .ok)
+        XCTAssertEqual(firstConnectionNumber, secondConnectionNumber, "Identical TLS configurations did not use the same connection")
+        XCTAssertNotEqual(thirdConnectionNumber, firstConnectionNumber, "Different TLS configurations did not use different connections.")
     }
 }
