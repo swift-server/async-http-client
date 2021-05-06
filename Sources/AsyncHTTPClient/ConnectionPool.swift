@@ -82,7 +82,7 @@ final class ConnectionPool {
             } else {
                 let provider = HTTP1ConnectionProvider(key: key,
                                                        eventLoop: taskEventLoop,
-                                                       configuration: self.configuration,
+                                                       configuration: key.config(overriding: self.configuration),
                                                        pool: self,
                                                        backgroundActivityLogger: self.backgroundActivityLogger)
                 let enqueued = provider.enqueue()
@@ -165,6 +165,15 @@ final class ConnectionPool {
                     return false
                 }
             }
+        }
+
+        /// Returns a key-specific `HTTPClient.Configuration` by overriding the properties of `base`
+        func config(overriding base: HTTPClient.Configuration) -> HTTPClient.Configuration {
+            var config = base
+            if let tlsConfiguration = self.tlsConfiguration {
+                config.tlsConfiguration = tlsConfiguration.base
+            }
+            return config
         }
     }
 }

@@ -150,14 +150,9 @@ extension NIOClientTCPBootstrap {
         let key = destination
 
         let requiresTLS = key.scheme.requiresTLS
-        // Override optional connection pool configuration.
-        var keyConfiguration = configuration
-        if let tlsConfiguration = key.tlsConfiguration {
-            keyConfiguration.tlsConfiguration = tlsConfiguration.base
-        }
         let bootstrap: NIOClientTCPBootstrap
         do {
-            bootstrap = try NIOClientTCPBootstrap.makeHTTPClientBootstrapBase(on: channelEventLoop, host: key.host, port: key.port, requiresTLS: requiresTLS, configuration: keyConfiguration)
+            bootstrap = try NIOClientTCPBootstrap.makeHTTPClientBootstrapBase(on: channelEventLoop, host: key.host, port: key.port, requiresTLS: requiresTLS, configuration: configuration)
         } catch {
             return channelEventLoop.makeFailedFuture(error)
         }
@@ -165,7 +160,7 @@ extension NIOClientTCPBootstrap {
         let channel: EventLoopFuture<Channel>
         switch key.scheme {
         case .http, .https:
-            let address = HTTPClient.resolveAddress(host: key.host, port: key.port, proxy: keyConfiguration.proxy)
+            let address = HTTPClient.resolveAddress(host: key.host, port: key.port, proxy: configuration.proxy)
             channel = bootstrap.connect(host: address.host, port: address.port)
         case .unix, .http_unix, .https_unix:
             channel = bootstrap.connect(unixDomainSocketPath: key.unixPath)
@@ -178,7 +173,7 @@ extension NIOClientTCPBootstrap {
 
             if requiresLateSSLHandler {
                 let handshakePromise = channel.eventLoop.makePromise(of: Void.self)
-                channel.pipeline.syncAddLateSSLHandlerIfNeeded(for: key, tlsConfiguration: keyConfiguration.tlsConfiguration, handshakePromise: handshakePromise)
+                channel.pipeline.syncAddLateSSLHandlerIfNeeded(for: key, tlsConfiguration: configuration.tlsConfiguration, handshakePromise: handshakePromise)
                 handshakeFuture = handshakePromise.futureResult
             } else if requiresTLS {
                 do {
