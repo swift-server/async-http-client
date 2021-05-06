@@ -2916,7 +2916,7 @@ class HTTPClientTests: XCTestCase {
             XCTAssertEqual(error as? ExpectedError, .expected)
         }
     }
-    
+
     func testRequestSpecificTLS() throws {
         let configuration = HTTPClient.Configuration(tlsConfiguration: nil,
                                                      timeout: .init(),
@@ -2926,12 +2926,12 @@ class HTTPClientTests: XCTestCase {
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: configuration)
         let decoder = JSONDecoder()
-        
+
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
             XCTAssertNoThrow(try localHTTPBin.shutdown())
         }
-        
+
         // First two requests use identical TLS configurations.
         let firstRequest = try HTTPClient.Request(url: "https://localhost:\(localHTTPBin.port)/get", method: .GET, tlsConfiguration: .forClient(certificateVerification: .none))
         let firstResponse = try localClient.execute(request: firstRequest).wait()
@@ -2940,7 +2940,7 @@ class HTTPClientTests: XCTestCase {
             return
         }
         let firstConnectionNumber = try decoder.decode(RequestInfo.self, from: firstBody).connectionNumber
-        
+
         let secondRequest = try HTTPClient.Request(url: "https://localhost:\(localHTTPBin.port)/get", method: .GET, tlsConfiguration: .forClient(certificateVerification: .none))
         let secondResponse = try localClient.execute(request: secondRequest).wait()
         guard let secondBody = secondResponse.body else {
@@ -2948,7 +2948,7 @@ class HTTPClientTests: XCTestCase {
             return
         }
         let secondConnectionNumber = try decoder.decode(RequestInfo.self, from: secondBody).connectionNumber
-        
+
         // Uses a differrent TLS config.
         let thirdRequest = try HTTPClient.Request(url: "https://localhost:\(localHTTPBin.port)/get", method: .GET, tlsConfiguration: .forClient(maximumTLSVersion: .tlsv1, certificateVerification: .none))
         let thirdResponse = try localClient.execute(request: thirdRequest).wait()
@@ -2957,7 +2957,7 @@ class HTTPClientTests: XCTestCase {
             return
         }
         let thirdConnectionNumber = try decoder.decode(RequestInfo.self, from: thirdBody).connectionNumber
-        
+
         XCTAssertEqual(firstResponse.status, .ok)
         XCTAssertEqual(secondResponse.status, .ok)
         XCTAssertEqual(thirdResponse.status, .ok)

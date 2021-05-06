@@ -213,7 +213,7 @@ extension HTTPClient {
         public init(url: String, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
             try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: nil)
         }
-        
+
         /// Create HTTP request.
         ///
         /// - parameters:
@@ -232,7 +232,7 @@ extension HTTPClient {
             guard let url = URL(string: url) else {
                 throw HTTPClientError.invalidURL
             }
-            
+
             try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: tlsConfiguration)
         }
 
@@ -251,7 +251,7 @@ extension HTTPClient {
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
             try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: nil)
         }
-        
+
         /// Create an HTTP `Request`.
         ///
         /// - parameters:
@@ -269,12 +269,12 @@ extension HTTPClient {
             guard let scheme = url.scheme?.lowercased() else {
                 throw HTTPClientError.emptyScheme
             }
-            
+
             self.kind = try Kind(forScheme: scheme)
             self.host = try self.kind.hostFromURL(url)
             self.socketPath = try self.kind.socketPathFromURL(url)
             self.uri = self.kind.uriFromURL(url)
-            
+
             self.redirectState = nil
             self.url = url
             self.method = method
