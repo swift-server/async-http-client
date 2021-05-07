@@ -82,7 +82,7 @@ final class ConnectionPool {
             } else {
                 let provider = HTTP1ConnectionProvider(key: key,
                                                        eventLoop: taskEventLoop,
-                                                       configuration: self.configuration,
+                                                       configuration: key.config(overriding: self.configuration),
                                                        pool: self,
                                                        backgroundActivityLogger: self.backgroundActivityLogger)
                 let enqueued = provider.enqueue()
@@ -139,12 +139,16 @@ final class ConnectionPool {
             self.port = request.port
             self.host = request.host
             self.unixPath = request.socketPath
+            if let tls = request.tlsConfiguration {
+                self.tlsConfiguration = BestEffortHashableTLSConfiguration(wrapping: tls)
+            }
         }
 
         var scheme: Scheme
         var host: String
         var port: Int
         var unixPath: String
+        var tlsConfiguration: BestEffortHashableTLSConfiguration?
 
         enum Scheme: Hashable {
             case http
@@ -161,6 +165,15 @@ final class ConnectionPool {
                     return false
                 }
             }
+        }
+
+        /// Returns a key-specific `HTTPClient.Configuration` by overriding the properties of `base`
+        func config(overriding base: HTTPClient.Configuration) -> HTTPClient.Configuration {
+            var config = base
+            if let tlsConfiguration = self.tlsConfiguration {
+                config.tlsConfiguration = tlsConfiguration.base
+            }
+            return config
         }
     }
 }

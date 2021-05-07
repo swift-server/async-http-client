@@ -133,6 +133,7 @@ extension HTTPClientTests {
             ("testFileDownloadChunked", testFileDownloadChunked),
             ("testCloseWhileBackpressureIsExertedIsFine", testCloseWhileBackpressureIsExertedIsFine),
             ("testErrorAfterCloseWhileBackpressureExerted", testErrorAfterCloseWhileBackpressureExerted),
+            ("testRequestSpecificTLS", testRequestSpecificTLS),
         ]
     }
 }
