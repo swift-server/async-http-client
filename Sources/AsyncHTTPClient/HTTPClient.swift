@@ -900,7 +900,9 @@ extension ChannelPipeline {
         try sync.addHandler(handler)
     }
 
-    func syncAddLateSSLHandlerIfNeeded(for key: ConnectionPool.Key, tlsConfiguration: TLSConfiguration?, handshakePromise: EventLoopPromise<Void>) {
+    func syncAddLateSSLHandlerIfNeeded(for key: ConnectionPool.Key,
+                                       sslContext: NIOSSLContext,
+                                       handshakePromise: EventLoopPromise<Void>) {
         precondition(key.scheme.requiresTLS)
 
         do {
@@ -913,10 +915,9 @@ extension ChannelPipeline {
             try synchronousPipelineView.addHandler(eventsHandler, name: TLSEventsHandler.handlerName)
 
             // Then we add the SSL handler.
-            let tlsConfiguration = tlsConfiguration ?? TLSConfiguration.forClient()
-            let context = try NIOSSLContext(configuration: tlsConfiguration)
             try synchronousPipelineView.addHandler(
-                try NIOSSLClientHandler(context: context, serverHostname: (key.host.isIPAddress || key.host.isEmpty) ? nil : key.host),
+                try NIOSSLClientHandler(context: sslContext,
+                                        serverHostname: (key.host.isIPAddress || key.host.isEmpty) ? nil : key.host),
                 position: .before(eventsHandler)
             )
         } catch {

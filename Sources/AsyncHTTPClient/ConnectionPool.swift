@@ -18,6 +18,7 @@ import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOHTTPCompression
+import NIOSSL
 import NIOTLS
 import NIOTransportServices
 
@@ -40,6 +41,8 @@ final class ConnectionPool {
     private let lock = Lock()
 
     private let backgroundActivityLogger: Logger
+
+    let sslContextCache = SSLContextCache()
 
     init(configuration: HTTPClient.Configuration, backgroundActivityLogger: Logger) {
         self.configuration = configuration
@@ -106,6 +109,8 @@ final class ConnectionPool {
             self.providers.values
         }
 
+        self.sslContextCache.shutdown()
+
         return EventLoopFuture.reduce(true, providers.map { $0.close() }, on: eventLoop) { $0 && $1 }
     }
 
@@ -148,7 +153,7 @@ final class ConnectionPool {
         var host: String
         var port: Int
         var unixPath: String
-        var tlsConfiguration: BestEffortHashableTLSConfiguration?
+        private var tlsConfiguration: BestEffortHashableTLSConfiguration?
 
         enum Scheme: Hashable {
             case http
@@ -249,14 +254,15 @@ class HTTP1ConnectionProvider {
                 } else {
                     logger.trace("opening fresh connection (found matching but inactive connection)",
                                  metadata: ["ahc-dead-connection": "\(connection)"])
-                    self.makeChannel(preference: waiter.preference).whenComplete { result in
+                    self.makeChannel(preference: waiter.preference,
+                                     logger: logger).whenComplete { result in
                         self.connect(result, waiter: waiter, logger: logger)
                     }
                 }
             }
         case .create(let waiter):
             logger.trace("opening fresh connection (no connections to reuse available)")
-            self.makeChannel(preference: waiter.preference).whenComplete { result in
+            self.makeChannel(preference: waiter.preference, logger: logger).whenComplete { result in
                 self.connect(result, waiter: waiter, logger: logger)
             }
         case .replace(let connection, let waiter):
@@ -266,7 +272,7 @@ class HTTP1ConnectionProvider {
                 logger.trace("opening fresh connection (replacing exising connection)",
                              metadata: ["ahc-old-connection": "\(connection)",
                                         "ahc-waiter": "\(waiter)"])
-                self.makeChannel(preference: waiter.preference).whenComplete { result in
+                self.makeChannel(preference: waiter.preference, logger: logger).whenComplete { result in
                     self.connect(result, waiter: waiter, logger: logger)
                 }
             }
@@ -434,8 +440,14 @@ class HTTP1ConnectionProvider {
         return self.closePromise.futureResult.map { true }
     }
 
-    private func makeChannel(preference: HTTPClient.EventLoopPreference) -> EventLoopFuture<Channel> {
-        return NIOClientTCPBootstrap.makeHTTP1Channel(destination: self.key, eventLoop: self.eventLoop, configuration: self.configuration, preference: preference)
+    private func makeChannel(preference: HTTPClient.EventLoopPreference,
+                             logger: Logger) -> EventLoopFuture<Channel> {
+        return NIOClientTCPBootstrap.makeHTTP1Channel(destination: self.key,
+                                                      eventLoop: self.eventLoop,
+                                                      configuration: self.configuration,
+                                                      sslContextCache: self.pool.sslContextCache,
+                                                      preference: preference,
+                                                      logger: logger)
     }
 
     /// A `Waiter` represents a request that waits for a connection when none is

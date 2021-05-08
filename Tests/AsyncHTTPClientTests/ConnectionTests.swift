@@ -19,6 +19,7 @@ import XCTest
 class ConnectionTests: XCTestCase {
     var eventLoop: EmbeddedEventLoop!
     var http1ConnectionProvider: HTTP1ConnectionProvider!
+    var pool: ConnectionPool!
 
     func buildState(connection: Connection, release: Bool) {
         XCTAssertTrue(self.http1ConnectionProvider.state.enqueue())
@@ -131,24 +132,30 @@ class ConnectionTests: XCTestCase {
     }
 
     override func setUp() {
+        XCTAssertNil(self.pool)
         XCTAssertNil(self.eventLoop)
         XCTAssertNil(self.http1ConnectionProvider)
         self.eventLoop = EmbeddedEventLoop()
-        XCTAssertNoThrow(self.http1ConnectionProvider = try HTTP1ConnectionProvider(key: .init(.init(url: "http://some.test")),
-                                                                                    eventLoop: self.eventLoop,
-                                                                                    configuration: .init(),
-                                                                                    pool: .init(configuration: .init(),
-                                                                                                backgroundActivityLogger: HTTPClient.loggingDisabled),
-                                                                                    backgroundActivityLogger: HTTPClient.loggingDisabled))
+        self.pool = ConnectionPool(configuration: .init(),
+                                   backgroundActivityLogger: HTTPClient.loggingDisabled)
+        XCTAssertNoThrow(self.http1ConnectionProvider =
+            try HTTP1ConnectionProvider(key: .init(.init(url: "http://some.test")),
+                                        eventLoop: self.eventLoop,
+                                        configuration: .init(),
+                                        pool: self.pool,
+                                        backgroundActivityLogger: HTTPClient.loggingDisabled))
     }
 
     override func tearDown() {
+        XCTAssertNotNil(self.pool)
         XCTAssertNotNil(self.eventLoop)
         XCTAssertNotNil(self.http1ConnectionProvider)
         XCTAssertNoThrow(try self.http1ConnectionProvider.close().wait())
         XCTAssertNoThrow(try self.eventLoop.syncShutdownGracefully())
-        self.eventLoop = nil
         self.http1ConnectionProvider = nil
+        XCTAssertTrue(try self.pool.close(on: self.eventLoop).wait())
+        self.eventLoop = nil
+        self.pool = nil
     }
 }
 

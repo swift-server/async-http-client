@@ -51,14 +51,15 @@ class HTTPClientNIOTSTests: XCTestCase {
 
     func testTLSFailError() {
         guard isTestingNIOTS() else { return }
-        #if canImport(Network)
-            let httpBin = HTTPBin(ssl: true)
-            let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
-            defer {
-                XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
-                XCTAssertNoThrow(try httpBin.shutdown())
-            }
 
+        let httpBin = HTTPBin(ssl: true)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        #if canImport(Network)
             do {
                 _ = try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()
                 XCTFail("This should have failed")
@@ -68,6 +69,8 @@ class HTTPClientNIOTSTests: XCTestCase {
             } catch {
                 XCTFail("Error should have been NWTLSError not \(type(of: error))")
             }
+        #else
+            XCTFail("wrong OS")
         #endif
     }
 
