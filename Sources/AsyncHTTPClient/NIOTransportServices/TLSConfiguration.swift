@@ -68,10 +68,12 @@
             if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
                 sec_protocol_options_set_min_tls_protocol_version(options.securityProtocolOptions, self.minimumTLSVersion.nwTLSProtocolVersion)
             } else {
-                #if !targetEnvironment(macCatalyst)
-                    sec_protocol_options_set_tls_min_version(options.securityProtocolOptions, self.minimumTLSVersion.sslProtocol)
-                #else
-                    preconditionFailure("macCatalyst 13 is the first version of macCatalyst")
+                #if compiler(>=5.3)
+                    #if !targetEnvironment(macCatalyst)
+                        sec_protocol_options_set_tls_min_version(options.securityProtocolOptions, self.minimumTLSVersion.sslProtocol)
+                    #else
+                        preconditionFailure("macCatalyst 13 is the first version of macCatalyst")
+                    #endif
                 #endif
             }
 
@@ -80,10 +82,12 @@
                 if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
                     sec_protocol_options_set_max_tls_protocol_version(options.securityProtocolOptions, maximumTLSVersion.nwTLSProtocolVersion)
                 } else {
-                    #if !targetEnvironment(macCatalyst)
-                        sec_protocol_options_set_tls_max_version(options.securityProtocolOptions, maximumTLSVersion.sslProtocol)
-                    #else
-                        preconditionFailure("macCatalyst 13 is the first version of macCatalyst")
+                    #if compiler(>=5.3)
+                        #if !targetEnvironment(macCatalyst)
+                            sec_protocol_options_set_tls_max_version(options.securityProtocolOptions, maximumTLSVersion.sslProtocol)
+                        #else
+                            preconditionFailure("macCatalyst 13 is the first version of macCatalyst")
+                        #endif
                     #endif
                 }
             }
