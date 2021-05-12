@@ -125,6 +125,15 @@ extension HTTPClientTests {
             ("testBodyUploadAfterEndFails", testBodyUploadAfterEndFails),
             ("testNoBytesSentOverBodyLimit", testNoBytesSentOverBodyLimit),
             ("testDoubleError", testDoubleError),
+            ("testSSLHandshakeErrorPropagation", testSSLHandshakeErrorPropagation),
+            ("testSSLHandshakeErrorPropagationDelayedClose", testSSLHandshakeErrorPropagationDelayedClose),
+            ("testWeCloseConnectionsWhenConnectionCloseSetByServer", testWeCloseConnectionsWhenConnectionCloseSetByServer),
+            ("testBiDirectionalStreaming", testBiDirectionalStreaming),
+            ("testSynchronousHandshakeErrorReporting", testSynchronousHandshakeErrorReporting),
+            ("testFileDownloadChunked", testFileDownloadChunked),
+            ("testCloseWhileBackpressureIsExertedIsFine", testCloseWhileBackpressureIsExertedIsFine),
+            ("testErrorAfterCloseWhileBackpressureExerted", testErrorAfterCloseWhileBackpressureExerted),
+            ("testRequestSpecificTLS", testRequestSpecificTLS),
         ]
     }
 }

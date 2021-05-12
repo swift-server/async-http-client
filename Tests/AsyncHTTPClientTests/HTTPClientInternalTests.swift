@@ -145,7 +145,7 @@ class HTTPClientInternalTests: XCTestCase {
 
         try channel.pipeline.addHandler(handler).wait()
 
-        handler.state = .sent
+        handler.state = .bodySentWaitingResponseHead
         var body = channel.allocator.buffer(capacity: 4)
         body.writeStaticString("1234")
 
@@ -159,6 +159,100 @@ class HTTPClientInternalTests: XCTestCase {
         default:
             XCTFail("Expecting .body")
         }
+    }
+
+    func testHTTPResponseHeadBeforeRequestHead() throws {
+        let channel = EmbeddedChannel()
+        XCTAssertNoThrow(try channel.connect(to: try SocketAddress(unixDomainSocketPath: "/fake")).wait())
+
+        let delegate = TestHTTPDelegate()
+        let task = Task<Void>(eventLoop: channel.eventLoop, logger: HTTPClient.loggingDisabled)
+        let handler = TaskHandler(task: task,
+                                  kind: .host,
+                                  delegate: delegate,
+                                  redirectHandler: nil,
+                                  ignoreUncleanSSLShutdown: false,
+                                  logger: HTTPClient.loggingDisabled)
+
+        XCTAssertNoThrow(try channel.pipeline.addHTTPClientHandlers().wait())
+        XCTAssertNoThrow(try channel.pipeline.addHandler(handler).wait())
+
+        XCTAssertNoThrow(try channel.writeInbound(ByteBuffer(string: "HTTP/1.0 200 OK\r\n\r\n")))
+
+        XCTAssertThrowsError(try task.futureResult.wait()) { error in
+            XCTAssertEqual(error as? NIOHTTPDecoderError, NIOHTTPDecoderError.unsolicitedResponse)
+        }
+    }
+
+    func testHTTPResponseDoubleHead() throws {
+        let channel = EmbeddedChannel()
+        XCTAssertNoThrow(try channel.connect(to: try SocketAddress(unixDomainSocketPath: "/fake")).wait())
+
+        let delegate = TestHTTPDelegate()
+        let task = Task<Void>(eventLoop: channel.eventLoop, logger: HTTPClient.loggingDisabled)
+        let handler = TaskHandler(task: task,
+                                  kind: .host,
+                                  delegate: delegate,
+                                  redirectHandler: nil,
+                                  ignoreUncleanSSLShutdown: false,
+                                  logger: HTTPClient.loggingDisabled)
+
+        XCTAssertNoThrow(try channel.pipeline.addHTTPClientHandlers().wait())
+        XCTAssertNoThrow(try channel.pipeline.addHandler(handler).wait())
+
+        let request = try HTTPClient.Request(url: "http://localhost/get")
+        XCTAssertNoThrow(try channel.writeOutbound(request))
+
+        XCTAssertNoThrow(try channel.writeInbound(ByteBuffer(string: "HTTP/1.0 200 OK\r\nHTTP/1.0 200 OK\r\n\r\n")))
+
+        XCTAssertThrowsError(try task.futureResult.wait()) { error in
+            XCTAssertEqual((error as? HTTPParserError)?.debugDescription, "invalid character in header")
+        }
+    }
+
+    func testRequestFinishesAfterRedirectIfServerRespondsBeforeClientFinishes() throws {
+        let channel = EmbeddedChannel()
+
+        var request = try Request(url: "http://localhost:8080/get")
+        // This promise is needed to force task handler to process incoming redirecting head before finishing sending the request
+        let promise = channel.eventLoop.makePromise(of: Void.self)
+        request.body = .stream(length: 6) { writer in
+            promise.futureResult.flatMap {
+                writer.write(.byteBuffer(ByteBuffer(string: "helllo")))
+            }
+        }
+
+        let task = Task<Void>(eventLoop: channel.eventLoop, logger: HTTPClient.loggingDisabled)
+        let redirecter = RedirectHandler<Void>(request: request) { _ in
+            task
+        }
+
+        let handler = TaskHandler(task: task,
+                                  kind: .host,
+                                  delegate: TestHTTPDelegate(),
+                                  redirectHandler: redirecter,
+                                  ignoreUncleanSSLShutdown: false,
+                                  logger: HTTPClient.loggingDisabled)
+
+        XCTAssertNoThrow(try channel.pipeline.addHTTPClientHandlers().wait())
+        XCTAssertNoThrow(try channel.pipeline.addHandler(handler).wait())
+
+        let future = channel.write(request)
+        channel.flush()
+
+        XCTAssertNoThrow(XCTAssertNotNil(try channel.readOutbound(as: ByteBuffer.self))) // expecting to read head from the client
+        // sending redirect before client finishesh processing the request
+        XCTAssertNoThrow(try channel.writeInbound(ByteBuffer(string: "HTTP/1.1 302 Found\r\nLocation: /follow\r\n\r\n")))
+        channel.flush()
+
+        promise.succeed(())
+
+        // we expect client to fully send us all bytes
+        XCTAssertEqual(try channel.readOutbound(as: ByteBuffer.self), ByteBuffer(string: "helllo"))
+        XCTAssertEqual(try channel.readOutbound(as: ByteBuffer.self), ByteBuffer(string: ""))
+        XCTAssertNoThrow(try channel.writeInbound(ByteBuffer(string: "\r\n")))
+
+        XCTAssertNoThrow(try future.wait())
     }
 
     func testProxyStreaming() throws {
@@ -812,7 +906,7 @@ class HTTPClientInternalTests: XCTestCase {
 
         XCTAssert(connection !== connection2)
         try! connection2.channel.eventLoop.submit {
-            connection2.release(closing: true, logger: HTTPClient.loggingDisabled)
+            connection2.release(closing: false, logger: HTTPClient.loggingDisabled)
         }.wait()
         XCTAssertTrue(connection2.channel.isActive)
     }

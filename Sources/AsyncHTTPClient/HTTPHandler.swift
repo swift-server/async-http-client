@@ -186,6 +186,8 @@ extension HTTPClient {
         public var headers: HTTPHeaders
         /// Request body, defaults to no body.
         public var body: Body?
+        /// Request-specific TLS configuration, defaults to no request-specific TLS configuration.
+        public var tlsConfiguration: TLSConfiguration?
 
         struct RedirectState {
             var count: Int
@@ -209,11 +211,29 @@ extension HTTPClient {
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
         public init(url: String, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+            try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: nil)
+        }
+
+        /// Create HTTP request.
+        ///
+        /// - parameters:
+        ///     - url: Remote `URL`.
+        ///     - version: HTTP version.
+        ///     - method: HTTP method.
+        ///     - headers: Custom HTTP headers.
+        ///     - body: Request body.
+        ///     - tlsConfiguration: Request TLS configuration
+        /// - throws:
+        ///     - `invalidURL` if URL cannot be parsed.
+        ///     - `emptyScheme` if URL does not contain HTTP scheme.
+        ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
+        ///     - `emptyHost` if URL does not contains a host.
+        public init(url: String, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration?) throws {
             guard let url = URL(string: url) else {
                 throw HTTPClientError.invalidURL
             }
 
-            try self.init(url: url, method: method, headers: headers, body: body)
+            try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: tlsConfiguration)
         }
 
         /// Create an HTTP `Request`.
@@ -229,6 +249,23 @@ extension HTTPClient {
         ///     - `emptyHost` if URL does not contains a host.
         ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+            try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: nil)
+        }
+
+        /// Create an HTTP `Request`.
+        ///
+        /// - parameters:
+        ///     - url: Remote `URL`.
+        ///     - method: HTTP method.
+        ///     - headers: Custom HTTP headers.
+        ///     - body: Request body.
+        ///     - tlsConfiguration: Request TLS configuration
+        /// - throws:
+        ///     - `emptyScheme` if URL does not contain HTTP scheme.
+        ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
+        ///     - `emptyHost` if URL does not contains a host.
+        ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
+        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration?) throws {
             guard let scheme = url.scheme?.lowercased() else {
                 throw HTTPClientError.emptyScheme
             }
@@ -244,6 +281,7 @@ extension HTTPClient {
             self.scheme = scheme
             self.headers = headers
             self.body = body
+            self.tlsConfiguration = tlsConfiguration
         }
 
         /// Whether request will be executed using secure socket.
@@ -380,6 +418,11 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
         case .head(let head):
             self.state = .body(head, part)
         case .body(let head, var body):
+            // The compiler can't prove that `self.state` is dead here (and it kinda isn't, there's
+            // a cross-module call in the way) so we need to drop the original reference to `body` in
+            // `self.state` or we'll get a CoW. To fix that we temporarily set the state to `.end` (which
+            // has no associated data). We'll fix it at the bottom of this block.
+            self.state = .end
             var part = part
             body.writeBuffer(&part)
             self.state = .body(head, body)
@@ -414,7 +457,26 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
 /// `HTTPClientResponseDelegate` allows an implementation to receive notifications about request processing and to control how response parts are processed.
 /// You can implement this protocol if you need fine-grained control over an HTTP request/response, for example, if you want to inspect the response
 /// headers before deciding whether to accept a response body, or if you want to stream your request body. Pass an instance of your conforming
-/// class to the `HTTPClient.execute()` method and this package will call each delegate method appropriately as the request takes place.
+/// class to the `HTTPClient.execute()` method and this package will call each delegate method appropriately as the request takes place./
+///
+/// ### Backpressure
+///
+/// A `HTTPClientResponseDelegate` can be used to exert backpressure on the server response. This is achieved by way of the futures returned from
+/// `didReceiveHead` and `didReceiveBodyPart`. The following functions are part of the "backpressure system" in the delegate:
+///
+/// - `didReceiveHead`
+/// - `didReceiveBodyPart`
+/// - `didFinishRequest`
+/// - `didReceiveError`
+///
+/// The first three methods are strictly _exclusive_, with that exclusivity managed by the futures returned by `didReceiveHead` and
+/// `didReceiveBodyPart`. What this means is that until the returned future is completed, none of these three methods will be called
+/// again. This allows delegates to rate limit the server to a capacity it can manage. `didFinishRequest` does not return a future,
+/// as we are expecting no more data from the server at this time.
+///
+/// `didReceiveError` is somewhat special: it signals the end of this regime. `didRecieveError` is not exclusive: it may be called at
+/// any time, even if a returned future is not yet completed. `didReceiveError` is terminal, meaning that once it has been called none
+/// of these four methods will be called again. This can be used as a signal to abandon all outstanding work.
 ///
 ///  - note: This delegate is strongly held by the `HTTPTaskHandler`
 ///          for the duration of the `Request` processing and will be
@@ -458,6 +520,11 @@ public protocol HTTPClientResponseDelegate: AnyObject {
     /// You must return an `EventLoopFuture<Void>` that you complete when you have finished processing the body part.
     /// You can create an already succeeded future by calling `task.eventLoop.makeSucceededFuture(())`.
     ///
+    /// This function will not be called until the future returned by `didReceiveHead` has completed.
+    ///
+    /// This function will not be called for subsequent body parts until the previous future returned by a
+    /// call to this function completes.
+    ///
     /// - parameters:
     ///     - task: Current request context.
     ///     - buffer: Received body `Part`.
@@ -466,12 +533,19 @@ public protocol HTTPClientResponseDelegate: AnyObject {
 
     /// Called when error was thrown during request execution. Will be called zero or one time only. Request processing will be stopped after that.
     ///
+    /// This function may be called at any time: it does not respect the backpressure exerted by `didReceiveHead` and `didReceiveBodyPart`.
+    /// All outstanding work may be cancelled when this is received. Once called, no further calls will be made to `didReceiveHead`, `didReceiveBodyPart`,
+    /// or `didFinishRequest`.
+    ///
     /// - parameters:
     ///     - task: Current request context.
     ///     - error: Error that occured during response processing.
     func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error)
 
     /// Called when the complete HTTP request is finished. You must return an instance of your `Response` associated type. Will be called once, except if an error occurred.
+    ///
+    /// This function will not be called until all futures returned by `didReceiveHead` and `didReceiveBodyPart` have completed. Once called,
+    /// no further calls will be made to `didReceiveHead`, `didReceiveBodyPart`, or `didReceiveError`.
     ///
     /// - parameters:
     ///     - task: Current request context.
@@ -634,6 +708,9 @@ extension HTTPClient {
                         self.promise.fail(error)
                         connection.channel.close(promise: nil)
                     }
+            } else {
+                // this is used in tests where we don't want to bootstrap the whole connection pool
+                self.promise.fail(error)
             }
         }
 
@@ -665,11 +742,12 @@ internal struct TaskCancelEvent {}
 internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: RemovableChannelHandler {
     enum State {
         case idle
-        case bodySent
-        case sent
-        case head
+        case sendingBodyWaitingResponseHead
+        case sendingBodyResponseHeadReceived
+        case bodySentWaitingResponseHead
+        case bodySentResponseHeadReceived
         case redirected(HTTPResponseHead, URL)
-        case body
+        case bufferedEnd
         case endOrError
     }
 
@@ -680,10 +758,11 @@ internal class TaskHandler<Delegate: HTTPClientResponseDelegate>: RemovableChann
     let logger: Logger // We are okay to store the logger here because a TaskHandler is just for one request.
 
     var state: State = .idle
+    var responseReadBuffer: ResponseReadBuffer = ResponseReadBuffer()
     var expectedBodyLength: Int?
     var actualBodyLength: Int = 0
     var pendingRead = false
-    var mayRead = true
+    var outstandingDelegateRead = false
     var closing = false {
         didSet {
             assert(self.closing || !oldValue,
@@ -794,7 +873,8 @@ extension TaskHandler: ChannelDuplexHandler {
     typealias OutboundOut = HTTPClientRequestPart
 
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
-        self.state = .idle
+        self.state = .sendingBodyWaitingResponseHead
+
         let request = self.unwrapOutboundIn(data)
 
         var head = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1),
@@ -840,11 +920,27 @@ extension TaskHandler: ChannelDuplexHandler {
             self.writeBody(request: request, context: context)
         }.flatMap {
             context.eventLoop.assertInEventLoop()
-            if case .endOrError = self.state {
+            switch self.state {
+            case .idle:
+                // since this code path is called from `write` and write sets state to sendingBody
+                preconditionFailure("should not happen")
+            case .sendingBodyWaitingResponseHead:
+                self.state = .bodySentWaitingResponseHead
+            case .sendingBodyResponseHeadReceived:
+                self.state = .bodySentResponseHeadReceived
+            case .bodySentWaitingResponseHead, .bodySentResponseHeadReceived:
+                preconditionFailure("should not happen, state is \(self.state)")
+            case .redirected:
+                break
+            case .bufferedEnd, .endOrError:
+                // If the state is .endOrError, it means that request was failed and there is nothing to do here:
+                // we cannot write .end since channel is most likely closed, and we should not fail the future,
+                // since the task would already be failed, no need to fail the writer too.
+                // If the state is .bufferedEnd the issue is the same, we just haven't fully delivered the response to
+                // the user yet.
                 return context.eventLoop.makeSucceededFuture(())
             }
 
-            self.state = .bodySent
             if let expectedBodyLength = self.expectedBodyLength, expectedBodyLength != self.actualBodyLength {
                 let error = HTTPClientError.bodyLengthMismatch
                 return context.eventLoop.makeFailedFuture(error)
@@ -852,11 +948,11 @@ extension TaskHandler: ChannelDuplexHandler {
             return context.writeAndFlush(self.wrapOutboundOut(.end(nil)))
         }.map {
             context.eventLoop.assertInEventLoop()
+
             if case .endOrError = self.state {
                 return
             }
 
-            self.state = .sent
             self.callOutToDelegateFireAndForget(self.delegate.didSendRequest)
         }.flatMapErrorThrowing { error in
             context.eventLoop.assertInEventLoop()
@@ -903,6 +999,9 @@ extension TaskHandler: ChannelDuplexHandler {
     private func writeBodyPart(context: ChannelHandlerContext, part: IOData, promise: EventLoopPromise<Void>) {
         switch self.state {
         case .idle:
+            // this function is called on the codepath starting with write, so it cannot be in state .idle
+            preconditionFailure("should not happen")
+        case .sendingBodyWaitingResponseHead, .sendingBodyResponseHeadReceived, .redirected:
             if let limit = self.expectedBodyLength, self.actualBodyLength + part.readableBytes > limit {
                 let error = HTTPClientError.bodyLengthMismatch
                 self.errorCaught(context: context, error: error)
@@ -911,7 +1010,7 @@ extension TaskHandler: ChannelDuplexHandler {
             }
             self.actualBodyLength += part.readableBytes
             context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: promise)
-        default:
+        case .bodySentWaitingResponseHead, .bodySentResponseHeadReceived, .bufferedEnd, .endOrError:
             let error = HTTPClientError.writeAfterRequestSent
             self.errorCaught(context: context, error: error)
             promise.fail(error)
@@ -919,11 +1018,11 @@ extension TaskHandler: ChannelDuplexHandler {
     }
 
     public func read(context: ChannelHandlerContext) {
-        if self.mayRead {
+        if self.outstandingDelegateRead {
+            self.pendingRead = true
+        } else {
             self.pendingRead = false
             context.read()
-        } else {
-            self.pendingRead = true
         }
     }
 
@@ -931,7 +1030,18 @@ extension TaskHandler: ChannelDuplexHandler {
         let response = self.unwrapInboundIn(data)
         switch response {
         case .head(let head):
-            if case .endOrError = self.state {
+            switch self.state {
+            case .idle:
+                // should be prevented by NIO HTTP1 pipeline, see testHTTPResponseHeadBeforeRequestHead
+                preconditionFailure("should not happen")
+            case .sendingBodyWaitingResponseHead:
+                self.state = .sendingBodyResponseHeadReceived
+            case .bodySentWaitingResponseHead:
+                self.state = .bodySentResponseHeadReceived
+            case .sendingBodyResponseHeadReceived, .bodySentResponseHeadReceived, .redirected:
+                // should be prevented by NIO HTTP1 pipeline, aee testHTTPResponseDoubleHead
+                preconditionFailure("should not happen")
+            case .bufferedEnd, .endOrError:
                 return
             }
 
@@ -942,28 +1052,18 @@ extension TaskHandler: ChannelDuplexHandler {
             if let redirectURL = self.redirectHandler?.redirectTarget(status: head.status, headers: head.headers) {
                 self.state = .redirected(head, redirectURL)
             } else {
-                self.state = .head
-                self.mayRead = false
-                self.callOutToDelegate(value: head, channelEventLoop: context.eventLoop, self.delegate.didReceiveHead)
-                    .whenComplete { result in
-                        self.handleBackpressureResult(context: context, result: result)
-                    }
+                self.handleReadForDelegate(response, context: context)
             }
-        case .body(let body):
+        case .body:
             switch self.state {
-            case .redirected, .endOrError:
+            case .redirected, .bufferedEnd, .endOrError:
                 break
             default:
-                self.state = .body
-                self.mayRead = false
-                self.callOutToDelegate(value: body, channelEventLoop: context.eventLoop, self.delegate.didReceiveBodyPart)
-                    .whenComplete { result in
-                        self.handleBackpressureResult(context: context, result: result)
-                    }
+                self.handleReadForDelegate(response, context: context)
             }
         case .end:
             switch self.state {
-            case .endOrError:
+            case .bufferedEnd, .endOrError:
                 break
             case .redirected(let head, let redirectURL):
                 self.state = .endOrError
@@ -971,18 +1071,67 @@ extension TaskHandler: ChannelDuplexHandler {
                     self.redirectHandler?.redirect(status: head.status, to: redirectURL, promise: self.task.promise)
                 }
             default:
-                self.state = .endOrError
-                self.callOutToDelegate(promise: self.task.promise, self.delegate.didFinishRequest)
+                self.state = .bufferedEnd
+                self.handleReadForDelegate(response, context: context)
             }
+        }
+    }
+
+    private func handleReadForDelegate(_ read: HTTPClientResponsePart, context: ChannelHandlerContext) {
+        if self.outstandingDelegateRead {
+            self.responseReadBuffer.appendPart(read)
+            return
+        }
+
+        // No outstanding delegate read, so we can deliver this directly.
+        self.deliverReadToDelegate(read, context: context)
+    }
+
+    private func deliverReadToDelegate(_ read: HTTPClientResponsePart, context: ChannelHandlerContext) {
+        precondition(!self.outstandingDelegateRead)
+        self.outstandingDelegateRead = true
+
+        if case .endOrError = self.state {
+            // No further read delivery should occur, we already delivered an error.
+            return
+        }
+
+        switch read {
+        case .head(let head):
+            self.callOutToDelegate(value: head, channelEventLoop: context.eventLoop, self.delegate.didReceiveHead)
+                .whenComplete { result in
+                    self.handleBackpressureResult(context: context, result: result)
+                }
+        case .body(let body):
+            self.callOutToDelegate(value: body, channelEventLoop: context.eventLoop, self.delegate.didReceiveBodyPart)
+                .whenComplete { result in
+                    self.handleBackpressureResult(context: context, result: result)
+                }
+        case .end:
+            self.state = .endOrError
+            self.outstandingDelegateRead = false
+
+            if self.pendingRead {
+                // We must read here, as we will be removed from the channel shortly.
+                self.pendingRead = false
+                context.read()
+            }
+
+            self.callOutToDelegate(promise: self.task.promise, self.delegate.didFinishRequest)
         }
     }
 
     private func handleBackpressureResult(context: ChannelHandlerContext, result: Result<Void, Error>) {
         context.eventLoop.assertInEventLoop()
+        self.outstandingDelegateRead = false
+
         switch result {
         case .success:
-            self.mayRead = true
-            if self.pendingRead {
+            if let nextRead = self.responseReadBuffer.nextRead() {
+                // We can deliver this directly.
+                self.deliverReadToDelegate(nextRead, context: context)
+            } else if self.pendingRead {
+                self.pendingRead = false
                 context.read()
             }
         case .failure(let error):
@@ -1009,10 +1158,10 @@ extension TaskHandler: ChannelDuplexHandler {
 
     func channelInactive(context: ChannelHandlerContext) {
         switch self.state {
-        case .endOrError:
-            break
-        case .body, .head, .idle, .redirected, .sent, .bodySent:
+        case .idle, .sendingBodyWaitingResponseHead, .sendingBodyResponseHeadReceived, .bodySentWaitingResponseHead, .bodySentResponseHeadReceived, .redirected:
             self.errorCaught(context: context, error: HTTPClientError.remoteConnectionClosed)
+        case .bufferedEnd, .endOrError:
+            break
         }
         context.fireChannelInactive()
     }
@@ -1021,12 +1170,12 @@ extension TaskHandler: ChannelDuplexHandler {
         switch error {
         case NIOSSLError.uncleanShutdown:
             switch self.state {
-            case .endOrError:
+            case .bufferedEnd, .endOrError:
                 /// Some HTTP Servers can 'forget' to respond with CloseNotify when client is closing connection,
                 /// this could lead to incomplete SSL shutdown. But since request is already processed, we can ignore this error.
                 break
-            case .head where self.ignoreUncleanSSLShutdown,
-                 .body where self.ignoreUncleanSSLShutdown:
+            case .sendingBodyResponseHeadReceived where self.ignoreUncleanSSLShutdown,
+                 .bodySentResponseHeadReceived where self.ignoreUncleanSSLShutdown:
                 /// We can also ignore this error like `.end`.
                 break
             default:
@@ -1035,7 +1184,7 @@ extension TaskHandler: ChannelDuplexHandler {
             }
         default:
             switch self.state {
-            case .idle, .bodySent, .sent, .head, .redirected, .body:
+            case .idle, .sendingBodyWaitingResponseHead, .sendingBodyResponseHeadReceived, .bodySentWaitingResponseHead, .bodySentResponseHeadReceived, .redirected, .bufferedEnd:
                 self.state = .endOrError
                 self.failTaskAndNotifyDelegate(error: error, self.delegate.didReceiveError)
             case .endOrError:

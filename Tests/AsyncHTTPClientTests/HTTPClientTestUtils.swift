@@ -21,6 +21,7 @@ import NIOHTTP1
 import NIOHTTPCompression
 import NIOSSL
 import NIOTransportServices
+import XCTest
 
 /// Are we testing NIO Transport services
 func isTestingNIOTS() -> Bool {
@@ -97,6 +98,52 @@ class CountingDelegate: HTTPClientResponseDelegate {
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Int {
         return self.count
+    }
+}
+
+class DelayOnHeadDelegate: HTTPClientResponseDelegate {
+    typealias Response = ByteBuffer
+
+    let promise: EventLoopPromise<Void>
+
+    private var data: ByteBuffer
+
+    private var mayReceiveData = false
+
+    private var expectError = false
+
+    init(promise: EventLoopPromise<Void>) {
+        self.promise = promise
+        self.data = ByteBuffer()
+
+        self.promise.futureResult.whenSuccess {
+            self.mayReceiveData = true
+        }
+        self.promise.futureResult.whenFailure { (_: Error) in
+            self.expectError = true
+        }
+    }
+
+    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
+        XCTAssertFalse(self.expectError)
+        return self.promise.futureResult.hop(to: task.eventLoop)
+    }
+
+    func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+        XCTAssertTrue(self.mayReceiveData)
+        XCTAssertFalse(self.expectError)
+        self.data.writeImmutableBuffer(buffer)
+        return self.promise.futureResult.hop(to: task.eventLoop)
+    }
+
+    func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
+        XCTAssertTrue(self.mayReceiveData)
+        XCTAssertFalse(self.expectError)
+        return self.data
+    }
+
+    func didReceiveError(task: HTTPClient.Task<ByteBuffer>, _ error: Error) {
+        XCTAssertTrue(self.expectError)
     }
 }
 
@@ -464,6 +511,21 @@ internal final class HttpBinHandler: ChannelInboundHandler {
         context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
     }
 
+    func writeChunked(context: ChannelHandlerContext) {
+        // This tests receiving chunks very fast: please do not insert delays here!
+        let headers = HTTPHeaders([("Transfer-Encoding", "chunked")])
+
+        context.write(self.wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))), promise: nil)
+        for i in 0..<10 {
+            let msg = "id: \(i)"
+            var buf = context.channel.allocator.buffer(capacity: msg.count)
+            buf.writeString(msg)
+            context.write(wrapOutboundOut(.body(.byteBuffer(buf))), promise: nil)
+        }
+
+        context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+    }
+
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         self.isServingRequest = true
         switch self.unwrapInboundIn(data) {
@@ -579,6 +641,19 @@ internal final class HttpBinHandler: ChannelInboundHandler {
                 return
             case "/events/10/content-length":
                 self.writeEvents(context: context, isContentLengthRequired: true)
+            case "/chunked":
+                self.writeChunked(context: context)
+                return
+            case "/close-on-response":
+                var headers = self.responseHeaders
+                headers.replaceOrAdd(name: "connection", value: "close")
+
+                var builder = HTTPResponseBuilder(.http1_1, status: .ok, headers: headers)
+                builder.body = ByteBuffer(string: "some body content")
+
+                // We're forcing this closed now.
+                self.shouldClose = true
+                self.resps.append(builder)
             default:
                 context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .notFound))), promise: nil)
                 context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
@@ -772,6 +847,53 @@ internal final class HttpBinForSSLUncleanShutdownHandler: ChannelInboundHandler 
     }
 }
 
+internal final class CloseWithoutClosingServerHandler: ChannelInboundHandler {
+    typealias InboundIn = HTTPServerRequestPart
+    typealias OutboundOut = HTTPServerResponsePart
+
+    private var callback: (() -> Void)?
+    private var onClosePromise: EventLoopPromise<Void>?
+
+    init(_ callback: @escaping () -> Void) {
+        self.callback = callback
+    }
+
+    func handlerAdded(context: ChannelHandlerContext) {
+        self.onClosePromise = context.eventLoop.makePromise()
+        self.onClosePromise!.futureResult.whenSuccess(self.callback!)
+        self.callback = nil
+    }
+
+    func handlerRemoved(context: ChannelHandlerContext) {
+        assert(self.onClosePromise == nil)
+    }
+
+    func channelInactive(context: ChannelHandlerContext) {
+        if let onClosePromise = self.onClosePromise {
+            self.onClosePromise = nil
+            onClosePromise.succeed(())
+        }
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        guard case .end = self.unwrapInboundIn(data) else {
+            return
+        }
+
+        // We're gonna send a response back here, with Connection: close, but we will
+        // not close the connection. This reproduces #324.
+        let headers = HTTPHeaders([
+            ("Host", "CloseWithoutClosingServerHandler"),
+            ("Content-Length", "0"),
+            ("Connection", "close"),
+        ])
+        let head = HTTPResponseHead(version: .init(major: 1, minor: 1), status: .ok, headers: headers)
+
+        context.write(self.wrapOutboundOut(.head(head)), promise: nil)
+        context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+    }
+}
+
 struct EventLoopFutureTimeoutError: Error {}
 
 extension EventLoopFuture {
@@ -845,6 +967,30 @@ struct CollectEverythingLogHandler: LogHandler {
         }
         set {
             self.metadata[key] = newValue
+        }
+    }
+}
+
+class HTTPEchoHandler: ChannelInboundHandler {
+    typealias InboundIn = HTTPServerRequestPart
+    typealias OutboundOut = HTTPServerResponsePart
+
+    var promises: CircularBuffer<EventLoopPromise<Void>> = CircularBuffer()
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        let request = self.unwrapInboundIn(data)
+        switch request {
+        case .head:
+            context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .init(major: 1, minor: 1), status: .ok))), promise: nil)
+        case .body(let bytes):
+            context.writeAndFlush(self.wrapOutboundOut(.body(.byteBuffer(bytes)))).whenSuccess {
+                if let promise = self.promises.popFirst() {
+                    promise.succeed(())
+                }
+            }
+        case .end:
+            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+            context.close(promise: nil)
         }
     }
 }
