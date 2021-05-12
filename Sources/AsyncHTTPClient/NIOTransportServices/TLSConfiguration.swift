@@ -63,6 +63,13 @@
         func getNWProtocolTLSOptions() -> NWProtocolTLS.Options {
             let options = NWProtocolTLS.Options()
 
+            let useMTELGExplainer = """
+            You can still use this configuration option on macOS if you initialize HTTPClient \
+            with a MultiThreadedEventLoopGroup. Please note that using MultiThreadedEventLoopGroup \
+            will make AsyncHTTPClient use NIO on BSD Sockets and not Network.framework (which is the preferred \
+            platform networking stack).
+            """
+
             // minimum TLS protocol
             if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
                 sec_protocol_options_set_min_tls_protocol_version(options.securityProtocolOptions, self.minimumTLSVersion.nwTLSProtocolVersion)
@@ -88,7 +95,7 @@
 
             // the certificate chain
             if self.certificateChain.count > 0 {
-                preconditionFailure("TLSConfiguration.certificateChain is not supported")
+                preconditionFailure("TLSConfiguration.certificateChain is not supported. \(useMTELGExplainer)")
             }
 
             // cipher suites
@@ -99,12 +106,12 @@
 
             // key log callback
             if self.keyLogCallback != nil {
-                preconditionFailure("TLSConfiguration.keyLogCallback is not supported")
+                preconditionFailure("TLSConfiguration.keyLogCallback is not supported. \(useMTELGExplainer)")
             }
 
             // private key
             if self.privateKey != nil {
-                preconditionFailure("TLSConfiguration.privateKey is not supported")
+                preconditionFailure("TLSConfiguration.privateKey is not supported. \(useMTELGExplainer)")
             }
 
             // renegotiation support key is unsupported
@@ -112,7 +119,7 @@
             // trust roots
             if let trustRoots = self.trustRoots {
                 guard case .default = trustRoots else {
-                    preconditionFailure("TLSConfiguration.trustRoots != .default is not supported")
+                    preconditionFailure("TLSConfiguration.trustRoots != .default is not supported. \(useMTELGExplainer)")
                 }
             }
 
@@ -127,7 +134,8 @@
                 )
 
             case .noHostnameVerification:
-                precondition(self.certificateVerification != .noHostnameVerification, "TLSConfiguration.certificateVerification = .noHostnameVerification is not supported")
+                precondition(self.certificateVerification != .noHostnameVerification,
+                             "TLSConfiguration.certificateVerification = .noHostnameVerification is not supported. \(useMTELGExplainer)")
 
             case .fullVerification:
                 break
