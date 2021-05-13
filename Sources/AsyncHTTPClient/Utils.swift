@@ -180,9 +180,11 @@ extension NIOClientTCPBootstrap {
             // if eventLoop is compatible with NIOTransportServices create a NIOTSConnectionBootstrap
             if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), let tsBootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoop) {
                 // create NIOClientTCPBootstrap with NIOTS TLS provider
-                let parameters = tlsConfiguration.getNWProtocolTLSOptions()
-                let tlsProvider = NIOTSClientTLSProvider(tlsOptions: parameters)
-                return eventLoop.makeSucceededFuture(NIOClientTCPBootstrap(tsBootstrap, tls: tlsProvider))
+                return tlsConfiguration.getNWProtocolTLSOptions(on: eventLoop)
+                    .map { parameters in
+                        let tlsProvider = NIOTSClientTLSProvider(tlsOptions: parameters)
+                        return NIOClientTCPBootstrap(tsBootstrap, tls: tlsProvider)
+                    }
             }
         #endif
 

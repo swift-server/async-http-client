@@ -16,6 +16,7 @@
 
     import Foundation
     import Network
+    import NIO
     import NIOSSL
     import NIOTransportServices
 
@@ -58,9 +59,25 @@
 
         /// create NWProtocolTLS.Options for use with NIOTransportServices from the NIOSSL TLSConfiguration
         ///
-        /// - Parameter queue: Dispatch queue to run `sec_protocol_options_set_verify_block` on.
+        /// - Parameter eventLoop: EventLoop to wait for creation of options on
+        /// - Returns: Future holding NWProtocolTLS Options
+        func getNWProtocolTLSOptions(on eventLoop: EventLoop) -> EventLoopFuture<NWProtocolTLS.Options> {
+            let promise = eventLoop.makePromise(of: NWProtocolTLS.Options.self)
+            Self.tlsDispatchQueue.async {
+                do {
+                    let options = try self.getNWProtocolTLSOptions()
+                    promise.succeed(options)
+                } catch {
+                    promise.fail(error)
+                }
+            }
+            return promise.futureResult
+        }
+
+        /// create NWProtocolTLS.Options for use with NIOTransportServices from the NIOSSL TLSConfiguration
+        ///
         /// - Returns: Equivalent NWProtocolTLS Options
-        func getNWProtocolTLSOptions() -> NWProtocolTLS.Options {
+        func getNWProtocolTLSOptions() throws -> NWProtocolTLS.Options {
             let options = NWProtocolTLS.Options()
 
             let useMTELGExplainer = """
@@ -109,6 +126,11 @@
                 preconditionFailure("TLSConfiguration.keyLogCallback is not supported. \(useMTELGExplainer)")
             }
 
+            // the certificate chain
+            if self.certificateChain.count > 0 {
+                preconditionFailure("TLSConfiguration.certificateChain is not supported. \(useMTELGExplainer)")
+            }
+
             // private key
             if self.privateKey != nil {
                 preconditionFailure("TLSConfiguration.privateKey is not supported. \(useMTELGExplainer)")
@@ -117,30 +139,60 @@
             // renegotiation support key is unsupported
 
             // trust roots
-            if let trustRoots = self.trustRoots {
-                guard case .default = trustRoots else {
-                    preconditionFailure("TLSConfiguration.trustRoots != .default is not supported. \(useMTELGExplainer)")
+            var secTrustRoots: [SecCertificate]?
+            switch trustRoots {
+            case .some(.certificates(let certificates)):
+                secTrustRoots = try certificates.compactMap { certificate in
+                    try SecCertificateCreateWithData(nil, Data(certificate.toDERBytes()) as CFData)
                 }
-            }
+            case .some(.file(let file)):
+                let certificates = try NIOSSLCertificate.fromPEMFile(file)
+                secTrustRoots = try certificates.compactMap { certificate in
+                    try SecCertificateCreateWithData(nil, Data(certificate.toDERBytes()) as CFData)
+                }
 
-            switch self.certificateVerification {
-            case .none:
-                // add verify block to control certificate verification
-                sec_protocol_options_set_verify_block(
-                    options.securityProtocolOptions,
-                    { _, _, sec_protocol_verify_complete in
-                        sec_protocol_verify_complete(true)
-                    }, TLSConfiguration.tlsDispatchQueue
-                )
-
-            case .noHostnameVerification:
-                precondition(self.certificateVerification != .noHostnameVerification,
-                             "TLSConfiguration.certificateVerification = .noHostnameVerification is not supported. \(useMTELGExplainer)")
-
-            case .fullVerification:
+            case .some(.default), .none:
                 break
             }
 
+            precondition(self.certificateVerification != .noHostnameVerification,
+                         "TLSConfiguration.certificateVerification = .noHostnameVerification is not supported. \(useMTELGExplainer)")
+
+            if certificateVerification != .fullVerification || trustRoots != nil {
+                // add verify block to control certificate verification
+                sec_protocol_options_set_verify_block(
+                    options.securityProtocolOptions,
+                    { _, sec_trust, sec_protocol_verify_complete in
+                        guard self.certificateVerification != .none else {
+                            sec_protocol_verify_complete(true)
+                            return
+                        }
+
+                        let trust = sec_trust_copy_ref(sec_trust).takeRetainedValue()
+                        if let trustRootCertificates = secTrustRoots {
+                            SecTrustSetAnchorCertificates(trust, trustRootCertificates as CFArray)
+                        }
+                        if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
+                            dispatchPrecondition(condition: .onQueue(Self.tlsDispatchQueue))
+                            SecTrustEvaluateAsyncWithError(trust, Self.tlsDispatchQueue) { _, result, error in
+                                if let error = error {
+                                    print("Trust failed: \(error.localizedDescription)")
+                                }
+                                sec_protocol_verify_complete(result)
+                            }
+                        } else {
+                            SecTrustEvaluateAsync(trust, Self.tlsDispatchQueue) { _, result in
+                                switch result {
+                                case .proceed, .unspecified:
+                                    sec_protocol_verify_complete(true)
+                                default:
+                                    sec_protocol_verify_complete(false)
+                                }
+                            }
+                        }
+                    }, Self.tlsDispatchQueue
+                )
+            }
             return options
         }
     }
