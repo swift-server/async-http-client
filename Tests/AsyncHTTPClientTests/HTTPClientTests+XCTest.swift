@@ -37,6 +37,7 @@ extension HTTPClientTests {
             ("testPost", testPost),
             ("testGetHttps", testGetHttps),
             ("testGetHttpsWithIP", testGetHttpsWithIP),
+            ("testGetHTTPSWorksOnMTELGWithIP", testGetHTTPSWorksOnMTELGWithIP),
             ("testPostHttps", testPostHttps),
             ("testHttpRedirect", testHttpRedirect),
             ("testHttpHostRedirect", testHttpHostRedirect),

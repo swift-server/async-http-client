@@ -313,6 +313,25 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(.ok, response.status)
     }
 
+    func testGetHTTPSWorksOnMTELGWithIP() throws {
+        // Same test as above but this one will use NIO on Sockets even on Apple platforms, just to make sure
+        // this works.
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer {
+            XCTAssertNoThrow(try group.syncShutdownGracefully())
+        }
+        let localHTTPBin = HTTPBin(ssl: true)
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(group),
+                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
+        defer {
+            XCTAssertNoThrow(try localClient.syncShutdown())
+            XCTAssertNoThrow(try localHTTPBin.shutdown())
+        }
+
+        let response = try localClient.get(url: "https://127.0.0.1:\(localHTTPBin.port)/get").wait()
+        XCTAssertEqual(.ok, response.status)
+    }
+
     func testPostHttps() throws {
         let localHTTPBin = HTTPBin(ssl: true)
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
