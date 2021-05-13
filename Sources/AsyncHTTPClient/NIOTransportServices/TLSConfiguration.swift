@@ -16,6 +16,7 @@
 
     import Foundation
     import Network
+    import NIO
     import NIOSSL
     import NIOTransportServices
 
@@ -58,7 +59,23 @@
 
         /// create NWProtocolTLS.Options for use with NIOTransportServices from the NIOSSL TLSConfiguration
         ///
-        /// - Parameter queue: Dispatch queue to run `sec_protocol_options_set_verify_block` on.
+        /// - Parameter eventLoop: EventLoop to wait for creation of options on
+        /// - Returns: Future holding NWProtocolTLS Options
+        func getNWProtocolTLSOptions(on eventLoop: EventLoop) -> EventLoopFuture<NWProtocolTLS.Options> {
+            let promise = eventLoop.makePromise(of: NWProtocolTLS.Options.self)
+            Self.tlsDispatchQueue.async {
+                do {
+                    let options = try self.getNWProtocolTLSOptions()
+                    promise.succeed(options)
+                } catch {
+                    promise.fail(error)
+                }
+            }
+            return promise.futureResult
+        }
+
+        /// create NWProtocolTLS.Options for use with NIOTransportServices from the NIOSSL TLSConfiguration
+        ///
         /// - Returns: Equivalent NWProtocolTLS Options
         func getNWProtocolTLSOptions() throws -> NWProtocolTLS.Options {
             let options = NWProtocolTLS.Options()
@@ -138,7 +155,8 @@
                 break
             }
 
-            precondition(self.certificateVerification != .noHostnameVerification, "TLSConfiguration.certificateVerification = .noHostnameVerification is not supported")
+            precondition(self.certificateVerification != .noHostnameVerification,
+                         "TLSConfiguration.certificateVerification = .noHostnameVerification is not supported. \(useMTELGExplainer)")
 
             if certificateVerification != .fullVerification || trustRoots != nil {
                 // add verify block to control certificate verification
@@ -173,13 +191,6 @@
                         }
                     }, Self.tlsDispatchQueue
                 )
-
-            case .noHostnameVerification:
-                precondition(self.certificateVerification != .noHostnameVerification,
-                             "TLSConfiguration.certificateVerification = .noHostnameVerification is not supported. \(useMTELGExplainer)")
-
-            case .fullVerification:
-                break
             }
             return options
         }
