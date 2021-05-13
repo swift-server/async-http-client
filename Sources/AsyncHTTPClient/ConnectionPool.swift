@@ -109,8 +109,6 @@ final class ConnectionPool {
             self.providers.values
         }
 
-        self.sslContextCache.shutdown()
-
         return EventLoopFuture.reduce(true, providers.map { $0.close() }, on: eventLoop) { $0 && $1 }
     }
 

@@ -25,10 +25,9 @@ import XCTest
 extension SSLContextCacheTests {
     static var allTests: [(String, (SSLContextCacheTests) -> () throws -> Void)] {
         return [
-            ("testJustStartingAndStoppingAContextCacheWorks", testJustStartingAndStoppingAContextCacheWorks),
             ("testRequestingSSLContextWorks", testRequestingSSLContextWorks),
-            ("testRequestingSSLContextAfterShutdownThrows", testRequestingSSLContextAfterShutdownThrows),
             ("testCacheWorks", testCacheWorks),
+            ("testCacheDoesNotReturnWrongEntry", testCacheDoesNotReturnWrongEntry),
         ]
     }
 }

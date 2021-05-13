@@ -18,36 +18,17 @@ import NIOSSL
 import XCTest
 
 final class SSLContextCacheTests: XCTestCase {
-    func testJustStartingAndStoppingAContextCacheWorks() {
-        SSLContextCache().shutdown()
-    }
-
     func testRequestingSSLContextWorks() {
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         let eventLoop = group.next()
         let cache = SSLContextCache()
         defer {
             XCTAssertNoThrow(try group.syncShutdownGracefully())
-            cache.shutdown()
         }
 
         XCTAssertNoThrow(try cache.sslContext(tlsConfiguration: .forClient(),
                                               eventLoop: eventLoop,
                                               logger: HTTPClient.loggingDisabled).wait())
-    }
-
-    func testRequestingSSLContextAfterShutdownThrows() {
-        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-        let eventLoop = group.next()
-        let cache = SSLContextCache()
-        defer {
-            XCTAssertNoThrow(try group.syncShutdownGracefully())
-        }
-
-        cache.shutdown()
-        XCTAssertThrowsError(try cache.sslContext(tlsConfiguration: .forClient(),
-                                                  eventLoop: eventLoop,
-                                                  logger: HTTPClient.loggingDisabled).wait())
     }
 
     func testCacheWorks() {
@@ -56,7 +37,6 @@ final class SSLContextCacheTests: XCTestCase {
         let cache = SSLContextCache()
         defer {
             XCTAssertNoThrow(try group.syncShutdownGracefully())
-            cache.shutdown()
         }
 
         var firstContext: NIOSSLContext?
@@ -71,5 +51,29 @@ final class SSLContextCacheTests: XCTestCase {
         XCTAssertNotNil(firstContext)
         XCTAssertNotNil(secondContext)
         XCTAssert(firstContext === secondContext)
+    }
+
+    func testCacheDoesNotReturnWrongEntry() {
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        let eventLoop = group.next()
+        let cache = SSLContextCache()
+        defer {
+            XCTAssertNoThrow(try group.syncShutdownGracefully())
+        }
+
+        var firstContext: NIOSSLContext?
+        var secondContext: NIOSSLContext?
+
+        XCTAssertNoThrow(firstContext = try cache.sslContext(tlsConfiguration: .forClient(),
+                                                             eventLoop: eventLoop,
+                                                             logger: HTTPClient.loggingDisabled).wait())
+
+        // Second one has a _different_ TLSConfiguration.
+        XCTAssertNoThrow(secondContext = try cache.sslContext(tlsConfiguration: .forClient(certificateVerification: .none),
+                                                              eventLoop: eventLoop,
+                                                              logger: HTTPClient.loggingDisabled).wait())
+        XCTAssertNotNil(firstContext)
+        XCTAssertNotNil(secondContext)
+        XCTAssert(firstContext !== secondContext)
     }
 }
