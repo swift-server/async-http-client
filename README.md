@@ -227,3 +227,7 @@ let secureSocketPathBasedURL = URL(
     uri: "/path/to/resource"
 )
 ```
+
+## Security
+
+Please have a look at [SECURITY.md](SECURITY.md) for AsyncHTTPClient's security process.
