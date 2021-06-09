@@ -47,8 +47,8 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNil(self.defaultClient)
         XCTAssertNil(self.backgroundLogStore)
 
-        self.clientGroup = getDefaultEventLoopGroup(numberOfThreads: 1)
-        self.serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        self.clientGroup = getDefaultEventLoopGroup(numberOfThreads: 3)
+        self.serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 3)
         self.defaultHTTPBin = HTTPBin()
         self.backgroundLogStore = CollectEverythingLogHandler.LogStore()
         var backgroundLogger = Logger(label: "\(#function)", factory: { _ in
