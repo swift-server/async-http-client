@@ -26,6 +26,7 @@ import NIOSSL
 import NIOTestUtils
 import NIOTransportServices
 import XCTest
+import NIOSOCKS
 
 class HTTPClientTests: XCTestCase {
     typealias Request = HTTPClient.Request
@@ -707,6 +708,23 @@ class HTTPClientTests: XCTestCase {
                 return XCTFail("Should fail with HTTPClientError.proxyAuthenticationRequired")
             }
         }
+    }
+    
+    func testProxySOCKS() throws {
+        let socksBin = try MockSocksServer(expectedURL: "/socks/test", expectedResponse: "it works!")
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                     configuration: .init(proxy: .socksServer(host: "127.0.0.1")))
+        
+        do  {
+            let response = try localClient.get(url: "http://127.0.0.1/socks/test").wait()
+            XCTAssertEqual(.ok, response.status)
+            XCTAssertEqual(ByteBuffer(string: "it works!"), response.body)
+        } catch {
+            XCTFail("\(error)")
+        }
+        
+        XCTAssertNoThrow(try localClient.syncShutdown())
+        XCTAssertNoThrow(try socksBin.shutdown())
     }
 
     func testUploadStreaming() throws {
