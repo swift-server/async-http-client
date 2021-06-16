@@ -62,8 +62,8 @@ public extension HTTPClient.Configuration {
             return .init(host: host, port: port, authorization: authorization, type: .http)
         }
         
-        public static func socksServer(host: String, port: Int = 1080, httpAuthorization: HTTPClient.Authorization? = nil) -> Proxy {
-            return .init(host: host, port: port, authorization: httpAuthorization, type: .socks)
+        public static func socksServer(host: String, port: Int = 1080) -> Proxy {
+            return .init(host: host, port: port, authorization: nil, type: .socks)
         }
     }
 }
