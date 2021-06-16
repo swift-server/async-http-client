@@ -14,6 +14,7 @@
 
 import NIO
 import NIOHTTP1
+import NIOSOCKS
 
 public extension HTTPClient.Configuration {
     /// Proxy server configuration
@@ -27,6 +28,12 @@ public extension HTTPClient.Configuration {
     /// TLS will be established _after_ successful proxy, between your client
     /// and the destination server.
     struct Proxy {
+        
+        enum ProxyType: Hashable {
+            case http
+            case socks
+        }
+        
         /// Specifies Proxy server host.
         public var host: String
         /// Specifies Proxy server port.
@@ -34,13 +41,15 @@ public extension HTTPClient.Configuration {
         /// Specifies Proxy server authorization.
         public var authorization: HTTPClient.Authorization?
 
+        var type: ProxyType
+        
         /// Create proxy.
         ///
         /// - parameters:
         ///     - host: proxy server host.
         ///     - port: proxy server port.
         public static func server(host: String, port: Int) -> Proxy {
-            return .init(host: host, port: port, authorization: nil)
+            return .init(host: host, port: port, authorization: nil, type: .http)
         }
 
         /// Create proxy.
@@ -50,7 +59,11 @@ public extension HTTPClient.Configuration {
         ///     - port: proxy server port.
         ///     - authorization: proxy server authorization.
         public static func server(host: String, port: Int, authorization: HTTPClient.Authorization? = nil) -> Proxy {
-            return .init(host: host, port: port, authorization: authorization)
+            return .init(host: host, port: port, authorization: authorization, type: .http)
+        }
+        
+        public static func socksServer(host: String, port: Int = 1080, httpAuthorization: HTTPClient.Authorization? = nil) -> Proxy {
+            return .init(host: host, port: port, authorization: httpAuthorization, type: .socks)
         }
     }
 }

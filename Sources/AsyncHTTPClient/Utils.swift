@@ -148,9 +148,14 @@ extension NIOClientTCPBootstrap {
                 return bootstrap.channelInitializer { channel in
                     do {
                         if let proxy = configuration.proxy {
-                            try channel.pipeline.syncAddProxyHandler(host: host,
-                                                                     port: port,
-                                                                     authorization: proxy.authorization)
+                            switch proxy.type {
+                            case .http:
+                                try channel.pipeline.syncAddProxyHandler(host: host,
+                                                                         port: port,
+                                                                         authorization: proxy.authorization)
+                            case .socks:
+                                try channel.pipeline.syncAddSOCKSProxyHandler()
+                            }
                         } else if requiresTLS {
                             // We only add the handshake verifier if we need TLS and we're not going through a proxy.
                             // If we're going through a proxy we add it later (outside of this method).
