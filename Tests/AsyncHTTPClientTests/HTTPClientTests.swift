@@ -2913,15 +2913,13 @@ class HTTPClientTests: XCTestCase {
 
     func testCloseWhileBackpressureIsExertedIsFine() throws {
         let request = try Request(url: self.defaultHTTPBinURLPrefix + "close-on-response")
-        let backpressurePromise = self.defaultClient.eventLoopGroup.next().makePromise(of: Void.self)
-
-        let resultFuture = self.defaultClient.execute(
-            request: request, delegate: DelayOnHeadDelegate(promise: backpressurePromise)
-        )
-
-        self.defaultClient.eventLoopGroup.next().scheduleTask(in: .milliseconds(50)) {
-            backpressurePromise.succeed(())
+        let delegate = DelayOnHeadDelegate(eventLoop: self.clientGroup.next()) { _, promise in
+            promise.futureResult.eventLoop.scheduleTask(in: .milliseconds(50)) {
+                promise.succeed(())
+            }
         }
+
+        let resultFuture = self.defaultClient.execute(request: request, delegate: delegate)
 
         // The full response must be correctly delivered.
         var data = try resultFuture.wait()
@@ -2938,15 +2936,11 @@ class HTTPClientTests: XCTestCase {
         }
 
         let request = try Request(url: self.defaultHTTPBinURLPrefix + "close-on-response")
-        let backpressurePromise = self.defaultClient.eventLoopGroup.next().makePromise(of: Void.self)
-
-        let resultFuture = self.defaultClient.execute(
-            request: request, delegate: DelayOnHeadDelegate(promise: backpressurePromise)
-        )
-
-        self.defaultClient.eventLoopGroup.next().scheduleTask(in: .milliseconds(50)) {
+        let delegate = DelayOnHeadDelegate(eventLoop: self.clientGroup.next()) { _, backpressurePromise in
             backpressurePromise.fail(ExpectedError.expected)
         }
+
+        let resultFuture = self.defaultClient.execute(request: request, delegate: delegate)
 
         // The task must be failed.
         XCTAssertThrowsError(try resultFuture.wait()) { error in

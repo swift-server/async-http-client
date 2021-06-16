@@ -104,7 +104,8 @@ class CountingDelegate: HTTPClientResponseDelegate {
 class DelayOnHeadDelegate: HTTPClientResponseDelegate {
     typealias Response = ByteBuffer
 
-    let promise: EventLoopPromise<Void>
+    let eventLoop: EventLoop
+    let didReceiveHead: (HTTPResponseHead, EventLoopPromise<Void>) -> Void
 
     private var data: ByteBuffer
 
@@ -112,28 +113,35 @@ class DelayOnHeadDelegate: HTTPClientResponseDelegate {
 
     private var expectError = false
 
-    init(promise: EventLoopPromise<Void>) {
-        self.promise = promise
+    init(eventLoop: EventLoop, didReceiveHead: @escaping (HTTPResponseHead, EventLoopPromise<Void>) -> Void) {
+        self.eventLoop = eventLoop
+        self.didReceiveHead = didReceiveHead
         self.data = ByteBuffer()
-
-        self.promise.futureResult.whenSuccess {
-            self.mayReceiveData = true
-        }
-        self.promise.futureResult.whenFailure { (_: Error) in
-            self.expectError = true
-        }
     }
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
+        XCTAssertFalse(self.mayReceiveData)
         XCTAssertFalse(self.expectError)
-        return self.promise.futureResult.hop(to: task.eventLoop)
+
+        let promise = self.eventLoop.makePromise(of: Void.self)
+        promise.futureResult.whenComplete {
+            switch $0 {
+            case .success:
+                self.mayReceiveData = true
+            case .failure:
+                self.expectError = true
+            }
+        }
+
+        self.didReceiveHead(head, promise)
+        return promise.futureResult
     }
 
     func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         XCTAssertTrue(self.mayReceiveData)
         XCTAssertFalse(self.expectError)
         self.data.writeImmutableBuffer(buffer)
-        return self.promise.futureResult.hop(to: task.eventLoop)
+        return self.eventLoop.makeSucceededFuture(())
     }
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
