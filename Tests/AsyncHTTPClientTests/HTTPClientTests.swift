@@ -728,6 +728,16 @@ class HTTPClientTests: XCTestCase {
             XCTFail("\(error)")
         }
     }
+    
+    // there is no socks server, so we should fail
+    func testProxySOCKSFailureInvalidServer() throws {
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                     configuration: .init(proxy: .socksServer(host: "127.0.0.1")))
+        defer {
+            XCTAssertNoThrow(try localClient.syncShutdown())
+        }
+        XCTAssertThrowsError(try localClient.get(url: "http://127.0.0.1/socks/test").wait())
+    }
 
     func testUploadStreaming() throws {
         let body: HTTPClient.Body = .stream(length: 8) { writer in
