@@ -342,8 +342,8 @@ extension HTTPClient {
     }
 
     /// HTTP authentication
-    public struct Authorization {
-        private enum Scheme {
+    public struct Authorization: Hashable {
+        private enum Scheme: Hashable {
             case Basic(String)
             case Bearer(String)
         }

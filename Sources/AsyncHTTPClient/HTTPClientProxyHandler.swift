@@ -16,7 +16,7 @@ import NIO
 import NIOHTTP1
 import NIOSOCKS
 
-public extension HTTPClient.Configuration {
+extension HTTPClient.Configuration {
     /// Proxy server configuration
     /// Specifies the remote address of an HTTP proxy.
     ///
@@ -27,10 +27,10 @@ public extension HTTPClient.Configuration {
     /// If a `TLSConfiguration` is used in conjunction with `HTTPClient.Configuration.Proxy`,
     /// TLS will be established _after_ successful proxy, between your client
     /// and the destination server.
-    struct Proxy {
+    public struct Proxy {
         
         enum ProxyType: Hashable {
-            case http
+            case http(HTTPClient.Authorization?)
             case socks
         }
         
@@ -38,8 +38,22 @@ public extension HTTPClient.Configuration {
         public var host: String
         /// Specifies Proxy server port.
         public var port: Int
-        /// Specifies Proxy server authorization. Ignored if the proxy is SOCKSv5.
-        public var authorization: HTTPClient.Authorization?
+        /// Specifies Proxy server authorization.
+        public var authorization: HTTPClient.Authorization? {
+            set {
+                precondition(self.type == .http(self.authorization), "Only HTTP proxies can have authorization set.")
+                self.type = .http(newValue)
+            }
+            
+            get {
+                switch self.type {
+                case .http(let authorization):
+                    return authorization
+                case .socks:
+                    return nil
+                }
+            }
+        }
 
         var type: ProxyType
         
@@ -49,7 +63,7 @@ public extension HTTPClient.Configuration {
         ///     - host: proxy server host.
         ///     - port: proxy server port.
         public static func server(host: String, port: Int) -> Proxy {
-            return .init(host: host, port: port, authorization: nil, type: .http)
+            return .init(host: host, port: port, type: .http(nil))
         }
 
         /// Create proxy.
@@ -59,7 +73,7 @@ public extension HTTPClient.Configuration {
         ///     - port: proxy server port.
         ///     - authorization: proxy server authorization.
         public static func server(host: String, port: Int, authorization: HTTPClient.Authorization? = nil) -> Proxy {
-            return .init(host: host, port: port, authorization: authorization, type: .http)
+            return .init(host: host, port: port, type: .http(authorization))
         }
         
         /// Create a SOCKSv5 proxy.
@@ -67,7 +81,7 @@ public extension HTTPClient.Configuration {
         /// - parameter port: The SOCKSv5 proxy port, defaults to 1080.
         /// - returns: A new instance of `Proxy` configured to connect to a `SOCKSv5` server.
         public static func socksServer(host: String, port: Int = 1080) -> Proxy {
-            return .init(host: host, port: port, authorization: nil, type: .socks)
+            return .init(host: host, port: port, type: .socks)
         }
     }
 }
