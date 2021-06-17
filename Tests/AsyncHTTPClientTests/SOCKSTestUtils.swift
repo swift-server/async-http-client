@@ -23,48 +23,45 @@ struct MockSOCKSError: Error, Hashable {
 }
 
 class MockSOCKSServer {
-    
     let channel: Channel
-    
-    public init(expectedURL: String, expectedResponse: String, misbehave: Bool = false, file: String = (#file), line: UInt = #line) throws {
+
+    public init(expectedURL: String, expectedResponse: String, misbehave: Bool = false, file: String = #file, line: UInt = #line) throws {
         let elg = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-        let bootstrap = ServerBootstrap.init(group: elg)
+        let bootstrap = ServerBootstrap(group: elg)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .childChannelInitializer { channel in
                 let handshakeHandler = SOCKSServerHandshakeHandler()
                 return channel.pipeline.addHandlers([
                     handshakeHandler,
                     SOCKSTestHandler(handshakeHandler: handshakeHandler, misbehave: misbehave),
-                    SOCKSTestHTTPClient(expectedURL: expectedURL, expectedResponse: expectedResponse, file: file, line: line)
+                    SOCKSTestHTTPClient(expectedURL: expectedURL, expectedResponse: expectedResponse, file: file, line: line),
                 ])
             }
         self.channel = try bootstrap.bind(host: "127.0.0.1", port: 1080).wait()
     }
-    
+
     func shutdown() throws {
         try self.channel.close().wait()
     }
-    
 }
 
 class SOCKSTestHTTPClient: ChannelInboundHandler {
-    
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
-    
+
     let expectedURL: String
     let expectedResponse: String
     let file: String
     let line: UInt
     var requestCount = 0
-    
+
     init(expectedURL: String, expectedResponse: String, file: String, line: UInt) {
         self.expectedURL = expectedURL
         self.expectedResponse = expectedResponse
         self.file = file
         self.line = line
     }
-    
+
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let message = self.unwrapInboundIn(data)
         switch message {
@@ -82,7 +79,7 @@ class SOCKSTestHTTPClient: ChannelInboundHandler {
             context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
         }
     }
-    
+
     func errorCaught(context: ChannelHandlerContext, error: Error) {
         context.fireErrorCaught(error)
         context.close(promise: nil)
@@ -90,22 +87,21 @@ class SOCKSTestHTTPClient: ChannelInboundHandler {
 }
 
 class SOCKSTestHandler: ChannelInboundHandler, RemovableChannelHandler {
-    
     typealias InboundIn = ClientMessage
-    
+
     let handshakeHandler: SOCKSServerHandshakeHandler
     let misbehave: Bool
-    
+
     init(handshakeHandler: SOCKSServerHandshakeHandler, misbehave: Bool) {
         self.handshakeHandler = handshakeHandler
         self.misbehave = misbehave
     }
-    
+
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         guard context.channel.isActive else {
             return
         }
-        
+
         let message = self.unwrapInboundIn(data)
         switch message {
         case .greeting:
@@ -114,9 +110,10 @@ class SOCKSTestHandler: ChannelInboundHandler, RemovableChannelHandler {
         case .authenticationData:
             context.fireErrorCaught(MockSOCKSError(description: "Received authentication data but didn't receive any."))
         case .request(let request):
-            guard !misbehave else {
+            guard !self.misbehave else {
                 context.writeAndFlush(
-                    .init(ServerMessage.authenticationData(context.channel.allocator.buffer(string: "bad server!"), complete: true)), promise: nil)
+                    .init(ServerMessage.authenticationData(context.channel.allocator.buffer(string: "bad server!"), complete: true)), promise: nil
+                )
                 return
             }
             context.writeAndFlush(.init(
@@ -130,5 +127,4 @@ class SOCKSTestHandler: ChannelInboundHandler, RemovableChannelHandler {
             }
         }
     }
-    
 }

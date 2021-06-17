@@ -28,12 +28,11 @@ extension HTTPClient.Configuration {
     /// TLS will be established _after_ successful proxy, between your client
     /// and the destination server.
     public struct Proxy {
-        
         enum ProxyType: Hashable {
             case http(HTTPClient.Authorization?)
             case socks
         }
-        
+
         /// Specifies Proxy server host.
         public var host: String
         /// Specifies Proxy server port.
@@ -44,7 +43,7 @@ extension HTTPClient.Configuration {
                 precondition(self.type == .http(self.authorization), "Only HTTP proxies can have authorization set.")
                 self.type = .http(newValue)
             }
-            
+
             get {
                 switch self.type {
                 case .http(let authorization):
@@ -56,7 +55,7 @@ extension HTTPClient.Configuration {
         }
 
         var type: ProxyType
-        
+
         /// Create proxy.
         ///
         /// - parameters:
@@ -75,7 +74,7 @@ extension HTTPClient.Configuration {
         public static func server(host: String, port: Int, authorization: HTTPClient.Authorization? = nil) -> Proxy {
             return .init(host: host, port: port, type: .http(authorization))
         }
-        
+
         /// Create a SOCKSv5 proxy.
         /// - parameter host: The SOCKSv5 proxy address.
         /// - parameter port: The SOCKSv5 proxy port, defaults to 1080.

@@ -18,10 +18,10 @@ import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOHTTPCompression
+import NIOSOCKS
 import NIOSSL
 import NIOTLS
 import NIOTransportServices
-import NIOSOCKS
 
 extension Logger {
     private func requestInfo(_ request: HTTPClient.Request) -> Logger.Metadata.Value {
@@ -900,7 +900,7 @@ extension ChannelPipeline {
         try sync.addHandler(decoder)
         try sync.addHandler(handler)
     }
-    
+
     func syncAddSOCKSProxyHandler(host: String, port: Int) throws {
         let address = try SocketAddress(ipAddress: host, port: port)
         let handler = SOCKSClientHandler(targetAddress: .address(address))
