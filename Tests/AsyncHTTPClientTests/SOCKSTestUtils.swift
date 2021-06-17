@@ -56,6 +56,7 @@ class SOCKSTestHTTPClient: ChannelInboundHandler {
     let expectedResponse: String
     let file: String
     let line: UInt
+    var requestCount = 0
     
     init(expectedURL: String, expectedResponse: String, file: String, line: UInt) {
         self.expectedURL = expectedURL
@@ -68,7 +69,11 @@ class SOCKSTestHTTPClient: ChannelInboundHandler {
         let message = self.unwrapInboundIn(data)
         switch message {
         case .head(let head):
+            guard self.requestCount == 0 else {
+                return
+            }
             XCTAssertEqual(head.uri, self.expectedURL)
+            self.requestCount += 1
         case .body:
             break
         case .end:
