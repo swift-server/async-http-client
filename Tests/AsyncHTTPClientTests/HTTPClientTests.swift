@@ -715,6 +715,11 @@ class HTTPClientTests: XCTestCase {
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: .init(proxy: .socksServer(host: "127.0.0.1")))
         
+        defer {
+            XCTAssertNoThrow(try localClient.syncShutdown())
+            XCTAssertNoThrow(try socksBin.shutdown())
+        }
+        
         do  {
             let response = try localClient.get(url: "http://127.0.0.1/socks/test").wait()
             XCTAssertEqual(.ok, response.status)
@@ -722,9 +727,6 @@ class HTTPClientTests: XCTestCase {
         } catch {
             XCTFail("\(error)")
         }
-        
-        XCTAssertNoThrow(try localClient.syncShutdown())
-        XCTAssertNoThrow(try socksBin.shutdown())
     }
 
     func testUploadStreaming() throws {

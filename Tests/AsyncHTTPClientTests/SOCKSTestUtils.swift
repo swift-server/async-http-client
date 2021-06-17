@@ -18,6 +18,10 @@ import NIOHTTP1
 import NIOSOCKS
 import XCTest
 
+struct MockSOCKSError: Error, Hashable {
+    var description: String
+}
+
 class MockSOCKSServer {
     
     let channel: Channel
@@ -89,12 +93,12 @@ class SOCKSTestHandler: ChannelInboundHandler, RemovableChannelHandler {
         let message = self.unwrapInboundIn(data)
         switch message {
         case .greeting:
-            context.writeAndFlush(.init(
+            context.write(.init(
                 ServerMessage.selectedAuthenticationMethod(.init(method: .noneRequired))), promise: nil)
             context.writeAndFlush(.init(
                 ServerMessage.authenticationData(context.channel.allocator.buffer(capacity: 0), complete: true)), promise: nil)
         case .authenticationData:
-            break
+            context.fireErrorCaught(MockSOCKSError(description: "Received authentication data but didn't receive any."))
         case .request(let request):
             context.writeAndFlush(.init(
                 ServerMessage.response(.init(reply: .succeeded, boundAddress: request.addressType))), promise: nil)
