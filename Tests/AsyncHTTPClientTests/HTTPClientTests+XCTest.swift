@@ -59,6 +59,7 @@ extension HTTPClientTests {
             ("testProxyPlaintextWithCorrectlyAuthorization", testProxyPlaintextWithCorrectlyAuthorization),
             ("testProxyPlaintextWithIncorrectlyAuthorization", testProxyPlaintextWithIncorrectlyAuthorization),
             ("testProxySOCKS", testProxySOCKS),
+            ("testProxySOCKSBogusAddress", testProxySOCKSBogusAddress),
             ("testProxySOCKSFailureNoServer", testProxySOCKSFailureNoServer),
             ("testProxySOCKSFailureInvalidServer", testProxySOCKSFailureInvalidServer),
             ("testProxySOCKSMisbehavingServer", testProxySOCKSMisbehavingServer),
