@@ -725,6 +725,16 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(.ok, response?.status)
         XCTAssertEqual(ByteBuffer(string: "it works!"), response?.body)
     }
+    
+    func testProxySOCKSBogusAddress() throws {
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                     configuration: .init(proxy: .socksServer(host: "127.0..")))
+
+        defer {
+            XCTAssertNoThrow(try localClient.syncShutdown())
+        }
+        XCTAssertThrowsError(try localClient.get(url: "http://127.0.0.1/socks/test").wait())
+    }
 
     // there is no socks server, so we should fail
     func testProxySOCKSFailureNoServer() throws {
