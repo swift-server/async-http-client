@@ -725,7 +725,7 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(.ok, response?.status)
         XCTAssertEqual(ByteBuffer(string: "it works!"), response?.body)
     }
-    
+
     func testProxySOCKSBogusAddress() throws {
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: .init(proxy: .socksServer(host: "127.0..")))
