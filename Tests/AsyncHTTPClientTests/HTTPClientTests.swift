@@ -720,13 +720,10 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try socksBin.shutdown())
         }
         
-        do  {
-            let response = try localClient.get(url: "http://127.0.0.1/socks/test").wait()
-            XCTAssertEqual(.ok, response.status)
-            XCTAssertEqual(ByteBuffer(string: "it works!"), response.body)
-        } catch {
-            XCTFail("\(error)")
-        }
+        var response: HTTPClient.Response? = nil
+        XCTAssertNoThrow(response = try localClient.get(url: "http://127.0.0.1/socks/test").wait())
+        XCTAssertEqual(.ok, response?.status)
+        XCTAssertEqual(ByteBuffer(string: "it works!"), response?.body)
     }
     
     // there is no socks server, so we should fail
