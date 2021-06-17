@@ -727,6 +727,18 @@ class HTTPClientTests: XCTestCase {
     }
     
     // there is no socks server, so we should fail
+    func testProxySOCKSFailureNoServer() throws {
+        let localHTTPBin = HTTPBin()
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                     configuration: .init(proxy: .socksServer(host: "127.0.0.1", port: localHTTPBin.port)))
+        defer {
+            XCTAssertNoThrow(try localClient.syncShutdown())
+            XCTAssertNoThrow(try localHTTPBin.shutdown())
+        }
+        XCTAssertThrowsError(try localClient.get(url: "http://127.0.0.1/socks/test").wait())
+    }
+    
+    // speak to a server that doesn't speak SOCKS
     func testProxySOCKSFailureInvalidServer() throws {
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: .init(proxy: .socksServer(host: "127.0.0.1")))
