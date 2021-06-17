@@ -2,7 +2,7 @@
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2020 Apple Inc. and the AsyncHTTPClient project authors
+// Copyright (c) 2021 Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
+import AsyncHTTPClient
 import NIO
 import NIOHTTP1
 import NIOSOCKS
@@ -27,13 +27,13 @@ class MockSOCKSServer {
         let bootstrap = ServerBootstrap.init(group: elg)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .childChannelInitializer { channel in
-            let handshakeHandler = SOCKSServerHandshakeHandler()
-            return channel.pipeline.addHandlers([
-                handshakeHandler,
-                SOCKSTestHandler(handshakeHandler: handshakeHandler),
-                SOCKSTestHTTPClient(expectedURL: expectedURL, expectedResponse: expectedResponse, file: file, line: line)
-            ])
-        }
+                let handshakeHandler = SOCKSServerHandshakeHandler()
+                return channel.pipeline.addHandlers([
+                    handshakeHandler,
+                    SOCKSTestHandler(handshakeHandler: handshakeHandler),
+                    SOCKSTestHTTPClient(expectedURL: expectedURL, expectedResponse: expectedResponse, file: file, line: line)
+                ])
+            }
         self.channel = try bootstrap.bind(host: "127.0.0.1", port: 1080).wait()
     }
     

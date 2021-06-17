@@ -38,7 +38,7 @@ public extension HTTPClient.Configuration {
         public var host: String
         /// Specifies Proxy server port.
         public var port: Int
-        /// Specifies Proxy server authorization.
+        /// Specifies Proxy server authorization. Ignored if the proxy is SOCKSv5.
         public var authorization: HTTPClient.Authorization?
 
         var type: ProxyType
@@ -62,6 +62,10 @@ public extension HTTPClient.Configuration {
             return .init(host: host, port: port, authorization: authorization, type: .http)
         }
         
+        /// Create a SOCKSv5 proxy.
+        /// - parameter host: The SOCKSv5 proxy address.
+        /// - parameter port: The SOCKSv5 proxy port, defaults to 1080.
+        /// - returns: A new instance of `Proxy` configured to connect to a `SOCKSv5` server.
         public static func socksServer(host: String, port: Int = 1080) -> Proxy {
             return .init(host: host, port: port, authorization: nil, type: .socks)
         }
