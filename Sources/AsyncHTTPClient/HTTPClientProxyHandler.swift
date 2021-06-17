@@ -40,7 +40,7 @@ extension HTTPClient.Configuration {
         /// Specifies Proxy server authorization.
         public var authorization: HTTPClient.Authorization? {
             set {
-                precondition(self.type == .http(self.authorization), "Only HTTP proxies can have authorization set.")
+                precondition(self.type == .http(self.authorization), "SOCKS authorization support is not yet implemented.")
                 self.type = .http(newValue)
             }
 
