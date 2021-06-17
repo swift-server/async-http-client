@@ -18,7 +18,7 @@ import NIOHTTP1
 import NIOSOCKS
 import XCTest
 
-class MockSocksServer {
+class MockSOCKSServer {
     
     let channel: Channel
     

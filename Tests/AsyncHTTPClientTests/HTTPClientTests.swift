@@ -711,7 +711,7 @@ class HTTPClientTests: XCTestCase {
     }
     
     func testProxySOCKS() throws {
-        let socksBin = try MockSocksServer(expectedURL: "/socks/test", expectedResponse: "it works!")
+        let socksBin = try MockSOCKSServer(expectedURL: "/socks/test", expectedResponse: "it works!")
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: .init(proxy: .socksServer(host: "127.0.0.1")))
         
