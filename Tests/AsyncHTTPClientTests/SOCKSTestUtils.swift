@@ -26,7 +26,7 @@ class MockSOCKSServer {
     
     let channel: Channel
     
-    public init(expectedURL: String, expectedResponse: String, file: String = (#file), line: UInt = #line) throws {
+    public init(expectedURL: String, expectedResponse: String, misbehave: Bool = false, file: String = (#file), line: UInt = #line) throws {
         let elg = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         let bootstrap = ServerBootstrap.init(group: elg)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
@@ -34,7 +34,7 @@ class MockSOCKSServer {
                 let handshakeHandler = SOCKSServerHandshakeHandler()
                 return channel.pipeline.addHandlers([
                     handshakeHandler,
-                    SOCKSTestHandler(handshakeHandler: handshakeHandler),
+                    SOCKSTestHandler(handshakeHandler: handshakeHandler, misbehave: misbehave),
                     SOCKSTestHTTPClient(expectedURL: expectedURL, expectedResponse: expectedResponse, file: file, line: line)
                 ])
             }
@@ -77,6 +77,11 @@ class SOCKSTestHTTPClient: ChannelInboundHandler {
             context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
         }
     }
+    
+    func errorCaught(context: ChannelHandlerContext, error: Error) {
+        context.fireErrorCaught(error)
+        context.close(promise: nil)
+    }
 }
 
 class SOCKSTestHandler: ChannelInboundHandler, RemovableChannelHandler {
@@ -84,12 +89,18 @@ class SOCKSTestHandler: ChannelInboundHandler, RemovableChannelHandler {
     typealias InboundIn = ClientMessage
     
     let handshakeHandler: SOCKSServerHandshakeHandler
+    let misbehave: Bool
     
-    init(handshakeHandler: SOCKSServerHandshakeHandler) {
+    init(handshakeHandler: SOCKSServerHandshakeHandler, misbehave: Bool) {
         self.handshakeHandler = handshakeHandler
+        self.misbehave = misbehave
     }
     
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        guard context.channel.isActive else {
+            return
+        }
+        
         let message = self.unwrapInboundIn(data)
         switch message {
         case .greeting:
@@ -98,6 +109,11 @@ class SOCKSTestHandler: ChannelInboundHandler, RemovableChannelHandler {
         case .authenticationData:
             context.fireErrorCaught(MockSOCKSError(description: "Received authentication data but didn't receive any."))
         case .request(let request):
+            guard !misbehave else {
+                context.writeAndFlush(
+                    .init(ServerMessage.authenticationData(context.channel.allocator.buffer(string: "bad server!"), complete: true)), promise: nil)
+                return
+            }
             context.writeAndFlush(.init(
                 ServerMessage.response(.init(reply: .succeeded, boundAddress: request.addressType))), promise: nil)
             context.channel.pipeline.addHandlers([

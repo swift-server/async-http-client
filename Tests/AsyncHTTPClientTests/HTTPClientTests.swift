@@ -747,6 +747,21 @@ class HTTPClientTests: XCTestCase {
         }
         XCTAssertThrowsError(try localClient.get(url: "http://127.0.0.1/socks/test").wait())
     }
+    
+    // test a handshake failure with a misbehaving server
+    func testProxySOCKSMisbehavingServer() throws {
+        let socksBin = try MockSOCKSServer(expectedURL: "/socks/test", expectedResponse: "it works!", misbehave: true)
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                     configuration: .init(proxy: .socksServer(host: "127.0.0.1")))
+        
+        defer {
+            XCTAssertNoThrow(try localClient.syncShutdown())
+            XCTAssertNoThrow(try socksBin.shutdown())
+        }
+        
+        // the server will send a bogus message in response to the clients request
+        XCTAssertThrowsError(try localClient.get(url: "http://127.0.0.1/socks/test").wait())
+    }
 
     func testUploadStreaming() throws {
         let body: HTTPClient.Body = .stream(length: 8) { writer in
