@@ -93,10 +93,8 @@ class SOCKSTestHandler: ChannelInboundHandler, RemovableChannelHandler {
         let message = self.unwrapInboundIn(data)
         switch message {
         case .greeting:
-            context.write(.init(
-                ServerMessage.selectedAuthenticationMethod(.init(method: .noneRequired))), promise: nil)
             context.writeAndFlush(.init(
-                ServerMessage.authenticationData(context.channel.allocator.buffer(capacity: 0), complete: true)), promise: nil)
+                ServerMessage.selectedAuthenticationMethod(.init(method: .noneRequired))), promise: nil)
         case .authenticationData:
             context.fireErrorCaught(MockSOCKSError(description: "Received authentication data but didn't receive any."))
         case .request(let request):
