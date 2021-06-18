@@ -710,69 +710,6 @@ class HTTPClientTests: XCTestCase {
         }
     }
 
-    func testProxySOCKS() throws {
-        let socksBin = try MockSOCKSServer(expectedURL: "/socks/test", expectedResponse: "it works!")
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(proxy: .socksServer(host: "127.0.0.1")))
-
-        defer {
-            XCTAssertNoThrow(try localClient.syncShutdown())
-            XCTAssertNoThrow(try socksBin.shutdown())
-        }
-
-        var response: HTTPClient.Response?
-        XCTAssertNoThrow(response = try localClient.get(url: "http://127.0.0.1/socks/test").wait())
-        XCTAssertEqual(.ok, response?.status)
-        XCTAssertEqual(ByteBuffer(string: "it works!"), response?.body)
-    }
-
-    func testProxySOCKSBogusAddress() throws {
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(proxy: .socksServer(host: "127.0..")))
-
-        defer {
-            XCTAssertNoThrow(try localClient.syncShutdown())
-        }
-        XCTAssertThrowsError(try localClient.get(url: "http://127.0.0.1/socks/test").wait())
-    }
-
-    // there is no socks server, so we should fail
-    func testProxySOCKSFailureNoServer() throws {
-        let localHTTPBin = HTTPBin()
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(proxy: .socksServer(host: "127.0.0.1", port: localHTTPBin.port)))
-        defer {
-            XCTAssertNoThrow(try localClient.syncShutdown())
-            XCTAssertNoThrow(try localHTTPBin.shutdown())
-        }
-        XCTAssertThrowsError(try localClient.get(url: "http://127.0.0.1/socks/test").wait())
-    }
-
-    // speak to a server that doesn't speak SOCKS
-    func testProxySOCKSFailureInvalidServer() throws {
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(proxy: .socksServer(host: "127.0.0.1")))
-        defer {
-            XCTAssertNoThrow(try localClient.syncShutdown())
-        }
-        XCTAssertThrowsError(try localClient.get(url: "http://127.0.0.1/socks/test").wait())
-    }
-
-    // test a handshake failure with a misbehaving server
-    func testProxySOCKSMisbehavingServer() throws {
-        let socksBin = try MockSOCKSServer(expectedURL: "/socks/test", expectedResponse: "it works!", misbehave: true)
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(proxy: .socksServer(host: "127.0.0.1")))
-
-        defer {
-            XCTAssertNoThrow(try localClient.syncShutdown())
-            XCTAssertNoThrow(try socksBin.shutdown())
-        }
-
-        // the server will send a bogus message in response to the clients request
-        XCTAssertThrowsError(try localClient.get(url: "http://127.0.0.1/socks/test").wait())
-    }
-
     func testUploadStreaming() throws {
         let body: HTTPClient.Body = .stream(length: 8) { writer in
             let buffer = ByteBuffer(string: "1234")

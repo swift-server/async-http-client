@@ -884,7 +884,7 @@ extension HTTPClient.Configuration {
 }
 
 extension ChannelPipeline {
-    func syncAddProxyHandler(host: String, port: Int, authorization: HTTPClient.Authorization?) throws {
+    func syncAddHTTPProxyHandler(host: String, port: Int, authorization: HTTPClient.Authorization?) throws {
         let encoder = HTTPRequestEncoder()
         let decoder = ByteToMessageHandler(HTTPResponseDecoder(leftOverBytesStrategy: .forwardBytes))
         let handler = HTTPClientProxyHandler(host: host, port: port, authorization: authorization) { channel in
@@ -902,8 +902,8 @@ extension ChannelPipeline {
     }
 
     func syncAddSOCKSProxyHandler(host: String, port: Int) throws {
-        let address = try SocketAddress.makeAddressResolvingHost(host, port: port)
-        let handler = SOCKSClientHandler(targetAddress: .address(address))
+//        let address = try SocketAddress.makeAddressResolvingHost(host, port: port)
+        let handler = SOCKSClientHandler(targetAddress: .domain(host, port: port))
         let sync = self.syncOperations
         try sync.addHandler(handler)
     }

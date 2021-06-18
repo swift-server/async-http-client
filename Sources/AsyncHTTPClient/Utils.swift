@@ -150,7 +150,7 @@ extension NIOClientTCPBootstrap {
                         if let proxy = configuration.proxy {
                             switch proxy.type {
                             case .http:
-                                try channel.pipeline.syncAddProxyHandler(host: host,
+                                try channel.pipeline.syncAddHTTPProxyHandler(host: host,
                                                                          port: port,
                                                                          authorization: proxy.authorization)
                             case .socks:

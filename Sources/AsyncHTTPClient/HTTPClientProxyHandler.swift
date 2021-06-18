@@ -56,7 +56,7 @@ extension HTTPClient.Configuration {
 
         var type: ProxyType
 
-        /// Create proxy.
+        /// Create a HTTP proxy.
         ///
         /// - parameters:
         ///     - host: proxy server host.
@@ -65,7 +65,7 @@ extension HTTPClient.Configuration {
             return .init(host: host, port: port, type: .http(nil))
         }
 
-        /// Create proxy.
+        /// Create a HTTP proxy.
         ///
         /// - parameters:
         ///     - host: proxy server host.
