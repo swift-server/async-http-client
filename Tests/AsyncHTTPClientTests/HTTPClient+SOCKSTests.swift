@@ -13,13 +13,12 @@
 //===----------------------------------------------------------------------===//
 
 /* NOT @testable */ import AsyncHTTPClient // Tests that need @testable go into HTTPClientInternalTests.swift
+import Logging
 import NIO
 import NIOSOCKS
 import XCTest
-import Logging
 
 class HTTPClientSOCKSTests: XCTestCase {
-    
     typealias Request = HTTPClient.Request
 
     var clientGroup: EventLoopGroup!
@@ -72,7 +71,7 @@ class HTTPClientSOCKSTests: XCTestCase {
         XCTAssertNotNil(self.backgroundLogStore)
         self.backgroundLogStore = nil
     }
- 
+
     func testProxySOCKS() throws {
         let socksBin = try MockSOCKSServer(expectedURL: "/socks/test", expectedResponse: "it works!")
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
@@ -135,5 +134,4 @@ class HTTPClientSOCKSTests: XCTestCase {
         // the server will send a bogus message in response to the clients request
         XCTAssertThrowsError(try localClient.get(url: "http://localhost/socks/test").wait())
     }
-    
 }

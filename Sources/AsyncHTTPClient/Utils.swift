@@ -151,8 +151,8 @@ extension NIOClientTCPBootstrap {
                             switch proxy.type {
                             case .http:
                                 try channel.pipeline.syncAddHTTPProxyHandler(host: host,
-                                                                         port: port,
-                                                                         authorization: proxy.authorization)
+                                                                             port: port,
+                                                                             authorization: proxy.authorization)
                             case .socks:
                                 try channel.pipeline.syncAddSOCKSProxyHandler(host: host, port: port)
                             }
