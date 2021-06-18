@@ -89,7 +89,7 @@ class HTTPClientNIOTSTests: XCTestCase {
         XCTAssertNoThrow(try httpBin.shutdown())
 
         XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(port)/get").wait()) { error in
-            XCTAssertEqual(.connectTimeout(.milliseconds(100)), error as? ChannelError)
+            XCTAssertEqual(.connectTimeout, error as? HTTPClientError)
         }
     }
 

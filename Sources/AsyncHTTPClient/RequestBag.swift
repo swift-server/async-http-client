@@ -86,14 +86,14 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate>: HTTPRequestTask {
         self.idleReadTimeout = idleReadTimeout
         self.delegate = delegate
 
-//        self.task.taskDelegate = self
-//        self.task.futureResult.whenComplete { _ in
-//            self.task.taskDelegate = nil
-//        }
+        self.task.taskDelegate = self
+        self.task.futureResult.whenComplete { _ in
+            self.task.taskDelegate = nil
+        }
     }
 
     func willBeExecutedOnConnection(_ connection: HTTPConnectionPool.Connection) {
-//        self.task.setConnection(connection)
+        self.task.setConnection(connection)
     }
 
     func requestWasQueued(_ queuer: HTTP1RequestQueuer) {

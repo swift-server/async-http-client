@@ -29,7 +29,6 @@ protocol HTTPConnectionPoolDelegate {
 }
 
 class HTTPConnectionPool {
-    
     struct Connection: Equatable {
         typealias ID = Int
 

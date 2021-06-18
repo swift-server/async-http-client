@@ -636,18 +636,33 @@ extension HTTPClient {
         public let eventLoop: EventLoop
 
         let promise: EventLoopPromise<Response>
-        var completion: EventLoopFuture<Void>
-        var connection: Connection?
-        var cancelled: Bool
-        let lock: Lock
+
+        var connection: HTTPConnectionPool.Connection? {
+            self.lock.withLock { self._connection }
+        }
+
+        var isCancelled: Bool {
+            self.lock.withLock { self._isCancelled }
+        }
+
+        var taskDelegate: HTTPClientTaskDelegate? {
+            get {
+                self.lock.withLock { self._taskDelegate }
+            }
+            set {
+                self.lock.withLock { self._taskDelegate = newValue }
+            }
+        }
+
+        private var _connection: HTTPConnectionPool.Connection?
+        private var _isCancelled: Bool = false
+        private var _taskDelegate: HTTPClientTaskDelegate?
+        private let lock = Lock()
         let logger: Logger // We are okay to store the logger here because a Task is for only one request.
 
         init(eventLoop: EventLoop, logger: Logger) {
             self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
-            self.completion = self.promise.futureResult.map { _ in }
-            self.cancelled = false
-            self.lock = Lock()
             self.logger = logger
         }
 
@@ -672,25 +687,17 @@ extension HTTPClient {
 
         /// Cancels the request execution.
         public func cancel() {
-            let channel: Channel? = self.lock.withLock {
-                if !self.cancelled {
-                    self.cancelled = true
-                    return self.connection?.channel
-                } else {
-                    return nil
-                }
+            let taskDelegate = self.lock.withLock { () -> HTTPClientTaskDelegate? in
+                self._isCancelled = true
+                return self._taskDelegate
             }
-            channel?.triggerUserOutboundEvent(TaskCancelEvent(), promise: nil)
+
+            taskDelegate?.cancel()
         }
 
-        @discardableResult
-        func setConnection(_ connection: Connection) -> Connection {
+        func setConnection(_ connection: HTTPConnectionPool.Connection) {
             return self.lock.withLock {
-                self.connection = connection
-                if self.cancelled {
-                    connection.channel.triggerUserOutboundEvent(TaskCancelEvent(), promise: nil)
-                }
-                return connection
+                self._connection = connection
             }
         }
 
@@ -698,43 +705,12 @@ extension HTTPClient {
                                                            with value: Response,
                                                            delegateType: Delegate.Type,
                                                            closing: Bool) {
-            self.releaseAssociatedConnection(delegateType: delegateType,
-                                             closing: closing).whenSuccess {
-                promise?.succeed(value)
-            }
+            promise?.succeed(value)
         }
 
         func fail<Delegate: HTTPClientResponseDelegate>(with error: Error,
                                                         delegateType: Delegate.Type) {
-            if let connection = self.connection {
-                self.releaseAssociatedConnection(delegateType: delegateType, closing: true)
-                    .whenSuccess {
-                        self.promise.fail(error)
-                        connection.channel.close(promise: nil)
-                    }
-            } else {
-                // this is used in tests where we don't want to bootstrap the whole connection pool
-                self.promise.fail(error)
-            }
-        }
-
-        func releaseAssociatedConnection<Delegate: HTTPClientResponseDelegate>(delegateType: Delegate.Type,
-                                                                               closing: Bool) -> EventLoopFuture<Void> {
-            if let connection = self.connection {
-                // remove read timeout handler
-                return connection.removeHandler(IdleStateHandler.self).flatMap {
-                    connection.removeHandler(TaskHandler<Delegate>.self)
-                }.map {
-                    connection.release(closing: closing, logger: self.logger)
-                }.flatMapError { error in
-                    fatalError("Couldn't remove taskHandler: \(error)")
-                }
-            } else {
-                // TODO: This seems only reached in some internal unit test
-                // Maybe there could be a better handling in the future to make
-                // it an error outside of testing contexts
-                return self.eventLoop.makeSucceededFuture(())
-            }
+            self.promise.fail(error)
         }
     }
 }
@@ -1071,9 +1047,7 @@ extension TaskHandler: ChannelDuplexHandler {
                 break
             case .redirected(let head, let redirectURL):
                 self.state = .endOrError
-                self.task.releaseAssociatedConnection(delegateType: Delegate.self, closing: self.closing).whenSuccess {
-                    self.redirectHandler?.redirect(status: head.status, to: redirectURL, promise: self.task.promise)
-                }
+                self.redirectHandler?.redirect(status: head.status, to: redirectURL, promise: self.task.promise)
             default:
                 self.state = .bufferedEnd
                 self.handleReadForDelegate(response, context: context)

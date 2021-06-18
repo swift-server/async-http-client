@@ -300,7 +300,7 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(.ok, response.status)
     }
 
-    func testGetHttpsWithIP() throws {
+    func testGetHttpsWithIP() {
         let localHTTPBin = HTTPBin(ssl: true)
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: HTTPClient.Configuration(certificateVerification: .none))
@@ -309,11 +309,12 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try localHTTPBin.shutdown())
         }
 
-        let response = try localClient.get(url: "https://127.0.0.1:\(localHTTPBin.port)/get").wait()
-        XCTAssertEqual(.ok, response.status)
+        var response: HTTPClient.Response?
+        XCTAssertNoThrow(response = try localClient.get(url: "https://127.0.0.1:\(localHTTPBin.port)/get").wait())
+        XCTAssertEqual(response?.status, .ok)
     }
 
-    func testGetHTTPSWorksOnMTELGWithIP() throws {
+    func testGetHTTPSWorksOnMTELGWithIP() {
         // Same test as above but this one will use NIO on Sockets even on Apple platforms, just to make sure
         // this works.
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
@@ -328,8 +329,9 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try localHTTPBin.shutdown())
         }
 
-        let response = try localClient.get(url: "https://127.0.0.1:\(localHTTPBin.port)/get").wait()
-        XCTAssertEqual(.ok, response.status)
+        var response: HTTPClient.Response?
+        XCTAssertNoThrow(response = try localClient.get(url: "https://127.0.0.1:\(localHTTPBin.port)/get").wait())
+        XCTAssertEqual(response?.status, .ok)
     }
 
     func testPostHttps() throws {
@@ -572,13 +574,11 @@ class HTTPClientTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try localClient.get(url: self.defaultHTTPBinURLPrefix + "wait").wait(), "Should fail") { error in
-            guard case let error = error as? HTTPClientError, error == .readTimeout else {
-                return XCTFail("Should fail with readTimeout")
-            }
+            XCTAssertEqual(error as? HTTPClientError, .readTimeout)
         }
     }
 
-    func testConnectTimeout() throws {
+    func testConnectTimeout() {
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: .init(timeout: .init(connect: .milliseconds(100), read: .milliseconds(150))))
 
@@ -588,15 +588,13 @@ class HTTPClientTests: XCTestCase {
 
         // This must throw as 198.51.100.254 is reserved for documentation only
         XCTAssertThrowsError(try httpClient.get(url: "http://198.51.100.254:65535/get").wait()) { error in
-            XCTAssertEqual(.connectTimeout(.milliseconds(100)), error as? ChannelError)
+            XCTAssertEqual(error as? HTTPClientError, .connectTimeout)
         }
     }
 
     func testDeadline() throws {
         XCTAssertThrowsError(try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "wait", deadline: .now() + .milliseconds(150)).wait(), "Should fail") { error in
-            guard case let error = error as? HTTPClientError, error == .readTimeout else {
-                return XCTFail("Should fail with readTimeout")
-            }
+            XCTAssertEqual(error as? HTTPClientError, .deadlineExceeded)
         }
     }
 
@@ -610,9 +608,7 @@ class HTTPClientTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try task.wait(), "Should fail") { error in
-            guard case let error = error as? HTTPClientError, error == .cancelled else {
-                return XCTFail("Should fail with cancelled")
-            }
+            XCTAssertEqual(error as? HTTPClientError, .cancelled)
         }
     }
 
@@ -1839,18 +1835,8 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try localClient.syncShutdown())
         }
 
-        XCTAssertThrowsError(try localClient.get(url: "http://localhost:\(port)").wait()) { error in
-            if isTestingNIOTS() {
-                guard case ChannelError.connectTimeout = error else {
-                    XCTFail("Unexpected error: \(error)")
-                    return
-                }
-            } else {
-                guard error is NIOConnectionError else {
-                    XCTFail("Unexpected error: \(error)")
-                    return
-                }
-            }
+        XCTAssertThrowsError(try localClient.get(url: "http://localhost:\(port)").wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
         }
     }
 
@@ -2506,8 +2492,8 @@ class HTTPClientTests: XCTestCase {
         let delegate = TestDelegate()
 
         XCTAssertThrowsError(try httpClient.execute(request: request, delegate: delegate).wait()) { error in
-            XCTAssertEqual(.connectTimeout(.milliseconds(10)), error as? ChannelError)
-            XCTAssertEqual(.connectTimeout(.milliseconds(10)), delegate.error as? ChannelError)
+            XCTAssertEqual(.connectTimeout, error as? HTTPClientError)
+            XCTAssertEqual(.connectTimeout, delegate.error as? HTTPClientError)
         }
     }
 
@@ -2728,7 +2714,7 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertThrowsError(try task.wait()) { error in
             if isTestingNIOTS() {
-                XCTAssertEqual(error as? ChannelError, .connectTimeout(.milliseconds(100)))
+                XCTAssertEqual(error as? HTTPClientError, .connectTimeout)
             } else {
                 switch error as? NIOSSLError {
                 case .some(.handshakeFailed(.sslError(_))): break
@@ -2775,7 +2761,7 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertThrowsError(try task.wait()) { error in
             if isTestingNIOTS() {
-                XCTAssertEqual(error as? ChannelError, .connectTimeout(.milliseconds(200)))
+                XCTAssertEqual(error as? HTTPClientError, .connectTimeout)
             } else {
                 switch error as? NIOSSLError {
                 case .some(.handshakeFailed(.sslError(_))): break
