@@ -1,4 +1,4 @@
-// swift-tools-version:5.0
+// swift-tools-version:5.2
 //===----------------------------------------------------------------------===//
 //
 // This source file is part of the AsyncHTTPClient open source project
@@ -30,13 +30,30 @@ let package = Package(
     targets: [
         .target(
             name: "AsyncHTTPClient",
-            dependencies: ["NIO", "NIOHTTP1", "NIOSSL", "NIOConcurrencyHelpers", "NIOHTTPCompression",
-                           "NIOFoundationCompat", "NIOTransportServices", "Logging", "NIOSOCKS"]
+            dependencies: [
+                .product(name: "NIO", package: "swift-nio"),
+                .product(name: "NIOHTTP1", package: "swift-nio"),
+                .product(name: "NIOSSL", package: "swift-nio-ssl"),
+                .product(name: "NIOConcurrencyHelpers", package: "swift-nio"),
+                .product(name: "NIOHTTPCompression", package: "swift-nio-extras"),
+                .product(name: "NIOFoundationCompat", package: "swift-nio"),
+                .product(name: "NIOTransportServices", package: "swift-nio-transport-services"),
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "NIOSOCKS", package: "swift-nio-extras"),
+            ]
         ),
         .testTarget(
             name: "AsyncHTTPClientTests",
-            dependencies: ["NIO", "NIOConcurrencyHelpers", "NIOSSL", "AsyncHTTPClient", "NIOFoundationCompat",
-                           "NIOTestUtils", "Logging", "NIOSOCKS"]
+            dependencies: [
+                .product(name: "NIO", package: "swift-nio"),
+                .product(name: "NIOConcurrencyHelpers", package: "swift-nio"),
+                .product(name: "NIOSSL", package: "swift-nio-ssl"),
+                "AsyncHTTPClient",
+                .product(name: "NIOFoundationCompat", package: "swift-nio"),
+                .product(name: "NIOTestUtils", package: "swift-nio"),
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "NIOSOCKS", package: "swift-nio-extras"),
+            ]
         ),
     ]
 )
