@@ -37,7 +37,7 @@ class MockSOCKSServer {
                     TestHTTPServer(expectedURL: expectedURL, expectedResponse: expectedResponse, file: file, line: line),
                 ])
             }
-        self.channel = try bootstrap.bind(host: "127.0.0.1", port: 1080).wait()
+        self.channel = try bootstrap.bind(host: "localhost", port: 1080).wait()
     }
 
     func shutdown() throws {

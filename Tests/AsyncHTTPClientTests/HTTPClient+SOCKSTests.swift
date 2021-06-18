@@ -2,7 +2,7 @@
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2019 Apple Inc. and the AsyncHTTPClient project authors
+// Copyright (c) 2021 Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -76,7 +76,7 @@ class HTTPClientSOCKSTests: XCTestCase {
     func testProxySOCKS() throws {
         let socksBin = try MockSOCKSServer(expectedURL: "/socks/test", expectedResponse: "it works!")
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(proxy: .socksServer(host: "127.0.0.1")))
+                                     configuration: .init(proxy: .socksServer(host: "localhost")))
 
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
@@ -84,7 +84,7 @@ class HTTPClientSOCKSTests: XCTestCase {
         }
 
         var response: HTTPClient.Response?
-        XCTAssertNoThrow(response = try localClient.get(url: "http://127.0.0.1/socks/test").wait())
+        XCTAssertNoThrow(response = try localClient.get(url: "http://localhost/socks/test").wait())
         XCTAssertEqual(.ok, response?.status)
         XCTAssertEqual(ByteBuffer(string: "it works!"), response?.body)
     }
@@ -96,36 +96,36 @@ class HTTPClientSOCKSTests: XCTestCase {
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
         }
-        XCTAssertThrowsError(try localClient.get(url: "http://127.0.0.1/socks/test").wait())
+        XCTAssertThrowsError(try localClient.get(url: "http://localhost/socks/test").wait())
     }
 
     // there is no socks server, so we should fail
     func testProxySOCKSFailureNoServer() throws {
         let localHTTPBin = HTTPBin()
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(proxy: .socksServer(host: "127.0.0.1", port: localHTTPBin.port)))
+                                     configuration: .init(proxy: .socksServer(host: "localhost", port: localHTTPBin.port)))
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
             XCTAssertNoThrow(try localHTTPBin.shutdown())
         }
-        XCTAssertThrowsError(try localClient.get(url: "http://127.0.0.1/socks/test").wait())
+        XCTAssertThrowsError(try localClient.get(url: "http://localhost/socks/test").wait())
     }
 
     // speak to a server that doesn't speak SOCKS
     func testProxySOCKSFailureInvalidServer() throws {
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(proxy: .socksServer(host: "127.0.0.1")))
+                                     configuration: .init(proxy: .socksServer(host: "localhost")))
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
         }
-        XCTAssertThrowsError(try localClient.get(url: "http://127.0.0.1/socks/test").wait())
+        XCTAssertThrowsError(try localClient.get(url: "http://localhost/socks/test").wait())
     }
 
     // test a handshake failure with a misbehaving server
     func testProxySOCKSMisbehavingServer() throws {
         let socksBin = try MockSOCKSServer(expectedURL: "/socks/test", expectedResponse: "it works!", misbehave: true)
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(proxy: .socksServer(host: "127.0.0.1")))
+                                     configuration: .init(proxy: .socksServer(host: "localhost")))
 
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
@@ -133,7 +133,7 @@ class HTTPClientSOCKSTests: XCTestCase {
         }
 
         // the server will send a bogus message in response to the clients request
-        XCTAssertThrowsError(try localClient.get(url: "http://127.0.0.1/socks/test").wait())
+        XCTAssertThrowsError(try localClient.get(url: "http://localhost/socks/test").wait())
     }
     
 }

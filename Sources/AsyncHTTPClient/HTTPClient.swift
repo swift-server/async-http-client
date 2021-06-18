@@ -902,7 +902,6 @@ extension ChannelPipeline {
     }
 
     func syncAddSOCKSProxyHandler(host: String, port: Int) throws {
-//        let address = try SocketAddress.makeAddressResolvingHost(host, port: port)
         let handler = SOCKSClientHandler(targetAddress: .domain(host, port: port))
         let sync = self.syncOperations
         try sync.addHandler(handler)
