@@ -18,6 +18,7 @@ import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOHTTPCompression
+import NIOSOCKS
 import NIOSSL
 import NIOTLS
 import NIOTransportServices
@@ -883,7 +884,7 @@ extension HTTPClient.Configuration {
 }
 
 extension ChannelPipeline {
-    func syncAddProxyHandler(host: String, port: Int, authorization: HTTPClient.Authorization?) throws {
+    func syncAddHTTPProxyHandler(host: String, port: Int, authorization: HTTPClient.Authorization?) throws {
         let encoder = HTTPRequestEncoder()
         let decoder = ByteToMessageHandler(HTTPResponseDecoder(leftOverBytesStrategy: .forwardBytes))
         let handler = HTTPClientProxyHandler(host: host, port: port, authorization: authorization) { channel in
@@ -897,6 +898,12 @@ extension ChannelPipeline {
         let sync = self.syncOperations
         try sync.addHandler(encoder)
         try sync.addHandler(decoder)
+        try sync.addHandler(handler)
+    }
+
+    func syncAddSOCKSProxyHandler(host: String, port: Int) throws {
+        let handler = SOCKSClientHandler(targetAddress: .domain(host, port: port))
+        let sync = self.syncOperations
         try sync.addHandler(handler)
     }
 

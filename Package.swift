@@ -21,9 +21,9 @@ let package = Package(
         .library(name: "AsyncHTTPClient", targets: ["AsyncHTTPClient"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.27.0"),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.29.0"),
         .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.13.0"),
-        .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.3.0"),
+        .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.9.1"),
         .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.5.1"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.4.0"),
     ],
@@ -31,12 +31,12 @@ let package = Package(
         .target(
             name: "AsyncHTTPClient",
             dependencies: ["NIO", "NIOHTTP1", "NIOSSL", "NIOConcurrencyHelpers", "NIOHTTPCompression",
-                           "NIOFoundationCompat", "NIOTransportServices", "Logging"]
+                           "NIOFoundationCompat", "NIOTransportServices", "Logging", "NIOSOCKS"]
         ),
         .testTarget(
             name: "AsyncHTTPClientTests",
             dependencies: ["NIO", "NIOConcurrencyHelpers", "NIOSSL", "AsyncHTTPClient", "NIOFoundationCompat",
-                           "NIOTestUtils", "Logging"]
+                           "NIOTestUtils", "Logging", "NIOSOCKS"]
         ),
     ]
 )
