@@ -22,7 +22,6 @@ import NIOConcurrencyHelpers
 import NIOFoundationCompat
 import NIOHTTP1
 import NIOHTTPCompression
-import NIOSOCKS
 import NIOSSL
 import NIOTestUtils
 import NIOTransportServices
