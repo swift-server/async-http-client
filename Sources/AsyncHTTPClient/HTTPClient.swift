@@ -907,6 +907,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case bodyLengthMismatch
         case writeAfterRequestSent
         case incompatibleHeaders
+        case connectTimeout
+        case getConnectionFromPoolTimeout
     }
 
     private var code: Code
@@ -963,4 +965,12 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let writeAfterRequestSent = HTTPClientError(code: .writeAfterRequestSent)
     /// Incompatible headers specified, for example `Transfer-Encoding` and `Content-Length`.
     public static let incompatibleHeaders = HTTPClientError(code: .incompatibleHeaders)
+    /// Create a new HTTP connection timed out
+    public static let connectTimeout = HTTPClientError(code: .connectTimeout)
+    /// Aquiring a HTTP connection from the connection pool timed out.
+    ///
+    /// This can have multiple reasons:
+    ///  - A connection could not be created within the timout period.
+    ///  - Tasks are not processed fast enough on the existing connections, to process all waiters in time
+    public static let getConnectionFromPoolTimeout = HTTPClientError(code: .getConnectionFromPoolTimeout)
 }
