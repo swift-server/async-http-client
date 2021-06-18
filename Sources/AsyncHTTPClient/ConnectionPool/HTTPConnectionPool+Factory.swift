@@ -46,6 +46,58 @@ extension HTTPConnectionPool {
 }
 
 extension HTTPConnectionPool.ConnectionFactory {
+    
+    func makeConnection(for pool: HTTPConnectionPool, connectionID: HTTPConnectionPool.Connection.ID, eventLoop: EventLoop, logger: Logger) {
+        var logger = logger
+        logger[metadataKey: "ahc-connection"] = "\(connectionID)"
+
+        let future: EventLoopFuture<(Channel, HTTPVersion)>
+
+        if self.key.scheme.isProxyable, let proxy = self.clientConfiguration.proxy {
+            future = self.makeHTTPProxyChannel(proxy, connectionID: connectionID, eventLoop: eventLoop, logger: logger)
+        } else {
+            future = self.makeChannel(eventLoop: eventLoop, logger: logger)
+        }
+
+        future.whenComplete { result in
+            do {
+                switch result {
+                case .success(let (channel, .http1_0)), .success(let (channel, .http1_1)):
+                    let connection = try HTTP1Connection(
+                        channel: channel,
+                        connectionID: connectionID,
+                        configuration: self.clientConfiguration,
+                        delegate: pool,
+                        logger: logger
+                    )
+                    pool.http1ConnectionCreated(connection)
+                case .success(let (channel, .http2)):
+                    let http2Connection = try HTTP2Connection(
+                        channel: channel,
+                        connectionID: connectionID,
+                        delegate: pool,
+                        logger: logger
+                    )
+
+                    http2Connection.readyToAcceptConnectionsFuture.whenComplete { result in
+                        switch result {
+                        case .success:
+                            pool.http2ConnectionCreated(http2Connection)
+                        case .failure(let error):
+                            pool.failedToCreateHTTPConnection(connectionID, error: error)
+                        }
+                    }
+                case .failure(let error):
+                    throw error
+                default:
+                    preconditionFailure("Unexpected new http version")
+                }
+            } catch {
+                pool.failedToCreateHTTPConnection(connectionID, error: error)
+            }
+        }
+    }
+    
     func makeBestChannel(connectionID: HTTPConnectionPool.Connection.ID, eventLoop: EventLoop, logger: Logger) -> EventLoopFuture<(Channel, HTTPVersion)> {
         if self.key.scheme.isProxyable, let proxy = self.clientConfiguration.proxy {
             return self.makeHTTPProxyChannel(proxy, connectionID: connectionID, eventLoop: eventLoop, logger: logger)

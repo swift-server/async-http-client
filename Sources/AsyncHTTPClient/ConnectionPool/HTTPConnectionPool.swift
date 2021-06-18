@@ -12,9 +12,23 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Logging
 import NIO
+import NIOConcurrencyHelpers
+import NIOHTTP1
+import NIOSSL
+import NIOTLS
+import NIOTransportServices
+#if canImport(Network)
+    import Network
+    import Security
+#endif
+    
+protocol HTTPConnectionPoolDelegate {
+    func connectionPoolDidShutdown(_ pool: HTTPConnectionPool, unclean: Bool)
+}
 
-enum HTTPConnectionPool {
+class HTTPConnectionPool {
     
     struct Connection: Equatable {
         typealias ID = Int
@@ -144,7 +158,328 @@ enum HTTPConnectionPool {
             }
         }
     }
+    
+    let stateLock = Lock()
+    private var _state: StateMachine {
+        didSet {
+            self.logger.trace("Connection Pool State changed", metadata: [
+                "key": "\(self.key)",
+                "state": "\(self._state)",
+            ])
+        }
+    }
 
+    let timerLock = Lock()
+    private var _waiters = [Waiter.ID: Scheduled<Void>]()
+    private var _timer = [Connection.ID: Scheduled<Void>]()
+
+    let key: ConnectionPool.Key
+    var logger: Logger
+
+    let eventLoopGroup: EventLoopGroup
+    let connectionFactory: ConnectionFactory
+    let idleConnectionTimeout: TimeAmount
+
+    let delegate: HTTPConnectionPoolDelegate
+
+    init(eventLoopGroup: EventLoopGroup,
+         sslContextCache: SSLContextCache,
+         tlsConfiguration: TLSConfiguration?,
+         clientConfiguration: HTTPClient.Configuration,
+         key: ConnectionPool.Key,
+         delegate: HTTPConnectionPoolDelegate,
+         idGenerator: Connection.ID.Generator,
+         logger: Logger) {
+        self.eventLoopGroup = eventLoopGroup
+        self.connectionFactory = ConnectionFactory(
+            key: key,
+            tlsConfiguration: tlsConfiguration,
+            clientConfiguration: clientConfiguration,
+            sslContextCache: sslContextCache
+        )
+        self.key = key
+        self.delegate = delegate
+        self.logger = logger
+
+        self.idleConnectionTimeout = clientConfiguration.connectionPool.idleTimeout
+
+        self._state = StateMachine(
+            eventLoopGroup: eventLoopGroup,
+            idGenerator: idGenerator,
+            maximumConcurrentHTTP1Connections: 8
+        )
+    }
+
+    func execute(request: HTTPRequestTask) {
+        let (eventLoop, required) = request.resolveEventLoop()
+
+        let action = self.stateLock.withLock { () -> StateMachine.Action in
+            self._state.executeTask(request, onPreffered: eventLoop, required: required)
+        }
+        self.run(action: action)
+    }
+
+    func shutdown() {
+        let action = self.stateLock.withLock { () -> StateMachine.Action in
+            self._state.shutdown()
+        }
+        self.run(action: action)
+    }
+
+    func run(action: StateMachine.Action) {
+        self.run(connectionAction: action.connection)
+        self.run(taskAction: action.task)
+    }
+
+    func run(connectionAction: StateMachine.ConnectionAction) {
+        switch connectionAction {
+        case .createConnection(let connectionID, let eventLoop):
+            self.createConnection(connectionID, on: eventLoop)
+
+        case .scheduleTimeoutTimer(let connectionID):
+            self.scheduleTimerForConnection(connectionID)
+
+        case .cancelTimeoutTimer(let connectionID):
+            self.cancelTimerForConnection(connectionID)
+
+        case .replaceConnection(let oldConnection, with: let newConnectionID, on: let eventLoop):
+            oldConnection.close()
+            self.createConnection(newConnectionID, on: eventLoop)
+
+        case .closeConnection(let connection, isShutdown: let isShutdown):
+            connection.close()
+
+            if case .yes(let unclean) = isShutdown {
+                self.delegate.connectionPoolDidShutdown(self, unclean: unclean)
+            }
+
+        case .cleanupConnection(let close, let cancel, isShutdown: let isShutdown):
+            for connection in close {
+                connection.close()
+            }
+
+            for connection in cancel {
+                connection.cancel()
+            }
+
+            if case .yes(let unclean) = isShutdown {
+                self.delegate.connectionPoolDidShutdown(self, unclean: unclean)
+            }
+
+        case .none:
+            break
+        }
+    }
+
+    func run(taskAction: StateMachine.TaskAction) {
+        switch taskAction {
+        case .executeTask(let request, let connection, let waiterID):
+            connection.execute(request: request)
+            if let waiterID = waiterID {
+                self.cancelWaiterTimeout(waiterID)
+            }
+
+        case .executeTasks(let requests, let connection):
+            for (request, waiterID) in requests {
+                connection.execute(request: request)
+                if let waiterID = waiterID {
+                    self.cancelWaiterTimeout(waiterID)
+                }
+            }
+
+        case .failTask(let request, let error, cancelWaiter: let waiterID):
+            request.fail(error)
+
+            if let waiterID = waiterID {
+                self.cancelWaiterTimeout(waiterID)
+            }
+
+        case .failTasks(let requests, let error):
+            for (request, waiterID) in requests {
+                request.fail(error)
+
+                if let waiterID = waiterID {
+                    self.cancelWaiterTimeout(waiterID)
+                }
+            }
+
+        case .scheduleWaiterTimeout(let waiterID, let task, on: let eventLoop):
+            self.scheduleWaiterTimeout(waiterID, task, on: eventLoop)
+
+        case .cancelWaiterTimeout(let waiterID):
+            self.cancelWaiterTimeout(waiterID)
+
+        case .none:
+            break
+        }
+    }
+
+    // MARK: Run actions
+
+    func createConnection(_ connectionID: Connection.ID, on eventLoop: EventLoop) {
+        self.connectionFactory.makeConnection(
+            for: self,
+            connectionID: connectionID,
+            eventLoop: eventLoop,
+            logger: self.logger
+        )
+    }
+
+    func scheduleWaiterTimeout(_ id: Waiter.ID, _ task: HTTPRequestTask, on eventLoop: EventLoop) {
+        let deadline = task.connectionDeadline
+        let scheduled = eventLoop.scheduleTask(deadline: deadline) {
+            // The timer has fired. Now we need to do a couple of things:
+            //
+            // 1. Remove ourselfes from the timer dictionary to not leak any data. If our
+            //    waiter entry still exist, we need to tell the state machine, that we want
+            //    to fail the request.
+
+            let timeout = self.timerLock.withLock {
+                self._waiters.removeValue(forKey: id) != nil
+            }
+
+            // 2. If the entry did not exists anymore, we can assume that the request was
+            //    scheduled on another connection. The timer still fired anyhow because of a
+            //    race. In such a situation we don't need to do anything.
+            guard timeout else { return }
+
+            // 3. Tell the state machine about the time
+            let action = self.stateLock.withLock {
+                self._state.waiterTimeout(id)
+            }
+
+            self.run(action: action)
+        }
+
+        self.timerLock.withLockVoid {
+            precondition(self._waiters[id] == nil)
+            self._waiters[id] = scheduled
+        }
+
+        task.requestWasQueued(self)
+    }
+
+    func cancelWaiterTimeout(_ id: Waiter.ID) {
+        let scheduled = self.timerLock.withLock {
+            self._waiters.removeValue(forKey: id)
+        }
+
+        scheduled?.cancel()
+    }
+
+    func scheduleTimerForConnection(_ connectionID: Connection.ID) {
+        assert(self._timer[connectionID] == nil)
+
+        let scheduled = self.eventLoopGroup.next().scheduleTask(in: self.idleConnectionTimeout) {
+            // there might be a race between a cancelTimer call and the triggering
+            // of this scheduled task. both want to acquire the lock
+            self.stateLock.withLockVoid {
+                guard self._timer.removeValue(forKey: connectionID) != nil else {
+                    // a cancel method has potentially won
+                    return
+                }
+
+                let action = self._state.connectionTimeout(connectionID)
+                self.run(action: action)
+            }
+        }
+
+        self._timer[connectionID] = scheduled
+    }
+
+    func cancelTimerForConnection(_ connectionID: Connection.ID) {
+        guard let cancelTimer = self._timer.removeValue(forKey: connectionID) else {
+            return
+        }
+
+        cancelTimer.cancel()
+    }
+}
+
+extension HTTPConnectionPool {
+    func http1ConnectionCreated(_ connection: HTTP1Connection) {
+        let action = self.stateLock.withLock {
+            self._state.newHTTP1ConnectionCreated(.http1_1(connection))
+        }
+        self.run(action: action)
+    }
+
+    func http2ConnectionCreated(_ connection: HTTP2Connection) {
+        let action = self.stateLock.withLock { () -> StateMachine.Action in
+            if let settings = connection.settings {
+                return self._state.newHTTP2ConnectionCreated(.http2(connection), settings: settings)
+            } else {
+                // immidiate connection closure before we can register with state machine
+                // is the only reason we don't have settings
+                struct ImmidiateConnectionClose: Error {}
+                return self._state.failedToCreateNewConnection(ImmidiateConnectionClose(), connectionID: connection.id)
+            }
+        }
+        self.run(action: action)
+    }
+
+    func failedToCreateHTTPConnection(_ connectionID: Connection.ID, error: Error) {
+        let action = self.stateLock.withLock {
+            self._state.failedToCreateNewConnection(error, connectionID: connectionID)
+        }
+        self.run(action: action)
+    }
+}
+
+extension HTTPConnectionPool: HTTP1ConnectionDelegate {
+    func http1ConnectionClosed(_ connection: HTTP1Connection) {
+        let action = self.stateLock.withLock {
+            self._state.connectionClosed(connection.id)
+        }
+        self.run(action: action)
+    }
+
+    func http1ConnectionReleased(_ connection: HTTP1Connection) {
+        let action = self.stateLock.withLock {
+            self._state.http1ConnectionReleased(connection.id)
+        }
+        self.run(action: action)
+    }
+}
+
+extension HTTPConnectionPool: HTTP2ConnectionDelegate {
+    func http2ConnectionClosed(_ connection: HTTP2Connection) {
+        self.stateLock.withLock {
+            let action = self._state.connectionClosed(connection.id)
+            self.run(action: action)
+        }
+    }
+
+    func http2ConnectionStreamClosed(_ connection: HTTP2Connection, availableStreams: Int) {
+        self.stateLock.withLock {
+            let action = self._state.http2ConnectionStreamClosed(connection.id, availableStreams: availableStreams)
+            self.run(action: action)
+        }
+    }
+}
+
+extension HTTPConnectionPool: HTTP1RequestQueuer {
+    func cancelRequest(task: HTTPRequestTask) {
+        let waiterID = Waiter.ID(task)
+        let action = self.stateLock.withLock {
+            self._state.cancelWaiter(waiterID)
+        }
+
+        self.run(action: action)
+    }
+}
+
+extension HTTPRequestTask {
+    fileprivate func resolveEventLoop() -> (EventLoop, Bool) {
+        switch self.eventLoopPreference.preference {
+        case .indifferent:
+            return (self.eventLoop, false)
+        case .delegate(let el):
+            return (el, false)
+        case .delegateAndChannel(let el), .testOnly_exact(let el, _):
+            return (el, true)
+        }
+    }
 }
 
 struct EventLoopID: Hashable {
