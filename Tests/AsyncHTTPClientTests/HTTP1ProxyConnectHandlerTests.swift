@@ -22,7 +22,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         let embedded = EmbeddedChannel()
         defer { XCTAssertNoThrow(try embedded.finish(acceptAlreadyClosed: false)) }
 
-        let socketAddress = try! SocketAddress(ipAddress: "127.0.0.1", port: 3000)
+        let socketAddress = try! SocketAddress.makeAddressResolvingHost("localhost", port: 3000)
         XCTAssertNoThrow(try embedded.connect(to: socketAddress).wait())
 
         let connectPromise = embedded.eventLoop.makePromise(of: Void.self)
@@ -57,7 +57,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
     func testProxyConnectWithAuthorization() {
         let embedded = EmbeddedChannel()
 
-        let socketAddress = try! SocketAddress(ipAddress: "127.0.0.1", port: 3000)
+        let socketAddress = try! SocketAddress.makeAddressResolvingHost("localhost", port: 3000)
         XCTAssertNoThrow(try embedded.connect(to: socketAddress).wait())
 
         let connectPromise = embedded.eventLoop.makePromise(of: Void.self)
@@ -92,7 +92,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
     func testProxyConnectWithoutAuthorizationFailure500() {
         let embedded = EmbeddedChannel()
 
-        let socketAddress = try! SocketAddress(ipAddress: "127.0.0.1", port: 3000)
+        let socketAddress = try! SocketAddress.makeAddressResolvingHost("localhost", port: 3000)
         XCTAssertNoThrow(try embedded.connect(to: socketAddress).wait())
 
         let connectPromise = embedded.eventLoop.makePromise(of: Void.self)
@@ -130,7 +130,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
     func testProxyConnectWithoutAuthorizationButAuthorizationNeeded() {
         let embedded = EmbeddedChannel()
 
-        let socketAddress = try! SocketAddress(ipAddress: "127.0.0.1", port: 3000)
+        let socketAddress = try! SocketAddress.makeAddressResolvingHost("localhost", port: 3000)
         XCTAssertNoThrow(try embedded.connect(to: socketAddress).wait())
 
         let connectPromise = embedded.eventLoop.makePromise(of: Void.self)
@@ -168,7 +168,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
     func testProxyConnectReceivesBody() {
         let embedded = EmbeddedChannel()
 
-        let socketAddress = try! SocketAddress(ipAddress: "127.0.0.1", port: 3000)
+        let socketAddress = try! SocketAddress.makeAddressResolvingHost("localhost", port: 3000)
         XCTAssertNoThrow(try embedded.connect(to: socketAddress).wait())
 
         let connectPromise = embedded.eventLoop.makePromise(of: Void.self)

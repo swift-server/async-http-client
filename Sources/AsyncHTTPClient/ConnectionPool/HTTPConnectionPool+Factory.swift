@@ -47,8 +47,7 @@ extension HTTPConnectionPool {
 }
 
 extension HTTPConnectionPool.ConnectionFactory {
-    func makeBestChannel(connectionID: HTTPConnectionPool.Connection.ID, eventLoop: EventLoop, logger: Logger) -> EventLoopFuture<(Channel, HTTPVersion)> {
-        
+    func makeChannel(connectionID: HTTPConnectionPool.Connection.ID, eventLoop: EventLoop, logger: Logger) -> EventLoopFuture<(Channel, HTTPVersion)> {
         if self.key.scheme.isProxyable, let proxy = self.clientConfiguration.proxy {
             switch proxy.type {
             case .socks:
@@ -57,11 +56,11 @@ extension HTTPConnectionPool.ConnectionFactory {
                 return self.makeHTTPProxyChannel(proxy, connectionID: connectionID, eventLoop: eventLoop, logger: logger)
             }
         } else {
-            return self.makeChannel(eventLoop: eventLoop, logger: logger)
+            return self.makeNonProxiedChannel(eventLoop: eventLoop, logger: logger)
         }
     }
 
-    private func makeChannel(eventLoop: EventLoop, logger: Logger) -> EventLoopFuture<(Channel, HTTPVersion)> {
+    private func makeNonProxiedChannel(eventLoop: EventLoop, logger: Logger) -> EventLoopFuture<(Channel, HTTPVersion)> {
         switch self.key.scheme {
         case .http, .http_unix, .unix:
             return self.makePlainChannel(eventLoop: eventLoop).map { ($0, .http1_1) }
@@ -128,7 +127,7 @@ extension HTTPConnectionPool.ConnectionFactory {
             }
         }
     }
-    
+
     private func makeSOCKSProxyChannel(
         _ proxy: HTTPClient.Configuration.Proxy,
         connectionID: HTTPConnectionPool.Connection.ID,
@@ -144,7 +143,8 @@ extension HTTPConnectionPool.ConnectionFactory {
 
             let socksConnectHandler = SOCKSClientHandler(
                 targetAddress: .domain(self.key.host, port: self.key.port),
-                connectionEstablishedPromise: connectionEstablishedPromise)
+                connectionEstablishedPromise: connectionEstablishedPromise
+            )
 
             do {
                 try channel.pipeline.syncOperations.addHandler(socksConnectHandler)
@@ -159,7 +159,7 @@ extension HTTPConnectionPool.ConnectionFactory {
             }
         }
     }
-    
+
     private func setupTLSInProxyConnectionIfNeeded(_ channel: Channel, logger: Logger) -> EventLoopFuture<(Channel, HTTPVersion)> {
         switch self.key.scheme {
         case .unix, .http_unix, .https_unix:
@@ -301,9 +301,8 @@ extension HTTPConnectionPool.ConnectionFactory {
             .addTimeoutIfNeeded(self.clientConfiguration.timeout)
             .channelInitializer { channel in
                 sslContextFuture.flatMap { (sslContext) -> EventLoopFuture<Void> in
-                    let sync = channel.pipeline.syncOperations
-
                     do {
+                        let sync = channel.pipeline.syncOperations
                         let sslHandler = try NIOSSLClientHandler(
                             context: sslContext,
                             serverHostname: hostname
