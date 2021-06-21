@@ -130,8 +130,11 @@ class HTTPClientSOCKSTests: XCTestCase {
             XCTAssertNoThrow(try localClient.syncShutdown())
             XCTAssertNoThrow(try socksBin.shutdown())
         }
-
-        // the server will send a bogus message in response to the clients request
-        XCTAssertThrowsError(try localClient.get(url: "http://localhost/socks/test").wait())
+        
+        // the server will send a bogus message in response to the clients greeting
+        // this will be first picked up as an invalid protocol
+        XCTAssertThrowsError(try localClient.get(url: "http://localhost/socks/test").wait()) { e in
+            XCTAssertTrue(e is SOCKSError.InvalidProtocolVersion)
+        }
     }
 }
