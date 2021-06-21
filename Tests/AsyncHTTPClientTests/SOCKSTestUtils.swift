@@ -97,10 +97,6 @@ class SOCKSTestHandler: ChannelInboundHandler, RemovableChannelHandler {
             }
         }
     }
-
-    func errorCaught(context: ChannelHandlerContext, error: Error) {
-        context.fireErrorCaught(error)
-    }
 }
 
 class TestHTTPServer: ChannelInboundHandler {
@@ -139,16 +135,7 @@ class TestHTTPServer: ChannelInboundHandler {
     }
 
     func errorCaught(context: ChannelHandlerContext, error: Error) {
-//        if self.misbehave {
-//            // We've landed here because of a state error
-//            // which we want when we're misbehaving
-//            // so in this case ignore the error, and send forward
-//            // some invalid socks bytes.
-//            let buffer = context.channel.allocator.buffer(bytes: [0xFF, 0xFF, 0xFF, 0xFF])
-//            context.writeAndFlush(self.wrapOutboundOut(buffer), promise: nil)
-//        } else {
         context.fireErrorCaught(error)
         context.close(promise: nil)
-//        }
     }
 }
