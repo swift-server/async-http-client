@@ -24,7 +24,7 @@ struct MockSOCKSError: Error, Hashable {
 
 class TestSOCKSBadServerHandler: ChannelInboundHandler {
     typealias InboundIn = ByteBuffer
-    
+
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         // just write some nonsense bytes
         let buffer = context.channel.allocator.buffer(bytes: [0xAA, 0xBB, 0xCC, 0xDD, 0xEE])
@@ -36,14 +36,13 @@ class MockSOCKSServer {
     let channel: Channel
 
     init(expectedURL: String, expectedResponse: String, misbehave: Bool = false, file: String = #file, line: UInt = #line) throws {
-        
         let elg = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         let bootstrap: ServerBootstrap
         if misbehave {
             bootstrap = ServerBootstrap(group: elg)
                 .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
                 .childChannelInitializer { channel in
-                    return channel.pipeline.addHandler(TestSOCKSBadServerHandler())
+                    channel.pipeline.addHandler(TestSOCKSBadServerHandler())
                 }
         } else {
             bootstrap = ServerBootstrap(group: elg)
@@ -98,7 +97,7 @@ class SOCKSTestHandler: ChannelInboundHandler, RemovableChannelHandler {
             }
         }
     }
-    
+
     func errorCaught(context: ChannelHandlerContext, error: Error) {
         context.fireErrorCaught(error)
     }
@@ -148,8 +147,8 @@ class TestHTTPServer: ChannelInboundHandler {
 //            let buffer = context.channel.allocator.buffer(bytes: [0xFF, 0xFF, 0xFF, 0xFF])
 //            context.writeAndFlush(self.wrapOutboundOut(buffer), promise: nil)
 //        } else {
-            context.fireErrorCaught(error)
-            context.close(promise: nil)
+        context.fireErrorCaught(error)
+        context.close(promise: nil)
 //        }
     }
 }
