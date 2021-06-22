@@ -43,7 +43,6 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
 
         XCTAssertEqual(head.method, .CONNECT)
         XCTAssertEqual(head.uri, "swift.org:443")
-        XCTAssertEqual(head.headers["proxy-connection"].first, "keep-alive")
         XCTAssertNil(head.headers["proxy-authorization"].first)
         XCTAssertEqual(try embedded.readOutbound(as: HTTPClientRequestPart.self), .end(nil))
 
@@ -78,7 +77,6 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
 
         XCTAssertEqual(head.method, .CONNECT)
         XCTAssertEqual(head.uri, "swift.org:443")
-        XCTAssertEqual(head.headers["proxy-connection"].first, "keep-alive")
         XCTAssertEqual(head.headers["proxy-authorization"].first, "Basic abc123")
         XCTAssertEqual(try embedded.readOutbound(as: HTTPClientRequestPart.self), .end(nil))
 
@@ -113,7 +111,6 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
 
         XCTAssertEqual(head.method, .CONNECT)
         XCTAssertEqual(head.uri, "swift.org:443")
-        XCTAssertEqual(head.headers["proxy-connection"].first, "keep-alive")
         XCTAssertNil(head.headers["proxy-authorization"].first)
         XCTAssertEqual(try embedded.readOutbound(as: HTTPClientRequestPart.self), .end(nil))
 
@@ -151,7 +148,6 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
 
         XCTAssertEqual(head.method, .CONNECT)
         XCTAssertEqual(head.uri, "swift.org:443")
-        XCTAssertEqual(head.headers["proxy-connection"].first, "keep-alive")
         XCTAssertNil(head.headers["proxy-authorization"].first)
         XCTAssertEqual(try embedded.readOutbound(as: HTTPClientRequestPart.self), .end(nil))
 
@@ -189,7 +185,6 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
 
         XCTAssertEqual(head.method, .CONNECT)
         XCTAssertEqual(head.uri, "swift.org:443")
-        XCTAssertEqual(head.headers["proxy-connection"].first, "keep-alive")
         XCTAssertEqual(try embedded.readOutbound(as: HTTPClientRequestPart.self), .end(nil))
 
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)

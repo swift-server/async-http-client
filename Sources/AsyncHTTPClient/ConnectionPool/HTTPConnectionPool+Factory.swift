@@ -82,7 +82,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         case .http_unix, .unix:
             return bootstrap.connect(unixDomainSocketPath: self.key.unixPath)
         case .https, .https_unix:
-            preconditionFailure("Unexpected schema")
+            preconditionFailure("Unexpected scheme")
         }
     }
 
@@ -152,9 +152,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                 return channel.eventLoop.makeFailedFuture(error)
             }
 
-            return connectionEstablishedPromise.futureResult.always { result in
-                logger.debug("result: \(result)", metadata: nil)
-            }.flatMap {
+            return connectionEstablishedPromise.futureResult.flatMap {
                 self.setupTLSInProxyConnectionIfNeeded(channel, logger: logger)
             }
         }
@@ -240,7 +238,7 @@ extension HTTPConnectionPool.ConnectionFactory {
             case .https_unix:
                 return bootstrap.connect(unixDomainSocketPath: self.key.unixPath)
             case .http, .http_unix, .unix:
-                preconditionFailure("Unexpected schema")
+                preconditionFailure("Unexpected scheme")
             }
         }.flatMap { channel -> EventLoopFuture<(Channel, String?)> in
             let tlsEventHandler = try! channel.pipeline.syncOperations.handler(type: TLSEventsHandler.self)

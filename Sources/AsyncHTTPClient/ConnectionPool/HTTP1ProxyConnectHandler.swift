@@ -46,9 +46,9 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
     }
 
     func handlerAdded(context: ChannelHandlerContext) {
-        precondition(context.channel.isActive, "Expected to be added to an active channel")
-
-        self.sendConnect(context: context)
+        if context.channel.isActive {
+            self.sendConnect(context: context)
+        }
     }
 
     func handlerRemoved(context: ChannelHandlerContext) {
@@ -57,6 +57,23 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
             break
         case .initialized, .connectSent, .headReceived:
             preconditionFailure("Removing the handler, while connecting seems wrong")
+        }
+    }
+    
+    func channelActive(context: ChannelHandlerContext) {
+        self.sendConnect(context: context)
+    }
+    
+    func channelInactive(context: ChannelHandlerContext) {
+        switch self.state {
+        case .initialized(let promise), .connectSent(let promise), .headReceived(let promise):
+            let error = HTTPClientError.remoteConnectionClosed
+            self.state = .failed(error)
+            promise.fail(error)
+        case .failed:
+            break
+        case .completed:
+            break
         }
     }
 
@@ -103,7 +120,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
                 // ran into an error before... ignore this one
                 break
             case .completed, .connectSent, .initialized:
-                preconditionFailure("Invalid state")
+                preconditionFailure("Invalid state: \(self.state)")
             }
 
         case .end:
@@ -115,14 +132,15 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
                 // ran into an error before... ignore this one
                 break
             case .initialized, .connectSent, .completed:
-                preconditionFailure("Invalid state")
+                preconditionFailure("Invalid state: \(self.state)")
             }
         }
     }
 
     func sendConnect(context: ChannelHandlerContext) {
         guard case .initialized(let promise) = self.state else {
-            preconditionFailure("Invalid state")
+            // we might run into this handler twice, once in handlerAdded and once in channelActive.
+            return
         }
 
         self.state = .connectSent(promise)
@@ -132,9 +150,8 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
             method: .CONNECT,
             uri: "\(self.targetHost):\(self.targetPort)"
         )
-        head.headers.add(name: "proxy-connection", value: "keep-alive")
         if let authorization = self.proxyAuthorization {
-            head.headers.add(name: "proxy-authorization", value: authorization.headerValue)
+            head.headers.replaceOrAdd(name: "proxy-authorization", value: authorization.headerValue)
         }
         context.write(self.wrapOutboundOut(.head(head)), promise: nil)
         context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
