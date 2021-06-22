@@ -336,6 +336,7 @@ extension NIOClientTCPBootstrapProtocol {
         guard let connectTimeamount = config?.connect else {
             return self
         }
+        
         return self.connectTimeout(connectTimeamount)
     }
 }
