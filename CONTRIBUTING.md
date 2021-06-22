@@ -57,6 +57,8 @@ A good AsyncHTTPClient patch is:
 3. Documented, adding API documentation as needed to cover new functions and properties.
 4. Accompanied by a great commit message, using our commit message template.
 
+*Note* as of version 1.5.0 AsyncHTTPClient requires Swift 5.2. Earlier versions support as far back as Swift 5.0.
+
 ### Commit Message Template
 
 We require that your commit messages match our template. The easiest way to do that is to get git to help you by explicitly using the template. To do that, `cd` to the root of our repository and run:

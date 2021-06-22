@@ -10,7 +10,7 @@ This library provides the following:
 
 ---
 
-**NOTE**: You will need [Xcode 10.2](https://itunes.apple.com/us/app/xcode/id497799835) or [Swift 5.0](https://swift.org/download/#swift-50) to try out `AsyncHTTPClient`.
+**NOTE**: You will need [Xcode 11.4](https://apps.apple.com/gb/app/xcode/id497799835?mt=12) or [Swift 5.2](https://swift.org/download/#swift-52) to try out `AsyncHTTPClient`.
 
 ---
 
