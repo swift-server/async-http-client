@@ -915,6 +915,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case socksHandshakeTimeout
         case httpProxyHandshakeTimeout
         case tlsHandshakeTimeout
+        case serverOfferedUnsupportedApplicationProtocol(String)
     }
 
     private var code: Code
@@ -977,4 +978,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let httpProxyHandshakeTimeout = HTTPClientError(code: .httpProxyHandshakeTimeout)
     /// The tls handshake timed out.
     public static let tlsHandshakeTimeout = HTTPClientError(code: .tlsHandshakeTimeout)
+    /// The remote server only offered an unsupported application protocol
+    public static func serverOfferedUnsupportedApplicationProtocol(_ proto: String) -> HTTPClientError {
+        return HTTPClientError(code: .serverOfferedUnsupportedApplicationProtocol(proto))
+    }
 }

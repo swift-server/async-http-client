@@ -29,21 +29,20 @@ extension HTTPConnectionPool {
     }
 
     final class ConnectionFactory {
-        
         struct Timeouts {
             /// the `TimeAmount` waited before the TCP connection creation is failed with a timeout error
             var connect: TimeAmount = .seconds(10)
-            
+
             /// the `TimeAmount` waited before the SOCKS proxy connection creation is failed with a timeout error
             var socksProxyHandshake: TimeAmount = .seconds(10)
-            
+
             /// the `TimeAmount` waited before the HTTP proxy connection creation is failed with a timeout error
             var httpProxyHandshake: TimeAmount = .seconds(10)
-            
+
             /// the `TimeAmount` waited before we the TLS handshake is failed with a timeout error
             var tlsHandshake: TimeAmount = .seconds(10)
         }
-        
+
         let key: ConnectionPool.Key
         let clientConfiguration: HTTPClient.Configuration
         let tlsConfiguration: TLSConfiguration
@@ -59,7 +58,7 @@ extension HTTPConnectionPool {
             self.clientConfiguration = clientConfiguration
             self.sslContextCache = sslContextCache
             self.tlsConfiguration = tlsConfiguration ?? clientConfiguration.tlsConfiguration ?? .forClient()
-            
+
             var timeouts = timeouts
             if let connect = clientConfiguration.timeout.connect {
                 timeouts.connect = connect
@@ -88,10 +87,10 @@ extension HTTPConnectionPool.ConnectionFactory {
         case .http, .http_unix, .unix:
             return self.makePlainChannel(eventLoop: eventLoop).map { ($0, .http1_1) }
         case .https, .https_unix:
-            return self.makeTLSChannel(eventLoop: eventLoop, logger: logger).map {
-                (channel, negotiated) -> (Channel, HTTPVersion) in
-                let version = negotiated == "h2" ? HTTPVersion.http2 : HTTPVersion.http1_1
-                return (channel, version)
+            return self.makeTLSChannel(eventLoop: eventLoop, logger: logger).flatMapThrowing {
+                channel, negotiated in
+
+                (channel, try self.matchALPNToHTTPVersion(negotiated))
             }
         }
     }
@@ -137,7 +136,9 @@ extension HTTPConnectionPool.ConnectionFactory {
                 return channel.eventLoop.makeFailedFuture(error)
             }
 
-            return proxyHandler.proxyEstablishedFuture.flatMap {
+            // The proxyEstablishedFuture is set as soon as the HTTP1ProxyConnectHandler is in a
+            // pipeline. It is created in HTTP1ProxyConnectHandler's handlerAdded method.
+            return proxyHandler.proxyEstablishedFuture!.flatMap {
                 channel.pipeline.removeHandler(proxyHandler).flatMap {
                     channel.pipeline.removeHandler(decoder).flatMap {
                         channel.pipeline.removeHandler(encoder)
@@ -170,7 +171,9 @@ extension HTTPConnectionPool.ConnectionFactory {
                 return channel.eventLoop.makeFailedFuture(error)
             }
 
-            return socksEventHandler.socksEstablishedFuture.flatMap {
+            // The socksEstablishedFuture is set as soon as the SOCKSEventsHandler is in a
+            // pipeline. It is created in SOCKSEventsHandler's handlerAdded method.
+            return socksEventHandler.socksEstablishedFuture!.flatMap {
                 channel.pipeline.removeHandler(socksEventHandler).flatMap {
                     channel.pipeline.removeHandler(socksConnectHandler)
                 }
@@ -206,18 +209,16 @@ extension HTTPConnectionPool.ConnectionFactory {
                     )
                     try channel.pipeline.syncOperations.addHandler(sslHandler)
                     try channel.pipeline.syncOperations.addHandler(tlsEventHandler)
-                    return tlsEventHandler.tlsEstablishedFuture
+
+                    // The tlsEstablishedFuture is set as soon as the TLSEventsHandler is in a
+                    // pipeline. It is created in TLSEventsHandler's handlerAdded method.
+                    return tlsEventHandler.tlsEstablishedFuture!
                 } catch {
                     return channel.eventLoop.makeFailedFuture(error)
                 }
             }.flatMap { negotiated -> EventLoopFuture<(Channel, HTTPVersion)> in
-                channel.pipeline.removeHandler(tlsEventHandler).map {
-                    switch negotiated {
-                    case "h2":
-                        return (channel, .http2)
-                    default:
-                        return (channel, .http1_1)
-                    }
+                channel.pipeline.removeHandler(tlsEventHandler).flatMapThrowing {
+                    (channel, try self.matchALPNToHTTPVersion(negotiated))
                 }
             }
         }
@@ -263,8 +264,13 @@ extension HTTPConnectionPool.ConnectionFactory {
                 preconditionFailure("Unexpected scheme")
             }
         }.flatMap { channel -> EventLoopFuture<(Channel, String?)> in
+            // It is save to use `try!` here, since we are sure, that a `TLSEventsHandler` exists
+            // within the pipeline. It is added in `makeTLSBootstrap`.
             let tlsEventHandler = try! channel.pipeline.syncOperations.handler(type: TLSEventsHandler.self)
-            return tlsEventHandler.tlsEstablishedFuture.flatMap { negotiated in
+
+            // The tlsEstablishedFuture is set as soon as the TLSEventsHandler is in a
+            // pipeline. It is created in TLSEventsHandler's handlerAdded method.
+            return tlsEventHandler.tlsEstablishedFuture!.flatMap { negotiated in
                 channel.pipeline.removeHandler(tlsEventHandler).map { (channel, negotiated) }
             }
         }
@@ -342,6 +348,17 @@ extension HTTPConnectionPool.ConnectionFactory {
             }
 
         return eventLoop.makeSucceededFuture(bootstrap)
+    }
+
+    private func matchALPNToHTTPVersion(_ negotiated: String?) throws -> HTTPVersion {
+        switch negotiated {
+        case .none, .some("http/1.1"):
+            return .http1_1
+        case .some("h2"):
+            return .http2
+        case .some(let unsupported):
+            throw HTTPClientError.serverOfferedUnsupportedApplicationProtocol(unsupported)
+        }
     }
 }
 

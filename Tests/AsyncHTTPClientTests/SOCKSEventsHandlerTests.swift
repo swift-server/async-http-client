@@ -27,7 +27,7 @@ class SOCKSEventsHandlerTests: XCTestCase {
         XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
 
         embedded.pipeline.fireUserInboundEventTriggered(SOCKSProxyEstablishedEvent())
-        XCTAssertNoThrow(try socksEventsHandler.socksEstablishedFuture.wait())
+        XCTAssertNoThrow(try XCTUnwrap(socksEventsHandler.socksEstablishedFuture).wait())
     }
 
     func testHandlerFailsFutureWhenRemovedWithoutEvent() {
@@ -37,7 +37,7 @@ class SOCKSEventsHandlerTests: XCTestCase {
         XCTAssertNotNil(socksEventsHandler.socksEstablishedFuture)
 
         XCTAssertNoThrow(try embedded.pipeline.removeHandler(socksEventsHandler).wait())
-        XCTAssertThrowsError(try socksEventsHandler.socksEstablishedFuture.wait())
+        XCTAssertThrowsError(try XCTUnwrap(socksEventsHandler.socksEstablishedFuture).wait())
     }
 
     func testHandlerFailsFutureWhenHandshakeFails() {
@@ -48,7 +48,7 @@ class SOCKSEventsHandlerTests: XCTestCase {
 
         let error = SOCKSError.InvalidReservedByte(actual: 19)
         embedded.pipeline.fireErrorCaught(error)
-        XCTAssertThrowsError(try socksEventsHandler.socksEstablishedFuture.wait()) {
+        XCTAssertThrowsError(try XCTUnwrap(socksEventsHandler.socksEstablishedFuture).wait()) {
             XCTAssertEqual($0 as? SOCKSError.InvalidReservedByte, error)
         }
     }
@@ -64,7 +64,7 @@ class SOCKSEventsHandlerTests: XCTestCase {
 
         embedded.embeddedEventLoop.advanceTime(by: .milliseconds(20))
 
-        XCTAssertThrowsError(try socksEventsHandler.socksEstablishedFuture.wait()) {
+        XCTAssertThrowsError(try XCTUnwrap(socksEventsHandler.socksEstablishedFuture).wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .socksHandshakeTimeout)
         }
         XCTAssertFalse(embedded.isActive, "The timeout shall close the connection")
@@ -81,7 +81,7 @@ class SOCKSEventsHandlerTests: XCTestCase {
 
         // schedules execute only on the next tick
         embedded.embeddedEventLoop.run()
-        XCTAssertThrowsError(try socksEventsHandler.socksEstablishedFuture.wait()) {
+        XCTAssertThrowsError(try XCTUnwrap(socksEventsHandler.socksEstablishedFuture).wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .socksHandshakeTimeout)
         }
         XCTAssertFalse(embedded.isActive, "The timeout shall close the connection")

@@ -30,7 +30,7 @@ final class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
     }
 
     private var tlsEstablishedPromise: EventLoopPromise<String?>?
-    var tlsEstablishedFuture: EventLoopFuture<String?>! {
+    var tlsEstablishedFuture: EventLoopFuture<String?>? {
         return self.tlsEstablishedPromise?.futureResult
     }
 

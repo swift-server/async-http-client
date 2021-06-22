@@ -30,7 +30,7 @@ final class SOCKSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
     }
 
     private var socksEstablishedPromise: EventLoopPromise<Void>?
-    var socksEstablishedFuture: EventLoopFuture<Void>! {
+    var socksEstablishedFuture: EventLoopFuture<Void>? {
         return self.socksEstablishedPromise?.futureResult
     }
 

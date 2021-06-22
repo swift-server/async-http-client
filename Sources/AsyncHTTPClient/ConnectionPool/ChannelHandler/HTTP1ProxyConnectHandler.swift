@@ -41,7 +41,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
     let deadline: NIODeadline
 
     private var proxyEstablishedPromise: EventLoopPromise<Void>?
-    var proxyEstablishedFuture: EventLoopFuture<Void>! {
+    var proxyEstablishedFuture: EventLoopFuture<Void>? {
         return self.proxyEstablishedPromise?.futureResult
     }
 

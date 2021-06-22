@@ -28,7 +28,7 @@ class TLSEventsHandlerTests: XCTestCase {
         XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
 
         embedded.pipeline.fireUserInboundEventTriggered(TLSUserEvent.handshakeCompleted(negotiatedProtocol: "abcd1234"))
-        XCTAssertEqual(try tlsEventsHandler.tlsEstablishedFuture.wait(), "abcd1234")
+        XCTAssertEqual(try XCTUnwrap(tlsEventsHandler.tlsEstablishedFuture).wait(), "abcd1234")
     }
 
     func testHandlerFailsFutureWhenRemovedWithoutEvent() {
@@ -38,7 +38,7 @@ class TLSEventsHandlerTests: XCTestCase {
         XCTAssertNotNil(tlsEventsHandler.tlsEstablishedFuture)
 
         XCTAssertNoThrow(try embedded.pipeline.removeHandler(tlsEventsHandler).wait())
-        XCTAssertThrowsError(try tlsEventsHandler.tlsEstablishedFuture.wait())
+        XCTAssertThrowsError(try XCTUnwrap(tlsEventsHandler.tlsEstablishedFuture).wait())
     }
 
     func testHandlerFailsFutureWhenHandshakeFails() {
@@ -48,7 +48,7 @@ class TLSEventsHandlerTests: XCTestCase {
         XCTAssertNotNil(tlsEventsHandler.tlsEstablishedFuture)
 
         embedded.pipeline.fireErrorCaught(NIOSSLError.handshakeFailed(BoringSSLError.wantConnect))
-        XCTAssertThrowsError(try tlsEventsHandler.tlsEstablishedFuture.wait()) {
+        XCTAssertThrowsError(try XCTUnwrap(tlsEventsHandler.tlsEstablishedFuture).wait()) {
             XCTAssertEqual($0 as? NIOSSLError, .handshakeFailed(BoringSSLError.wantConnect))
         }
     }
@@ -65,6 +65,6 @@ class TLSEventsHandlerTests: XCTestCase {
         embedded.pipeline.fireUserInboundEventTriggered(TLSUserEvent.shutdownCompleted)
 
         embedded.pipeline.fireUserInboundEventTriggered(TLSUserEvent.handshakeCompleted(negotiatedProtocol: "alpn"))
-        XCTAssertEqual(try tlsEventsHandler.tlsEstablishedFuture.wait(), "alpn")
+        XCTAssertEqual(try XCTUnwrap(tlsEventsHandler.tlsEstablishedFuture).wait(), "alpn")
     }
 }
