@@ -22,15 +22,14 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         let embedded = EmbeddedChannel()
         defer { XCTAssertNoThrow(try embedded.finish(acceptAlreadyClosed: false)) }
 
-        let socketAddress = try! SocketAddress.makeAddressResolvingHost("localhost", port: 3000)
+        let socketAddress = try! SocketAddress.makeAddressResolvingHost("localhost", port: 0)
         XCTAssertNoThrow(try embedded.connect(to: socketAddress).wait())
 
-        let connectPromise = embedded.eventLoop.makePromise(of: Void.self)
         let proxyConnectHandler = HTTP1ProxyConnectHandler(
             targetHost: "swift.org",
             targetPort: 443,
             proxyAuthorization: .none,
-            connectPromise: connectPromise
+            deadline: .now() + .seconds(10)
         )
 
         XCTAssertNoThrow(try embedded.pipeline.syncOperations.addHandler(proxyConnectHandler))
@@ -50,21 +49,20 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.head(responseHead)))
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.end(nil)))
 
-        XCTAssertNoThrow(try connectPromise.futureResult.wait())
+        XCTAssertNoThrow(try proxyConnectHandler.proxyEstablishedFuture.wait())
     }
 
     func testProxyConnectWithAuthorization() {
         let embedded = EmbeddedChannel()
 
-        let socketAddress = try! SocketAddress.makeAddressResolvingHost("localhost", port: 3000)
+        let socketAddress = try! SocketAddress.makeAddressResolvingHost("localhost", port: 0)
         XCTAssertNoThrow(try embedded.connect(to: socketAddress).wait())
 
-        let connectPromise = embedded.eventLoop.makePromise(of: Void.self)
         let proxyConnectHandler = HTTP1ProxyConnectHandler(
             targetHost: "swift.org",
             targetPort: 443,
             proxyAuthorization: .basic(credentials: "abc123"),
-            connectPromise: connectPromise
+            deadline: .now() + .seconds(10)
         )
 
         XCTAssertNoThrow(try embedded.pipeline.syncOperations.addHandler(proxyConnectHandler))
@@ -84,21 +82,20 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.head(responseHead)))
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.end(nil)))
 
-        connectPromise.succeed(())
+        XCTAssertNoThrow(try proxyConnectHandler.proxyEstablishedFuture.wait())
     }
 
     func testProxyConnectWithoutAuthorizationFailure500() {
         let embedded = EmbeddedChannel()
 
-        let socketAddress = try! SocketAddress.makeAddressResolvingHost("localhost", port: 3000)
+        let socketAddress = try! SocketAddress.makeAddressResolvingHost("localhost", port: 0)
         XCTAssertNoThrow(try embedded.connect(to: socketAddress).wait())
 
-        let connectPromise = embedded.eventLoop.makePromise(of: Void.self)
         let proxyConnectHandler = HTTP1ProxyConnectHandler(
             targetHost: "swift.org",
             targetPort: 443,
             proxyAuthorization: .none,
-            connectPromise: connectPromise
+            deadline: .now() + .seconds(10)
         )
 
         XCTAssertNoThrow(try embedded.pipeline.syncOperations.addHandler(proxyConnectHandler))
@@ -119,7 +116,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         XCTAssertEqual(embedded.isActive, false)
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.end(nil)))
 
-        XCTAssertThrowsError(try connectPromise.futureResult.wait()) { error in
+        XCTAssertThrowsError(try proxyConnectHandler.proxyEstablishedFuture.wait()) { error in
             XCTAssertEqual(error as? HTTPClientError, .invalidProxyResponse)
         }
     }
@@ -127,15 +124,14 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
     func testProxyConnectWithoutAuthorizationButAuthorizationNeeded() {
         let embedded = EmbeddedChannel()
 
-        let socketAddress = try! SocketAddress.makeAddressResolvingHost("localhost", port: 3000)
+        let socketAddress = try! SocketAddress.makeAddressResolvingHost("localhost", port: 0)
         XCTAssertNoThrow(try embedded.connect(to: socketAddress).wait())
 
-        let connectPromise = embedded.eventLoop.makePromise(of: Void.self)
         let proxyConnectHandler = HTTP1ProxyConnectHandler(
             targetHost: "swift.org",
             targetPort: 443,
             proxyAuthorization: .none,
-            connectPromise: connectPromise
+            deadline: .now() + .seconds(10)
         )
 
         XCTAssertNoThrow(try embedded.pipeline.syncOperations.addHandler(proxyConnectHandler))
@@ -156,7 +152,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         XCTAssertEqual(embedded.isActive, false)
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.end(nil)))
 
-        XCTAssertThrowsError(try connectPromise.futureResult.wait()) { error in
+        XCTAssertThrowsError(try proxyConnectHandler.proxyEstablishedFuture.wait()) { error in
             XCTAssertEqual(error as? HTTPClientError, .proxyAuthenticationRequired)
         }
     }
@@ -164,15 +160,14 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
     func testProxyConnectReceivesBody() {
         let embedded = EmbeddedChannel()
 
-        let socketAddress = try! SocketAddress.makeAddressResolvingHost("localhost", port: 3000)
+        let socketAddress = try! SocketAddress.makeAddressResolvingHost("localhost", port: 0)
         XCTAssertNoThrow(try embedded.connect(to: socketAddress).wait())
 
-        let connectPromise = embedded.eventLoop.makePromise(of: Void.self)
         let proxyConnectHandler = HTTP1ProxyConnectHandler(
             targetHost: "swift.org",
             targetPort: 443,
             proxyAuthorization: .none,
-            connectPromise: connectPromise
+            deadline: .now() + .seconds(10)
         )
 
         XCTAssertNoThrow(try embedded.pipeline.syncOperations.addHandler(proxyConnectHandler))
@@ -193,7 +188,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         XCTAssertEqual(embedded.isActive, false)
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.end(nil)))
 
-        XCTAssertThrowsError(try connectPromise.futureResult.wait()) { error in
+        XCTAssertThrowsError(try proxyConnectHandler.proxyEstablishedFuture.wait()) { error in
             XCTAssertEqual(error as? HTTPClientError, .invalidProxyResponse)
         }
     }

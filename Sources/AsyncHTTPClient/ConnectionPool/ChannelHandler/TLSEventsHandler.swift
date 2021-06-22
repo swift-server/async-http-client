@@ -21,7 +21,7 @@ final class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
     enum State {
         // transitions to channelActive or failed
         case initialized
-        // transitions to socksEstablished or failed
+        // transitions to tlsEstablished or failed
         case channelActive(Scheduled<Void>?)
         // final success state
         case tlsEstablished
@@ -109,7 +109,7 @@ final class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
                 case .initialized, .channelActive:
                     // close the connection, if the handshake timed out
                     context.close(mode: .all, promise: nil)
-                    let error = HTTPClientError.socksHandshakeTimeout
+                    let error = HTTPClientError.tlsHandshakeTimeout
                     self.state = .failed(error)
                     self.tlsEstablishedPromise?.fail(error)
                 case .failed, .tlsEstablished:

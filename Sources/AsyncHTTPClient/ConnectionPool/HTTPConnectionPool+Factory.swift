@@ -97,15 +97,13 @@ extension HTTPConnectionPool.ConnectionFactory {
         // upgraded to TLS before we send our first request.
         let bootstrap = self.makePlainBootstrap(eventLoop: eventLoop)
         return bootstrap.connect(host: proxy.host, port: proxy.port).flatMap { channel in
-            let connectPromise = channel.eventLoop.makePromise(of: Void.self)
-
             let encoder = HTTPRequestEncoder()
             let decoder = ByteToMessageHandler(HTTPResponseDecoder(leftOverBytesStrategy: .dropBytes))
             let proxyHandler = HTTP1ProxyConnectHandler(
                 targetHost: self.key.host,
                 targetPort: self.key.port,
                 proxyAuthorization: proxy.authorization,
-                connectPromise: connectPromise
+                deadline: .now() + .seconds(10)
             )
 
             do {
@@ -116,7 +114,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                 return channel.eventLoop.makeFailedFuture(error)
             }
 
-            return connectPromise.futureResult.flatMap {
+            return proxyHandler.proxyEstablishedFuture.flatMap {
                 channel.pipeline.removeHandler(proxyHandler).flatMap {
                     channel.pipeline.removeHandler(decoder).flatMap {
                         channel.pipeline.removeHandler(encoder)

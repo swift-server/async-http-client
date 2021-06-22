@@ -22,35 +22,42 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
 
     enum State {
         // transitions to `.connectSent` or `.failed`
-        case initialized(EventLoopPromise<Void>)
+        case initialized
         // transitions to `.headReceived` or `.failed`
-        case connectSent(EventLoopPromise<Void>)
+        case connectSent(Scheduled<Void>)
         // transitions to `.completed` or `.failed`
-        case headReceived(EventLoopPromise<Void>)
+        case headReceived(Scheduled<Void>)
         // final error state
         case failed(Error)
         // final success state
         case completed
     }
 
-    private var state: State
+    private var state: State = .initialized
 
     let targetHost: String
     let targetPort: Int
     let proxyAuthorization: HTTPClient.Authorization?
+    let deadline: NIODeadline
+
+    private var proxyEstablishedPromise: EventLoopPromise<Void>?
+    var proxyEstablishedFuture: EventLoopFuture<Void>! {
+        return self.proxyEstablishedPromise?.futureResult
+    }
 
     init(targetHost: String,
          targetPort: Int,
          proxyAuthorization: HTTPClient.Authorization?,
-         connectPromise: EventLoopPromise<Void>) {
+         deadline: NIODeadline) {
         self.targetHost = targetHost
         self.targetPort = targetPort
         self.proxyAuthorization = proxyAuthorization
-
-        self.state = .initialized(connectPromise)
+        self.deadline = deadline
     }
 
     func handlerAdded(context: ChannelHandlerContext) {
+        self.proxyEstablishedPromise = context.eventLoop.makePromise(of: Void.self)
+
         if context.channel.isActive {
             self.sendConnect(context: context)
         }
@@ -61,7 +68,9 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
         case .failed, .completed:
             break
         case .initialized, .connectSent, .headReceived:
-            preconditionFailure("Removing the handler, while connecting seems wrong")
+            struct NoResult: Error {}
+            self.state = .failed(NoResult())
+            self.proxyEstablishedPromise?.fail(NoResult())
         }
     }
 
@@ -71,10 +80,14 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
 
     func channelInactive(context: ChannelHandlerContext) {
         switch self.state {
-        case .initialized(let promise), .connectSent(let promise), .headReceived(let promise):
+        case .initialized:
+            preconditionFailure("How can we receive a channelInactive before a channelActive?")
+        case .connectSent(let timeout), .headReceived(let timeout):
+            timeout.cancel()
             let error = HTTPClientError.remoteConnectionClosed
             self.state = .failed(error)
-            promise.fail(error)
+            self.proxyEstablishedPromise?.fail(error)
+            context.fireErrorCaught(error)
         case .failed:
             break
         case .completed:
@@ -102,25 +115,31 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
             case 407:
                 let error = HTTPClientError.proxyAuthenticationRequired
                 self.state = .failed(error)
-                context.close(promise: nil)
-                promise.fail(error)
+                self.proxyEstablishedPromise?.fail(error)
+                context.fireErrorCaught(error)
+                context.close(mode: .all, promise: nil)
+
             default:
                 // Any response other than a successful response
                 // indicates that the tunnel has not yet been formed and that the
                 // connection remains governed by HTTP.
                 let error = HTTPClientError.invalidProxyResponse
                 self.state = .failed(error)
-                context.close(promise: nil)
-                promise.fail(error)
+                self.proxyEstablishedPromise?.fail(error)
+                context.fireErrorCaught(error)
+                context.close(mode: .all, promise: nil)
             }
         case .body:
             switch self.state {
-            case .headReceived(let promise):
+            case .headReceived(let timeout):
+                timeout.cancel()
                 // we don't expect a body
                 let error = HTTPClientError.invalidProxyResponse
                 self.state = .failed(error)
-                context.close(promise: nil)
-                promise.fail(error)
+                self.proxyEstablishedPromise?.fail(error)
+                context.fireErrorCaught(error)
+                context.close(mode: .all, promise: nil)
+
             case .failed:
                 // ran into an error before... ignore this one
                 break
@@ -130,9 +149,11 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
 
         case .end:
             switch self.state {
-            case .headReceived(let promise):
+            case .headReceived(let timeout):
+                timeout.cancel()
                 self.state = .completed
-                promise.succeed(())
+                self.proxyEstablishedPromise?.succeed(())
+
             case .failed:
                 // ran into an error before... ignore this one
                 break
@@ -143,12 +164,30 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
     }
 
     func sendConnect(context: ChannelHandlerContext) {
-        guard case .initialized(let promise) = self.state else {
+        guard case .initialized = self.state else {
             // we might run into this handler twice, once in handlerAdded and once in channelActive.
             return
         }
 
-        self.state = .connectSent(promise)
+        let timeout = context.eventLoop.scheduleTask(deadline: self.deadline) {
+            switch self.state {
+            case .initialized:
+                preconditionFailure("How can we have a scheduled timeout, if the connection is not even up?")
+
+            case .connectSent(let scheduled), .headReceived(let scheduled):
+                scheduled.cancel()
+                let error = HTTPClientError.httpProxyHandshakeTimeout
+                self.state = .failed(error)
+                self.proxyEstablishedPromise?.fail(error)
+                context.fireErrorCaught(error)
+                context.close(mode: .all, promise: nil)
+
+            case .failed, .completed:
+                break
+            }
+        }
+
+        self.state = .connectSent(timeout)
 
         var head = HTTPRequestHead(
             version: .init(major: 1, minor: 1),
