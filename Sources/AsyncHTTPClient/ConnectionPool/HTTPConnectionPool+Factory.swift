@@ -29,19 +29,42 @@ extension HTTPConnectionPool {
     }
 
     final class ConnectionFactory {
+        
+        struct Timeouts {
+            /// the `TimeAmount` waited before the TCP connection creation is failed with a timeout error
+            var connect: TimeAmount = .seconds(10)
+            
+            /// the `TimeAmount` waited before the SOCKS proxy connection creation is failed with a timeout error
+            var socksProxyHandshake: TimeAmount = .seconds(10)
+            
+            /// the `TimeAmount` waited before the HTTP proxy connection creation is failed with a timeout error
+            var httpProxyHandshake: TimeAmount = .seconds(10)
+            
+            /// the `TimeAmount` waited before we the TLS handshake is failed with a timeout error
+            var tlsHandshake: TimeAmount = .seconds(10)
+        }
+        
         let key: ConnectionPool.Key
         let clientConfiguration: HTTPClient.Configuration
         let tlsConfiguration: TLSConfiguration
         let sslContextCache: SSLContextCache
+        let timeouts: Timeouts
 
         init(key: ConnectionPool.Key,
              tlsConfiguration: TLSConfiguration?,
              clientConfiguration: HTTPClient.Configuration,
-             sslContextCache: SSLContextCache) {
+             sslContextCache: SSLContextCache,
+             timeouts: Timeouts = .init()) {
             self.key = key
             self.clientConfiguration = clientConfiguration
             self.sslContextCache = sslContextCache
             self.tlsConfiguration = tlsConfiguration ?? clientConfiguration.tlsConfiguration ?? .forClient()
+            
+            var timeouts = timeouts
+            if let connect = clientConfiguration.timeout.connect {
+                timeouts.connect = connect
+            }
+            self.timeouts = timeouts
         }
     }
 }
@@ -103,7 +126,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                 targetHost: self.key.host,
                 targetPort: self.key.port,
                 proxyAuthorization: proxy.authorization,
-                deadline: .now() + .seconds(10)
+                deadline: .now() + self.timeouts.httpProxyHandshake
             )
 
             do {
@@ -138,7 +161,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         let bootstrap = self.makePlainBootstrap(eventLoop: eventLoop)
         return bootstrap.connect(host: proxy.host, port: proxy.port).flatMap { channel in
             let socksConnectHandler = SOCKSClientHandler(targetAddress: .domain(self.key.host, port: self.key.port))
-            let socksEventHandler = SOCKSEventsHandler(deadline: .now() + .seconds(10))
+            let socksEventHandler = SOCKSEventsHandler(deadline: .now() + self.timeouts.socksProxyHandshake)
 
             do {
                 try channel.pipeline.syncOperations.addHandler(socksConnectHandler)
@@ -167,7 +190,7 @@ extension HTTPConnectionPool.ConnectionFactory {
             var tlsConfig = self.tlsConfiguration
             // since we can support h2, we need to advertise this in alpn
             tlsConfig.applicationProtocols = ["http/1.1" /* , "h2" */ ]
-            let tlsEventHandler = TLSEventsHandler(deadline: .now() + .seconds(10))
+            let tlsEventHandler = TLSEventsHandler(deadline: .now() + self.timeouts.tlsHandshake)
 
             let sslContextFuture = self.sslContextCache.sslContext(
                 tlsConfiguration: tlsConfig,
@@ -204,7 +227,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         #if canImport(Network)
             if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), let tsBootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoop) {
                 return tsBootstrap
-                    .addTimeoutIfNeeded(self.clientConfiguration.timeout)
+                    .connectTimeout(self.timeouts.connect)
                     .channelInitializer { channel in
                         do {
                             try channel.pipeline.syncOperations.addHandler(HTTPClient.NWErrorHandler())
@@ -218,7 +241,7 @@ extension HTTPConnectionPool.ConnectionFactory {
 
         if let nioBootstrap = ClientBootstrap(validatingGroup: eventLoop) {
             return nioBootstrap
-                .addTimeoutIfNeeded(self.clientConfiguration.timeout)
+                .connectTimeout(self.timeouts.connect)
         }
 
         preconditionFailure("No matching bootstrap found")
@@ -269,7 +292,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                     options -> NIOClientTCPBootstrapProtocol in
 
                     tsBootstrap
-                        .addTimeoutIfNeeded(self.clientConfiguration.timeout)
+                        .connectTimeout(self.timeouts.connect)
                         .tlsOptions(options)
                         .channelInitializer { channel in
                             do {
@@ -298,7 +321,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         )
 
         let bootstrap = ClientBootstrap(group: eventLoop)
-            .addTimeoutIfNeeded(self.clientConfiguration.timeout)
+            .connectTimeout(self.timeouts.connect)
             .channelInitializer { channel in
                 sslContextFuture.flatMap { (sslContext) -> EventLoopFuture<Void> in
                     do {
@@ -307,7 +330,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                             context: sslContext,
                             serverHostname: hostname
                         )
-                        let tlsEventHandler = TLSEventsHandler(deadline: .now() + .seconds(10))
+                        let tlsEventHandler = TLSEventsHandler(deadline: .now() + self.timeouts.tlsHandshake)
 
                         try sync.addHandler(sslHandler)
                         try sync.addHandler(tlsEventHandler)
@@ -330,16 +353,6 @@ extension ConnectionPool.Key.Scheme {
         case .unix, .http_unix, .https_unix:
             return false
         }
-    }
-}
-
-extension NIOClientTCPBootstrapProtocol {
-    func addTimeoutIfNeeded(_ config: HTTPClient.Configuration.Timeout?) -> Self {
-        guard let connectTimeamount = config?.connect else {
-            return self
-        }
-
-        return self.connectTimeout(connectTimeamount)
     }
 }
 

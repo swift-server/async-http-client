@@ -40,7 +40,8 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
             key: .init(request),
             tlsConfiguration: nil,
             clientConfiguration: .init(proxy: .socksServer(host: "127.0.0.1", port: server!.localAddress!.port!)),
-            sslContextCache: .init()
+            sslContextCache: .init(),
+            timeouts: .init(socksProxyHandshake: .milliseconds(30))
         )
 
         XCTAssertThrowsError(try factory.makeChannel(connectionID: 1, eventLoop: group.next(), logger: .init(label: "test")).wait()) {
@@ -69,7 +70,8 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
             key: .init(request),
             tlsConfiguration: nil,
             clientConfiguration: .init(proxy: .server(host: "127.0.0.1", port: server!.localAddress!.port!)),
-            sslContextCache: .init()
+            sslContextCache: .init(),
+            timeouts: .init(httpProxyHandshake: .milliseconds(30))
         )
 
         XCTAssertThrowsError(try factory.makeChannel(connectionID: 1, eventLoop: group.next(), logger: .init(label: "test")).wait()) {
@@ -98,7 +100,8 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
             key: .init(request),
             tlsConfiguration: nil,
             clientConfiguration: .init(tlsConfiguration: .forClient(certificateVerification: .none)),
-            sslContextCache: .init()
+            sslContextCache: .init(),
+            timeouts: .init(tlsHandshake: .milliseconds(30))
         )
 
         XCTAssertThrowsError(try factory.makeChannel(connectionID: 1, eventLoop: group.next(), logger: .init(label: "test")).wait()) {

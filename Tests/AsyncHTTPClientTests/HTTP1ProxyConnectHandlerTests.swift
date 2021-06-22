@@ -112,12 +112,15 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         XCTAssertEqual(try embedded.readOutbound(as: HTTPClientRequestPart.self), .end(nil))
 
         let responseHead = HTTPResponseHead(version: .http1_1, status: .internalServerError)
-        XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.head(responseHead)))
-        XCTAssertEqual(embedded.isActive, false)
+        // answering with 500 should lead to a triggered error in pipeline
+        XCTAssertThrowsError(try embedded.writeInbound(HTTPClientResponsePart.head(responseHead))) {
+            XCTAssertEqual($0 as? HTTPClientError, .invalidProxyResponse)
+        }
+        XCTAssertFalse(embedded.isActive, "Channel should be closed in response to the error")
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.end(nil)))
 
-        XCTAssertThrowsError(try proxyConnectHandler.proxyEstablishedFuture.wait()) { error in
-            XCTAssertEqual(error as? HTTPClientError, .invalidProxyResponse)
+        XCTAssertThrowsError(try proxyConnectHandler.proxyEstablishedFuture.wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .invalidProxyResponse)
         }
     }
 
@@ -148,8 +151,11 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         XCTAssertEqual(try embedded.readOutbound(as: HTTPClientRequestPart.self), .end(nil))
 
         let responseHead = HTTPResponseHead(version: .http1_1, status: .proxyAuthenticationRequired)
-        XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.head(responseHead)))
-        XCTAssertEqual(embedded.isActive, false)
+        // answering with 500 should lead to a triggered error in pipeline
+        XCTAssertThrowsError(try embedded.writeInbound(HTTPClientResponsePart.head(responseHead))) {
+            XCTAssertEqual($0 as? HTTPClientError, .proxyAuthenticationRequired)
+        }
+        XCTAssertFalse(embedded.isActive, "Channel should be closed in response to the error")
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.end(nil)))
 
         XCTAssertThrowsError(try proxyConnectHandler.proxyEstablishedFuture.wait()) { error in
@@ -184,7 +190,10 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
 
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.head(responseHead)))
-        XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.body(ByteBuffer(bytes: [0, 1, 2, 3]))))
+        // answering with a body should lead to a triggered error in pipeline
+        XCTAssertThrowsError(try embedded.writeInbound(HTTPClientResponsePart.body(ByteBuffer(bytes: [0, 1, 2, 3])))) {
+            XCTAssertEqual($0 as? HTTPClientError, .invalidProxyResponse)
+        }
         XCTAssertEqual(embedded.isActive, false)
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.end(nil)))
 
