@@ -28,6 +28,7 @@ import XCTest
     XCTMain([
         testCase(ConnectionPoolTests.allTests),
         testCase(ConnectionTests.allTests),
+        testCase(HTTP1ProxyConnectHandlerTests.allTests),
         testCase(HTTPClientCookieTests.allTests),
         testCase(HTTPClientInternalTests.allTests),
         testCase(HTTPClientNIOTSTests.allTests),
@@ -36,5 +37,6 @@ import XCTest
         testCase(LRUCacheTests.allTests),
         testCase(RequestValidationTests.allTests),
         testCase(SSLContextCacheTests.allTests),
+        testCase(TLSEventsHandlerTests.allTests),
     ])
 #endif

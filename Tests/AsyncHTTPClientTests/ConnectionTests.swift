@@ -142,7 +142,9 @@ class ConnectionTests: XCTestCase {
             try HTTP1ConnectionProvider(key: .init(.init(url: "http://some.test")),
                                         eventLoop: self.eventLoop,
                                         configuration: .init(),
+                                        tlsConfiguration: nil,
                                         pool: self.pool,
+                                        sslContextCache: .init(),
                                         backgroundActivityLogger: HTTPClient.loggingDisabled))
     }
 
