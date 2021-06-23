@@ -28,7 +28,7 @@ extension HTTPConnectionPool {
         case http2_0(Channel)
     }
 
-    final class ConnectionFactory {
+    struct ConnectionFactory {
         let key: ConnectionPool.Key
         let clientConfiguration: HTTPClient.Configuration
         let tlsConfiguration: TLSConfiguration
