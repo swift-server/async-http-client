@@ -26,7 +26,7 @@ final class SSLContextCacheTests: XCTestCase {
             XCTAssertNoThrow(try group.syncShutdownGracefully())
         }
 
-        XCTAssertNoThrow(try cache.sslContext(tlsConfiguration: .forClient(),
+        XCTAssertNoThrow(try cache.sslContext(tlsConfiguration: .makeClientConfiguration(),
                                               eventLoop: eventLoop,
                                               logger: HTTPClient.loggingDisabled).wait())
     }
@@ -42,10 +42,10 @@ final class SSLContextCacheTests: XCTestCase {
         var firstContext: NIOSSLContext?
         var secondContext: NIOSSLContext?
 
-        XCTAssertNoThrow(firstContext = try cache.sslContext(tlsConfiguration: .forClient(),
+        XCTAssertNoThrow(firstContext = try cache.sslContext(tlsConfiguration: .makeClientConfiguration(),
                                                              eventLoop: eventLoop,
                                                              logger: HTTPClient.loggingDisabled).wait())
-        XCTAssertNoThrow(secondContext = try cache.sslContext(tlsConfiguration: .forClient(),
+        XCTAssertNoThrow(secondContext = try cache.sslContext(tlsConfiguration: .makeClientConfiguration(),
                                                               eventLoop: eventLoop,
                                                               logger: HTTPClient.loggingDisabled).wait())
         XCTAssertNotNil(firstContext)
@@ -64,12 +64,14 @@ final class SSLContextCacheTests: XCTestCase {
         var firstContext: NIOSSLContext?
         var secondContext: NIOSSLContext?
 
-        XCTAssertNoThrow(firstContext = try cache.sslContext(tlsConfiguration: .forClient(),
+        XCTAssertNoThrow(firstContext = try cache.sslContext(tlsConfiguration: .makeClientConfiguration(),
                                                              eventLoop: eventLoop,
                                                              logger: HTTPClient.loggingDisabled).wait())
 
         // Second one has a _different_ TLSConfiguration.
-        XCTAssertNoThrow(secondContext = try cache.sslContext(tlsConfiguration: .forClient(certificateVerification: .none),
+        var testTLSConfig = TLSConfiguration.makeClientConfiguration()
+        testTLSConfig.certificateVerification = .none
+        XCTAssertNoThrow(secondContext = try cache.sslContext(tlsConfiguration: testTLSConfig,
                                                               eventLoop: eventLoop,
                                                               logger: HTTPClient.loggingDisabled).wait())
         XCTAssertNotNil(firstContext)

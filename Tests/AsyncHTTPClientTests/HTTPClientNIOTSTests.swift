@@ -97,9 +97,13 @@ class HTTPClientNIOTSTests: XCTestCase {
         guard isTestingNIOTS() else { return }
         #if canImport(Network)
             let httpBin = HTTPBin(ssl: true)
+            var tlsConfig = TLSConfiguration.makeClientConfiguration()
+            tlsConfig.certificateVerification = .none
+            tlsConfig.minimumTLSVersion = .tlsv11
+            tlsConfig.maximumTLSVersion = .tlsv1
             let httpClient = HTTPClient(
                 eventLoopGroupProvider: .shared(self.clientGroup),
-                configuration: .init(tlsConfiguration: TLSConfiguration.forClient(minimumTLSVersion: .tlsv11, maximumTLSVersion: .tlsv1, certificateVerification: .none))
+                configuration: .init(tlsConfiguration: tlsConfig)
             )
             defer {
                 XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
@@ -116,7 +120,8 @@ class HTTPClientNIOTSTests: XCTestCase {
         guard isTestingNIOTS() else { return }
         #if canImport(Network)
             if #available(macOS 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
-                let tlsConfig = TLSConfiguration.forClient(trustRoots: .file("not/a/certificate"))
+                var tlsConfig = TLSConfiguration.makeClientConfiguration()
+                tlsConfig.trustRoots = .file("not/a/certificate")
 
                 XCTAssertThrowsError(try tlsConfig.getNWProtocolTLSOptions()) { error in
                     switch error {

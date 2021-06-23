@@ -2858,7 +2858,10 @@ class HTTPClientTests: XCTestCase {
 
         // We use a specially crafted client that has no cipher suites to offer. To do this we ask
         // only for cipher suites incompatible with our TLS version.
-        let tlsConfig = TLSConfiguration.forClient(minimumTLSVersion: .tlsv13, maximumTLSVersion: .tlsv12, certificateVerification: .none)
+        var tlsConfig = TLSConfiguration.makeClientConfiguration()
+        tlsConfig.minimumTLSVersion = .tlsv13
+        tlsConfig.maximumTLSVersion = .tlsv12
+        tlsConfig.certificateVerification = .none
         let localHTTPBin = HTTPBin(ssl: true)
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: HTTPClient.Configuration(tlsConfiguration: tlsConfig))
@@ -2951,7 +2954,9 @@ class HTTPClientTests: XCTestCase {
         }
 
         // First two requests use identical TLS configurations.
-        let firstRequest = try HTTPClient.Request(url: "https://localhost:\(localHTTPBin.port)/get", method: .GET, tlsConfiguration: .forClient(certificateVerification: .none))
+        var tlsConfig = TLSConfiguration.makeClientConfiguration()
+        tlsConfig.certificateVerification = .none
+        let firstRequest = try HTTPClient.Request(url: "https://localhost:\(localHTTPBin.port)/get", method: .GET, tlsConfiguration: tlsConfig)
         let firstResponse = try localClient.execute(request: firstRequest).wait()
         guard let firstBody = firstResponse.body else {
             XCTFail("No request body found")
@@ -2959,7 +2964,7 @@ class HTTPClientTests: XCTestCase {
         }
         let firstConnectionNumber = try decoder.decode(RequestInfo.self, from: firstBody).connectionNumber
 
-        let secondRequest = try HTTPClient.Request(url: "https://localhost:\(localHTTPBin.port)/get", method: .GET, tlsConfiguration: .forClient(certificateVerification: .none))
+        let secondRequest = try HTTPClient.Request(url: "https://localhost:\(localHTTPBin.port)/get", method: .GET, tlsConfiguration: tlsConfig)
         let secondResponse = try localClient.execute(request: secondRequest).wait()
         guard let secondBody = secondResponse.body else {
             XCTFail("No request body found")
@@ -2968,7 +2973,10 @@ class HTTPClientTests: XCTestCase {
         let secondConnectionNumber = try decoder.decode(RequestInfo.self, from: secondBody).connectionNumber
 
         // Uses a differrent TLS config.
-        let thirdRequest = try HTTPClient.Request(url: "https://localhost:\(localHTTPBin.port)/get", method: .GET, tlsConfiguration: .forClient(maximumTLSVersion: .tlsv1, certificateVerification: .none))
+        var tlsConfig2 = TLSConfiguration.makeClientConfiguration()
+        tlsConfig2.certificateVerification = .none
+        tlsConfig2.maximumTLSVersion = .tlsv1
+        let thirdRequest = try HTTPClient.Request(url: "https://localhost:\(localHTTPBin.port)/get", method: .GET, tlsConfiguration: tlsConfig2)
         let thirdResponse = try localClient.execute(request: thirdRequest).wait()
         guard let thirdBody = thirdResponse.body else {
             XCTFail("No request body found")

@@ -72,7 +72,7 @@ extension NIOClientTCPBootstrap {
             //
             // Note that TLS proxies are not supported at the moment. This means that we will always speak
             // plaintext to the proxy but we do support sending HTTPS traffic through the proxy.
-            sslContext = sslContextCache.sslContext(tlsConfiguration: configuration.tlsConfiguration ?? .forClient(),
+            sslContext = sslContextCache.sslContext(tlsConfiguration: configuration.tlsConfiguration ?? .makeClientConfiguration(),
                                                     eventLoop: eventLoop,
                                                     logger: logger).map { $0 }
         } else {
@@ -130,7 +130,7 @@ extension NIOClientTCPBootstrap {
                                       eventLoop: eventLoop,
                                       requiresTLS: requiresTLS,
                                       sslContextCache: sslContextCache,
-                                      tlsConfiguration: configuration.tlsConfiguration ?? .forClient(),
+                                      tlsConfiguration: configuration.tlsConfiguration ?? .makeClientConfiguration(),
                                       useProxy: configuration.proxy != nil,
                                       logger: logger)
             .map { bootstrap -> NIOClientTCPBootstrap in

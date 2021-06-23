@@ -289,8 +289,8 @@ internal final class HTTPBin {
     }
 
     static func configureTLS(channel: Channel) -> EventLoopFuture<Void> {
-        let configuration = TLSConfiguration.forServer(certificateChain: [.certificate(try! NIOSSLCertificate(bytes: Array(cert.utf8), format: .pem))],
-                                                       privateKey: .privateKey(try! NIOSSLPrivateKey(bytes: Array(key.utf8), format: .pem)))
+        let configuration = TLSConfiguration.makeServerConfiguration(certificateChain: [.certificate(try! NIOSSLCertificate(bytes: Array(cert.utf8), format: .pem))],
+                                                                     privateKey: .privateKey(try! NIOSSLPrivateKey(bytes: Array(key.utf8), format: .pem)))
         let context = try! NIOSSLContext(configuration: configuration)
         return channel.pipeline.addHandler(NIOSSLServerHandler(context: context), position: .first)
     }
@@ -773,8 +773,8 @@ internal class HttpBinForSSLUncleanShutdown {
             .childChannelInitializer { channel in
                 let requestDecoder = HTTPRequestDecoder()
                 return channel.pipeline.addHandler(ByteToMessageHandler(requestDecoder)).flatMap {
-                    let configuration = TLSConfiguration.forServer(certificateChain: [.certificate(try! NIOSSLCertificate(bytes: Array(cert.utf8), format: .pem))],
-                                                                   privateKey: .privateKey(try! NIOSSLPrivateKey(bytes: Array(key.utf8), format: .pem)))
+                    let configuration = TLSConfiguration.makeServerConfiguration(certificateChain: [.certificate(try! NIOSSLCertificate(bytes: Array(cert.utf8), format: .pem))],
+                                                                                 privateKey: .privateKey(try! NIOSSLPrivateKey(bytes: Array(key.utf8), format: .pem)))
                     let context = try! NIOSSLContext(configuration: configuration)
                     return channel.pipeline.addHandler(NIOSSLServerHandler(context: context), name: "NIOSSLServerHandler", position: .first).flatMap {
                         channel.pipeline.addHandler(HttpBinForSSLUncleanShutdownHandler(channelPromise: channelPromise))

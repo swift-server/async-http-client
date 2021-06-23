@@ -637,7 +637,7 @@ public class HTTPClient {
 
     /// `HTTPClient` configuration.
     public struct Configuration {
-        /// TLS configuration, defaults to `TLSConfiguration.forClient()`.
+        /// TLS configuration, defaults to `TLSConfiguration.makeClientConfiguration()`.
         public var tlsConfiguration: Optional<TLSConfiguration>
         /// Enables following 3xx redirects automatically, defaults to `RedirectConfiguration()`.
         ///
@@ -701,7 +701,9 @@ public class HTTPClient {
                     proxy: Proxy? = nil,
                     ignoreUncleanSSLShutdown: Bool = false,
                     decompression: Decompression = .disabled) {
-            self.init(tlsConfiguration: TLSConfiguration.forClient(certificateVerification: certificateVerification),
+            var tlsConfig = TLSConfiguration.makeClientConfiguration()
+            tlsConfig.certificateVerification = certificateVerification
+            self.init(tlsConfiguration: tlsConfig,
                       redirectConfiguration: redirectConfiguration,
                       timeout: timeout,
                       connectionPool: ConnectionPool(),
@@ -718,7 +720,9 @@ public class HTTPClient {
                     ignoreUncleanSSLShutdown: Bool = false,
                     decompression: Decompression = .disabled,
                     backgroundActivityLogger: Logger?) {
-            self.init(tlsConfiguration: TLSConfiguration.forClient(certificateVerification: certificateVerification),
+            var tlsConfig = TLSConfiguration.makeClientConfiguration()
+            tlsConfig.certificateVerification = certificateVerification
+            self.init(tlsConfiguration: tlsConfig,
                       redirectConfiguration: redirectConfiguration,
                       timeout: timeout,
                       connectionPool: ConnectionPool(),
