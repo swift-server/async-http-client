@@ -2761,9 +2761,14 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try server.close().wait())
         }
 
-        // We set the connect timeout down very low here because on NIOTS this manifests as a connect
-        // timeout.
-        let config = HTTPClient.Configuration(timeout: HTTPClient.Configuration.Timeout(connect: .milliseconds(200), read: nil))
+        var timeout = HTTPClient.Configuration.Timeout(connect: .seconds(10))
+        if isTestingNIOTS() {
+            // If we are using Network.framework, we set the connect timeout down very low here
+            // because on NIOTS a failing TLS handshake manifests as a connect timeout.
+            timeout.connect = .milliseconds(300)
+        }
+
+        let config = HTTPClient.Configuration(timeout: timeout)
         let client = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: config)
         defer {
             XCTAssertNoThrow(try client.syncShutdown())
