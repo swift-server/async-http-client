@@ -82,10 +82,8 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
             preconditionFailure("How can we receive a channelInactive before a channelActive?")
         case .connectSent(let timeout), .headReceived(let timeout):
             timeout.cancel()
-            let error = HTTPClientError.remoteConnectionClosed
-            self.state = .failed(error)
-            self.proxyEstablishedPromise?.fail(error)
-            context.fireErrorCaught(error)
+            self.failWithError(HTTPClientError.remoteConnectionClosed, context: context, closeConnection: false)
+
         case .failed, .completed:
             break
         }
@@ -98,68 +96,15 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         switch self.unwrapInboundIn(data) {
         case .head(let head):
-            guard case .connectSent(let promise) = self.state else {
-                preconditionFailure("HTTPDecoder should throw an error, if we have not send a request")
-            }
-
-            switch head.status.code {
-            case 200..<300:
-                // Any 2xx (Successful) response indicates that the sender (and all
-                // inbound proxies) will switch to tunnel mode immediately after the
-                // blank line that concludes the successful response's header section
-                self.state = .headReceived(promise)
-            case 407:
-                let error = HTTPClientError.proxyAuthenticationRequired
-                self.state = .failed(error)
-                self.proxyEstablishedPromise?.fail(error)
-                context.fireErrorCaught(error)
-                context.close(mode: .all, promise: nil)
-
-            default:
-                // Any response other than a successful response
-                // indicates that the tunnel has not yet been formed and that the
-                // connection remains governed by HTTP.
-                let error = HTTPClientError.invalidProxyResponse
-                self.state = .failed(error)
-                self.proxyEstablishedPromise?.fail(error)
-                context.fireErrorCaught(error)
-                context.close(mode: .all, promise: nil)
-            }
+            self.handleHTTPHeadReceived(head, context: context)
         case .body:
-            switch self.state {
-            case .headReceived(let timeout):
-                timeout.cancel()
-                // we don't expect a body
-                let error = HTTPClientError.invalidProxyResponse
-                self.state = .failed(error)
-                self.proxyEstablishedPromise?.fail(error)
-                context.fireErrorCaught(error)
-                context.close(mode: .all, promise: nil)
-
-            case .failed:
-                // ran into an error before... ignore this one
-                break
-            case .completed, .connectSent, .initialized:
-                preconditionFailure("Invalid state: \(self.state)")
-            }
-
+            self.handleHTTPBodyReceived(context: context)
         case .end:
-            switch self.state {
-            case .headReceived(let timeout):
-                timeout.cancel()
-                self.state = .completed
-                self.proxyEstablishedPromise?.succeed(())
-
-            case .failed:
-                // ran into an error before... ignore this one
-                break
-            case .initialized, .connectSent, .completed:
-                preconditionFailure("Invalid state: \(self.state)")
-            }
+            self.handleHTTPEndReceived(context: context)
         }
     }
 
-    func sendConnect(context: ChannelHandlerContext) {
+    private func sendConnect(context: ChannelHandlerContext) {
         guard case .initialized = self.state else {
             // we might run into this handler twice, once in handlerAdded and once in channelActive.
             return
@@ -171,11 +116,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
                 preconditionFailure("How can we have a scheduled timeout, if the connection is not even up?")
 
             case .connectSent, .headReceived:
-                let error = HTTPClientError.httpProxyHandshakeTimeout
-                self.state = .failed(error)
-                self.proxyEstablishedPromise?.fail(error)
-                context.fireErrorCaught(error)
-                context.close(mode: .all, promise: nil)
+                self.failWithError(HTTPClientError.httpProxyHandshakeTimeout, context: context)
 
             case .failed, .completed:
                 break
@@ -195,5 +136,64 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
         context.write(self.wrapOutboundOut(.head(head)), promise: nil)
         context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
         context.flush()
+    }
+
+    private func handleHTTPHeadReceived(_ head: HTTPResponseHead, context: ChannelHandlerContext) {
+        guard case .connectSent(let scheduled) = self.state else {
+            preconditionFailure("HTTPDecoder should throw an error, if we have not send a request")
+        }
+
+        switch head.status.code {
+        case 200..<300:
+            // Any 2xx (Successful) response indicates that the sender (and all
+            // inbound proxies) will switch to tunnel mode immediately after the
+            // blank line that concludes the successful response's header section
+            self.state = .headReceived(scheduled)
+        case 407:
+            self.failWithError(HTTPClientError.proxyAuthenticationRequired, context: context)
+
+        default:
+            // Any response other than a successful response indicates that the tunnel
+            // has not yet been formed and that the connection remains governed by HTTP.
+            self.failWithError(HTTPClientError.invalidProxyResponse, context: context)
+        }
+    }
+
+    private func handleHTTPBodyReceived(context: ChannelHandlerContext) {
+        switch self.state {
+        case .headReceived(let timeout):
+            timeout.cancel()
+            // we don't expect a body
+            self.failWithError(HTTPClientError.invalidProxyResponse, context: context)
+        case .failed:
+            // ran into an error before... ignore this one
+            break
+        case .completed, .connectSent, .initialized:
+            preconditionFailure("Invalid state: \(self.state)")
+        }
+    }
+
+    private func handleHTTPEndReceived(context: ChannelHandlerContext) {
+        switch self.state {
+        case .headReceived(let timeout):
+            timeout.cancel()
+            self.state = .completed
+            self.proxyEstablishedPromise?.succeed(())
+
+        case .failed:
+            // ran into an error before... ignore this one
+            break
+        case .initialized, .connectSent, .completed:
+            preconditionFailure("Invalid state: \(self.state)")
+        }
+    }
+
+    private func failWithError(_ error: Error, context: ChannelHandlerContext, closeConnection: Bool = true) {
+        self.state = .failed(error)
+        self.proxyEstablishedPromise?.fail(error)
+        context.fireErrorCaught(error)
+        if closeConnection {
+            context.close(mode: .all, promise: nil)
+        }
     }
 }

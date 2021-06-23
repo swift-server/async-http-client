@@ -16,6 +16,7 @@
 import Logging
 import NIO
 import NIOSOCKS
+import NIOSSL
 import XCTest
 
 class HTTPConnectionPool_FactoryTests: XCTestCase {
@@ -141,10 +142,12 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
 
         let request = try! HTTPClient.Request(url: "https://localhost:\(server!.localAddress!.port!)")
 
+        var tlsConfig = TLSConfiguration.makeClientConfiguration()
+        tlsConfig.certificateVerification = .none
         let factory = HTTPConnectionPool.ConnectionFactory(
             key: .init(request),
             tlsConfiguration: nil,
-            clientConfiguration: .init(tlsConfiguration: .forClient(certificateVerification: .none)),
+            clientConfiguration: .init(tlsConfiguration: tlsConfig),
             sslContextCache: .init()
         )
 

@@ -41,7 +41,7 @@ extension HTTPConnectionPool {
             self.key = key
             self.clientConfiguration = clientConfiguration
             self.sslContextCache = sslContextCache
-            self.tlsConfiguration = tlsConfiguration ?? clientConfiguration.tlsConfiguration ?? .forClient()
+            self.tlsConfiguration = tlsConfiguration ?? clientConfiguration.tlsConfiguration ?? .makeClientConfiguration()
         }
     }
 }

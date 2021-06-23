@@ -25,6 +25,7 @@ import XCTest
 extension HTTPConnectionPool_FactoryTests {
     static var allTests: [(String, (HTTPConnectionPool_FactoryTests) -> () throws -> Void)] {
         return [
+            ("testConnectionCreationTimesoutIfDeadlineIsInThePast", testConnectionCreationTimesoutIfDeadlineIsInThePast),
             ("testSOCKSConnectionCreationTimesoutIfRemoteIsUnresponsive", testSOCKSConnectionCreationTimesoutIfRemoteIsUnresponsive),
             ("testHTTPProxyConnectionCreationTimesoutIfRemoteIsUnresponsive", testHTTPProxyConnectionCreationTimesoutIfRemoteIsUnresponsive),
             ("testTLSConnectionCreationTimesoutIfRemoteIsUnresponsive", testTLSConnectionCreationTimesoutIfRemoteIsUnresponsive),
