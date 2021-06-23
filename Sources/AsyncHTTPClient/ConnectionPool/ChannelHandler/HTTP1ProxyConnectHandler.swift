@@ -21,10 +21,15 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
     typealias InboundIn = HTTPClientResponsePart
 
     enum State {
+        // transitions to `.connectSent` or `.failed`
         case initialized(EventLoopPromise<Void>)
+        // transitions to `.headReceived` or `.failed`
         case connectSent(EventLoopPromise<Void>)
+        // transitions to `.completed` or `.failed`
         case headReceived(EventLoopPromise<Void>)
+        // final error state
         case failed(Error)
+        // final success state
         case completed
     }
 
@@ -59,11 +64,11 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
             preconditionFailure("Removing the handler, while connecting seems wrong")
         }
     }
-    
+
     func channelActive(context: ChannelHandlerContext) {
         self.sendConnect(context: context)
     }
-    
+
     func channelInactive(context: ChannelHandlerContext) {
         switch self.state {
         case .initialized(let promise), .connectSent(let promise), .headReceived(let promise):

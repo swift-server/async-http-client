@@ -139,20 +139,21 @@ extension HTTPConnectionPool.ConnectionFactory {
         // upgraded to TLS before we send our first request.
         let bootstrap = self.makePlainBootstrap(eventLoop: eventLoop)
         return bootstrap.connect(host: proxy.host, port: proxy.port).flatMap { channel in
-            let connectionEstablishedPromise = channel.eventLoop.makePromise(of: Void.self)
-
-            let socksConnectHandler = SOCKSClientHandler(
-                targetAddress: .domain(self.key.host, port: self.key.port),
-                connectionEstablishedPromise: connectionEstablishedPromise
-            )
+            let socksConnectHandler = SOCKSClientHandler(targetAddress: .domain(self.key.host, port: self.key.port))
+            let socksEventHandler = SOCKSEventsHandler(deadline: .now() + .seconds(10))
 
             do {
                 try channel.pipeline.syncOperations.addHandler(socksConnectHandler)
+                try channel.pipeline.syncOperations.addHandler(socksEventHandler)
             } catch {
                 return channel.eventLoop.makeFailedFuture(error)
             }
 
-            return connectionEstablishedPromise.futureResult.flatMap {
+            return socksEventHandler.socksEstablishedFuture.flatMap {
+                channel.pipeline.removeHandler(socksEventHandler).flatMap {
+                    channel.pipeline.removeHandler(socksConnectHandler)
+                }
+            }.flatMap {
                 self.setupTLSInProxyConnectionIfNeeded(channel, logger: logger)
             }
         }
@@ -168,7 +169,7 @@ extension HTTPConnectionPool.ConnectionFactory {
             var tlsConfig = self.tlsConfiguration
             // since we can support h2, we need to advertise this in alpn
             tlsConfig.applicationProtocols = ["http/1.1" /* , "h2" */ ]
-            let tlsEventHandler = TLSEventsHandler()
+            let tlsEventHandler = TLSEventsHandler(deadline: .now() + .seconds(10))
 
             let sslContextFuture = self.sslContextCache.sslContext(
                 tlsConfiguration: tlsConfig,
@@ -275,7 +276,10 @@ extension HTTPConnectionPool.ConnectionFactory {
                         .channelInitializer { channel in
                             do {
                                 try channel.pipeline.syncOperations.addHandler(HTTPClient.NWErrorHandler())
-                                try channel.pipeline.syncOperations.addHandler(TLSEventsHandler())
+                                // we don't need to set a TLS deadline for NIOTS connections, since the
+                                // TLS handshake is part of the TS connection bootstrap. If the TLS
+                                // handshake times out the complete connection creation will be failed.
+                                try channel.pipeline.syncOperations.addHandler(TLSEventsHandler(deadline: nil))
                                 return channel.eventLoop.makeSucceededFuture(())
                             } catch {
                                 return channel.eventLoop.makeFailedFuture(error)
@@ -305,7 +309,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                             context: sslContext,
                             serverHostname: hostname
                         )
-                        let tlsEventHandler = TLSEventsHandler()
+                        let tlsEventHandler = TLSEventsHandler(deadline: .now() + .seconds(10))
 
                         try sync.addHandler(sslHandler)
                         try sync.addHandler(tlsEventHandler)
@@ -336,7 +340,7 @@ extension NIOClientTCPBootstrapProtocol {
         guard let connectTimeamount = config?.connect else {
             return self
         }
-        
+
         return self.connectTimeout(connectTimeamount)
     }
 }

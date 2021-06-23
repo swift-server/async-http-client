@@ -36,6 +36,7 @@ import XCTest
         testCase(HTTPClientTests.allTests),
         testCase(LRUCacheTests.allTests),
         testCase(RequestValidationTests.allTests),
+        testCase(SOCKSEventsHandlerTests.allTests),
         testCase(SSLContextCacheTests.allTests),
         testCase(TLSEventsHandlerTests.allTests),
     ])

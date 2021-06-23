@@ -20,17 +20,19 @@ import XCTest
 
 class TLSEventsHandlerTests: XCTestCase {
     func testHandlerHappyPath() {
-        let tlsEventsHandler = TLSEventsHandler()
+        let tlsEventsHandler = TLSEventsHandler(deadline: nil)
         XCTAssertNil(tlsEventsHandler.tlsEstablishedFuture)
         let embedded = EmbeddedChannel(handlers: [tlsEventsHandler])
         XCTAssertNotNil(tlsEventsHandler.tlsEstablishedFuture)
+
+        XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
 
         embedded.pipeline.fireUserInboundEventTriggered(TLSUserEvent.handshakeCompleted(negotiatedProtocol: "abcd1234"))
         XCTAssertEqual(try tlsEventsHandler.tlsEstablishedFuture.wait(), "abcd1234")
     }
 
     func testHandlerFailsFutureWhenRemovedWithoutEvent() {
-        let tlsEventsHandler = TLSEventsHandler()
+        let tlsEventsHandler = TLSEventsHandler(deadline: nil)
         XCTAssertNil(tlsEventsHandler.tlsEstablishedFuture)
         let embedded = EmbeddedChannel(handlers: [tlsEventsHandler])
         XCTAssertNotNil(tlsEventsHandler.tlsEstablishedFuture)
@@ -40,7 +42,7 @@ class TLSEventsHandlerTests: XCTestCase {
     }
 
     func testHandlerFailsFutureWhenHandshakeFails() {
-        let tlsEventsHandler = TLSEventsHandler()
+        let tlsEventsHandler = TLSEventsHandler(deadline: nil)
         XCTAssertNil(tlsEventsHandler.tlsEstablishedFuture)
         let embedded = EmbeddedChannel(handlers: [tlsEventsHandler])
         XCTAssertNotNil(tlsEventsHandler.tlsEstablishedFuture)
@@ -52,10 +54,12 @@ class TLSEventsHandlerTests: XCTestCase {
     }
 
     func testHandlerIgnoresShutdownCompletedEvent() {
-        let tlsEventsHandler = TLSEventsHandler()
+        let tlsEventsHandler = TLSEventsHandler(deadline: nil)
         XCTAssertNil(tlsEventsHandler.tlsEstablishedFuture)
         let embedded = EmbeddedChannel(handlers: [tlsEventsHandler])
         XCTAssertNotNil(tlsEventsHandler.tlsEstablishedFuture)
+
+        XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
 
         // ignore event
         embedded.pipeline.fireUserInboundEventTriggered(TLSUserEvent.shutdownCompleted)
