@@ -54,7 +54,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         logger: Logger
     ) -> EventLoopFuture<(Channel, HTTPVersion)> {
         let channelFuture: EventLoopFuture<(Channel, HTTPVersion)>
-        
+
         if self.key.scheme.isProxyable, let proxy = self.clientConfiguration.proxy {
             switch proxy.type {
             case .socks:
@@ -63,19 +63,21 @@ extension HTTPConnectionPool.ConnectionFactory {
                     connectionID: connectionID,
                     deadline: deadline,
                     eventLoop: eventLoop,
-                    logger: logger)
+                    logger: logger
+                )
             case .http:
                 channelFuture = self.makeHTTPProxyChannel(
                     proxy,
                     connectionID: connectionID,
                     deadline: deadline,
                     eventLoop: eventLoop,
-                    logger: logger)
+                    logger: logger
+                )
             }
         } else {
             channelFuture = self.makeNonProxiedChannel(deadline: deadline, eventLoop: eventLoop, logger: logger)
         }
-        
+
         // let's map `ChannelError.connectTimeout` into a `HTTPClientError.connectTimeout`
         return channelFuture.flatMapErrorThrowing { error throws -> (Channel, HTTPVersion) in
             switch error {

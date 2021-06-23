@@ -19,7 +19,6 @@ import NIOSOCKS
 import XCTest
 
 class HTTPConnectionPool_FactoryTests: XCTestCase {
-    
     func testConnectionCreationTimesoutIfDeadlineIsInThePast() {
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { XCTAssertNoThrow(try group.syncShutdownGracefully()) }
@@ -48,13 +47,13 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
             connectionID: 1,
             deadline: .now() - .seconds(1),
             eventLoop: group.next(),
-            logger: .init(label: "test")).wait()
+            logger: .init(label: "test")
+        ).wait()
         ) {
             XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
         }
     }
 
-    
     func testSOCKSConnectionCreationTimesoutIfRemoteIsUnresponsive() {
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { XCTAssertNoThrow(try group.syncShutdownGracefully()) }
@@ -83,7 +82,8 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
             connectionID: 1,
             deadline: .now() + .seconds(1),
             eventLoop: group.next(),
-            logger: .init(label: "test")).wait()
+            logger: .init(label: "test")
+        ).wait()
         ) {
             XCTAssertEqual($0 as? HTTPClientError, .socksHandshakeTimeout)
         }
@@ -117,7 +117,8 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
             connectionID: 1,
             deadline: .now() + .seconds(1),
             eventLoop: group.next(),
-            logger: .init(label: "test")).wait()
+            logger: .init(label: "test")
+        ).wait()
         ) {
             XCTAssertEqual($0 as? HTTPClientError, .httpProxyHandshakeTimeout)
         }
@@ -151,7 +152,8 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
             connectionID: 1,
             deadline: .now() + .seconds(1),
             eventLoop: group.next(),
-            logger: .init(label: "test")).wait()
+            logger: .init(label: "test")
+        ).wait()
         ) {
             XCTAssertEqual($0 as? HTTPClientError, .tlsHandshakeTimeout)
         }
