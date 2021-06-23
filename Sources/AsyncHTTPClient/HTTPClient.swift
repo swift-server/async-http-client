@@ -912,6 +912,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case bodyLengthMismatch
         case writeAfterRequestSent
         case incompatibleHeaders
+        case connectTimeout
         case socksHandshakeTimeout
         case httpProxyHandshakeTimeout
         case tlsHandshakeTimeout
@@ -972,6 +973,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let writeAfterRequestSent = HTTPClientError(code: .writeAfterRequestSent)
     /// Incompatible headers specified, for example `Transfer-Encoding` and `Content-Length`.
     public static let incompatibleHeaders = HTTPClientError(code: .incompatibleHeaders)
+    /// Creating a new tcp connection timed out
+    public static let connectTimeout = HTTPClientError(code: .connectTimeout)
     /// The socks handshake timed out.
     public static let socksHandshakeTimeout = HTTPClientError(code: .socksHandshakeTimeout)
     /// The http proxy connection creation timed out.

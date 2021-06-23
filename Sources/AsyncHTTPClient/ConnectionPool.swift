@@ -455,7 +455,13 @@ class HTTP1ConnectionProvider {
                              logger: Logger) -> EventLoopFuture<Channel> {
         let connectionID = HTTPConnectionPool.Connection.ID.globalGenerator.next()
         let eventLoop = preference.bestEventLoop ?? self.eventLoop
-        return self.factory.makeChannel(connectionID: connectionID, eventLoop: eventLoop, logger: logger).flatMapThrowing {
+        let deadline = NIODeadline.now() + (self.configuration.timeout.connect ?? .seconds(10))
+        return self.factory.makeChannel(
+            connectionID: connectionID,
+            deadline: deadline,
+            eventLoop: eventLoop,
+            logger: logger
+        ).flatMapThrowing {
             (channel, _) -> Channel in
 
             // add the http1.1 channel handlers

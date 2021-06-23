@@ -19,6 +19,42 @@ import NIOSOCKS
 import XCTest
 
 class HTTPConnectionPool_FactoryTests: XCTestCase {
+    
+    func testConnectionCreationTimesoutIfDeadlineIsInThePast() {
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { XCTAssertNoThrow(try group.syncShutdownGracefully()) }
+
+        var server: Channel?
+        XCTAssertNoThrow(server = try ServerBootstrap(group: group)
+            .childChannelInitializer { channel in
+                channel.pipeline.addHandler(NeverrespondServerHandler())
+            }
+            .bind(to: .init(ipAddress: "127.0.0.1", port: 0))
+            .wait())
+        defer {
+            XCTAssertNoThrow(try server?.close().wait())
+        }
+
+        let request = try! HTTPClient.Request(url: "https://apple.com")
+
+        let factory = HTTPConnectionPool.ConnectionFactory(
+            key: .init(request),
+            tlsConfiguration: nil,
+            clientConfiguration: .init(proxy: .socksServer(host: "127.0.0.1", port: server!.localAddress!.port!)),
+            sslContextCache: .init()
+        )
+
+        XCTAssertThrowsError(try factory.makeChannel(
+            connectionID: 1,
+            deadline: .now() - .seconds(1),
+            eventLoop: group.next(),
+            logger: .init(label: "test")).wait()
+        ) {
+            XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
+        }
+    }
+
+    
     func testSOCKSConnectionCreationTimesoutIfRemoteIsUnresponsive() {
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { XCTAssertNoThrow(try group.syncShutdownGracefully()) }
@@ -40,11 +76,15 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
             key: .init(request),
             tlsConfiguration: nil,
             clientConfiguration: .init(proxy: .socksServer(host: "127.0.0.1", port: server!.localAddress!.port!)),
-            sslContextCache: .init(),
-            timeouts: .init(socksProxyHandshake: .milliseconds(30))
+            sslContextCache: .init()
         )
 
-        XCTAssertThrowsError(try factory.makeChannel(connectionID: 1, eventLoop: group.next(), logger: .init(label: "test")).wait()) {
+        XCTAssertThrowsError(try factory.makeChannel(
+            connectionID: 1,
+            deadline: .now() + .seconds(1),
+            eventLoop: group.next(),
+            logger: .init(label: "test")).wait()
+        ) {
             XCTAssertEqual($0 as? HTTPClientError, .socksHandshakeTimeout)
         }
     }
@@ -70,11 +110,15 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
             key: .init(request),
             tlsConfiguration: nil,
             clientConfiguration: .init(proxy: .server(host: "127.0.0.1", port: server!.localAddress!.port!)),
-            sslContextCache: .init(),
-            timeouts: .init(httpProxyHandshake: .milliseconds(30))
+            sslContextCache: .init()
         )
 
-        XCTAssertThrowsError(try factory.makeChannel(connectionID: 1, eventLoop: group.next(), logger: .init(label: "test")).wait()) {
+        XCTAssertThrowsError(try factory.makeChannel(
+            connectionID: 1,
+            deadline: .now() + .seconds(1),
+            eventLoop: group.next(),
+            logger: .init(label: "test")).wait()
+        ) {
             XCTAssertEqual($0 as? HTTPClientError, .httpProxyHandshakeTimeout)
         }
     }
@@ -100,11 +144,15 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
             key: .init(request),
             tlsConfiguration: nil,
             clientConfiguration: .init(tlsConfiguration: .forClient(certificateVerification: .none)),
-            sslContextCache: .init(),
-            timeouts: .init(tlsHandshake: .milliseconds(30))
+            sslContextCache: .init()
         )
 
-        XCTAssertThrowsError(try factory.makeChannel(connectionID: 1, eventLoop: group.next(), logger: .init(label: "test")).wait()) {
+        XCTAssertThrowsError(try factory.makeChannel(
+            connectionID: 1,
+            deadline: .now() + .seconds(1),
+            eventLoop: group.next(),
+            logger: .init(label: "test")).wait()
+        ) {
             XCTAssertEqual($0 as? HTTPClientError, .tlsHandshakeTimeout)
         }
     }

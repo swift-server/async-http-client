@@ -587,8 +587,8 @@ class HTTPClientTests: XCTestCase {
         }
 
         // This must throw as 198.51.100.254 is reserved for documentation only
-        XCTAssertThrowsError(try httpClient.get(url: "http://198.51.100.254:65535/get").wait()) { error in
-            XCTAssertEqual(.connectTimeout(.milliseconds(100)), error as? ChannelError)
+        XCTAssertThrowsError(try httpClient.get(url: "http://198.51.100.254:65535/get").wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
         }
     }
 
@@ -1841,15 +1841,9 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertThrowsError(try localClient.get(url: "http://localhost:\(port)").wait()) { error in
             if isTestingNIOTS() {
-                guard case ChannelError.connectTimeout = error else {
-                    XCTFail("Unexpected error: \(error)")
-                    return
-                }
+                XCTAssertEqual(error as? HTTPClientError, .connectTimeout)
             } else {
-                guard error is NIOConnectionError else {
-                    XCTFail("Unexpected error: \(error)")
-                    return
-                }
+                XCTAssert(error is NIOConnectionError, "Unexpected error: \(error)")
             }
         }
     }
@@ -2505,9 +2499,9 @@ class HTTPClientTests: XCTestCase {
         let request = try HTTPClient.Request(url: "http://198.51.100.254:65535/get")
         let delegate = TestDelegate()
 
-        XCTAssertThrowsError(try httpClient.execute(request: request, delegate: delegate).wait()) { error in
-            XCTAssertEqual(.connectTimeout(.milliseconds(10)), error as? ChannelError)
-            XCTAssertEqual(.connectTimeout(.milliseconds(10)), delegate.error as? ChannelError)
+        XCTAssertThrowsError(try httpClient.execute(request: request, delegate: delegate).wait()) {
+            XCTAssertEqual(.connectTimeout, $0 as? HTTPClientError)
+            XCTAssertEqual(.connectTimeout, delegate.error as? HTTPClientError)
         }
     }
 
@@ -2733,7 +2727,7 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertThrowsError(try task.wait()) { error in
             if isTestingNIOTS() {
-                XCTAssertEqual(error as? ChannelError, .connectTimeout(.milliseconds(100)))
+                XCTAssertEqual(error as? HTTPClientError, .connectTimeout)
             } else {
                 switch error as? NIOSSLError {
                 case .some(.handshakeFailed(.sslError(_))): break
@@ -2780,7 +2774,7 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertThrowsError(try task.wait()) { error in
             if isTestingNIOTS() {
-                XCTAssertEqual(error as? ChannelError, .connectTimeout(.milliseconds(200)))
+                XCTAssertEqual(error as? HTTPClientError, .connectTimeout)
             } else {
                 switch error as? NIOSSLError {
                 case .some(.handshakeFailed(.sslError(_))): break
