@@ -35,10 +35,10 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
 
     private var state: State = .initialized
 
-    let targetHost: String
-    let targetPort: Int
-    let proxyAuthorization: HTTPClient.Authorization?
-    let deadline: NIODeadline
+    private let targetHost: String
+    private let targetPort: Int
+    private let proxyAuthorization: HTTPClient.Authorization?
+    private let deadline: NIODeadline
 
     private var proxyEstablishedPromise: EventLoopPromise<Void>?
     var proxyEstablishedFuture: EventLoopFuture<Void>? {
@@ -58,9 +58,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
     func handlerAdded(context: ChannelHandlerContext) {
         self.proxyEstablishedPromise = context.eventLoop.makePromise(of: Void.self)
 
-        if context.channel.isActive {
-            self.sendConnect(context: context)
-        }
+        self.sendConnect(context: context)
     }
 
     func handlerRemoved(context: ChannelHandlerContext) {
@@ -88,9 +86,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
             self.state = .failed(error)
             self.proxyEstablishedPromise?.fail(error)
             context.fireErrorCaught(error)
-        case .failed:
-            break
-        case .completed:
+        case .failed, .completed:
             break
         }
     }
@@ -174,8 +170,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
             case .initialized:
                 preconditionFailure("How can we have a scheduled timeout, if the connection is not even up?")
 
-            case .connectSent(let scheduled), .headReceived(let scheduled):
-                scheduled.cancel()
+            case .connectSent, .headReceived:
                 let error = HTTPClientError.httpProxyHandshakeTimeout
                 self.state = .failed(error)
                 self.proxyEstablishedPromise?.fail(error)
