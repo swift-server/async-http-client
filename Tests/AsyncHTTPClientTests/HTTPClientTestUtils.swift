@@ -342,15 +342,14 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
             socketAddress = try! SocketAddress(unixDomainSocketPath: path)
         }
 
-        let activeConnCounterHandler = CountActiveConnectionsHandler()
-        self.activeConnCounterHandler = activeConnCounterHandler
+        self.activeConnCounterHandler = CountActiveConnectionsHandler()
 
         let connectionIDAtomic = NIOAtomic<Int>.makeAtomic(value: 0)
 
         self.serverChannel = try! ServerBootstrap(group: self.group)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .serverChannelInitializer { channel in
-                channel.pipeline.addHandler(activeConnCounterHandler)
+                channel.pipeline.addHandler(self.activeConnCounterHandler)
             }.childChannelInitializer { channel in
                 do {
                     let connectionID = connectionIDAtomic.add(1)
@@ -364,7 +363,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
                         try self.syncAddHTTPProxyHandlers(
                             to: channel,
                             connectionID: connectionID,
-                            expectedAuthroization: expectedAuthorization
+                            expectedAuthorization: expectedAuthorization
                         )
                         return channel.eventLoop.makeSucceededVoidFuture()
                     }
@@ -392,14 +391,14 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
     private func syncAddHTTPProxyHandlers(
         to channel: Channel,
         connectionID: Int,
-        expectedAuthroization: String?
+        expectedAuthorization: String?
     ) throws {
         let sync = channel.pipeline.syncOperations
         let promise = channel.eventLoop.makePromise(of: Void.self)
 
         let responseEncoder = HTTPResponseEncoder()
         let requestDecoder = ByteToMessageHandler(HTTPRequestDecoder(leftOverBytesStrategy: .forwardBytes))
-        let proxySimulator = HTTPProxySimulator(promise: promise, expectedAuhorization: expectedAuthroization)
+        let proxySimulator = HTTPProxySimulator(promise: promise, expectedAuhorization: expectedAuthorization)
 
         try sync.addHandler(responseEncoder)
         try sync.addHandler(requestDecoder)
