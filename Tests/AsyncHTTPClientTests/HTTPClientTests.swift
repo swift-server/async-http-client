@@ -32,7 +32,7 @@ class HTTPClientTests: XCTestCase {
 
     var clientGroup: EventLoopGroup!
     var serverGroup: EventLoopGroup!
-    var defaultHTTPBin: HTTPBin!
+    var defaultHTTPBin: HTTPBin<HTTPBinHandler>!
     var defaultClient: HTTPClient!
     var backgroundLogStore: CollectEverythingLogHandler.LogStore!
 
@@ -249,7 +249,7 @@ class HTTPClientTests: XCTestCase {
 
     func testConvenienceExecuteMethodsOverSecureSocket() throws {
         XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
-            let localSocketPathHTTPBin = HTTPBin(ssl: true, bindTarget: .unixDomainSocket(path))
+            let localSocketPathHTTPBin = HTTPBin(.http1_1(ssl: true, compress: false), bindTarget: .unixDomainSocket(path))
             let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                          configuration: HTTPClient.Configuration(certificateVerification: .none))
             defer {
@@ -288,7 +288,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testGetHttps() throws {
-        let localHTTPBin = HTTPBin(ssl: true)
+        let localHTTPBin = HTTPBin(.http1_1(ssl: true))
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: HTTPClient.Configuration(certificateVerification: .none))
         defer {
@@ -301,7 +301,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testGetHttpsWithIP() throws {
-        let localHTTPBin = HTTPBin(ssl: true)
+        let localHTTPBin = HTTPBin(.http1_1(ssl: true))
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: HTTPClient.Configuration(certificateVerification: .none))
         defer {
@@ -320,7 +320,7 @@ class HTTPClientTests: XCTestCase {
         defer {
             XCTAssertNoThrow(try group.syncShutdownGracefully())
         }
-        let localHTTPBin = HTTPBin(ssl: true)
+        let localHTTPBin = HTTPBin(.http1_1(ssl: true))
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(group),
                                      configuration: HTTPClient.Configuration(certificateVerification: .none))
         defer {
@@ -333,7 +333,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testPostHttps() throws {
-        let localHTTPBin = HTTPBin(ssl: true)
+        let localHTTPBin = HTTPBin(.http1_1(ssl: true))
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: HTTPClient.Configuration(certificateVerification: .none))
         defer {
@@ -352,7 +352,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testHttpRedirect() throws {
-        let httpsBin = HTTPBin(ssl: true)
+        let httpsBin = HTTPBin(.http1_1(ssl: true))
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: HTTPClient.Configuration(certificateVerification: .none, redirectConfiguration: .follow(max: 10, allowCycles: true)))
 
@@ -370,7 +370,7 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { httpSocketPath in
             XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { httpsSocketPath in
                 let socketHTTPBin = HTTPBin(bindTarget: .unixDomainSocket(httpSocketPath))
-                let socketHTTPSBin = HTTPBin(ssl: true, bindTarget: .unixDomainSocket(httpsSocketPath))
+                let socketHTTPSBin = HTTPBin(.http1_1(ssl: true), bindTarget: .unixDomainSocket(httpsSocketPath))
                 defer {
                     XCTAssertNoThrow(try socketHTTPBin.shutdown())
                     XCTAssertNoThrow(try socketHTTPSBin.shutdown())
@@ -647,7 +647,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testProxyPlaintext() throws {
-        let localHTTPBin = HTTPBin(simulateProxy: .plaintext)
+        let localHTTPBin = HTTPBin(proxy: .simulate(authorization: nil))
         let localClient = HTTPClient(
             eventLoopGroupProvider: .shared(self.clientGroup),
             configuration: .init(proxy: .server(host: "localhost", port: localHTTPBin.port))
@@ -661,7 +661,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testProxyTLS() throws {
-        let localHTTPBin = HTTPBin(simulateProxy: .tls)
+        let localHTTPBin = HTTPBin(.http1_1(ssl: true), proxy: .simulate(authorization: nil))
         let localClient = HTTPClient(
             eventLoopGroupProvider: .shared(self.clientGroup),
             configuration: .init(
@@ -678,7 +678,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testProxyPlaintextWithCorrectlyAuthorization() throws {
-        let localHTTPBin = HTTPBin(simulateProxy: .plaintext)
+        let localHTTPBin = HTTPBin(proxy: .simulate(authorization: "Basic YWxhZGRpbjpvcGVuc2VzYW1l"))
         let localClient = HTTPClient(
             eventLoopGroupProvider: .shared(self.clientGroup),
             configuration: .init(proxy: .server(host: "localhost", port: localHTTPBin.port, authorization: .basic(username: "aladdin", password: "opensesame")))
@@ -692,7 +692,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testProxyPlaintextWithIncorrectlyAuthorization() throws {
-        let localHTTPBin = HTTPBin(simulateProxy: .plaintext)
+        let localHTTPBin = HTTPBin(proxy: .simulate(authorization: "Basic YWxhZGRpbjpvcGVuc2VzYW1l"))
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: .init(proxy: .server(host: "localhost",
                                                                          port: localHTTPBin.port,
@@ -924,7 +924,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testDecompression() throws {
-        let localHTTPBin = HTTPBin(compress: true)
+        let localHTTPBin = HTTPBin(.http1_1(compress: true))
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: .init(decompression: .enabled(limit: .none)))
 
@@ -961,7 +961,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testDecompressionLimit() throws {
-        let localHTTPBin = HTTPBin(compress: true)
+        let localHTTPBin = HTTPBin(.http1_1(compress: true))
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: .init(decompression: .enabled(limit: .ratio(1))))
 
         defer {
@@ -982,7 +982,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testLoopDetectionRedirectLimit() throws {
-        let localHTTPBin = HTTPBin(ssl: true)
+        let localHTTPBin = HTTPBin(.http1_1(ssl: true))
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: HTTPClient.Configuration(certificateVerification: .none, redirectConfiguration: .follow(max: 5, allowCycles: false)))
 
@@ -997,7 +997,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testCountRedirectLimit() throws {
-        let localHTTPBin = HTTPBin(ssl: true)
+        let localHTTPBin = HTTPBin(.http1_1(ssl: true))
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: HTTPClient.Configuration(certificateVerification: .none, redirectConfiguration: .follow(max: 10, allowCycles: true)))
 
@@ -1196,7 +1196,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testStressGetHttps() throws {
-        let localHTTPBin = HTTPBin(ssl: true)
+        let localHTTPBin = HTTPBin(.http1_1(ssl: true))
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: HTTPClient.Configuration(certificateVerification: .none))
         defer {
@@ -1252,7 +1252,7 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testFailingConnectionIsReleased() {
-        let localHTTPBin = HTTPBin(refusesConnections: true)
+        let localHTTPBin = HTTPBin(.refuse)
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
@@ -1683,7 +1683,7 @@ class HTTPClientTests: XCTestCase {
     func testHTTPSPlusUNIX() {
         // Here, we're testing a URL where the UNIX domain socket is encoded as the host name
         XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
-            let localHTTPBin = HTTPBin(ssl: true, bindTarget: .unixDomainSocket(path))
+            let localHTTPBin = HTTPBin(.http1_1(ssl: true), bindTarget: .unixDomainSocket(path))
             let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                          configuration: HTTPClient.Configuration(certificateVerification: .none))
             defer {
@@ -2318,7 +2318,7 @@ class HTTPClientTests: XCTestCase {
             })
             backgroundLogger.logLevel = .trace
 
-            let localSocketPathHTTPBin = HTTPBin(ssl: true, bindTarget: .unixDomainSocket(path))
+            let localSocketPathHTTPBin = HTTPBin(.http1_1(ssl: true), bindTarget: .unixDomainSocket(path))
             let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                          configuration: HTTPClient.Configuration(certificateVerification: .none),
                                          backgroundActivityLogger: backgroundLogger)
@@ -2417,7 +2417,7 @@ class HTTPClientTests: XCTestCase {
             })
             backgroundLogger.logLevel = .trace
 
-            let localSocketPathHTTPBin = HTTPBin(ssl: true, bindTarget: .unixDomainSocket(path))
+            let localSocketPathHTTPBin = HTTPBin(.http1_1(ssl: true), bindTarget: .unixDomainSocket(path))
             let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                          configuration: HTTPClient.Configuration(certificateVerification: .none),
                                          backgroundActivityLogger: backgroundLogger)
@@ -2862,7 +2862,7 @@ class HTTPClientTests: XCTestCase {
         tlsConfig.minimumTLSVersion = .tlsv13
         tlsConfig.maximumTLSVersion = .tlsv12
         tlsConfig.certificateVerification = .none
-        let localHTTPBin = HTTPBin(ssl: true)
+        let localHTTPBin = HTTPBin(.http1_1(ssl: true))
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: HTTPClient.Configuration(tlsConfiguration: tlsConfig))
         defer {
@@ -2943,7 +2943,7 @@ class HTTPClientTests: XCTestCase {
                                                      timeout: .init(),
                                                      ignoreUncleanSSLShutdown: false,
                                                      decompression: .disabled)
-        let localHTTPBin = HTTPBin(ssl: true)
+        let localHTTPBin = HTTPBin(.http1_1(ssl: true))
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: configuration)
         let decoder = JSONDecoder()

@@ -18,8 +18,10 @@ import Logging
 import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
+import NIOHTTP2
 import NIOHTTPCompression
 import NIOSSL
+import NIOTLS
 import NIOTransportServices
 import XCTest
 
@@ -264,20 +266,48 @@ enum TemporaryFileHelpers {
     }
 }
 
-internal final class HTTPBin {
-    let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-    let serverChannel: Channel
-    let isShutdown: NIOAtomic<Bool> = .makeAtomic(value: false)
-    var connections: NIOAtomic<Int>
-    var connectionCount: NIOAtomic<Int> = .makeAtomic(value: 0)
-    private let activeConnCounterHandler: CountActiveConnectionsHandler
-    var activeConnections: Int {
-        return self.activeConnCounterHandler.currentlyActiveConnections
-    }
+enum TestTLS {
+    static let certificate = try! NIOSSLCertificate(bytes: Array(cert.utf8), format: .pem)
+    static let privateKey = try! NIOSSLPrivateKey(bytes: Array(key.utf8), format: .pem)
+}
 
+internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
+    RequestHandler.InboundIn == HTTPServerRequestPart,
+    RequestHandler.OutboundOut == HTTPServerResponsePart {
     enum BindTarget {
         case unixDomainSocket(String)
         case localhostIPv4RandomPort
+    }
+
+    enum Mode {
+        // refuses all connections
+        case refuse
+        // supports http1.1 connections only, which can be either plain text or encrypted
+        case http1_1(ssl: Bool = false, compress: Bool = false)
+        // supports http1.1 and http2 connections which must be always encrypted
+        case http2(compress: Bool)
+
+        // supports request decompression and http response compression
+        var compress: Bool {
+            switch self {
+            case .refuse:
+                return false
+            case .http1_1(ssl: _, compress: let compress), .http2(compress: let compress):
+                return compress
+            }
+        }
+    }
+
+    enum Proxy {
+        case none
+        case simulate(authorization: String?)
+    }
+
+    let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+
+    private let activeConnCounterHandler: CountActiveConnectionsHandler
+    var activeConnections: Int {
+        return self.activeConnCounterHandler.currentlyActiveConnections
     }
 
     var port: Int {
@@ -288,21 +318,22 @@ internal final class HTTPBin {
         return self.serverChannel.localAddress!
     }
 
-    static func configureTLS(channel: Channel) -> EventLoopFuture<Void> {
-        let configuration = TLSConfiguration.makeServerConfiguration(certificateChain: [.certificate(try! NIOSSLCertificate(bytes: Array(cert.utf8), format: .pem))],
-                                                                     privateKey: .privateKey(try! NIOSSLPrivateKey(bytes: Array(key.utf8), format: .pem)))
-        let context = try! NIOSSLContext(configuration: configuration)
-        return channel.pipeline.addHandler(NIOSSLServerHandler(context: context), position: .first)
-    }
+    private let mode: Mode
+    private let sslContext: NIOSSLContext?
+    private var serverChannel: Channel!
+    private let isShutdown: NIOAtomic<Bool> = .makeAtomic(value: false)
+    private let handlerFactory: (Int) -> (RequestHandler)
 
-    init(ssl: Bool = false,
-         compress: Bool = false,
-         bindTarget: BindTarget = .localhostIPv4RandomPort,
-         simulateProxy: HTTPProxySimulator.Option? = nil,
-         channelPromise: EventLoopPromise<Channel>? = nil,
-         connectionDelay: TimeAmount = .seconds(0),
-         maxChannelAge: TimeAmount? = nil,
-         refusesConnections: Bool = false) {
+    init(
+        _ mode: Mode = .http1_1(ssl: false, compress: false),
+        proxy: Proxy = .none,
+        bindTarget: BindTarget = .localhostIPv4RandomPort,
+        handlerFactory: @escaping (Int) -> (RequestHandler)
+    ) {
+        self.mode = mode
+        self.sslContext = HTTPBin.sslContext(for: mode)
+        self.handlerFactory = handlerFactory
+
         let socketAddress: SocketAddress
         switch bindTarget {
         case .localhostIPv4RandomPort:
@@ -314,45 +345,195 @@ internal final class HTTPBin {
         let activeConnCounterHandler = CountActiveConnectionsHandler()
         self.activeConnCounterHandler = activeConnCounterHandler
 
-        let connections = NIOAtomic.makeAtomic(value: 0)
-        self.connections = connections
+        let connectionIDAtomic = NIOAtomic<Int>.makeAtomic(value: 0)
 
         self.serverChannel = try! ServerBootstrap(group: self.group)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .serverChannelInitializer { channel in
                 channel.pipeline.addHandler(activeConnCounterHandler)
             }.childChannelInitializer { channel in
-                guard !refusesConnections else {
-                    return channel.eventLoop.makeFailedFuture(HTTPBinError.refusedConnection)
-                }
-                return channel.eventLoop.scheduleTask(in: connectionDelay) {}.futureResult.flatMap {
-                    channel.pipeline.configureHTTPServerPipeline(withPipeliningAssistance: true, withErrorHandling: true).flatMap {
-                        if compress {
-                            return channel.pipeline.addHandler(HTTPResponseCompressor())
-                        } else {
-                            return channel.eventLoop.makeSucceededFuture(())
-                        }
-                    }
-                    .flatMap {
-                        if let simulateProxy = simulateProxy {
-                            let responseEncoder = HTTPResponseEncoder()
-                            let requestDecoder = ByteToMessageHandler(HTTPRequestDecoder(leftOverBytesStrategy: .forwardBytes))
+                do {
+                    let connectionID = connectionIDAtomic.add(1)
 
-                            return channel.pipeline.addHandlers([responseEncoder, requestDecoder, HTTPProxySimulator(option: simulateProxy, encoder: responseEncoder, decoder: requestDecoder)], position: .first)
-                        } else {
-                            return channel.eventLoop.makeSucceededFuture(())
-                        }
-                    }.flatMap {
-                        if ssl {
-                            return HTTPBin.configureTLS(channel: channel).flatMap {
-                                channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise, maxChannelAge: maxChannelAge, connectionId: connections.add(1)))
-                            }
-                        } else {
-                            return channel.pipeline.addHandler(HttpBinHandler(channelPromise: channelPromise, maxChannelAge: maxChannelAge, connectionId: connections.add(1)))
-                        }
+                    if case .refuse = mode {
+                        throw HTTPBinError.refusedConnection
                     }
+
+                    // if we need to simulate a proxy, we need to add those handlers first
+                    if case .simulate(authorization: let expectedAuthorization) = proxy {
+                        try self.syncAddHTTPProxyHandlers(
+                            to: channel,
+                            connectionID: connectionID,
+                            expectedAuthroization: expectedAuthorization
+                        )
+                        return channel.eventLoop.makeSucceededVoidFuture()
+                    }
+
+                    // if a connection has been established, we need to negotiate TLS before
+                    // anything else. Depending on the negotiation, the HTTPHandlers will be added.
+                    if let sslContext = self.sslContext {
+                        try self.addTLSHandlerAndUpgrader(
+                            to: channel,
+                            sslContext: sslContext,
+                            connectionID: connectionID
+                        )
+                        return channel.eventLoop.makeSucceededVoidFuture()
+                    }
+
+                    // if neither HTTP Proxy nor TLS are wanted, we can add HTTP1 handlers directly
+                    try self.syncAddHTTP1Handlers(to: channel, connectionID: connectionID)
+                    return channel.eventLoop.makeSucceededVoidFuture()
+                } catch {
+                    return channel.eventLoop.makeFailedFuture(error)
                 }
             }.bind(to: socketAddress).wait()
+    }
+
+    private func syncAddHTTPProxyHandlers(
+        to channel: Channel,
+        connectionID: Int,
+        expectedAuthroization: String?
+    ) throws {
+        let sync = channel.pipeline.syncOperations
+        let promise = channel.eventLoop.makePromise(of: Void.self)
+
+        let responseEncoder = HTTPResponseEncoder()
+        let requestDecoder = ByteToMessageHandler(HTTPRequestDecoder(leftOverBytesStrategy: .forwardBytes))
+        let proxySimulator = HTTPProxySimulator(promise: promise, expectedAuhorization: expectedAuthroization)
+
+        try sync.addHandler(responseEncoder)
+        try sync.addHandler(requestDecoder)
+        try sync.addHandler(proxySimulator)
+
+        promise.futureResult.flatMap { _ in
+            channel.pipeline.removeHandler(proxySimulator)
+        }.flatMap { _ in
+            channel.pipeline.removeHandler(responseEncoder)
+        }.flatMap { _ in
+            channel.pipeline.removeHandler(requestDecoder)
+        }.whenComplete { result in
+            switch result {
+            case .failure:
+                channel.close(mode: .all, promise: nil)
+            case .success:
+                self.httpProxyEstablished(channel, connectionID: connectionID)
+            }
+        }
+    }
+
+    func syncAddHTTP1Handlers(to channel: Channel, connectionID: Int) throws {
+        let sync = channel.pipeline.syncOperations
+        try sync.configureHTTPServerPipeline(withPipeliningAssistance: true, withErrorHandling: true)
+
+        if self.mode.compress {
+            try sync.addHandler(HTTPResponseCompressor())
+        }
+
+        try sync.addHandler(self.handlerFactory(connectionID))
+    }
+
+    private func httpProxyEstablished(_ channel: Channel, connectionID: Int) {
+        do {
+            // if a connection has been established, we need to negotiate TLS before
+            // anything else. Depending on the negotiation, the HTTPHandlers will be added.
+            if let sslContext = self.sslContext {
+                try self.addTLSHandlerAndUpgrader(
+                    to: channel,
+                    sslContext: sslContext,
+                    connectionID: connectionID
+                )
+                return
+            }
+
+            // if neither HTTP Proxy nor TLS are wanted, we can add HTTP1 handlers directly
+            try self.syncAddHTTP1Handlers(to: channel, connectionID: connectionID)
+        } catch {
+            // in case of an while modifying the pipeline we should close the connection
+            channel.close(mode: .all, promise: nil)
+        }
+    }
+
+    private static func tlsConfiguration(for mode: Mode) -> TLSConfiguration? {
+        var configuration: TLSConfiguration?
+
+        switch mode {
+        case .refuse, .http1_1(ssl: false, compress: _):
+            break
+        case .http2:
+            configuration = .makeServerConfiguration(
+                certificateChain: [.certificate(TestTLS.certificate)],
+                privateKey: .privateKey(TestTLS.privateKey)
+            )
+            configuration!.applicationProtocols = NIOHTTP2SupportedALPNProtocols
+        case .http1_1(ssl: true, compress: _):
+            configuration = .makeServerConfiguration(
+                certificateChain: [.certificate(TestTLS.certificate)],
+                privateKey: .privateKey(TestTLS.privateKey)
+            )
+        }
+
+        return configuration
+    }
+
+    private static func sslContext(for mode: Mode) -> NIOSSLContext? {
+        if let tlsConfiguration = self.tlsConfiguration(for: mode) {
+            return try! NIOSSLContext(configuration: tlsConfiguration)
+        }
+        return nil
+    }
+
+    private func addTLSHandlerAndUpgrader(to channel: Channel, sslContext: NIOSSLContext, connectionID: Int) throws {
+        let sslHandler = NIOSSLServerHandler(context: sslContext)
+
+        // copy pasted from NIOHTTP2
+        let alpnHandler = ApplicationProtocolNegotiationHandler { result in
+            do {
+                switch result {
+                case .negotiated("h2"):
+                    // Successful upgrade to HTTP/2. Let the user configure the pipeline.
+                    let http2Handler = NIOHTTP2Handler(
+                        mode: .server,
+                        initialSettings: NIOHTTP2.nioDefaultSettings
+                    )
+                    let multiplexer = HTTP2StreamMultiplexer(
+                        mode: .server,
+                        channel: channel,
+                        inboundStreamInitializer: { channel in
+                            do {
+                                let sync = channel.pipeline.syncOperations
+
+                                try sync.addHandler(HTTP2FramePayloadToHTTP1ServerCodec())
+                                try sync.addHandler(self.handlerFactory(connectionID))
+
+                                return channel.eventLoop.makeSucceededVoidFuture()
+                            } catch {
+                                return channel.eventLoop.makeFailedFuture(error)
+                            }
+                        }
+                    )
+
+                    let sync = channel.pipeline.syncOperations
+
+                    try sync.addHandler(http2Handler)
+                    try sync.addHandler(multiplexer)
+                case .negotiated("http/1.1"), .fallback:
+                    // Explicit or implicit HTTP/1.1 choice.
+                    try self.syncAddHTTP1Handlers(to: channel, connectionID: connectionID)
+                case .negotiated:
+                    // We negotiated something that isn't HTTP/1.1. This is a bad scene, and is a good indication
+                    // of a user configuration error. We're going to close the connection directly.
+                    channel.close(mode: .all, promise: nil)
+                    throw NIOHTTP2Errors.invalidALPNToken()
+                }
+
+                return channel.eventLoop.makeSucceededVoidFuture()
+            } catch {
+                return channel.eventLoop.makeFailedFuture(error)
+            }
+        }
+
+        try channel.pipeline.syncOperations.addHandler(alpnHandler)
+        try channel.pipeline.syncOperations.addHandler(sslHandler, position: .before(alpnHandler))
     }
 
     func shutdown() throws {
@@ -365,8 +546,19 @@ internal final class HTTPBin {
     }
 }
 
+extension HTTPBin where RequestHandler == HTTPBinHandler {
+    convenience init(
+        _ mode: Mode = .http1_1(ssl: false, compress: false),
+        proxy: Proxy = .none,
+        bindTarget: BindTarget = .localhostIPv4RandomPort
+    ) {
+        self.init(mode, proxy: proxy, bindTarget: bindTarget) { HTTPBinHandler(connectionID: $0) }
+    }
+}
+
 enum HTTPBinError: Error {
     case refusedConnection
+    case invalidProxyRequest
 }
 
 final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
@@ -374,21 +566,16 @@ final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
     typealias InboundOut = HTTPServerResponsePart
     typealias OutboundOut = HTTPServerResponsePart
 
-    enum Option {
-        case plaintext
-        case tls
-    }
+    // the promise to succeed, once the proxy connection is setup
+    let promise: EventLoopPromise<Void>
+    let expectedAuhorization: String?
 
-    let option: Option
-    let encoder: HTTPResponseEncoder
-    let decoder: ByteToMessageHandler<HTTPRequestDecoder>
     var head: HTTPResponseHead
 
-    init(option: Option, encoder: HTTPResponseEncoder, decoder: ByteToMessageHandler<HTTPRequestDecoder>) {
-        self.option = option
-        self.encoder = encoder
-        self.decoder = decoder
-        self.head = HTTPResponseHead(version: .init(major: 1, minor: 1), status: .ok, headers: .init([("Content-Length", "0"), ("Connection", "close")]))
+    init(promise: EventLoopPromise<Void>, expectedAuhorization: String?) {
+        self.promise = promise
+        self.expectedAuhorization = expectedAuhorization
+        self.head = HTTPResponseHead(version: .init(major: 1, minor: 1), status: .ok, headers: .init([("Content-Length", "0")]))
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -396,27 +583,28 @@ final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
         switch request {
         case .head(let head):
             guard head.method == .CONNECT else {
-                fatalError("Expected a CONNECT request")
+                self.head.status = .badRequest
+                return
             }
-            if head.headers.contains(name: "proxy-authorization") {
-                if head.headers["proxy-authorization"].first != "Basic YWxhZGRpbjpvcGVuc2VzYW1l" {
+
+            if let expectedAuhorization = self.expectedAuhorization {
+                guard let authorization = head.headers["proxy-authorization"].first,
+                    expectedAuhorization == authorization else {
                     self.head.status = .proxyAuthenticationRequired
+                    return
                 }
             }
+
         case .body:
             ()
         case .end:
+            let okay = self.head.status != .ok
             context.write(self.wrapOutboundOut(.head(self.head)), promise: nil)
             context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
-
-            context.channel.pipeline.removeHandler(self, promise: nil)
-            context.channel.pipeline.removeHandler(self.decoder, promise: nil)
-            context.channel.pipeline.removeHandler(self.encoder, promise: nil)
-
-            switch self.option {
-            case .tls:
-                _ = HTTPBin.configureTLS(channel: context.channel)
-            case .plaintext: break
+            if okay {
+                self.promise.fail(HTTPBinError.invalidProxyRequest)
+            } else {
+                self.promise.succeed(())
             }
         }
     }
@@ -447,37 +635,21 @@ internal struct RequestInfo: Codable {
     var connectionNumber: Int
 }
 
-internal final class HttpBinHandler: ChannelInboundHandler {
+internal final class HTTPBinHandler: ChannelInboundHandler {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
 
-    let channelPromise: EventLoopPromise<Channel>?
     var resps = CircularBuffer<HTTPResponseBuilder>()
     var responseHeaders = HTTPHeaders()
     var delay: TimeAmount = .seconds(0)
     let creationDate = Date()
-    let maxChannelAge: TimeAmount?
     var shouldClose = false
     var isServingRequest = false
-    let connectionId: Int
+    let connectionID: Int
     var requestId: Int = 0
 
-    init(channelPromise: EventLoopPromise<Channel>? = nil, maxChannelAge: TimeAmount? = nil, connectionId: Int) {
-        self.channelPromise = channelPromise
-        self.maxChannelAge = maxChannelAge
-        self.connectionId = connectionId
-    }
-
-    func handlerAdded(context: ChannelHandlerContext) {
-        if let maxChannelAge = self.maxChannelAge {
-            context.eventLoop.scheduleTask(in: maxChannelAge) {
-                if !self.isServingRequest {
-                    context.close(promise: nil)
-                } else {
-                    self.shouldClose = true
-                }
-            }
-        }
+    init(connectionID: Int) {
+        self.connectionID = connectionID
     }
 
     func parseAndSetOptions(from head: HTTPRequestHead) {
@@ -675,7 +847,6 @@ internal final class HttpBinHandler: ChannelInboundHandler {
             response.add(body)
             self.resps.prepend(response)
         case .end:
-            self.channelPromise?.succeed(context.channel)
             if self.resps.isEmpty {
                 return
             }
@@ -685,14 +856,14 @@ internal final class HttpBinHandler: ChannelInboundHandler {
             if let body = response.body {
                 let requestInfo = RequestInfo(data: String(buffer: body),
                                               requestNumber: self.requestId,
-                                              connectionNumber: self.connectionId)
+                                              connectionNumber: self.connectionID)
                 let responseBody = try! JSONEncoder().encodeAsByteBuffer(requestInfo,
                                                                          allocator: context.channel.allocator)
                 context.write(wrapOutboundOut(.body(.byteBuffer(responseBody))), promise: nil)
             } else {
                 let requestInfo = RequestInfo(data: "",
                                               requestNumber: self.requestId,
-                                              connectionNumber: self.connectionId)
+                                              connectionNumber: self.connectionID)
                 let responseBody = try! JSONEncoder().encodeAsByteBuffer(requestInfo,
                                                                          allocator: context.channel.allocator)
                 context.write(wrapOutboundOut(.body(.byteBuffer(responseBody))), promise: nil)
