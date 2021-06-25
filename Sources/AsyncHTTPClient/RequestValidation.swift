@@ -59,7 +59,7 @@ extension HTTPHeaders {
             throw HTTPClientError.traceRequestWithBody
         }
 
-        guard (encodings.filter { $0 == "chunked" }.count <= 1) else {
+        guard (encodings.lazy.filter { $0 == "chunked" }.count <= 1) else {
             throw HTTPClientError.chunkedSpecifiedMultipleTimes
         }
 
