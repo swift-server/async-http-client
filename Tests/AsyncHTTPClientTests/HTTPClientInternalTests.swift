@@ -425,7 +425,6 @@ class HTTPClientInternalTests: XCTestCase {
         // We need to wait for channel options that limit NIO to sending only one byte at a time.
         try delegate.optionsApplied.futureResult.wait()
 
-        //
         // Send 4 bytes, but only one should be received until the backpressure promise is succeeded.
 
         // Now we wait until message is delivered to client channel pipeline
