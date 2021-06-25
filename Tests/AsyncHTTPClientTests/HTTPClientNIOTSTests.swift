@@ -52,7 +52,7 @@ class HTTPClientNIOTSTests: XCTestCase {
     func testTLSFailError() {
         guard isTestingNIOTS() else { return }
 
-        let httpBin = HTTPBin(ssl: true)
+        let httpBin = HTTPBin(.http1_1(ssl: true))
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
@@ -76,7 +76,7 @@ class HTTPClientNIOTSTests: XCTestCase {
 
     func testConnectionFailError() {
         guard isTestingNIOTS() else { return }
-        let httpBin = HTTPBin(ssl: true)
+        let httpBin = HTTPBin(.http1_1(ssl: true))
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: .init(timeout: .init(connect: .milliseconds(100),
                                                                         read: .milliseconds(100))))
@@ -96,7 +96,7 @@ class HTTPClientNIOTSTests: XCTestCase {
     func testTLSVersionError() {
         guard isTestingNIOTS() else { return }
         #if canImport(Network)
-            let httpBin = HTTPBin(ssl: true)
+            let httpBin = HTTPBin(.http1_1(ssl: true))
             var tlsConfig = TLSConfiguration.makeClientConfiguration()
             tlsConfig.certificateVerification = .none
             tlsConfig.minimumTLSVersion = .tlsv11

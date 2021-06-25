@@ -368,11 +368,49 @@ class HTTPClientInternalTests: XCTestCase {
             func didFinishRequest(task: HTTPClient.Task<Response>) throws {}
         }
 
+        final class WriteAfterFutureSucceedsHandler: ChannelInboundHandler {
+            typealias InboundIn = HTTPServerRequestPart
+            typealias OutboundOut = HTTPServerResponsePart
+
+            let bodyFuture: EventLoopFuture<Void>
+            let endFuture: EventLoopFuture<Void>
+
+            init(bodyFuture: EventLoopFuture<Void>, endFuture: EventLoopFuture<Void>) {
+                self.bodyFuture = bodyFuture
+                self.endFuture = endFuture
+            }
+
+            func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+                switch self.unwrapInboundIn(data) {
+                case .head:
+                    let head = HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok)
+                    context.writeAndFlush(wrapOutboundOut(.head(head)), promise: nil)
+                case .body:
+                    // ignore
+                    break
+                case .end:
+                    self.bodyFuture.hop(to: context.eventLoop).whenSuccess {
+                        let buffer = context.channel.allocator.buffer(string: "1234")
+                        context.writeAndFlush(self.wrapOutboundOut(.body(.byteBuffer(buffer))), promise: nil)
+                    }
+
+                    self.endFuture.hop(to: context.eventLoop).whenSuccess {
+                        context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+                    }
+                }
+            }
+        }
+
         // cannot test with NIOTS as `maxMessagesPerRead` is not supported
         let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
-        let promise = httpClient.eventLoopGroup.next().makePromise(of: Channel.self)
-        let httpBin = HTTPBin(channelPromise: promise)
+        let delegate = BackpressureTestDelegate(eventLoop: httpClient.eventLoopGroup.next())
+        let httpBin = HTTPBin { _ in
+            WriteAfterFutureSucceedsHandler(
+                bodyFuture: delegate.optionsApplied.futureResult,
+                endFuture: delegate.backpressurePromise.futureResult
+            )
+        }
 
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
@@ -381,17 +419,13 @@ class HTTPClientInternalTests: XCTestCase {
         }
 
         let request = try Request(url: "http://localhost:\(httpBin.port)/custom")
-        let delegate = BackpressureTestDelegate(eventLoop: httpClient.eventLoopGroup.next())
-        let future = httpClient.execute(request: request, delegate: delegate).futureResult
 
-        let channel = try promise.futureResult.wait()
+        let requestFuture = httpClient.execute(request: request, delegate: delegate).futureResult
 
         // We need to wait for channel options that limit NIO to sending only one byte at a time.
         try delegate.optionsApplied.futureResult.wait()
 
         // Send 4 bytes, but only one should be received until the backpressure promise is succeeded.
-        let buffer = channel.allocator.buffer(string: "1234")
-        try channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(buffer))).wait()
 
         // Now we wait until message is delivered to client channel pipeline
         try delegate.messageReceived.futureResult.wait()
@@ -399,9 +433,7 @@ class HTTPClientInternalTests: XCTestCase {
 
         // Succeed the backpressure promise.
         delegate.backpressurePromise.succeed(())
-
-        try channel.writeAndFlush(HTTPServerResponsePart.end(nil)).wait()
-        try future.wait()
+        try requestFuture.wait()
 
         // At this point all other bytes should be delivered.
         XCTAssertEqual(delegate.reads, 4)
@@ -602,7 +634,7 @@ class HTTPClientInternalTests: XCTestCase {
     }
 
     func testResponseConnectionCloseGet() throws {
-        let httpBin = HTTPBin(ssl: false)
+        let httpBin = HTTPBin(.http1_1())
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
         defer {
@@ -756,14 +788,14 @@ class HTTPClientInternalTests: XCTestCase {
         struct NoChannelError: Error {}
 
         let client = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
-        var maybeServersAndChannels: [(HTTPBin, Channel)]?
+        var maybeServersAndChannels: [(HTTPBin<HTTPBinHandler>, Channel)]?
         XCTAssertNoThrow(maybeServersAndChannels = try (0..<10).map { _ in
             let web = HTTPBin()
             defer {
                 XCTAssertNoThrow(try web.shutdown())
             }
 
-            let req = try! HTTPClient.Request(url: "http://localhost:\(web.serverChannel.localAddress!.port!)/get",
+            let req = try! HTTPClient.Request(url: "http://localhost:\(web.port)/get",
                                               method: .GET,
                                               body: nil)
             var maybeConnection: Connection?
@@ -847,7 +879,7 @@ class HTTPClientInternalTests: XCTestCase {
             XCTAssertNoThrow(try client.syncShutdown())
         }
 
-        let req = try! HTTPClient.Request(url: "http://localhost:\(web.serverChannel.localAddress!.port!)/get",
+        let req = try! HTTPClient.Request(url: "http://localhost:\(web.port)/get",
                                           method: .GET,
                                           body: nil)
 
@@ -1083,7 +1115,7 @@ class HTTPClientInternalTests: XCTestCase {
         let el1 = elg.next()
         let el2 = elg.next()
 
-        let httpBin = HTTPBin(refusesConnections: true)
+        let httpBin = HTTPBin(.refuse)
         let client = HTTPClient(eventLoopGroupProvider: .shared(elg))
 
         defer {

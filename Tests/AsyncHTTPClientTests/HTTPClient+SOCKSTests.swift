@@ -23,7 +23,7 @@ class HTTPClientSOCKSTests: XCTestCase {
 
     var clientGroup: EventLoopGroup!
     var serverGroup: EventLoopGroup!
-    var defaultHTTPBin: HTTPBin!
+    var defaultHTTPBin: HTTPBin<HTTPBinHandler>!
     var defaultClient: HTTPClient!
     var backgroundLogStore: CollectEverythingLogHandler.LogStore!
 
