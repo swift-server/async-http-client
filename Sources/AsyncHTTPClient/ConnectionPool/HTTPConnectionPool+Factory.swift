@@ -249,7 +249,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                     .channelInitializer { channel in
                         do {
                             try channel.pipeline.syncOperations.addHandler(HTTPClient.NWErrorHandler())
-                            return channel.eventLoop.makeSucceededFuture(())
+                            return channel.eventLoop.makeSucceededVoidFuture()
                         } catch {
                             return channel.eventLoop.makeFailedFuture(error)
                         }
@@ -325,7 +325,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                                 // TLS handshake is part of the TS connection bootstrap. If the TLS
                                 // handshake times out the complete connection creation will be failed.
                                 try channel.pipeline.syncOperations.addHandler(TLSEventsHandler(deadline: nil))
-                                return channel.eventLoop.makeSucceededFuture(())
+                                return channel.eventLoop.makeSucceededVoidFuture()
                             } catch {
                                 return channel.eventLoop.makeFailedFuture(error)
                             }
@@ -358,7 +358,7 @@ extension HTTPConnectionPool.ConnectionFactory {
 
                         try sync.addHandler(sslHandler)
                         try sync.addHandler(tlsEventHandler)
-                        return channel.eventLoop.makeSucceededFuture(())
+                        return channel.eventLoop.makeSucceededVoidFuture()
                     } catch {
                         return channel.eventLoop.makeFailedFuture(error)
                     }
