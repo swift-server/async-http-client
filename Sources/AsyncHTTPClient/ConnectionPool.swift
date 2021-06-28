@@ -454,7 +454,7 @@ class HTTP1ConnectionProvider {
                              logger: Logger) -> EventLoopFuture<Channel> {
         let connectionID = HTTPConnectionPool.Connection.ID.globalGenerator.next()
         let eventLoop = preference.bestEventLoop ?? self.eventLoop
-        let deadline = NIODeadline.now() + (self.configuration.timeout.connect ?? .seconds(10))
+        let deadline = .now() + self.configuration.timeout.connectionCreationTimeout
         return self.factory.makeHTTP1Channel(
             connectionID: connectionID,
             deadline: deadline,

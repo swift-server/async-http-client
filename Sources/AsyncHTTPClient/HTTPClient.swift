@@ -833,10 +833,16 @@ extension HTTPClient.Configuration {
         /// Specifies read timeout.
         public var read: TimeAmount?
 
+        /// internal connection creation timeout. Defaults the connect timeout to always contain a value.
+        var connectionCreationTimeout: TimeAmount {
+            self.connect ?? .seconds(10)
+        }
+
         /// Create timeout.
         ///
         /// - parameters:
-        ///     - connect: `connect` timeout.
+        ///     - connect: `connect` timeout. Will default to 10 seconds, if no value is
+        ///       provided. See `var connectionCreationTimeout`
         ///     - read: `read` timeout.
         public init(connect: TimeAmount? = nil, read: TimeAmount? = nil) {
             self.connect = connect
