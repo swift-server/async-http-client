@@ -17,7 +17,6 @@ import Logging
 import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
-import NIOHTTPCompression
 import NIOSSL
 import NIOTLS
 import NIOTransportServices
@@ -456,28 +455,12 @@ class HTTP1ConnectionProvider {
         let connectionID = HTTPConnectionPool.Connection.ID.globalGenerator.next()
         let eventLoop = preference.bestEventLoop ?? self.eventLoop
         let deadline = NIODeadline.now() + (self.configuration.timeout.connect ?? .seconds(10))
-        return self.factory.makeChannel(
+        return self.factory.makeHTTP1Channel(
             connectionID: connectionID,
             deadline: deadline,
             eventLoop: eventLoop,
             logger: logger
-        ).flatMapThrowing {
-            (channel, _) -> Channel in
-
-            // add the http1.1 channel handlers
-            let syncOperations = channel.pipeline.syncOperations
-            try syncOperations.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
-
-            switch self.configuration.decompression {
-            case .disabled:
-                ()
-            case .enabled(let limit):
-                let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
-                try syncOperations.addHandler(decompressHandler)
-            }
-
-            return channel
-        }
+        )
     }
 
     /// A `Waiter` represents a request that waits for a connection when none is

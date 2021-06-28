@@ -15,6 +15,7 @@
 import Logging
 import NIO
 import NIOHTTP1
+import NIOHTTPCompression
 import NIOSOCKS
 import NIOSSL
 import NIOTLS
@@ -47,6 +48,36 @@ extension HTTPConnectionPool {
 }
 
 extension HTTPConnectionPool.ConnectionFactory {
+    func makeHTTP1Channel(
+        connectionID: HTTPConnectionPool.Connection.ID,
+        deadline: NIODeadline,
+        eventLoop: EventLoop,
+        logger: Logger
+    ) -> EventLoopFuture<Channel> {
+        self.makeChannel(
+            connectionID: connectionID,
+            deadline: deadline,
+            eventLoop: eventLoop,
+            logger: logger
+        ).flatMapThrowing {
+            (channel, _) -> Channel in
+
+            // add the http1.1 channel handlers
+            let syncOperations = channel.pipeline.syncOperations
+            try syncOperations.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
+
+            switch self.clientConfiguration.decompression {
+            case .disabled:
+                ()
+            case .enabled(let limit):
+                let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
+                try syncOperations.addHandler(decompressHandler)
+            }
+
+            return channel
+        }
+    }
+
     func makeChannel(
         connectionID: HTTPConnectionPool.Connection.ID,
         deadline: NIODeadline,
