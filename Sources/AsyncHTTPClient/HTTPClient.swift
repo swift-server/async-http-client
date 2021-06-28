@@ -833,10 +833,16 @@ extension HTTPClient.Configuration {
         /// Specifies read timeout.
         public var read: TimeAmount?
 
+        /// internal connection creation timeout. Defaults the connect timeout to always contain a value.
+        var connectionCreationTimeout: TimeAmount {
+            self.connect ?? .seconds(10)
+        }
+
         /// Create timeout.
         ///
         /// - parameters:
-        ///     - connect: `connect` timeout.
+        ///     - connect: `connect` timeout. Will default to 10 seconds, if no value is
+        ///       provided. See `var connectionCreationTimeout`
         ///     - read: `read` timeout.
         public init(connect: TimeAmount? = nil, read: TimeAmount? = nil) {
             self.connect = connect
@@ -887,90 +893,6 @@ extension HTTPClient.Configuration {
     }
 }
 
-extension ChannelPipeline {
-    func syncAddHTTPProxyHandler(host: String, port: Int, authorization: HTTPClient.Authorization?) throws {
-        let encoder = HTTPRequestEncoder()
-        let decoder = ByteToMessageHandler(HTTPResponseDecoder(leftOverBytesStrategy: .forwardBytes))
-        let handler = HTTPClientProxyHandler(host: host, port: port, authorization: authorization) { channel in
-            let encoderRemovePromise = self.eventLoop.next().makePromise(of: Void.self)
-            channel.pipeline.removeHandler(encoder, promise: encoderRemovePromise)
-            return encoderRemovePromise.futureResult.flatMap {
-                channel.pipeline.removeHandler(decoder)
-            }
-        }
-
-        let sync = self.syncOperations
-        try sync.addHandler(encoder)
-        try sync.addHandler(decoder)
-        try sync.addHandler(handler)
-    }
-
-    func syncAddSOCKSProxyHandler(host: String, port: Int) throws {
-        let handler = SOCKSClientHandler(targetAddress: .domain(host, port: port))
-        let sync = self.syncOperations
-        try sync.addHandler(handler)
-    }
-
-    func syncAddLateSSLHandlerIfNeeded(for key: ConnectionPool.Key,
-                                       sslContext: NIOSSLContext,
-                                       handshakePromise: EventLoopPromise<Void>) {
-        precondition(key.scheme.requiresTLS)
-
-        do {
-            let synchronousPipelineView = self.syncOperations
-
-            // We add the TLSEventsHandler first so that it's always in the pipeline before any other TLS handler we add.
-            // If we're here, we must not have one in the channel already.
-            assert((try? synchronousPipelineView.context(name: TLSEventsHandler.handlerName)) == nil)
-            let eventsHandler = TLSEventsHandler(completionPromise: handshakePromise)
-            try synchronousPipelineView.addHandler(eventsHandler, name: TLSEventsHandler.handlerName)
-
-            // Then we add the SSL handler.
-            try synchronousPipelineView.addHandler(
-                try NIOSSLClientHandler(context: sslContext,
-                                        serverHostname: (key.host.isIPAddress || key.host.isEmpty) ? nil : key.host),
-                position: .before(eventsHandler)
-            )
-        } catch {
-            handshakePromise.fail(error)
-        }
-    }
-}
-
-class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
-    typealias InboundIn = NIOAny
-
-    static let handlerName: String = "AsyncHTTPClient.HTTPClient.TLSEventsHandler"
-
-    var completionPromise: EventLoopPromise<Void>
-
-    init(completionPromise: EventLoopPromise<Void>) {
-        self.completionPromise = completionPromise
-    }
-
-    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
-        if let tlsEvent = event as? TLSUserEvent {
-            switch tlsEvent {
-            case .handshakeCompleted:
-                self.completionPromise.succeed(())
-            case .shutdownCompleted:
-                break
-            }
-        }
-        context.fireUserInboundEventTriggered(event)
-    }
-
-    func errorCaught(context: ChannelHandlerContext, error: Error) {
-        self.completionPromise.fail(error)
-        context.fireErrorCaught(error)
-    }
-
-    func handlerRemoved(context: ChannelHandlerContext) {
-        struct NoResult: Error {}
-        self.completionPromise.fail(NoResult())
-    }
-}
-
 /// Possible client errors.
 public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     private enum Code: Equatable {
@@ -996,6 +918,11 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case bodyLengthMismatch
         case writeAfterRequestSent
         case incompatibleHeaders
+        case connectTimeout
+        case socksHandshakeTimeout
+        case httpProxyHandshakeTimeout
+        case tlsHandshakeTimeout
+        case serverOfferedUnsupportedApplicationProtocol(String)
     }
 
     private var code: Code
@@ -1052,4 +979,16 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let writeAfterRequestSent = HTTPClientError(code: .writeAfterRequestSent)
     /// Incompatible headers specified, for example `Transfer-Encoding` and `Content-Length`.
     public static let incompatibleHeaders = HTTPClientError(code: .incompatibleHeaders)
+    /// Creating a new tcp connection timed out
+    public static let connectTimeout = HTTPClientError(code: .connectTimeout)
+    /// The socks handshake timed out.
+    public static let socksHandshakeTimeout = HTTPClientError(code: .socksHandshakeTimeout)
+    /// The http proxy connection creation timed out.
+    public static let httpProxyHandshakeTimeout = HTTPClientError(code: .httpProxyHandshakeTimeout)
+    /// The tls handshake timed out.
+    public static let tlsHandshakeTimeout = HTTPClientError(code: .tlsHandshakeTimeout)
+    /// The remote server only offered an unsupported application protocol
+    public static func serverOfferedUnsupportedApplicationProtocol(_ proto: String) -> HTTPClientError {
+        return HTTPClientError(code: .serverOfferedUnsupportedApplicationProtocol(proto))
+    }
 }

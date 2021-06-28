@@ -17,7 +17,6 @@ import Logging
 import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
-import NIOHTTPCompression
 import NIOSSL
 import NIOTLS
 import NIOTransportServices
@@ -86,7 +85,9 @@ final class ConnectionPool {
                 let provider = HTTP1ConnectionProvider(key: key,
                                                        eventLoop: taskEventLoop,
                                                        configuration: key.config(overriding: self.configuration),
+                                                       tlsConfiguration: request.tlsConfiguration,
                                                        pool: self,
+                                                       sslContextCache: self.sslContextCache,
                                                        backgroundActivityLogger: self.backgroundActivityLogger)
                 let enqueued = provider.enqueue()
                 assert(enqueued)
@@ -213,6 +214,8 @@ class HTTP1ConnectionProvider {
 
     private let backgroundActivityLogger: Logger
 
+    private let factory: HTTPConnectionPool.ConnectionFactory
+
     /// Creates a new `HTTP1ConnectionProvider`
     ///
     /// - parameters:
@@ -225,7 +228,9 @@ class HTTP1ConnectionProvider {
     init(key: ConnectionPool.Key,
          eventLoop: EventLoop,
          configuration: HTTPClient.Configuration,
+         tlsConfiguration: TLSConfiguration?,
          pool: ConnectionPool,
+         sslContextCache: SSLContextCache,
          backgroundActivityLogger: Logger) {
         self.eventLoop = eventLoop
         self.configuration = configuration
@@ -234,6 +239,13 @@ class HTTP1ConnectionProvider {
         self.closePromise = eventLoop.makePromise()
         self.state = .init(eventLoop: eventLoop)
         self.backgroundActivityLogger = backgroundActivityLogger
+
+        self.factory = HTTPConnectionPool.ConnectionFactory(
+            key: self.key,
+            tlsConfiguration: tlsConfiguration,
+            clientConfiguration: self.configuration,
+            sslContextCache: sslContextCache
+        )
     }
 
     deinit {
@@ -440,12 +452,15 @@ class HTTP1ConnectionProvider {
 
     private func makeChannel(preference: HTTPClient.EventLoopPreference,
                              logger: Logger) -> EventLoopFuture<Channel> {
-        return NIOClientTCPBootstrap.makeHTTP1Channel(destination: self.key,
-                                                      eventLoop: self.eventLoop,
-                                                      configuration: self.configuration,
-                                                      sslContextCache: self.pool.sslContextCache,
-                                                      preference: preference,
-                                                      logger: logger)
+        let connectionID = HTTPConnectionPool.Connection.ID.globalGenerator.next()
+        let eventLoop = preference.bestEventLoop ?? self.eventLoop
+        let deadline = .now() + self.configuration.timeout.connectionCreationTimeout
+        return self.factory.makeHTTP1Channel(
+            connectionID: connectionID,
+            deadline: deadline,
+            eventLoop: eventLoop,
+            logger: logger
+        )
     }
 
     /// A `Waiter` represents a request that waits for a connection when none is

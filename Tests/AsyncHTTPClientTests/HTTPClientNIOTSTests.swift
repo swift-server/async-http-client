@@ -88,8 +88,8 @@ class HTTPClientNIOTSTests: XCTestCase {
         let port = httpBin.port
         XCTAssertNoThrow(try httpBin.shutdown())
 
-        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(port)/get").wait()) { error in
-            XCTAssertEqual(.connectTimeout(.milliseconds(100)), error as? ChannelError)
+        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(port)/get").wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
         }
     }
 

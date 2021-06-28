@@ -28,13 +28,17 @@ import XCTest
     XCTMain([
         testCase(ConnectionPoolTests.allTests),
         testCase(ConnectionTests.allTests),
+        testCase(HTTP1ProxyConnectHandlerTests.allTests),
         testCase(HTTPClientCookieTests.allTests),
         testCase(HTTPClientInternalTests.allTests),
         testCase(HTTPClientNIOTSTests.allTests),
         testCase(HTTPClientSOCKSTests.allTests),
         testCase(HTTPClientTests.allTests),
+        testCase(HTTPConnectionPool_FactoryTests.allTests),
         testCase(LRUCacheTests.allTests),
         testCase(RequestValidationTests.allTests),
+        testCase(SOCKSEventsHandlerTests.allTests),
         testCase(SSLContextCacheTests.allTests),
+        testCase(TLSEventsHandlerTests.allTests),
     ])
 #endif
