@@ -644,6 +644,8 @@ extension HTTPClient {
             self.lock.withLock { self._cancelled }
         }
 
+        /// The connection the request is scheduled on.
+        /// This is used for tests only.
         var connection: Connection? {
             self.lock.withLock { self._connection }
         }
@@ -687,8 +689,7 @@ extension HTTPClient {
             channel?.triggerUserOutboundEvent(TaskCancelEvent(), promise: nil)
         }
 
-        @discardableResult
-        func setConnection(_ connection: Connection) -> Connection {
+        func setConnection(_ connection: Connection) {
             let cancelled = self.lock.withLock { () -> Bool in
                 self._connection = connection
                 return self._cancelled
@@ -697,8 +698,6 @@ extension HTTPClient {
             if cancelled {
                 connection.channel.triggerUserOutboundEvent(TaskCancelEvent(), promise: nil)
             }
-
-            return connection
         }
 
         func succeed<Delegate: HTTPClientResponseDelegate>(promise: EventLoopPromise<Response>?,
@@ -713,7 +712,7 @@ extension HTTPClient {
 
         func fail<Delegate: HTTPClientResponseDelegate>(with error: Error,
                                                         delegateType: Delegate.Type) {
-            let maybeConnection = self.lock.withLock { self._connection }
+            let maybeConnection = self.connection
 
             if let connection = maybeConnection {
                 self.releaseAssociatedConnection(delegateType: delegateType, closing: true)
