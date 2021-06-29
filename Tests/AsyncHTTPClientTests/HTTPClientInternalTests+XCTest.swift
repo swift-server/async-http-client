@@ -34,7 +34,7 @@ extension HTTPClientInternalTests {
             ("testRequestFinishesAfterRedirectIfServerRespondsBeforeClientFinishes", testRequestFinishesAfterRedirectIfServerRespondsBeforeClientFinishes),
             ("testProxyStreaming", testProxyStreaming),
             ("testProxyStreamingFailure", testProxyStreamingFailure),
-            ("testUploadStreamingBackpressure", testUploadStreamingBackpressure),
+            ("testDownloadStreamingBackpressure", testDownloadStreamingBackpressure),
             ("testRequestURITrailingSlash", testRequestURITrailingSlash),
             ("testChannelAndDelegateOnDifferentEventLoops", testChannelAndDelegateOnDifferentEventLoops),
             ("testResponseConnectionCloseGet", testResponseConnectionCloseGet),

@@ -633,17 +633,25 @@ extension HTTPClient {
 
         let promise: EventLoopPromise<Response>
         var completion: EventLoopFuture<Void>
-        var connection: Connection?
-        var cancelled: Bool
-        let lock: Lock
+        private let lock = Lock()
+        // protected by lock
+        private var _connection: Connection?
+        // protected by lock
+        private var _cancelled: Bool = false
         let logger: Logger // We are okay to store the logger here because a Task is for only one request.
+
+        var isCancelled: Bool {
+            self.lock.withLock { self._cancelled }
+        }
+
+        var connection: Connection? {
+            self.lock.withLock { self._connection }
+        }
 
         init(eventLoop: EventLoop, logger: Logger) {
             self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.completion = self.promise.futureResult.map { _ in }
-            self.cancelled = false
-            self.lock = Lock()
             self.logger = logger
         }
 
@@ -669,9 +677,9 @@ extension HTTPClient {
         /// Cancels the request execution.
         public func cancel() {
             let channel: Channel? = self.lock.withLock {
-                if !self.cancelled {
-                    self.cancelled = true
-                    return self.connection?.channel
+                if !self._cancelled {
+                    self._cancelled = true
+                    return self._connection?.channel
                 } else {
                     return nil
                 }
@@ -681,13 +689,16 @@ extension HTTPClient {
 
         @discardableResult
         func setConnection(_ connection: Connection) -> Connection {
-            return self.lock.withLock {
-                self.connection = connection
-                if self.cancelled {
-                    connection.channel.triggerUserOutboundEvent(TaskCancelEvent(), promise: nil)
-                }
-                return connection
+            let cancelled = self.lock.withLock { () -> Bool in
+                self._connection = connection
+                return self._cancelled
             }
+
+            if cancelled {
+                connection.channel.triggerUserOutboundEvent(TaskCancelEvent(), promise: nil)
+            }
+
+            return connection
         }
 
         func succeed<Delegate: HTTPClientResponseDelegate>(promise: EventLoopPromise<Response>?,
@@ -702,7 +713,9 @@ extension HTTPClient {
 
         func fail<Delegate: HTTPClientResponseDelegate>(with error: Error,
                                                         delegateType: Delegate.Type) {
-            if let connection = self.connection {
+            let maybeConnection = self.lock.withLock { self._connection }
+
+            if let connection = maybeConnection {
                 self.releaseAssociatedConnection(delegateType: delegateType, closing: true)
                     .whenSuccess {
                         self.promise.fail(error)
@@ -716,7 +729,13 @@ extension HTTPClient {
 
         func releaseAssociatedConnection<Delegate: HTTPClientResponseDelegate>(delegateType: Delegate.Type,
                                                                                closing: Bool) -> EventLoopFuture<Void> {
-            if let connection = self.connection {
+            let maybeConnection = self.lock.withLock { () -> Connection? in
+                let connection = self._connection
+                self._connection = nil
+                return connection
+            }
+
+            if let connection = maybeConnection {
                 // remove read timeout handler
                 return connection.removeHandler(IdleStateHandler.self).flatMap {
                     connection.removeHandler(TaskHandler<Delegate>.self)

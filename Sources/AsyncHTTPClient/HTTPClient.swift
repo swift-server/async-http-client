@@ -579,11 +579,7 @@ public class HTTPClient {
 
                 task.setConnection(connection)
 
-                let isCancelled = task.lock.withLock {
-                    task.cancelled
-                }
-
-                if !isCancelled {
+                if !task.isCancelled {
                     return channel.writeAndFlush(request).flatMapError { _ in
                         // At this point the `TaskHandler` will already be present
                         // to handle the failure and pass it to the `promise`

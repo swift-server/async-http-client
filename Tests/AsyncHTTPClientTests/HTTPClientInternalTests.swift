@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 @testable import AsyncHTTPClient
+import Logging
 import NIO
 import NIOConcurrencyHelpers
 import NIOHTTP1
@@ -323,21 +324,25 @@ class HTTPClientInternalTests: XCTestCase {
     // of 4 bytes. This will guarantee that if we see first byte of the message, other
     // bytes a ready to be read as well. This will allow us to test if subsequent reads
     // are waiting for backpressure promise.
-    func testUploadStreamingBackpressure() throws {
+    func testDownloadStreamingBackpressure() throws {
         class BackpressureTestDelegate: HTTPClientResponseDelegate {
             typealias Response = Void
 
             var _reads = 0
             let lock: Lock
-            let backpressurePromise: EventLoopPromise<Void>
-            let optionsApplied: EventLoopPromise<Void>
-            let messageReceived: EventLoopPromise<Void>
+            let channel: Channel
 
-            init(eventLoop: EventLoop) {
+            let optionsApplied: EventLoopPromise<Void>
+            let backpressureFuture: EventLoopFuture<Void>
+            let firstBodyPartReceived: EventLoopPromise<Void>
+
+            init(channel: Channel, writeBodyPromise: EventLoopPromise<Void>, writeEndFuture: EventLoopFuture<Void>) {
                 self.lock = Lock()
-                self.backpressurePromise = eventLoop.makePromise()
-                self.optionsApplied = eventLoop.makePromise()
-                self.messageReceived = eventLoop.makePromise()
+
+                self.channel = channel
+                self.optionsApplied = writeBodyPromise
+                self.backpressureFuture = writeEndFuture
+                self.firstBodyPartReceived = channel.eventLoop.makePromise()
             }
 
             var reads: Int {
@@ -348,8 +353,8 @@ class HTTPClientInternalTests: XCTestCase {
 
             func didReceiveHead(task: HTTPClient.Task<Void>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
                 // This is to force NIO to send only 1 byte at a time.
-                let future = task.connection!.channel.setOption(ChannelOptions.maxMessagesPerRead, value: 1).flatMap {
-                    task.connection!.channel.setOption(ChannelOptions.recvAllocator, value: FixedSizeRecvByteBufferAllocator(capacity: 1))
+                let future = self.channel.setOption(ChannelOptions.maxMessagesPerRead, value: 1).flatMap {
+                    self.channel.setOption(ChannelOptions.recvAllocator, value: FixedSizeRecvByteBufferAllocator(capacity: 1))
                 }
                 future.cascade(to: self.optionsApplied)
                 return future
@@ -361,8 +366,8 @@ class HTTPClientInternalTests: XCTestCase {
                     self._reads += 1
                 }
                 // We need to notify the test when first byte of the message is arrived.
-                self.messageReceived.succeed(())
-                return self.backpressurePromise.futureResult
+                self.firstBodyPartReceived.succeed(())
+                return self.self.backpressureFuture
             }
 
             func didFinishRequest(task: HTTPClient.Task<Response>) throws {}
@@ -403,37 +408,68 @@ class HTTPClientInternalTests: XCTestCase {
 
         // cannot test with NIOTS as `maxMessagesPerRead` is not supported
         let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
-        let delegate = BackpressureTestDelegate(eventLoop: httpClient.eventLoopGroup.next())
+        let eventLoop = eventLoopGroup.next()
+        let writeBodyPromise = eventLoop.makePromise(of: Void.self)
+        let writeEndPromise = eventLoop.makePromise(of: Void.self)
         let httpBin = HTTPBin { _ in
             WriteAfterFutureSucceedsHandler(
-                bodyFuture: delegate.optionsApplied.futureResult,
-                endFuture: delegate.backpressurePromise.futureResult
+                bodyFuture: writeBodyPromise.futureResult,
+                endFuture: writeEndPromise.futureResult
             )
         }
-
         defer {
-            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
             XCTAssertNoThrow(try httpBin.shutdown())
             XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully())
         }
 
         let request = try Request(url: "http://localhost:\(httpBin.port)/custom")
+        let logger = Logger(label: "test-connection")
 
-        let requestFuture = httpClient.execute(request: request, delegate: delegate).futureResult
+        let clientFactory = HTTPConnectionPool.ConnectionFactory(
+            key: .init(request),
+            tlsConfiguration: nil,
+            clientConfiguration: .init(),
+            sslContextCache: .init()
+        )
+        var maybeChannel: Channel?
+        XCTAssertNoThrow(maybeChannel = try clientFactory.makeHTTP1Channel(
+            connectionID: 1,
+            deadline: .now() + .seconds(10),
+            eventLoop: eventLoopGroup.next(),
+            logger: logger
+        ).wait())
+
+        guard let channel = maybeChannel else { return XCTFail("Expected to have a channel at this point") }
+
+        let delegate = BackpressureTestDelegate(
+            channel: channel,
+            writeBodyPromise: writeBodyPromise,
+            writeEndFuture: writeEndPromise.futureResult
+        )
+        let task = HTTPClient.Task<BackpressureTestDelegate.Response>(eventLoop: eventLoop, logger: logger)
+
+        let taskHandler = TaskHandler(task: task,
+                                      kind: request.kind,
+                                      delegate: delegate,
+                                      redirectHandler: nil,
+                                      ignoreUncleanSSLShutdown: true,
+                                      logger: logger)
+
+        XCTAssertNoThrow(try channel.pipeline.addHandler(taskHandler).wait())
+        XCTAssertNoThrow(try channel.writeAndFlush(request).wait())
 
         // We need to wait for channel options that limit NIO to sending only one byte at a time.
-        try delegate.optionsApplied.futureResult.wait()
+        XCTAssertNoThrow(try delegate.optionsApplied.futureResult.wait())
 
         // Send 4 bytes, but only one should be received until the backpressure promise is succeeded.
 
         // Now we wait until message is delivered to client channel pipeline
-        try delegate.messageReceived.futureResult.wait()
+        XCTAssertNoThrow(try delegate.firstBodyPartReceived.futureResult.wait())
         XCTAssertEqual(delegate.reads, 1)
 
         // Succeed the backpressure promise.
-        delegate.backpressurePromise.succeed(())
-        try requestFuture.wait()
+        writeEndPromise.succeed(())
+        XCTAssertNoThrow(try task.futureResult.wait())
 
         // At this point all other bytes should be delivered.
         XCTAssertEqual(delegate.reads, 4)
