@@ -25,10 +25,10 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.requestVerified(requestHead), .sendRequestHead(requestHead, startBody: false, startReadTimeoutTimer: nil))
 
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
-        XCTAssertEqual(state.receivedHTTPResponseHead(responseHead), .forwardResponseHead(responseHead))
+        XCTAssertEqual(state.receivedHTTPResponseHead(responseHead), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
         XCTAssertEqual(state.receivedHTTPResponseBodyPart(responseBody), .forwardResponseBodyPart(responseBody, resetReadTimeoutTimer: nil))
-        XCTAssertEqual(state.receivedHTTPResponseEnd(), .forwardResponseEnd(readPending: false, clearReadTimeoutTimer: false))
+        XCTAssertEqual(state.receivedHTTPResponseEnd(), .succeedRequest(.none, clearReadTimeoutTimer: false))
     }
 
     func testPOSTRequestWithWriterBackpressure() {
@@ -58,10 +58,10 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.requestStreamFinished(), .sendRequestEnd(startReadTimeoutTimer: nil))
 
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
-        XCTAssertEqual(state.receivedHTTPResponseHead(responseHead), .forwardResponseHead(responseHead))
+        XCTAssertEqual(state.receivedHTTPResponseHead(responseHead), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
         XCTAssertEqual(state.receivedHTTPResponseBodyPart(responseBody), .forwardResponseBodyPart(responseBody, resetReadTimeoutTimer: nil))
-        XCTAssertEqual(state.receivedHTTPResponseEnd(), .forwardResponseEnd(readPending: false, clearReadTimeoutTimer: false))
+        XCTAssertEqual(state.receivedHTTPResponseEnd(), .succeedRequest(.none, clearReadTimeoutTimer: false))
     }
 
     func testPOSTContentLengthIsTooLong() {
@@ -74,7 +74,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.requestStreamPartReceived(part0), .sendBodyPart(part0))
 
         let failAction = state.requestStreamPartReceived(part1)
-        guard case .failRequest(let error, closeStream: true) = failAction else {
+        guard case .failRequest(let error, .close, clearReadTimeoutTimer: false) = failAction else {
             return XCTFail("Unexpected action: \(failAction)")
         }
 
@@ -90,7 +90,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.requestStreamPartReceived(part0), .sendBodyPart(part0))
 
         let failAction = state.requestStreamFinished()
-        guard case .failRequest(let error, closeStream: true) = failAction else {
+        guard case .failRequest(let error, .close, clearReadTimeoutTimer: false) = failAction else {
             return XCTFail("Unexpected action: \(failAction)")
         }
 
@@ -116,15 +116,15 @@ extension HTTPRequestStateMachine.Action: Equatable {
         case (.resumeRequestBodyStream, .resumeRequestBodyStream):
             return true
 
-        case (.forwardResponseHead(let lhsHead), .forwardResponseHead(let rhsHead)):
-            return lhsHead == rhsHead
+        case (.forwardResponseHead(let lhsHead, let lhsPauseRequestStream), .forwardResponseHead(let rhsHead, let rhsPauseRequestStream)):
+            return lhsHead == rhsHead && lhsPauseRequestStream == rhsPauseRequestStream
         case (.forwardResponseBodyPart(let lhsData, let lhsIdleReadTimeout), .forwardResponseBodyPart(let rhsData, let rhsIdleReadTimeout)):
             return lhsIdleReadTimeout == rhsIdleReadTimeout && lhsData == rhsData
-        case (.forwardResponseEnd(readPending: let lhsPending), .forwardResponseEnd(readPending: let rhsPending)):
-            return lhsPending == rhsPending
 
-        case (.failRequest(_, closeStream: let lhsClose), .failRequest(_, closeStream: let rhsClose)):
-            return lhsClose == rhsClose
+        case (.succeedRequest(let lhsFinalAction, let lhsClearReadTimeoutTimer), .succeedRequest(let rhsFinalAction, let rhsClearReadTimeoutTimer)):
+            return lhsFinalAction == rhsFinalAction && lhsClearReadTimeoutTimer == rhsClearReadTimeoutTimer
+        case (.failRequest(_, let lhsFinalAction, let lhsClearReadTimeoutTimer), .failRequest(_, let rhsFinalAction, let rhsClearReadTimeoutTimer)):
+            return lhsFinalAction == rhsFinalAction && lhsClearReadTimeoutTimer == rhsClearReadTimeoutTimer
 
         case (.read, .read):
             return true
