@@ -53,7 +53,7 @@ struct HTTPRequestStateMachine {
     }
 
     enum Action {
-        enum AfterHeadContinueWith {
+        enum NextMessageToSend {
             case sendEnd
             case startBodyStream
         }
@@ -137,12 +137,12 @@ struct HTTPRequestStateMachine {
     mutating func errorHappened(_ error: Error) -> Action {
         switch self.state {
         case .initialized:
-            preconditionFailure("After the state machine has been initialized, start must be called immidiatly. Thus this state is unreachable")
+            preconditionFailure("After the state machine has been initialized, start must be called immediately. Thus this state is unreachable")
         case .running:
             self.state = .failed(error)
             return .failRequest(error, closeStream: true)
         case .finished, .failed:
-            preconditionFailure("If the request is finished or failed, we expect the connection state machine to remove the request immidiatly from its state. Thus this state is unreachable.")
+            preconditionFailure("If the request is finished or failed, we expect the connection state machine to remove the request immediately from its state. Thus this state is unreachable.")
         }
     }
 
@@ -329,7 +329,7 @@ struct HTTPRequestStateMachine {
             preconditionFailure("How can we receive a response head before sending a request head ourselves")
 
         case .running(_, .initialized):
-            preconditionFailure("How can we receive a response body, if we haven't a received a head")
+            preconditionFailure("How can we receive a response body, if we haven't received a head")
 
         case .running(let requestState, .receivingBody(let streamState)):
             switch streamState {
