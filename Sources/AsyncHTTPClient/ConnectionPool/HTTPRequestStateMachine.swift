@@ -47,9 +47,9 @@ struct HTTPRequestStateMachine {
         /// A sub state for sending a request body. Stores whether a producer should produce more
         /// bytes or should pause.
         enum ProducerControlState: Equatable {
-            /// The request body producer should produce more body bytes. The channel is writable,
+            /// The request body producer should produce more body bytes. The channel is writable.
             case producing
-            /// The request body producer should pause producing more bytes. The channel is not writable,
+            /// The request body producer should pause producing more bytes. The channel is not writable.
             case paused
         }
 
@@ -71,7 +71,7 @@ struct HTTPRequestStateMachine {
 
         /// A response head has not been received yet.
         case waitingForHead
-        /// A response head has been received and we are ready to consume more data of the wire
+        /// A response head has been received and we are ready to consume more data off the wire
         case receivingBody(HTTPResponseHead, ConsumerControlState)
         /// A response end has been received and we are ready to consume more data of the wire
         case endReceived
@@ -218,7 +218,7 @@ struct HTTPRequestStateMachine {
         case .initialized:
             preconditionFailure("After the state machine has been initialized, start must be called immediately. Thus this state is unreachable")
         case .verifyingRequest, .waitForChannelToBecomeWritable:
-            // the request failed, before it was send onto the wire.
+            // the request failed, before it was sent onto the wire.
             self.state = .failed(error)
             return .failRequest(error, .none, clearReadTimeoutTimer: false)
         case .running:
