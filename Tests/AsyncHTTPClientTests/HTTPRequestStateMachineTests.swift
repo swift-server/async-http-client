@@ -22,20 +22,20 @@ class HTTPRequestStateMachineTests: XCTestCase {
         var state = HTTPRequestStateMachine(isChannelWritable: true, idleReadTimeout: nil)
         XCTAssertEqual(state.start(), .verifyRequest)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
-        XCTAssertEqual(state.requestVerified(requestHead), .sendRequestHead(requestHead, startBody: false, startReadTimeoutTimer: nil))
+        XCTAssertEqual(state.requestVerified(requestHead), .sendRequestHead(requestHead, startBody: false))
 
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(state.receivedHTTPResponseHead(responseHead), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
-        XCTAssertEqual(state.receivedHTTPResponseBodyPart(responseBody), .forwardResponseBodyPart(responseBody, resetReadTimeoutTimer: nil))
-        XCTAssertEqual(state.receivedHTTPResponseEnd(), .succeedRequest(.none, clearReadTimeoutTimer: false))
+        XCTAssertEqual(state.receivedHTTPResponseBodyPart(responseBody), .forwardResponseBodyPart(responseBody))
+        XCTAssertEqual(state.receivedHTTPResponseEnd(), .succeedRequest(.none))
     }
 
     func testPOSTRequestWithWriterBackpressure() {
         var state = HTTPRequestStateMachine(isChannelWritable: true, idleReadTimeout: nil)
         XCTAssertEqual(state.start(), .verifyRequest)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "4")]))
-        XCTAssertEqual(state.requestVerified(requestHead), .sendRequestHead(requestHead, startBody: true, startReadTimeoutTimer: nil))
+        XCTAssertEqual(state.requestVerified(requestHead), .sendRequestHead(requestHead, startBody: true))
         let part0 = IOData.byteBuffer(ByteBuffer(bytes: [0]))
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: [1]))
         let part2 = IOData.byteBuffer(ByteBuffer(bytes: [2]))
@@ -55,26 +55,26 @@ class HTTPRequestStateMachineTests: XCTestCase {
         // once we receive a writable event again, we can allow the producer to produce more data
         XCTAssertEqual(state.writabilityChanged(writable: true), .resumeRequestBodyStream)
         XCTAssertEqual(state.requestStreamPartReceived(part3), .sendBodyPart(part3))
-        XCTAssertEqual(state.requestStreamFinished(), .sendRequestEnd(startReadTimeoutTimer: nil))
+        XCTAssertEqual(state.requestStreamFinished(), .sendRequestEnd)
 
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(state.receivedHTTPResponseHead(responseHead), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
-        XCTAssertEqual(state.receivedHTTPResponseBodyPart(responseBody), .forwardResponseBodyPart(responseBody, resetReadTimeoutTimer: nil))
-        XCTAssertEqual(state.receivedHTTPResponseEnd(), .succeedRequest(.none, clearReadTimeoutTimer: false))
+        XCTAssertEqual(state.receivedHTTPResponseBodyPart(responseBody), .forwardResponseBodyPart(responseBody))
+        XCTAssertEqual(state.receivedHTTPResponseEnd(), .succeedRequest(.none))
     }
 
     func testPOSTContentLengthIsTooLong() {
         var state = HTTPRequestStateMachine(isChannelWritable: true, idleReadTimeout: nil)
         XCTAssertEqual(state.start(), .verifyRequest)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "4")]))
-        XCTAssertEqual(state.requestVerified(requestHead), .sendRequestHead(requestHead, startBody: true, startReadTimeoutTimer: nil))
+        XCTAssertEqual(state.requestVerified(requestHead), .sendRequestHead(requestHead, startBody: true))
         let part0 = IOData.byteBuffer(ByteBuffer(bytes: [0, 1, 2, 3]))
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: [0, 1, 2, 3]))
         XCTAssertEqual(state.requestStreamPartReceived(part0), .sendBodyPart(part0))
 
         let failAction = state.requestStreamPartReceived(part1)
-        guard case .failRequest(let error, .close, clearReadTimeoutTimer: false) = failAction else {
+        guard case .failRequest(let error, .close) = failAction else {
             return XCTFail("Unexpected action: \(failAction)")
         }
 
@@ -85,12 +85,12 @@ class HTTPRequestStateMachineTests: XCTestCase {
         var state = HTTPRequestStateMachine(isChannelWritable: true, idleReadTimeout: nil)
         XCTAssertEqual(state.start(), .verifyRequest)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "8")]))
-        XCTAssertEqual(state.requestVerified(requestHead), .sendRequestHead(requestHead, startBody: true, startReadTimeoutTimer: nil))
+        XCTAssertEqual(state.requestVerified(requestHead), .sendRequestHead(requestHead, startBody: true))
         let part0 = IOData.byteBuffer(ByteBuffer(bytes: [0, 1, 2, 3]))
         XCTAssertEqual(state.requestStreamPartReceived(part0), .sendBodyPart(part0))
 
         let failAction = state.requestStreamFinished()
-        guard case .failRequest(let error, .close, clearReadTimeoutTimer: false) = failAction else {
+        guard case .failRequest(let error, .close) = failAction else {
             return XCTFail("Unexpected action: \(failAction)")
         }
 
@@ -104,8 +104,8 @@ extension HTTPRequestStateMachine.Action: Equatable {
         case (.verifyRequest, .verifyRequest):
             return true
 
-        case (.sendRequestHead(let lhsHead, let lhsStartBody, let lhsIdleReadTimeout), .sendRequestHead(let rhsHead, let rhsStartBody, let rhsIdleReadTimeout)):
-            return lhsHead == rhsHead && lhsStartBody == rhsStartBody && lhsIdleReadTimeout == rhsIdleReadTimeout
+        case (.sendRequestHead(let lhsHead, let lhsStartBody), .sendRequestHead(let rhsHead, let rhsStartBody)):
+            return lhsHead == rhsHead && lhsStartBody == rhsStartBody
         case (.sendBodyPart(let lhsData), .sendBodyPart(let rhsData)):
             return lhsData == rhsData
         case (.sendRequestEnd, .sendRequestEnd):
@@ -116,15 +116,15 @@ extension HTTPRequestStateMachine.Action: Equatable {
         case (.resumeRequestBodyStream, .resumeRequestBodyStream):
             return true
 
-        case (.forwardResponseHead(let lhsHead, let lhsPauseRequestStream), .forwardResponseHead(let rhsHead, let rhsPauseRequestStream)):
-            return lhsHead == rhsHead && lhsPauseRequestStream == rhsPauseRequestStream
-        case (.forwardResponseBodyPart(let lhsData, let lhsIdleReadTimeout), .forwardResponseBodyPart(let rhsData, let rhsIdleReadTimeout)):
-            return lhsIdleReadTimeout == rhsIdleReadTimeout && lhsData == rhsData
+        case (.forwardResponseHead(let lhsHead, let lhsPauseRequestBodyStream), .forwardResponseHead(let rhsHead, let rhsPauseRequestBodyStream)):
+            return lhsHead == rhsHead && lhsPauseRequestBodyStream == rhsPauseRequestBodyStream
+        case (.forwardResponseBodyPart(let lhsData), .forwardResponseBodyPart(let rhsData)):
+            return lhsData == rhsData
 
-        case (.succeedRequest(let lhsFinalAction, let lhsClearReadTimeoutTimer), .succeedRequest(let rhsFinalAction, let rhsClearReadTimeoutTimer)):
-            return lhsFinalAction == rhsFinalAction && lhsClearReadTimeoutTimer == rhsClearReadTimeoutTimer
-        case (.failRequest(_, let lhsFinalAction, let lhsClearReadTimeoutTimer), .failRequest(_, let rhsFinalAction, let rhsClearReadTimeoutTimer)):
-            return lhsFinalAction == rhsFinalAction && lhsClearReadTimeoutTimer == rhsClearReadTimeoutTimer
+        case (.succeedRequest(let lhsFinalAction), .succeedRequest(let rhsFinalAction)):
+            return lhsFinalAction == rhsFinalAction
+        case (.failRequest(_, let lhsFinalAction), .failRequest(_, let rhsFinalAction)):
+            return lhsFinalAction == rhsFinalAction
 
         case (.read, .read):
             return true

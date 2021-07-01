@@ -54,8 +54,8 @@ struct HTTPRequestStateMachine {
         }
 
         /// The request is streaming its request body. `expectedBodyLength` has a value, if the request header contained
-        /// a `"content-length"` header field. It is the request header contained a `"transfer-encoding" = "chunked"`
-        /// header field.
+        /// a `"content-length"` header field. If the request header contained a `"transfer-encoding" = "chunked"`
+        /// header field, the `expectedBodyLength` is `nil`.
         case streaming(expectedBodyLength: Int?, sentBodyBytes: Int, producer: ProducerControlState)
         /// The request has sent its request body and end.
         case endSent
@@ -73,35 +73,36 @@ struct HTTPRequestStateMachine {
         case waitingForHead
         /// A response head has been received and we are ready to consume more data off the wire
         case receivingBody(HTTPResponseHead, ConsumerControlState)
-        /// A response end has been received and we are ready to consume more data of the wire
+        /// A response end has been received. We don't expect more bytes from the wire.
         case endReceived
     }
 
     enum Action {
         /// A action to execute, when we consider a request "done".
         enum FinalStreamAction {
-            /// close the connection
+            /// Close the connection
             case close
-            /// trigger a read event
+            /// Trigger a read event
             case read
-            /// do nothing
+            /// Do nothing. This is action is used, if the request failed, before we the request head was written onto the wire.
+            /// This might happen if the request is cancelled, or the request failed the soundness check.
             case none
         }
 
         case verifyRequest
 
-        case sendRequestHead(HTTPRequestHead, startBody: Bool, startReadTimeoutTimer: TimeAmount?)
+        case sendRequestHead(HTTPRequestHead, startBody: Bool)
         case sendBodyPart(IOData)
-        case sendRequestEnd(startReadTimeoutTimer: TimeAmount?)
+        case sendRequestEnd
 
         case pauseRequestBodyStream
         case resumeRequestBodyStream
 
         case forwardResponseHead(HTTPResponseHead, pauseRequestBodyStream: Bool)
-        case forwardResponseBodyPart(ByteBuffer, resetReadTimeoutTimer: TimeAmount?)
+        case forwardResponseBodyPart(ByteBuffer)
 
-        case failRequest(Error, FinalStreamAction, clearReadTimeoutTimer: Bool)
-        case succeedRequest(FinalStreamAction, clearReadTimeoutTimer: Bool)
+        case failRequest(Error, FinalStreamAction)
+        case succeedRequest(FinalStreamAction)
 
         case read
         case wait
@@ -207,8 +208,10 @@ struct HTTPRequestStateMachine {
         case .running(let requestState, .receivingBody(let responseHead, .downstreamIsConsuming(readPending: false))):
             self.state = .running(requestState, .receivingBody(responseHead, .downstreamIsConsuming(readPending: true)))
             return .wait
-        case .running(let requestState, .receivingBody(let responseHead, .downstreamHasDemand)):
-            self.state = .running(requestState, .receivingBody(responseHead, .downstreamHasDemand))
+        case .running(_, .receivingBody(_, .downstreamHasDemand)):
+            // The consumer has signaled a demand for more response body bytes. If a `read` is
+            // caught, we pass it on right away. The state machines does not transition into another
+            // state.
             return .read
         }
     }
@@ -220,10 +223,10 @@ struct HTTPRequestStateMachine {
         case .verifyingRequest, .waitForChannelToBecomeWritable:
             // the request failed, before it was sent onto the wire.
             self.state = .failed(error)
-            return .failRequest(error, .none, clearReadTimeoutTimer: false)
+            return .failRequest(error, .none)
         case .running:
             self.state = .failed(error)
-            return .failRequest(error, .close, clearReadTimeoutTimer: false)
+            return .failRequest(error, .close)
         case .finished, .failed:
             preconditionFailure("If the request is finished or failed, we expect the connection state machine to remove the request immediately from its state. Thus this state is unreachable.")
         }
@@ -269,17 +272,10 @@ struct HTTPRequestStateMachine {
             // pause. The reason for this is as follows: There might be thread synchronization
             // situations in which the producer might not have received the plea to pause yet.
 
-            if let expected = expectedBodyLength {
-                if sentBodyBytes + part.readableBytes > expected {
-                    let error = HTTPClientError.bodyLengthMismatch
+            if let expected = expectedBodyLength, sentBodyBytes + part.readableBytes > expected {
+                let error = HTTPClientError.bodyLengthMismatch
 
-                    var clearReadTimeoutTimer = false
-                    if case .receivingBody = responseState, self.idleReadTimeout != nil {
-                        clearReadTimeoutTimer = true
-                    }
-
-                    return .failRequest(error, .close, clearReadTimeoutTimer: clearReadTimeoutTimer)
-                }
+                return .failRequest(error, .close)
             }
 
             sentBodyBytes += part.readableBytes
@@ -324,11 +320,11 @@ struct HTTPRequestStateMachine {
             if let expected = expectedBodyLength, expected != sentBodyBytes {
                 let error = HTTPClientError.bodyLengthMismatch
                 self.state = .failed(error)
-                return .failRequest(error, .close, clearReadTimeoutTimer: false)
+                return .failRequest(error, .close)
             }
 
             self.state = .running(.endSent, .waitingForHead)
-            return .sendRequestEnd(startReadTimeoutTimer: self.idleReadTimeout)
+            return .sendRequestEnd
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, _), .receivingBody(let head, let streamState)):
             assert(head.status.code < 300)
@@ -336,21 +332,21 @@ struct HTTPRequestStateMachine {
             if let expected = expectedBodyLength, expected != sentBodyBytes {
                 let error = HTTPClientError.bodyLengthMismatch
                 self.state = .failed(error)
-                return .failRequest(error, .close, clearReadTimeoutTimer: self.idleReadTimeout != nil)
+                return .failRequest(error, .close)
             }
 
             self.state = .running(.endSent, .receivingBody(head, streamState))
-            return .sendRequestEnd(startReadTimeoutTimer: self.idleReadTimeout)
+            return .sendRequestEnd
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, _), .endReceived):
             if let expected = expectedBodyLength, expected != sentBodyBytes {
                 let error = HTTPClientError.bodyLengthMismatch
                 self.state = .failed(error)
-                return .failRequest(error, .close, clearReadTimeoutTimer: false)
+                return .failRequest(error, .close)
             }
 
             self.state = .finished
-            return .succeedRequest(.none, clearReadTimeoutTimer: false)
+            return .succeedRequest(.none)
 
         case .failed:
             return .wait
@@ -362,16 +358,11 @@ struct HTTPRequestStateMachine {
         case .initialized, .verifyingRequest, .waitForChannelToBecomeWritable:
             let error = HTTPClientError.cancelled
             self.state = .failed(error)
-            return .failRequest(error, .none, clearReadTimeoutTimer: false)
-        case .running(_, let responseState):
+            return .failRequest(error, .none)
+        case .running:
             let error = HTTPClientError.cancelled
             self.state = .failed(error)
-
-            var clearReadTimeoutTimer = false
-            if case .receivingBody = responseState, self.idleReadTimeout != nil {
-                clearReadTimeoutTimer = true
-            }
-            return .failRequest(error, .close, clearReadTimeoutTimer: clearReadTimeoutTimer)
+            return .failRequest(error, .close)
         case .finished:
             return .wait
         case .failed:
@@ -381,19 +372,10 @@ struct HTTPRequestStateMachine {
 
     mutating func channelInactive() -> Action {
         switch self.state {
-        case .initialized, .verifyingRequest, .waitForChannelToBecomeWritable:
+        case .initialized, .verifyingRequest, .waitForChannelToBecomeWritable, .running:
             let error = HTTPClientError.remoteConnectionClosed
             self.state = .failed(error)
-            return .failRequest(error, .none, clearReadTimeoutTimer: false)
-        case .running(_, let responseState):
-            let error = HTTPClientError.remoteConnectionClosed
-            self.state = .failed(error)
-
-            var clearReadTimeoutTimer = false
-            if case .receivingBody = responseState, self.idleReadTimeout != nil {
-                clearReadTimeoutTimer = true
-            }
-            return .failRequest(error, .none, clearReadTimeoutTimer: clearReadTimeoutTimer)
+            return .failRequest(error, .none)
         case .finished:
             return .wait
         case .failed:
@@ -457,12 +439,12 @@ struct HTTPRequestStateMachine {
 
         case .running(let requestState, .receivingBody(let head, .downstreamHasDemand)):
             self.state = .running(requestState, .receivingBody(head, .downstreamIsConsuming(readPending: false)))
-            return .forwardResponseBodyPart(body, resetReadTimeoutTimer: self.idleReadTimeout)
+            return .forwardResponseBodyPart(body)
 
         case .running(_, .receivingBody(_, .downstreamIsConsuming)):
             // the state doesn't need to be changed. we are already in the correct state.
             // just forward the data.
-            return .forwardResponseBodyPart(body, resetReadTimeoutTimer: self.idleReadTimeout)
+            return .forwardResponseBodyPart(body)
 
         case .running(_, .endReceived), .finished:
             preconditionFailure("How can we successfully finish the request, before having received a head. Invalid state: \(self.state)")
@@ -490,7 +472,7 @@ struct HTTPRequestStateMachine {
             assert(head.status.code >= 300)
             assert(producerState == .paused, "Expected to have paused the request body stream, when the head was received. Invalid state: \(self.state)")
             self.state = .finished
-            return .succeedRequest(.close, clearReadTimeoutTimer: self.idleReadTimeout != nil)
+            return .succeedRequest(.close)
 
         case .running(.endSent, .receivingBody(_, let streamState)):
             let finalAction: Action.FinalStreamAction
@@ -502,7 +484,7 @@ struct HTTPRequestStateMachine {
             }
 
             self.state = .finished
-            return .succeedRequest(finalAction, clearReadTimeoutTimer: self.idleReadTimeout != nil)
+            return .succeedRequest(finalAction)
 
         case .running(_, .endReceived), .finished:
             preconditionFailure("How can we receive a response end, if another one was already received. Invalid state: \(self.state)")
@@ -546,7 +528,7 @@ struct HTTPRequestStateMachine {
         case .running(.endSent, .waitingForHead), .running(.endSent, .receivingBody):
             let error = HTTPClientError.readTimeout
             self.state = .failed(error)
-            return .failRequest(error, .close, clearReadTimeoutTimer: false)
+            return .failRequest(error, .close)
 
         case .running(.endSent, .endReceived):
             preconditionFailure("Invalid state. This state should be: .finished")
@@ -559,13 +541,13 @@ struct HTTPRequestStateMachine {
     private mutating func startSendingRequestHead(_ head: HTTPRequestHead) -> Action {
         if let value = head.headers.first(name: "content-length"), let length = Int(value), length > 0 {
             self.state = .running(.streaming(expectedBodyLength: length, sentBodyBytes: 0, producer: .producing), .waitingForHead)
-            return .sendRequestHead(head, startBody: true, startReadTimeoutTimer: nil)
+            return .sendRequestHead(head, startBody: true)
         } else if head.headers.contains(name: "transfer-encoding") {
             self.state = .running(.streaming(expectedBodyLength: nil, sentBodyBytes: 0, producer: .producing), .waitingForHead)
-            return .sendRequestHead(head, startBody: true, startReadTimeoutTimer: nil)
+            return .sendRequestHead(head, startBody: true)
         } else {
             self.state = .running(.endSent, .waitingForHead)
-            return .sendRequestHead(head, startBody: false, startReadTimeoutTimer: self.idleReadTimeout)
+            return .sendRequestHead(head, startBody: false)
         }
     }
 }
