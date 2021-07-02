@@ -20,9 +20,9 @@ import XCTest
 class HTTPRequestStateMachineTests: XCTestCase {
     func testSimpleGETRequest() {
         var state = HTTPRequestStateMachine(isChannelWritable: true, idleReadTimeout: nil)
-        XCTAssertEqual(state.start(), .verifyRequest)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
-        XCTAssertEqual(state.requestVerified(requestHead), .sendRequestHead(requestHead, startBody: false))
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
 
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(state.receivedHTTPResponseHead(responseHead), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
@@ -33,9 +33,9 @@ class HTTPRequestStateMachineTests: XCTestCase {
 
     func testPOSTRequestWithWriterBackpressure() {
         var state = HTTPRequestStateMachine(isChannelWritable: true, idleReadTimeout: nil)
-        XCTAssertEqual(state.start(), .verifyRequest)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "4")]))
-        XCTAssertEqual(state.requestVerified(requestHead), .sendRequestHead(requestHead, startBody: true))
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(4))
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
         let part0 = IOData.byteBuffer(ByteBuffer(bytes: [0]))
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: [1]))
         let part2 = IOData.byteBuffer(ByteBuffer(bytes: [2]))
@@ -66,9 +66,9 @@ class HTTPRequestStateMachineTests: XCTestCase {
 
     func testPOSTContentLengthIsTooLong() {
         var state = HTTPRequestStateMachine(isChannelWritable: true, idleReadTimeout: nil)
-        XCTAssertEqual(state.start(), .verifyRequest)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "4")]))
-        XCTAssertEqual(state.requestVerified(requestHead), .sendRequestHead(requestHead, startBody: true))
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(4))
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
         let part0 = IOData.byteBuffer(ByteBuffer(bytes: [0, 1, 2, 3]))
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: [0, 1, 2, 3]))
         XCTAssertEqual(state.requestStreamPartReceived(part0), .sendBodyPart(part0))
@@ -83,9 +83,9 @@ class HTTPRequestStateMachineTests: XCTestCase {
 
     func testPOSTContentLengthIsTooShort() {
         var state = HTTPRequestStateMachine(isChannelWritable: true, idleReadTimeout: nil)
-        XCTAssertEqual(state.start(), .verifyRequest)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "8")]))
-        XCTAssertEqual(state.requestVerified(requestHead), .sendRequestHead(requestHead, startBody: true))
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(8))
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
         let part0 = IOData.byteBuffer(ByteBuffer(bytes: [0, 1, 2, 3]))
         XCTAssertEqual(state.requestStreamPartReceived(part0), .sendBodyPart(part0))
 
@@ -101,9 +101,6 @@ class HTTPRequestStateMachineTests: XCTestCase {
 extension HTTPRequestStateMachine.Action: Equatable {
     public static func == (lhs: HTTPRequestStateMachine.Action, rhs: HTTPRequestStateMachine.Action) -> Bool {
         switch (lhs, rhs) {
-        case (.verifyRequest, .verifyRequest):
-            return true
-
         case (.sendRequestHead(let lhsHead, let lhsStartBody), .sendRequestHead(let rhsHead, let rhsStartBody)):
             return lhsHead == rhsHead && lhsStartBody == rhsStartBody
         case (.sendBodyPart(let lhsData), .sendBodyPart(let rhsData)):

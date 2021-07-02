@@ -18,23 +18,19 @@ import NIOHTTP1
 struct HTTPRequestStateMachine {
     fileprivate enum State {
         /// The initial state machine state. The only valid mutation is `start()`. The state will
-        /// transition to `.verifyingRequest`
+        /// transitions to:
+        ///  - `.waitForChannelToBecomeWritable`
+        ///  - `.running(.streaming, .initialized)` (if the Channel is writable and if a request body is expected)
+        ///  - `.running(.endSent, .initialized)` (if the Channel is writable and no request body is expected)
         case initialized
-        /// During this state the request's soundness is checked, before sending it out on the wire.
-        /// Valid transitions are:
-        ///  - .waitForChannelToBecomeWritable (if the Channel is not writable)
-        ///  - .running(.streaming, .initialized) (if the Channel is writable and a request body is expected)
-        ///  - .running(.endSent, .initialized) (if the Channel is writable and no request body is expected)
-        ///  - .failed (if an error was found in the request soundness check)
-        case verifyingRequest
         /// Waiting for the channel to be writable. Valid transitions are:
-        ///  - .running(.streaming, .initialized) (once the Channel is writable again and if a request body is expected)
-        ///  - .running(.endSent, .initialized) (once the Channel is writable again and no request body is expected)
-        ///  - .failed (if a connection error occurred)
-        case waitForChannelToBecomeWritable(HTTPRequestHead)
+        ///  - `.running(.streaming, .initialized)` (once the Channel is writable again and if a request body is expected)
+        ///  - `.running(.endSent, .initialized)` (once the Channel is writable again and no request body is expected)
+        ///  - `.failed` (if a connection error occurred)
+        case waitForChannelToBecomeWritable(HTTPRequestHead, RequestFramingMetadata)
         /// A request is on the wire. Valid transitions are:
-        ///  - .finished
-        ///  - .failed
+        ///  - `.finished`
+        ///  - `.failed`
         case running(RequestState, ResponseState)
         /// The request has completed successfully
         case finished
@@ -89,8 +85,6 @@ struct HTTPRequestStateMachine {
             case none
         }
 
-        case verifyRequest
-
         case sendRequestHead(HTTPRequestHead, startBody: Bool)
         case sendBodyPart(IOData)
         case sendRequestEnd
@@ -118,12 +112,17 @@ struct HTTPRequestStateMachine {
         self.idleReadTimeout = idleReadTimeout
     }
 
-    mutating func start() -> Action {
+    mutating func startRequest(head: HTTPRequestHead, metadata: RequestFramingMetadata) -> Action {
         guard case .initialized = self.state else {
             preconditionFailure("`start()` must be called first, and exactly once. Invalid state: \(self.state)")
         }
-        self.state = .verifyingRequest
-        return .verifyRequest
+
+        guard self.isChannelWritable else {
+            self.state = .waitForChannelToBecomeWritable(head, metadata)
+            return .wait
+        }
+
+        return self.startSendingRequest(head: head, metadata: metadata)
     }
 
     mutating func writabilityChanged(writable: Bool) -> Action {
@@ -139,15 +138,14 @@ struct HTTPRequestStateMachine {
 
         switch self.state {
         case .initialized,
-             .verifyingRequest,
              .running(.streaming(_, _, producer: .producing), _),
              .running(.endSent, _),
              .finished,
              .failed:
             return .wait
 
-        case .waitForChannelToBecomeWritable(let head):
-            return self.startSendingRequestHead(head)
+        case .waitForChannelToBecomeWritable(let head, let metadata):
+            return self.startSendingRequest(head: head, metadata: metadata)
 
         case .running(.streaming(_, _, producer: .paused), .receivingBody(let head, _)) where head.status.code >= 300:
             // If we are receiving a response with a status of >= 300, we should not send out
@@ -172,7 +170,6 @@ struct HTTPRequestStateMachine {
 
         switch self.state {
         case .initialized,
-             .verifyingRequest,
              .waitForChannelToBecomeWritable,
              .running(.streaming(_, _, producer: .paused), _),
              .running(.endSent, _),
@@ -194,7 +191,6 @@ struct HTTPRequestStateMachine {
     mutating func readEventCaught() -> Action {
         switch self.state {
         case .initialized,
-             .verifyingRequest,
              .waitForChannelToBecomeWritable,
              .running(_, .waitingForHead),
              .running(_, .endReceived),
@@ -220,7 +216,7 @@ struct HTTPRequestStateMachine {
         switch self.state {
         case .initialized:
             preconditionFailure("After the state machine has been initialized, start must be called immediately. Thus this state is unreachable")
-        case .verifyingRequest, .waitForChannelToBecomeWritable:
+        case .waitForChannelToBecomeWritable:
             // the request failed, before it was sent onto the wire.
             self.state = .failed(error)
             return .failRequest(error, .none)
@@ -232,24 +228,10 @@ struct HTTPRequestStateMachine {
         }
     }
 
-    mutating func requestVerified(_ head: HTTPRequestHead) -> Action {
-        guard case .verifyingRequest = self.state else {
-            preconditionFailure("Invalid state: \(self.state)")
-        }
-
-        guard self.isChannelWritable else {
-            self.state = .waitForChannelToBecomeWritable(head)
-            return .wait
-        }
-
-        return self.startSendingRequestHead(head)
-    }
-
     mutating func requestStreamPartReceived(_ part: IOData) -> Action {
         switch self.state {
         case .initialized,
              .waitForChannelToBecomeWritable,
-             .verifyingRequest,
              .running(.endSent, _):
             preconditionFailure("We must be in the request streaming phase, if we receive further body parts. Invalid state: \(self.state)")
 
@@ -310,7 +292,6 @@ struct HTTPRequestStateMachine {
     mutating func requestStreamFinished() -> Action {
         switch self.state {
         case .initialized,
-             .verifyingRequest,
              .waitForChannelToBecomeWritable,
              .running(.endSent, _),
              .finished:
@@ -355,7 +336,7 @@ struct HTTPRequestStateMachine {
 
     mutating func requestCancelled() -> Action {
         switch self.state {
-        case .initialized, .verifyingRequest, .waitForChannelToBecomeWritable:
+        case .initialized, .waitForChannelToBecomeWritable:
             let error = HTTPClientError.cancelled
             self.state = .failed(error)
             return .failRequest(error, .none)
@@ -372,7 +353,7 @@ struct HTTPRequestStateMachine {
 
     mutating func channelInactive() -> Action {
         switch self.state {
-        case .initialized, .verifyingRequest, .waitForChannelToBecomeWritable, .running:
+        case .initialized, .waitForChannelToBecomeWritable, .running:
             let error = HTTPClientError.remoteConnectionClosed
             self.state = .failed(error)
             return .failRequest(error, .none)
@@ -388,7 +369,7 @@ struct HTTPRequestStateMachine {
 
     mutating func receivedHTTPResponseHead(_ head: HTTPResponseHead) -> Action {
         switch self.state {
-        case .initialized, .verifyingRequest, .waitForChannelToBecomeWritable:
+        case .initialized, .waitForChannelToBecomeWritable:
             preconditionFailure("How can we receive a response head before sending a request head ourselves")
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, producer: .paused), .waitingForHead):
@@ -431,7 +412,7 @@ struct HTTPRequestStateMachine {
 
     mutating func receivedHTTPResponseBodyPart(_ body: ByteBuffer) -> Action {
         switch self.state {
-        case .initialized, .verifyingRequest, .waitForChannelToBecomeWritable:
+        case .initialized, .waitForChannelToBecomeWritable:
             preconditionFailure("How can we receive a response head before sending a request head ourselves. Invalid state: \(self.state)")
 
         case .running(_, .waitingForHead):
@@ -455,7 +436,7 @@ struct HTTPRequestStateMachine {
 
     mutating func receivedHTTPResponseEnd() -> Action {
         switch self.state {
-        case .initialized, .verifyingRequest, .waitForChannelToBecomeWritable:
+        case .initialized, .waitForChannelToBecomeWritable:
             preconditionFailure("How can we receive a response head before sending a request head ourselves. Invalid state: \(self.state)")
 
         case .running(_, .waitingForHead):
@@ -496,7 +477,6 @@ struct HTTPRequestStateMachine {
     mutating func forwardMoreBodyParts() -> Action {
         switch self.state {
         case .initialized,
-             .verifyingRequest,
              .running(_, .waitingForHead),
              .waitForChannelToBecomeWritable:
             preconditionFailure("The response is expected to only ask for more data after the response head was forwarded")
@@ -520,7 +500,6 @@ struct HTTPRequestStateMachine {
     mutating func idleReadTimeoutTriggered() -> Action {
         switch self.state {
         case .initialized,
-             .verifyingRequest,
              .waitForChannelToBecomeWritable,
              .running(.streaming, _):
             preconditionFailure("We only schedule idle read timeouts after we have sent the complete request. Invalid state: \(self.state)")
@@ -538,14 +517,16 @@ struct HTTPRequestStateMachine {
         }
     }
 
-    private mutating func startSendingRequestHead(_ head: HTTPRequestHead) -> Action {
-        if let value = head.headers.first(name: "content-length"), let length = Int(value), length > 0 {
-            self.state = .running(.streaming(expectedBodyLength: length, sentBodyBytes: 0, producer: .producing), .waitingForHead)
-            return .sendRequestHead(head, startBody: true)
-        } else if head.headers.contains(name: "transfer-encoding") {
+    private mutating func startSendingRequest(head: HTTPRequestHead, metadata: RequestFramingMetadata) -> Action {
+        switch metadata.body {
+        case .stream:
             self.state = .running(.streaming(expectedBodyLength: nil, sentBodyBytes: 0, producer: .producing), .waitingForHead)
             return .sendRequestHead(head, startBody: true)
-        } else {
+        case .fixedSize(let length) where length > 0:
+            self.state = .running(.streaming(expectedBodyLength: length, sentBodyBytes: 0, producer: .producing), .waitingForHead)
+            return .sendRequestHead(head, startBody: true)
+        case .none, .fixedSize:
+            // fallback if fixed size is 0
             self.state = .running(.endSent, .waitingForHead)
             return .sendRequestHead(head, startBody: false)
         }
@@ -557,8 +538,6 @@ extension HTTPRequestStateMachine: CustomStringConvertible {
         switch self.state {
         case .initialized:
             return "HTTPRequestStateMachine(.initialized, isWritable: \(self.isChannelWritable))"
-        case .verifyingRequest:
-            return "HTTPRequestStateMachine(.verifyingRequest, isWritable: \(self.isChannelWritable))"
         case .waitForChannelToBecomeWritable:
             return "HTTPRequestStateMachine(.waitForChannelToBecomeWritable, isWritable: \(self.isChannelWritable))"
         case .running(let requestState, let responseState):
