@@ -61,7 +61,13 @@ struct HTTPRequestStateMachine {
         /// A sub state for receiving a response. Stores whether the consumer has either signaled demand for more data or
         /// is busy consuming the so far forwarded bytes
         enum ConsumerControlState {
+            /// the state machine is in this state once it has passed down a request head or body part. If a read event
+            /// occurs while in this state, the readPending flag will be set true. If the consumer signals more demand
+            /// by invoking `forwardMoreBodyParts`, the state machine will forward the read event.
             case downstreamIsConsuming(readPending: Bool)
+            /// the state machine is in this state once the consumer has signaled more demand by invoking
+            /// `forwardMoreBodyParts`. If a read event occurs in this state the read event will be forwarded
+            /// immediately.
             case downstreamHasDemand
         }
 
@@ -457,17 +463,20 @@ struct HTTPRequestStateMachine {
             self.state = .finished
             return .succeedRequest(.close)
 
-        case .running(.endSent, .receivingBody(_, let streamState)):
-            let finalAction: Action.FinalStreamAction
-            switch streamState {
-            case .downstreamIsConsuming(readPending: true):
-                finalAction = .read
-            case .downstreamIsConsuming(readPending: false), .downstreamHasDemand:
-                finalAction = .none
-            }
-
+        case .running(.endSent, .receivingBody(_, .downstreamIsConsuming(readPending: true))):
+            // If we have a received a read event before, we must ensure that the read event
+            // eventually gets onto the channel pipeline again. The end of the request gives
+            // us an opportunity for this clean up task.
+            // It is very unlikely that we can see this in the real world. If we have swallowed
+            // a read event we don't expect to receive further data from the channel incl.
+            // response ends.
             self.state = .finished
-            return .succeedRequest(finalAction)
+            return .succeedRequest(.read)
+
+        case .running(.endSent, .receivingBody(_, .downstreamIsConsuming(readPending: false))),
+             .running(.endSent, .receivingBody(_, .downstreamHasDemand)):
+            self.state = .finished
+            return .succeedRequest(.none)
 
         case .running(_, .endReceived), .finished:
             preconditionFailure("How can we receive a response end, if another one was already received. Invalid state: \(self.state)")
