@@ -93,7 +93,9 @@ struct HTTPRequestStateMachine {
 
         case sendRequestHead(HTTPRequestHead, startBody: Bool)
         case sendBodyPart(IOData)
-        case sendRequestEnd
+        /// If the server has replied, with a status of 200...300 before all data was sent, a request is considered succeeded,
+        /// as soon as we wrote the request end onto the wire. In this case the succeedRequest property is set.
+        case sendRequestEnd(succeedRequest: FinalStreamAction?)
 
         case pauseRequestBodyStream
         case resumeRequestBodyStream
@@ -111,11 +113,9 @@ struct HTTPRequestStateMachine {
     private var state: State = .initialized
 
     private var isChannelWritable: Bool
-    private let idleReadTimeout: TimeAmount?
 
-    init(isChannelWritable: Bool, idleReadTimeout: TimeAmount?) {
+    init(isChannelWritable: Bool) {
         self.isChannelWritable = isChannelWritable
-        self.idleReadTimeout = idleReadTimeout
     }
 
     mutating func startRequest(head: HTTPRequestHead, metadata: RequestFramingMetadata) -> Action {
@@ -301,8 +301,7 @@ struct HTTPRequestStateMachine {
         switch self.state {
         case .initialized,
              .waitForChannelToBecomeWritable,
-             .running(.endSent, _),
-             .finished:
+             .running(.endSent, _):
             preconditionFailure("A request body stream end is only expected if we are in state request streaming. Invalid state: \(self.state)")
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, _), .waitingForHead):
@@ -313,7 +312,7 @@ struct HTTPRequestStateMachine {
             }
 
             self.state = .running(.endSent, .waitingForHead)
-            return .sendRequestEnd
+            return .sendRequestEnd(succeedRequest: nil)
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, _), .receivingBody(let head, let streamState)):
             assert(head.status.code < 300)
@@ -325,7 +324,7 @@ struct HTTPRequestStateMachine {
             }
 
             self.state = .running(.endSent, .receivingBody(head, streamState))
-            return .sendRequestEnd
+            return .sendRequestEnd(succeedRequest: nil)
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, _), .endReceived):
             if let expected = expectedBodyLength, expected != sentBodyBytes {
@@ -335,9 +334,21 @@ struct HTTPRequestStateMachine {
             }
 
             self.state = .finished
-            return .succeedRequest(.none)
+            return .sendRequestEnd(succeedRequest: .some(.none))
 
         case .failed:
+            return .wait
+
+        case .finished:
+            // A request may be finished, before we have send all parts. This might be the case if
+            // the server responded with an HTTP status code that is equal or larger to 300
+            // (Redirection, Client Error or Server Error). In those cases we pause the request body
+            // stream as soon as we have received the response head and we succeed the request as
+            // when response end is received. This may mean, that we succeed a request, even though
+            // we have not sent all it's body parts.
+
+            // We may still receive something, here because of potential race conditions with the
+            // producing thread.
             return .wait
         }
     }
@@ -376,23 +387,23 @@ struct HTTPRequestStateMachine {
     // MARK: - Response
 
     mutating func receivedHTTPResponseHead(_ head: HTTPResponseHead) -> Action {
+        guard head.status.code >= 200 else {
+            // we ignore any leading 1xx headers... No state change needed.
+            return .wait
+        }
+
         switch self.state {
         case .initialized, .waitForChannelToBecomeWritable:
             preconditionFailure("How can we receive a response head before sending a request head ourselves")
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, producer: .paused), .waitingForHead):
             self.state = .running(
-                .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: .producing),
+                .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: .paused),
                 .receivingBody(head, .downstreamIsConsuming(readPending: false))
             )
             return .forwardResponseHead(head, pauseRequestBodyStream: false)
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, producer: .producing), .waitingForHead):
-            guard head.status.code >= 200 else {
-                // we ignore any leading 1xx headers... No state change needed.
-                return .wait
-            }
-
             if head.status.code >= 300 {
                 self.state = .running(
                     .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: .paused),
@@ -450,12 +461,25 @@ struct HTTPRequestStateMachine {
         case .running(_, .waitingForHead):
             preconditionFailure("How can we receive a response end, if we haven't a received a head. Invalid state: \(self.state)")
 
-        case .running(.streaming(let expectedBodyLength, let sentBodyBytes, let producerState), .receivingBody(let head, _)) where head.status.code < 300:
+        case .running(.streaming(let expectedBodyLength, let sentBodyBytes, let producerState), .receivingBody(let head, let consumerState)) where head.status.code < 300:
             self.state = .running(
                 .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: producerState),
                 .endReceived
             )
-            return .wait
+
+            switch consumerState {
+            case .downstreamHasDemand, .downstreamIsConsuming(readPending: false):
+                return .wait
+            case .downstreamIsConsuming(readPending: true):
+                // If we have a received a read event before, we must ensure that the read event
+                // eventually gets onto the channel pipeline again. The end of the request gives
+                // us an opportunity for this clean up task.
+                // It is very unlikely that we can see this in the real world. If we have swallowed
+                // a read event we don't expect to receive further data from the channel incl.
+                // response ends.
+
+                return .read
+            }
 
         case .running(.streaming(_, _, let producerState), .receivingBody(let head, _)):
             assert(head.status.code >= 300)
