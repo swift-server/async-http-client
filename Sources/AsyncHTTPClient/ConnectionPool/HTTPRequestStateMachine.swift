@@ -42,7 +42,7 @@ struct HTTPRequestStateMachine {
     fileprivate enum RequestState {
         /// A sub state for sending a request body. Stores whether a producer should produce more
         /// bytes or should pause.
-        enum ProducerControlState: Equatable {
+        enum ProducerControlState: String {
             /// The request body producer should produce more body bytes. The channel is writable.
             case producing
             /// The request body producer should pause producing more bytes. The channel is not writable.
@@ -200,7 +200,9 @@ struct HTTPRequestStateMachine {
             // more data...
             return .read
         case .running(_, .receivingBody(_, .downstreamIsConsuming(readPending: true))):
-            preconditionFailure("It should not be possible to receive two reads after each other, if the first one hasn't been forwarded.")
+            // We have caught another `read` event already. We don't need to change the state and
+            // we should continue to wait for the consumer to call `forwardMoreBodyParts`
+            return .wait
         case .running(let requestState, .receivingBody(let responseHead, .downstreamIsConsuming(readPending: false))):
             self.state = .running(requestState, .receivingBody(responseHead, .downstreamIsConsuming(readPending: true)))
             return .wait
@@ -557,17 +559,6 @@ extension HTTPRequestStateMachine.RequestState: CustomStringConvertible {
             return ".streaming(sent: \(expected != nil ? String(expected!) : "-"), sent: \(sent), producer: \(producer)"
         case .endSent:
             return ".endSent"
-        }
-    }
-}
-
-extension HTTPRequestStateMachine.RequestState.ProducerControlState: CustomStringConvertible {
-    var description: String {
-        switch self {
-        case .paused:
-            return ".paused"
-        case .producing:
-            return ".producing"
         }
     }
 }
