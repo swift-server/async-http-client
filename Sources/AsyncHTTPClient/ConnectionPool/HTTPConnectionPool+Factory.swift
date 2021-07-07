@@ -24,11 +24,6 @@ import NIOTLS
 #endif
 
 extension HTTPConnectionPool {
-    enum NegotiatedProtocol {
-        case http1_1(Channel)
-        case http2_0(Channel)
-    }
-
     struct ConnectionFactory {
         let key: ConnectionPool.Key
         let clientConfiguration: HTTPClient.Configuration
@@ -48,6 +43,11 @@ extension HTTPConnectionPool {
 }
 
 extension HTTPConnectionPool.ConnectionFactory {
+    enum NegotiatedProtocol {
+        case http1_1(Channel)
+        case http2(Channel)
+    }
+
     func makeHTTP1Channel(
         connectionID: HTTPConnectionPool.Connection.ID,
         deadline: NIODeadline,
@@ -59,8 +59,11 @@ extension HTTPConnectionPool.ConnectionFactory {
             deadline: deadline,
             eventLoop: eventLoop,
             logger: logger
-        ).flatMapThrowing {
-            (channel, _) -> Channel in
+        ).flatMapThrowing { (negotiated) -> Channel in
+
+            guard case .http1_1(let channel) = negotiated else {
+                preconditionFailure("Expected to create http/1.1 connections only for now")
+            }
 
             // add the http1.1 channel handlers
             let syncOperations = channel.pipeline.syncOperations
@@ -83,8 +86,8 @@ extension HTTPConnectionPool.ConnectionFactory {
         deadline: NIODeadline,
         eventLoop: EventLoop,
         logger: Logger
-    ) -> EventLoopFuture<(Channel, HTTPVersion)> {
-        let channelFuture: EventLoopFuture<(Channel, HTTPVersion)>
+    ) -> EventLoopFuture<NegotiatedProtocol> {
+        let channelFuture: EventLoopFuture<NegotiatedProtocol>
 
         if self.key.scheme.isProxyable, let proxy = self.clientConfiguration.proxy {
             switch proxy.type {
@@ -110,7 +113,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         }
 
         // let's map `ChannelError.connectTimeout` into a `HTTPClientError.connectTimeout`
-        return channelFuture.flatMapErrorThrowing { error throws -> (Channel, HTTPVersion) in
+        return channelFuture.flatMapErrorThrowing { error throws -> NegotiatedProtocol in
             switch error {
             case ChannelError.connectTimeout:
                 throw HTTPClientError.connectTimeout
@@ -124,15 +127,15 @@ extension HTTPConnectionPool.ConnectionFactory {
         deadline: NIODeadline,
         eventLoop: EventLoop,
         logger: Logger
-    ) -> EventLoopFuture<(Channel, HTTPVersion)> {
+    ) -> EventLoopFuture<NegotiatedProtocol> {
         switch self.key.scheme {
         case .http, .http_unix, .unix:
-            return self.makePlainChannel(deadline: deadline, eventLoop: eventLoop).map { ($0, .http1_1) }
+            return self.makePlainChannel(deadline: deadline, eventLoop: eventLoop).map { .http1_1($0) }
         case .https, .https_unix:
             return self.makeTLSChannel(deadline: deadline, eventLoop: eventLoop, logger: logger).flatMapThrowing {
                 channel, negotiated in
 
-                (channel, try self.matchALPNToHTTPVersion(negotiated))
+                try self.matchALPNToHTTPVersion(negotiated, channel: channel)
             }
         }
     }
@@ -156,7 +159,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         deadline: NIODeadline,
         eventLoop: EventLoop,
         logger: Logger
-    ) -> EventLoopFuture<(Channel, HTTPVersion)> {
+    ) -> EventLoopFuture<NegotiatedProtocol> {
         // A proxy connection starts with a plain text connection to the proxy server. After
         // the connection has been established with the proxy server, the connection might be
         // upgraded to TLS before we send our first request.
@@ -199,7 +202,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         deadline: NIODeadline,
         eventLoop: EventLoop,
         logger: Logger
-    ) -> EventLoopFuture<(Channel, HTTPVersion)> {
+    ) -> EventLoopFuture<NegotiatedProtocol> {
         // A proxy connection starts with a plain text connection to the proxy server. After
         // the connection has been established with the proxy server, the connection might be
         // upgraded to TLS before we send our first request.
@@ -231,12 +234,12 @@ extension HTTPConnectionPool.ConnectionFactory {
         _ channel: Channel,
         deadline: NIODeadline,
         logger: Logger
-    ) -> EventLoopFuture<(Channel, HTTPVersion)> {
+    ) -> EventLoopFuture<NegotiatedProtocol> {
         switch self.key.scheme {
         case .unix, .http_unix, .https_unix:
             preconditionFailure("Unexpected scheme. Not supported for proxy!")
         case .http:
-            return channel.eventLoop.makeSucceededFuture((channel, .http1_1))
+            return channel.eventLoop.makeSucceededFuture(.http1_1(channel))
         case .https:
             var tlsConfig = self.tlsConfiguration
             // since we can support h2, we need to advertise this in alpn
@@ -264,9 +267,9 @@ extension HTTPConnectionPool.ConnectionFactory {
                 } catch {
                     return channel.eventLoop.makeFailedFuture(error)
                 }
-            }.flatMap { negotiated -> EventLoopFuture<(Channel, HTTPVersion)> in
+            }.flatMap { negotiated -> EventLoopFuture<NegotiatedProtocol> in
                 channel.pipeline.removeHandler(tlsEventHandler).flatMapThrowing {
-                    (channel, try self.matchALPNToHTTPVersion(negotiated))
+                    try self.matchALPNToHTTPVersion(negotiated, channel: channel)
                 }
             }
         }
@@ -399,12 +402,12 @@ extension HTTPConnectionPool.ConnectionFactory {
         return eventLoop.makeSucceededFuture(bootstrap)
     }
 
-    private func matchALPNToHTTPVersion(_ negotiated: String?) throws -> HTTPVersion {
+    private func matchALPNToHTTPVersion(_ negotiated: String?, channel: Channel) throws -> NegotiatedProtocol {
         switch negotiated {
         case .none, .some("http/1.1"):
-            return .http1_1
+            return .http1_1(channel)
         case .some("h2"):
-            return .http2
+            return .http2(channel)
         case .some(let unsupported):
             throw HTTPClientError.serverOfferedUnsupportedApplicationProtocol(unsupported)
         }
