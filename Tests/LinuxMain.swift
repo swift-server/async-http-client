@@ -36,6 +36,7 @@ import XCTest
         testCase(HTTPClientSOCKSTests.allTests),
         testCase(HTTPClientTests.allTests),
         testCase(HTTPConnectionPool_FactoryTests.allTests),
+        testCase(HTTPConnectionPool_WaiterTests.allTests),
         testCase(HTTPRequestStateMachineTests.allTests),
         testCase(LRUCacheTests.allTests),
         testCase(RequestBagTests.allTests),
