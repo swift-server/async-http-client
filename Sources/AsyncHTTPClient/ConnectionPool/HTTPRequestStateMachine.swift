@@ -444,15 +444,6 @@ struct HTTPRequestStateMachine {
             return .wait
         }
 
-        var expectingBody: Bool = false
-        if let length = head.headers.first(name: "content-length").flatMap({ Int($0) }) {
-            if length > 0 {
-                expectingBody = true
-            }
-        } else if head.headers.contains(name: "transfer-encoding") {
-            expectingBody = true
-        }
-
         switch self.state {
         case .initialized, .waitForChannelToBecomeWritable:
             preconditionFailure("How can we receive a response head before sending a request head ourselves")
@@ -460,7 +451,7 @@ struct HTTPRequestStateMachine {
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, producer: .paused), .waitingForHead):
             self.state = .running(
                 .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: .paused),
-                .receivingBody(head, .init(expectingBody: expectingBody))
+                .receivingBody(head, .init())
             )
             return .forwardResponseHead(head, pauseRequestBodyStream: false)
 
@@ -468,19 +459,19 @@ struct HTTPRequestStateMachine {
             if head.status.code >= 300 {
                 self.state = .running(
                     .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: .paused),
-                    .receivingBody(head, .init(expectingBody: expectingBody))
+                    .receivingBody(head, .init())
                 )
                 return .forwardResponseHead(head, pauseRequestBodyStream: true)
             } else {
                 self.state = .running(
                     .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: .producing),
-                    .receivingBody(head, .init(expectingBody: expectingBody))
+                    .receivingBody(head, .init())
                 )
                 return .forwardResponseHead(head, pauseRequestBodyStream: false)
             }
 
         case .running(.endSent, .waitingForHead):
-            self.state = .running(.endSent, .receivingBody(head, .init(expectingBody: expectingBody)))
+            self.state = .running(.endSent, .receivingBody(head, .init()))
             return .forwardResponseHead(head, pauseRequestBodyStream: false)
 
         case .running(_, .receivingBody), .running(_, .endReceived), .finished:

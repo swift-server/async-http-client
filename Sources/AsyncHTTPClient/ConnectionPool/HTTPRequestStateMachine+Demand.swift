@@ -40,8 +40,8 @@ extension HTTPRequestStateMachine {
 
         private var state: State
 
-        init(expectingBody: Bool) {
-            self.state = .waitingForBytes(CircularBuffer(initialCapacity: expectingBody ? 16 : 0))
+        init() {
+            self.state = .waitingForBytes(CircularBuffer(initialCapacity: 16))
         }
 
         mutating func receivedBodyPart(_ body: ByteBuffer) {
@@ -137,8 +137,6 @@ extension HTTPRequestStateMachine {
         mutating func end() -> CircularBuffer<ByteBuffer> {
             switch self.state {
             case .waitingForBytes(let buffer):
-                // This should never happen. But we don't want to precondition this behavior. Let's just
-                // pass the read event on
                 return buffer
 
             case .waitingForReadOrDemand,
