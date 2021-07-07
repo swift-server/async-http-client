@@ -41,6 +41,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
     let idleReadTimeout: TimeAmount?
 
     let requestHead: HTTPRequestHead
+    let requestFramingMetadata: RequestFramingMetadata
 
     let eventLoopPreference: HTTPClient.EventLoopPreference
 
@@ -50,7 +51,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
          redirectHandler: RedirectHandler<Delegate.Response>?,
          connectionDeadline: NIODeadline,
          idleReadTimeout: TimeAmount?,
-         delegate: Delegate) {
+         delegate: Delegate) throws {
         self.eventLoopPreference = eventLoopPreference
         self.task = task
         self.state = .init(redirectHandler: redirectHandler)
@@ -59,12 +60,9 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
         self.idleReadTimeout = idleReadTimeout
         self.delegate = delegate
 
-        self.requestHead = HTTPRequestHead(
-            version: .http1_1,
-            method: request.method,
-            uri: request.uri,
-            headers: request.headers
-        )
+        let (head, metadata) = try request.createRequestHead()
+        self.requestHead = head
+        self.requestFramingMetadata = metadata
 
         // TODO: comment in once we switch to using the Request bag in AHC
 //        self.task.taskDelegate = self

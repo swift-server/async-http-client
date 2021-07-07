@@ -293,6 +293,28 @@ extension HTTPClient {
         public var port: Int {
             return self.url.port ?? (self.useTLS ? 443 : 80)
         }
+
+        func createRequestHead() throws -> (HTTPRequestHead, RequestFramingMetadata) {
+            var head = HTTPRequestHead(
+                version: .http1_1,
+                method: self.method,
+                uri: self.uri,
+                headers: self.headers
+            )
+
+            if !head.headers.contains(name: "host") {
+                let port = self.port
+                var host = self.host
+                if !(port == 80 && self.scheme == "http"), !(port == 443 && self.scheme == "https") {
+                    host += ":\(port)"
+                }
+                head.headers.add(name: "host", value: host)
+            }
+
+            let metadata = try head.headers.validate(method: self.method, body: self.body)
+
+            return (head, metadata)
+        }
     }
 
     /// Represent HTTP response.
@@ -877,46 +899,29 @@ extension TaskHandler: ChannelDuplexHandler {
     typealias OutboundOut = HTTPClientRequestPart
 
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
+        let request = self.unwrapOutboundIn(data)
         self.state = .sendingBodyWaitingResponseHead
 
-        let request = self.unwrapOutboundIn(data)
-
-        var head = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1),
-                                   method: request.method,
-                                   uri: request.uri)
-        var headers = request.headers
-
-        if !request.headers.contains(name: "host") {
-            let port = request.port
-            var host = request.host
-            if !(port == 80 && request.scheme == "http"), !(port == 443 && request.scheme == "https") {
-                host += ":\(port)"
-            }
-            headers.add(name: "host", value: host)
-        }
+        let head: HTTPRequestHead
+        let metadata: RequestFramingMetadata
 
         do {
-            try headers.validate(method: request.method, body: request.body)
+            (head, metadata) = try request.createRequestHead()
         } catch {
             self.errorCaught(context: context, error: error)
             promise?.fail(error)
             return
         }
 
-        head.headers = headers
-
-        if head.headers[canonicalForm: "connection"].map({ $0.lowercased() }).contains("close") {
-            self.closing = true
-        }
         // This assert can go away when (if ever!) the above `if` correctly handles other HTTP versions. For example
         // in HTTP/1.0, we need to treat the absence of a 'connection: keep-alive' as a close too.
-        assert(head.version == HTTPVersion(major: 1, minor: 1),
+        assert(head.version == .http1_1,
                "Sending a request in HTTP version \(head.version) which is unsupported by the above `if`")
 
-        let contentLengths = head.headers[canonicalForm: "content-length"]
-        assert(contentLengths.count <= 1)
-
-        self.expectedBodyLength = contentLengths.first.flatMap { Int($0) }
+        if case .fixedSize(let length) = metadata.body {
+            self.expectedBodyLength = length
+        }
+        self.closing = metadata.connectionClose
 
         context.write(wrapOutboundOut(.head(head))).map {
             self.callOutToDelegateFireAndForget(value: head, self.delegate.didSendRequestHead)

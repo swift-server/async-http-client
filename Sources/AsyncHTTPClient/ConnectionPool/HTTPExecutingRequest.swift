@@ -189,9 +189,17 @@ protocol HTTPRequestExecutor {
 protocol HTTPExecutingRequest: AnyObject {
     /// The request's head.
     ///
-    /// Based on the content of the request head the task executor will call `startRequestBodyStream`
-    /// after `requestHeadSent` was called.
+    /// The HTTP request head, that shall be sent. The HTTPRequestExecutor **will not** run any validation
+    /// check on the request head. All necessary metadata about the request head the executor expects in
+    /// the ``requestFramingMetadata``.
     var requestHead: HTTPRequestHead { get }
+
+    /// The request's framing metadata.
+    ///
+    /// The request framing metadata that is derived from the ``requestHead``. Based on the content of the
+    /// request framing metadata the executor will call ``startRequestBodyStream`` after
+    /// ``requestHeadSent``.
+    var requestFramingMetadata: RequestFramingMetadata { get }
 
     /// The maximal `TimeAmount` that is allowed to pass between `channelRead`s from the Channel.
     var idleReadTimeout: TimeAmount? { get }
