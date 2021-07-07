@@ -993,7 +993,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         return HTTPClientError(code: .serverOfferedUnsupportedApplicationProtocol(proto))
     }
 
-    /// The remote server responded with a status code between >= 300, before the full request was send. The request stream
+    /// The remote server responded with a status code >= 300, before the full request was sent. The request stream
     /// was therefore cancelled
     public static let requestStreamCancelled = HTTPClientError(code: .requestStreamCancelled)
 }
