@@ -923,6 +923,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case httpProxyHandshakeTimeout
         case tlsHandshakeTimeout
         case serverOfferedUnsupportedApplicationProtocol(String)
+        case requestStreamCancelled
     }
 
     private var code: Code
@@ -991,4 +992,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static func serverOfferedUnsupportedApplicationProtocol(_ proto: String) -> HTTPClientError {
         return HTTPClientError(code: .serverOfferedUnsupportedApplicationProtocol(proto))
     }
+
+    /// The remote server responded with a status code >= 300, before the full request was sent. The request stream
+    /// was therefore cancelled
+    public static let requestStreamCancelled = HTTPClientError(code: .requestStreamCancelled)
 }

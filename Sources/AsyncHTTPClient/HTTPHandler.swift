@@ -624,6 +624,10 @@ extension URL {
     }
 }
 
+protocol HTTPClientTaskDelegate {
+    func cancel()
+}
+
 extension HTTPClient {
     /// Response execution context. Will be created by the library and could be used for obtaining
     /// `EventLoopFuture<Response>` of the execution or cancellation of the execution.
