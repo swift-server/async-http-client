@@ -36,6 +36,8 @@ struct HTTPRequestStateMachine {
         case finished
         /// The request has failed
         case failed(Error)
+
+        case modifying
     }
 
     /// A sub state for a running request. More specifically for sending a request body.
@@ -58,23 +60,10 @@ struct HTTPRequestStateMachine {
     }
 
     fileprivate enum ResponseState {
-        /// A sub state for receiving a response. Stores whether the consumer has either signaled demand for more data or
-        /// is busy consuming the so far forwarded bytes
-        enum ConsumerControlState {
-            /// the state machine is in this state once it has passed down a request head or body part. If a read event
-            /// occurs while in this state, the readPending flag will be set true. If the consumer signals more demand
-            /// by invoking `forwardMoreBodyParts`, the state machine will forward the read event.
-            case downstreamIsConsuming(readPending: Bool)
-            /// the state machine is in this state once the consumer has signaled more demand by invoking
-            /// `forwardMoreBodyParts`. If a read event occurs in this state the read event will be forwarded
-            /// immediately.
-            case downstreamHasDemand
-        }
-
         /// A response head has not been received yet.
         case waitingForHead
         /// A response head has been received and we are ready to consume more data off the wire
-        case receivingBody(HTTPResponseHead, ConsumerControlState)
+        case receivingBody(HTTPResponseHead, ResponseStreamState)
         /// A response end has been received. We don't expect more bytes from the wire.
         case endReceived
     }
@@ -84,8 +73,9 @@ struct HTTPRequestStateMachine {
         enum FinalStreamAction {
             /// Close the connection
             case close
-            /// Trigger a read event
-            case read
+            /// If the server has replied, with a status of 200...300 before all data was sent, a request is considered succeeded,
+            /// as soon as we wrote the request end onto the wire.
+            case sendRequestEnd
             /// Do nothing. This is action is used, if the request failed, before we the request head was written onto the wire.
             /// This might happen if the request is cancelled, or the request failed the soundness check.
             case none
@@ -93,18 +83,16 @@ struct HTTPRequestStateMachine {
 
         case sendRequestHead(HTTPRequestHead, startBody: Bool)
         case sendBodyPart(IOData)
-        /// If the server has replied, with a status of 200...300 before all data was sent, a request is considered succeeded,
-        /// as soon as we wrote the request end onto the wire. In this case the succeedRequest property is set.
-        case sendRequestEnd(succeedRequest: FinalStreamAction?)
+        case sendRequestEnd
 
         case pauseRequestBodyStream
         case resumeRequestBodyStream
 
         case forwardResponseHead(HTTPResponseHead, pauseRequestBodyStream: Bool)
-        case forwardResponseBodyPart(ByteBuffer)
+        case forwardResponseBodyParts(CircularBuffer<ByteBuffer>)
 
         case failRequest(Error, FinalStreamAction)
-        case succeedRequest(FinalStreamAction)
+        case succeedRequest(FinalStreamAction, CircularBuffer<ByteBuffer>)
 
         case read
         case wait
@@ -168,6 +156,9 @@ struct HTTPRequestStateMachine {
 
             self.state = .running(requestState, responseState)
             return .resumeRequestBodyStream
+
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
@@ -191,32 +182,9 @@ struct HTTPRequestStateMachine {
             )
             self.state = .running(requestState, responseState)
             return .pauseRequestBodyStream
-        }
-    }
 
-    mutating func readEventCaught() -> Action {
-        switch self.state {
-        case .initialized,
-             .waitForChannelToBecomeWritable,
-             .running(_, .waitingForHead),
-             .running(_, .endReceived),
-             .finished,
-             .failed:
-            // If we are not in the middle of streaming the response body, we always want to get
-            // more data...
-            return .read
-        case .running(_, .receivingBody(_, .downstreamIsConsuming(readPending: true))):
-            // We have caught another `read` event already. We don't need to change the state and
-            // we should continue to wait for the consumer to call `forwardMoreBodyParts`
-            return .wait
-        case .running(let requestState, .receivingBody(let responseHead, .downstreamIsConsuming(readPending: false))):
-            self.state = .running(requestState, .receivingBody(responseHead, .downstreamIsConsuming(readPending: true)))
-            return .wait
-        case .running(_, .receivingBody(_, .downstreamHasDemand)):
-            // The consumer has signaled a demand for more response body bytes. If a `read` is
-            // caught, we pass it on right away. The state machines does not transition into another
-            // state.
-            return .read
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
@@ -233,6 +201,8 @@ struct HTTPRequestStateMachine {
             return .failRequest(error, .close)
         case .finished, .failed:
             preconditionFailure("If the request is finished or failed, we expect the connection state machine to remove the request immediately from its state. Thus this state is unreachable.")
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
@@ -294,6 +264,9 @@ struct HTTPRequestStateMachine {
             // We may still receive something, here because of potential race conditions with the
             // producing thread.
             return .wait
+
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
@@ -312,7 +285,7 @@ struct HTTPRequestStateMachine {
             }
 
             self.state = .running(.endSent, .waitingForHead)
-            return .sendRequestEnd(succeedRequest: nil)
+            return .sendRequestEnd
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, _), .receivingBody(let head, let streamState)):
             assert(head.status.code < 300)
@@ -324,7 +297,7 @@ struct HTTPRequestStateMachine {
             }
 
             self.state = .running(.endSent, .receivingBody(head, streamState))
-            return .sendRequestEnd(succeedRequest: nil)
+            return .sendRequestEnd
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, _), .endReceived):
             if let expected = expectedBodyLength, expected != sentBodyBytes {
@@ -334,7 +307,7 @@ struct HTTPRequestStateMachine {
             }
 
             self.state = .finished
-            return .sendRequestEnd(succeedRequest: .some(.none))
+            return .succeedRequest(.sendRequestEnd, .init())
 
         case .failed:
             return .wait
@@ -350,6 +323,9 @@ struct HTTPRequestStateMachine {
             // We may still receive something, here because of potential race conditions with the
             // producing thread.
             return .wait
+
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
@@ -359,14 +335,20 @@ struct HTTPRequestStateMachine {
             let error = HTTPClientError.cancelled
             self.state = .failed(error)
             return .failRequest(error, .none)
+
         case .running:
             let error = HTTPClientError.cancelled
             self.state = .failed(error)
             return .failRequest(error, .close)
+
         case .finished:
             return .wait
+
         case .failed:
             return .wait
+
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
@@ -376,17 +358,87 @@ struct HTTPRequestStateMachine {
             let error = HTTPClientError.remoteConnectionClosed
             self.state = .failed(error)
             return .failRequest(error, .none)
+
         case .finished:
             return .wait
+
         case .failed:
             // don't overwrite error
             return .wait
+
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
     // MARK: - Response
 
-    mutating func receivedHTTPResponseHead(_ head: HTTPResponseHead) -> Action {
+    mutating func read() -> Action {
+        switch self.state {
+        case .initialized,
+             .waitForChannelToBecomeWritable,
+             .running(_, .waitingForHead),
+             .running(_, .endReceived),
+             .finished,
+             .failed:
+            // If we are not in the middle of streaming the response body, we always want to get
+            // more data...
+            return .read
+
+        case .running(let requestState, .receivingBody(let head, var streamState)):
+            // This should never happen. But we don't want to precondition this behavior. Let's just
+            // pass the read event on
+            return self.avoidingStateMachineCoW { (state) -> Action in
+                let action = streamState.read()
+                state = .running(requestState, .receivingBody(head, streamState))
+                return action.toRequestAction()
+            }
+
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
+        }
+    }
+
+    mutating func channelRead(_ part: HTTPClientResponsePart) -> Action {
+        switch part {
+        case .head(let head):
+            return self.receivedHTTPResponseHead(head)
+        case .body(let body):
+            return self.receivedHTTPResponseBodyPart(body)
+        case .end:
+            return self.receivedHTTPResponseEnd()
+        }
+    }
+
+    mutating func channelReadComplete() -> Action {
+        switch self.state {
+        case .initialized,
+             .waitForChannelToBecomeWritable,
+             .running(_, .waitingForHead),
+             .running(_, .endReceived),
+             .finished,
+             .failed:
+            return .wait
+
+        case .running(let requestState, .receivingBody(let head, var streamState)):
+            // This should never happen. But we don't want to precondition this behavior. Let's just
+            // pass the read event on
+            return self.avoidingStateMachineCoW { (state) -> Action in
+                let buffer = streamState.channelReadComplete()
+                state = .running(requestState, .receivingBody(head, streamState))
+                if let buffer = buffer {
+                    return .forwardResponseBodyParts(buffer)
+                } else {
+                    return .wait
+                }
+            }
+
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
+        }
+    }
+
+    private mutating func receivedHTTPResponseHead(_ head: HTTPResponseHead) -> Action {
         guard head.status.code >= 200 else {
             // we ignore any leading 1xx headers... No state change needed.
             return .wait
@@ -399,7 +451,7 @@ struct HTTPRequestStateMachine {
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, producer: .paused), .waitingForHead):
             self.state = .running(
                 .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: .paused),
-                .receivingBody(head, .downstreamIsConsuming(readPending: false))
+                .receivingBody(head, .init())
             )
             return .forwardResponseHead(head, pauseRequestBodyStream: false)
 
@@ -407,25 +459,28 @@ struct HTTPRequestStateMachine {
             if head.status.code >= 300 {
                 self.state = .running(
                     .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: .paused),
-                    .receivingBody(head, .downstreamIsConsuming(readPending: false))
+                    .receivingBody(head, .init())
                 )
                 return .forwardResponseHead(head, pauseRequestBodyStream: true)
             } else {
                 self.state = .running(
                     .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: .producing),
-                    .receivingBody(head, .downstreamIsConsuming(readPending: false))
+                    .receivingBody(head, .init())
                 )
                 return .forwardResponseHead(head, pauseRequestBodyStream: false)
             }
 
         case .running(.endSent, .waitingForHead):
-            self.state = .running(.endSent, .receivingBody(head, .downstreamIsConsuming(readPending: false)))
+            self.state = .running(.endSent, .receivingBody(head, .init()))
             return .forwardResponseHead(head, pauseRequestBodyStream: false)
 
         case .running(_, .receivingBody), .running(_, .endReceived), .finished:
             preconditionFailure("How can we successfully finish the request, before having received a head. Invalid state: \(self.state)")
         case .failed:
             return .wait
+
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
@@ -437,23 +492,25 @@ struct HTTPRequestStateMachine {
         case .running(_, .waitingForHead):
             preconditionFailure("How can we receive a response body, if we haven't received a head. Invalid state: \(self.state)")
 
-        case .running(let requestState, .receivingBody(let head, .downstreamHasDemand)):
-            self.state = .running(requestState, .receivingBody(head, .downstreamIsConsuming(readPending: false)))
-            return .forwardResponseBodyPart(body)
-
-        case .running(_, .receivingBody(_, .downstreamIsConsuming)):
-            // the state doesn't need to be changed. we are already in the correct state.
-            // just forward the data.
-            return .forwardResponseBodyPart(body)
+        case .running(let requestState, .receivingBody(let head, var responseStreamState)):
+            return self.avoidingStateMachineCoW { (state) -> Action in
+                responseStreamState.receivedBodyPart(body)
+                state = .running(requestState, .receivingBody(head, responseStreamState))
+                return .wait
+            }
 
         case .running(_, .endReceived), .finished:
             preconditionFailure("How can we successfully finish the request, before having received a head. Invalid state: \(self.state)")
+
         case .failed:
             return .wait
+
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
-    mutating func receivedHTTPResponseEnd() -> Action {
+    private mutating func receivedHTTPResponseEnd() -> Action {
         switch self.state {
         case .initialized, .waitForChannelToBecomeWritable:
             preconditionFailure("How can we receive a response head before sending a request head ourselves. Invalid state: \(self.state)")
@@ -461,74 +518,67 @@ struct HTTPRequestStateMachine {
         case .running(_, .waitingForHead):
             preconditionFailure("How can we receive a response end, if we haven't a received a head. Invalid state: \(self.state)")
 
-        case .running(.streaming(let expectedBodyLength, let sentBodyBytes, let producerState), .receivingBody(let head, let consumerState)) where head.status.code < 300:
-            self.state = .running(
-                .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: producerState),
-                .endReceived
-            )
+        case .running(.streaming(let expectedBodyLength, let sentBodyBytes, let producerState), .receivingBody(let head, var responseStreamState))
+            where head.status.code < 300:
 
-            switch consumerState {
-            case .downstreamHasDemand, .downstreamIsConsuming(readPending: false):
-                return .wait
-            case .downstreamIsConsuming(readPending: true):
-                // If we have a received a read event before, we must ensure that the read event
-                // eventually gets onto the channel pipeline again. The end of the request gives
-                // us an opportunity for this clean up task.
-                // It is very unlikely that we can see this in the real world. If we have swallowed
-                // a read event we don't expect to receive further data from the channel incl.
-                // response ends.
-
-                return .read
+            return self.avoidingStateMachineCoW { state -> Action in
+                let remainingBuffer = responseStreamState.end()
+                state = .running(
+                    .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: producerState),
+                    .endReceived
+                )
+                return .forwardResponseBodyParts(remainingBuffer)
             }
 
-        case .running(.streaming(_, _, let producerState), .receivingBody(let head, _)):
+        case .running(.streaming(_, _, let producerState), .receivingBody(let head, var responseStreamState)):
             assert(head.status.code >= 300)
             assert(producerState == .paused, "Expected to have paused the request body stream, when the head was received. Invalid state: \(self.state)")
-            self.state = .finished
-            return .succeedRequest(.close)
 
-        case .running(.endSent, .receivingBody(_, .downstreamIsConsuming(readPending: true))):
-            // If we have a received a read event before, we must ensure that the read event
-            // eventually gets onto the channel pipeline again. The end of the request gives
-            // us an opportunity for this clean up task.
-            // It is very unlikely that we can see this in the real world. If we have swallowed
-            // a read event we don't expect to receive further data from the channel incl.
-            // response ends.
-            self.state = .finished
-            return .succeedRequest(.read)
+            return self.avoidingStateMachineCoW { state -> Action in
+                let remainingBuffer = responseStreamState.end()
+                state = .finished
+                return .succeedRequest(.close, remainingBuffer)
+            }
 
-        case .running(.endSent, .receivingBody(_, .downstreamIsConsuming(readPending: false))),
-             .running(.endSent, .receivingBody(_, .downstreamHasDemand)):
-            self.state = .finished
-            return .succeedRequest(.none)
+        case .running(.endSent, .receivingBody(_, var responseStreamState)):
+            return self.avoidingStateMachineCoW { state -> Action in
+                let remainingBuffer = responseStreamState.end()
+                state = .finished
+                return .succeedRequest(.none, remainingBuffer)
+            }
 
         case .running(_, .endReceived), .finished:
             preconditionFailure("How can we receive a response end, if another one was already received. Invalid state: \(self.state)")
+
         case .failed:
             return .wait
+
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
-    mutating func forwardMoreBodyParts() -> Action {
+    mutating func demandMoreResponseBodyParts() -> Action {
         switch self.state {
         case .initialized,
              .running(_, .waitingForHead),
              .waitForChannelToBecomeWritable:
             preconditionFailure("The response is expected to only ask for more data after the response head was forwarded")
-        case .running(let requestState, .receivingBody(let head, .downstreamIsConsuming(readPending: false))):
-            self.state = .running(requestState, .receivingBody(head, .downstreamHasDemand))
-            return .wait
-        case .running(let requestState, .receivingBody(let head, .downstreamIsConsuming(readPending: true))):
-            self.state = .running(requestState, .receivingBody(head, .downstreamIsConsuming(readPending: false)))
-            return .read
-        case .running(_, .receivingBody(_, .downstreamHasDemand)):
-            // We have received a request for more data before. Normally we only expect one request
-            // for more data, but a race can come into play here.
-            return .wait
+
+        case .running(let requestState, .receivingBody(let head, var responseStreamState)):
+            return self.avoidingStateMachineCoW { state -> Action in
+                let action = responseStreamState.demandMoreResponseBodyParts()
+                state = .running(requestState, .receivingBody(head, responseStreamState))
+                return action.toRequestAction()
+            }
+
         case .running(_, .endReceived),
              .finished,
              .failed:
             return .wait
+
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
@@ -549,6 +599,9 @@ struct HTTPRequestStateMachine {
 
         case .finished, .failed:
             return .wait
+
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
@@ -568,6 +621,52 @@ struct HTTPRequestStateMachine {
     }
 }
 
+extension HTTPRequestStateMachine {
+    /// So, uh...this function needs some explaining.
+    ///
+    /// While the state machine logic above is great, there is a downside to having all of the state machine data in
+    /// associated data on enumerations: any modification of that data will trigger copy on write for heap-allocated
+    /// data. That means that for _every operation on the state machine_ we will CoW our underlying state, which is
+    /// not good.
+    ///
+    /// The way we can avoid this is by using this helper function. It will temporarily set state to a value with no
+    /// associated data, before attempting the body of the function. It will also verify that the state machine never
+    /// remains in this bad state.
+    ///
+    /// A key note here is that all callers must ensure that they return to a good state before they exit.
+    ///
+    /// Sadly, because it's generic and has a closure, we need to force it to be inlined at all call sites, which is
+    /// not ideal.
+    @inline(__always)
+    private mutating func avoidingStateMachineCoW<ReturnType>(_ body: (inout State) -> ReturnType) -> ReturnType {
+        self.state = .modifying
+        defer {
+            assert(!self.isModifying)
+        }
+
+        return body(&self.state)
+    }
+
+    private var isModifying: Bool {
+        if case .modifying = self.state {
+            return true
+        } else {
+            return false
+        }
+    }
+}
+
+extension HTTPRequestStateMachine.ResponseStreamState.Action {
+    func toRequestAction() -> HTTPRequestStateMachine.Action {
+        switch self {
+        case .read:
+            return .read
+        case .wait:
+            return .wait
+        }
+    }
+}
+
 extension HTTPRequestStateMachine: CustomStringConvertible {
     var description: String {
         switch self.state {
@@ -581,6 +680,8 @@ extension HTTPRequestStateMachine: CustomStringConvertible {
             return "HTTPRequestStateMachine(.finished, isWritable: \(self.isChannelWritable))"
         case .failed(let error):
             return "HTTPRequestStateMachine(.failed(\(error)), isWritable: \(self.isChannelWritable))"
+        case .modifying:
+            return "HTTPRequestStateMachine(.modifying, isWritable: \(self.isChannelWritable))"
         }
     }
 }
