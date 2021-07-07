@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-struct RequestFramingMetadata {
-    enum Body {
+struct RequestFramingMetadata: Equatable {
+    enum Body: Equatable {
         case none
         case stream
         case fixedSize(Int)

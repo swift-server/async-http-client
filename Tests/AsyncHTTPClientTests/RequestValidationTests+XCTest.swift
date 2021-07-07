@@ -32,6 +32,8 @@ extension RequestValidationTests {
             ("testGET_HEAD_DELETE_CONNECTRequestCanHaveBody", testGET_HEAD_DELETE_CONNECTRequestCanHaveBody),
             ("testInvalidHeaderFieldNames", testInvalidHeaderFieldNames),
             ("testValidHeaderFieldNames", testValidHeaderFieldNames),
+            ("testMetadataDetectConnectionClose", testMetadataDetectConnectionClose),
+            ("testMetadataDefaultIsConnectionCloseIsFalse", testMetadataDefaultIsConnectionCloseIsFalse),
             ("testNoHeadersNoBody", testNoHeadersNoBody),
             ("testNoHeadersHasBody", testNoHeadersHasBody),
             ("testContentLengthHeaderNoBody", testContentLengthHeaderNoBody),

@@ -16,7 +16,13 @@ import NIO
 import NIOHTTP1
 
 extension HTTPHeaders {
-    mutating func validate(method: HTTPMethod, body: HTTPClient.Body?) throws {
+    mutating func validate(method: HTTPMethod, body: HTTPClient.Body?) throws -> RequestFramingMetadata {
+        var metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+
+        if self[canonicalForm: "connection"].map({ $0.lowercased() }).contains("close") {
+            metadata.connectionClose = true
+        }
+
         // validate transfer encoding and content length (https://tools.ietf.org/html/rfc7230#section-3.3.1)
         if self.contains(name: "Transfer-Encoding"), self.contains(name: "Content-Length") {
             throw HTTPClientError.incompatibleHeaders
@@ -43,13 +49,13 @@ extension HTTPHeaders {
                 // A user agent SHOULD NOT send a Content-Length header field when the request
                 // message does not contain a payload body and the method semantics do not
                 // anticipate such a body.
-                return
+                return metadata
             default:
                 // A user agent SHOULD send a Content-Length in a request message when
                 // no Transfer-Encoding is sent and the request method defines a meaning
                 // for an enclosed payload body.
                 self.add(name: "Content-Length", value: "0")
-                return
+                return metadata
             }
         }
 
@@ -85,14 +91,18 @@ extension HTTPHeaders {
         // add headers if required
         if let enc = transferEncoding {
             self.add(name: "Transfer-Encoding", value: enc)
+            metadata.body = .stream
         } else if let length = contentLength {
             // A sender MUST NOT send a Content-Length header field in any message
             // that contains a Transfer-Encoding header field.
             self.add(name: "Content-Length", value: String(length))
+            metadata.body = .fixedSize(length)
         }
+
+        return metadata
     }
 
-    func validateFieldNames() throws {
+    private func validateFieldNames() throws {
         let invalidFieldNames = self.compactMap { (name, _) -> String? in
             let satisfy = name.utf8.allSatisfy { (char) -> Bool in
                 switch char {
