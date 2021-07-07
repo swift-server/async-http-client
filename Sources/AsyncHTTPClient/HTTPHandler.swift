@@ -313,11 +313,6 @@ extension HTTPClient {
 
             let metadata = try head.headers.validate(method: self.method, body: self.body)
 
-            // This assert can go away when (if ever!) the above `if` correctly handles other HTTP versions. For example
-            // in HTTP/1.0, we need to treat the absence of a 'connection: keep-alive' as a close too.
-            assert(head.version == HTTPVersion(major: 1, minor: 1),
-                   "Sending a request in HTTP version \(head.version) which is unsupported by the above `if`")
-
             return (head, metadata)
         }
     }
