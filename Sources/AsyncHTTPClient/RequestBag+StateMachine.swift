@@ -255,6 +255,10 @@ extension RequestBag.StateMachine {
         }
     }
 
+    /// The response head has been received.
+    ///
+    /// - Parameter head: The response' head
+    /// - Returns: Whether the response should be forwarded to the delegate. Will be `false` if the request follows a redirect.
     mutating func receiveResponseHead(_ head: HTTPResponseHead) -> Bool {
         switch self.state {
         case .initialized, .queued:
