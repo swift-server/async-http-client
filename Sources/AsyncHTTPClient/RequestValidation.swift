@@ -19,7 +19,7 @@ extension HTTPHeaders {
     mutating func validate(method: HTTPMethod, body: HTTPClient.Body?) throws -> RequestFramingMetadata {
         var metadata = RequestFramingMetadata(connectionClose: false, body: .none)
 
-        if self[canonicalForm: "connection"].map({ $0.lowercased() }).contains("close") {
+        if self[canonicalForm: "connection"].lazy.map({ $0.lowercased() }).contains("close") {
             metadata.connectionClose = true
         }
 
