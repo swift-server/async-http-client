@@ -426,7 +426,11 @@ struct HTTPRequestStateMachine {
             return self.avoidingStateMachineCoW { (state) -> Action in
                 let buffer = streamState.channelReadComplete()
                 state = .running(requestState, .receivingBody(head, streamState))
-                return .forwardResponseBodyParts(buffer)
+                if let buffer = buffer {
+                    return .forwardResponseBodyParts(buffer)
+                } else {
+                    return .wait
+                }
             }
 
         case .modifying:

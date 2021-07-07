@@ -61,13 +61,18 @@ extension HTTPRequestStateMachine {
             }
         }
 
-        mutating func channelReadComplete() -> CircularBuffer<ByteBuffer> {
+        mutating func channelReadComplete() -> CircularBuffer<ByteBuffer>? {
             switch self.state {
             case .waitingForBytes(let buffer):
-                var newBuffer = buffer
-                newBuffer.removeAll(keepingCapacity: true)
-                self.state = .waitingForReadOrDemand(newBuffer)
-                return buffer
+                if buffer.isEmpty {
+                    self.state = .waitingForRead(buffer)
+                    return nil
+                } else {
+                    var newBuffer = buffer
+                    newBuffer.removeAll(keepingCapacity: true)
+                    self.state = .waitingForReadOrDemand(newBuffer)
+                    return buffer
+                }
 
             case .waitingForRead,
                  .waitingForDemand,

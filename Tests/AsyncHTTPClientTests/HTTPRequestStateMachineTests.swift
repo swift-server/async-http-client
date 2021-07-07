@@ -279,6 +279,33 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
     }
 
+    func testChannelReadCompleteTriggersButNoBodyDataWasReceivedSoFar() {
+        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
+
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: HTTPHeaders([("content-length", "12")]))
+        XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
+        let part0 = ByteBuffer(bytes: 0...3)
+        let part1 = ByteBuffer(bytes: 4...7)
+        let part2 = ByteBuffer(bytes: 8...11)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+        XCTAssertEqual(state.read(), .read)
+        XCTAssertEqual(state.channelRead(.body(part0)), .wait)
+        XCTAssertEqual(state.channelRead(.body(part1)), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .forwardResponseBodyParts(.init([part0, part1])))
+        XCTAssertEqual(state.read(), .wait)
+        XCTAssertEqual(state.demandMoreResponseBodyParts(), .read)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+        XCTAssertEqual(state.read(), .read)
+        XCTAssertEqual(state.channelRead(.body(part2)), .wait)
+        XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.none, .init([part2])))
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+        XCTAssertEqual(state.read(), .read)
+        XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
+    }
+
     func testResponseReadingWithBackpressureEndOfResponseAllowsReadEventsToTriggerDirectly() {
         var state = HTTPRequestStateMachine(isChannelWritable: true)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
