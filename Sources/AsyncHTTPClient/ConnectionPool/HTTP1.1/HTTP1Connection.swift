@@ -25,7 +25,8 @@ protocol HTTP1ConnectionDelegate {
 final class HTTP1Connection {
     let channel: Channel
 
-    /// the connection pool that created the connection
+    /// the connection's delegate, that will be informed about connection close and connection release
+    /// (ready to run next request).
     let delegate: HTTP1ConnectionDelegate
 
     enum State {
@@ -61,7 +62,11 @@ final class HTTP1Connection {
                 try sync.addHandler(decompressHandler)
             }
 
-            let channelHandler = HTTP1ClientChannelHandler(connection: self, logger: logger)
+            let channelHandler = HTTP1ClientChannelHandler(
+                connection: self,
+                eventLoop: channel.eventLoop,
+                logger: logger
+            )
             try sync.addHandler(channelHandler)
 
             // with this we create an intended retain cycle...

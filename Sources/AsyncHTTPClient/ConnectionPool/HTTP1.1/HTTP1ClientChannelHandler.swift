@@ -21,11 +21,9 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     typealias OutboundOut = HTTPClientRequestPart
     typealias InboundIn = HTTPClientResponsePart
 
-    var channelContext: ChannelHandlerContext!
-
-    var state: HTTP1ConnectionStateMachine = .init() {
+    private var state: HTTP1ConnectionStateMachine = .init() {
         didSet {
-            self.channelContext.eventLoop.assertInEventLoop()
+            self.eventLoop.assertInEventLoop()
 
             self.logger.trace("Connection state did change", metadata: [
                 "state": "\(String(describing: self.state))",
@@ -33,15 +31,20 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         }
     }
 
+    /// while we are in a channel pipeline, this context can be used.
+    private var channelContext: ChannelHandlerContext?
+
     /// the currently executing request
     private var request: HTTPExecutingRequest?
     private var idleReadTimeoutTimer: Scheduled<Void>?
 
     let connection: HTTP1Connection
     let logger: Logger
+    let eventLoop: EventLoop
 
-    init(connection: HTTP1Connection, logger: Logger) {
+    init(connection: HTTP1Connection, eventLoop: EventLoop, logger: Logger) {
         self.connection = connection
+        self.eventLoop = eventLoop
         self.logger = logger
     }
 
@@ -52,6 +55,10 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             let action = self.state.channelActive(isWritable: context.channel.isWritable)
             self.run(action, context: context)
         }
+    }
+
+    func handlerRemoved(context: ChannelHandlerContext) {
+        self.channelContext = nil
     }
 
     // MARK: Channel Inbound Handler
@@ -91,13 +98,10 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         self.run(action, context: context)
     }
 
-    func close(context: ChannelHandlerContext, mode: CloseMode, promise: EventLoopPromise<Void>?) {
-        context.close(mode: mode, promise: promise)
-    }
-
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
         self.logger.trace("New request to execute")
 
+        assert(self.request == nil, "Only write to the ChannelHandler if you are sure, it is idle!")
         let req = self.unwrapOutboundIn(data)
         self.request = req
 
@@ -135,28 +139,28 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
     // MARK: - Run Actions
 
-    func run(_ action: HTTP1ConnectionStateMachine.Action, context: ChannelHandlerContext) {
+    private func run(_ action: HTTP1ConnectionStateMachine.Action, context: ChannelHandlerContext) {
         switch action {
         case .sendRequestHead(let head, startBody: let startBody):
             if startBody {
-                context.write(wrapOutboundOut(.head(head)), promise: nil)
+                context.write(self.wrapOutboundOut(.head(head)), promise: nil)
                 context.flush()
 
                 self.request!.requestHeadSent()
                 self.request!.resumeRequestBodyStream()
             } else {
-                context.write(wrapOutboundOut(.head(head)), promise: nil)
-                context.write(wrapOutboundOut(.end(nil)), promise: nil)
+                context.write(self.wrapOutboundOut(.head(head)), promise: nil)
+                context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
                 context.flush()
 
                 self.request!.requestHeadSent()
             }
 
         case .sendBodyPart(let part):
-            context.writeAndFlush(wrapOutboundOut(.body(part)), promise: nil)
+            context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: nil)
 
         case .sendRequestEnd:
-            context.writeAndFlush(wrapOutboundOut(.end(nil)), promise: nil)
+            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
 
         case .pauseRequestBodyStream:
             self.request!.pauseRequestBodyStream()
@@ -219,6 +223,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             oldRequest.succeedRequest(buffer)
 
         case .failRequest(let error, let finalAction):
+            // see comment in the `succeedRequest` case.
             let oldRequest = self.request!
             self.request = nil
 
@@ -262,84 +267,88 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     // MARK: Private HTTPRequestExecutor
 
     private func writeRequestBodyPart0(_ data: IOData, request: HTTPExecutingRequest) {
-        guard self.request === request else {
-            // very likely we got threading issues here...
+        guard self.request === request, let context = self.channelContext else {
+            // Because the HTTPExecutingRequest may run in a different thread to our eventLoop,
+            // calls from the HTTPExecutingRequest to our ChannelHandler may arrive here after
+            // the request has been popped by the state machine or the ChannelHandler has been
+            // removed from the Channel pipeline. This is a normal threading issue, noone has
+            // screwed up.
             return
         }
 
         let action = self.state.requestStreamPartReceived(data)
-        self.run(action, context: self.channelContext)
+        self.run(action, context: context)
     }
 
     private func finishRequestBodyStream0(_ request: HTTPExecutingRequest) {
-        guard self.request === request else {
-            // very likely we got threading issues here...
+        guard self.request === request, let context = self.channelContext else {
+            // See code comment in `writeRequestBodyPart0`
             return
         }
 
         let action = self.state.requestStreamFinished()
-        self.run(action, context: self.channelContext)
+        self.run(action, context: context)
     }
 
     private func demandResponseBodyStream0(_ request: HTTPExecutingRequest) {
-        guard self.request === request else {
-            // very likely we got threading issues here...
+        guard self.request === request, let context = self.channelContext else {
+            // See code comment in `writeRequestBodyPart0`
             return
         }
 
         self.logger.trace("Downstream requests more response body data")
 
         let action = self.state.demandMoreResponseBodyParts()
-        self.run(action, context: self.channelContext)
+        self.run(action, context: context)
     }
 
-    func cancelRequest0(_ request: HTTPExecutingRequest) {
-        guard self.request === request else {
-            // very likely we got threading issues here...
+    private func cancelRequest0(_ request: HTTPExecutingRequest) {
+        guard self.request === request, let context = self.channelContext else {
+            // See code comment in `writeRequestBodyPart0`
             return
         }
 
         let action = self.state.requestCancelled(closeConnection: true)
-        self.run(action, context: self.channelContext)
+        self.run(action, context: context)
     }
 }
 
 extension HTTP1ClientChannelHandler: HTTPRequestExecutor {
     func writeRequestBodyPart(_ data: IOData, request: HTTPExecutingRequest) {
-        if self.channelContext.eventLoop.inEventLoop {
+        if self.eventLoop.inEventLoop {
             self.writeRequestBodyPart0(data, request: request)
         } else {
-            self.channelContext.eventLoop.execute {
+            self.eventLoop.execute {
                 self.writeRequestBodyPart0(data, request: request)
             }
         }
     }
 
     func finishRequestBodyStream(_ request: HTTPExecutingRequest) {
-        if self.channelContext.eventLoop.inEventLoop {
+        if self.eventLoop.inEventLoop {
             self.finishRequestBodyStream0(request)
         } else {
-            self.channelContext.eventLoop.execute {
+            self.eventLoop.execute {
                 self.finishRequestBodyStream0(request)
             }
         }
     }
 
     func demandResponseBodyStream(_ request: HTTPExecutingRequest) {
-        if self.channelContext.eventLoop.inEventLoop {
+        if self.eventLoop.inEventLoop {
             self.demandResponseBodyStream0(request)
         } else {
-            self.channelContext.eventLoop.execute {
+            self.eventLoop.execute {
                 self.demandResponseBodyStream0(request)
             }
         }
     }
 
     func cancelRequest(_ request: HTTPExecutingRequest) {
-        if self.channelContext.eventLoop.inEventLoop {
+        if self.eventLoop.inEventLoop {
             self.cancelRequest0(request)
         } else {
-            self.channelContext.eventLoop.execute {
+            self.eventLoop.execute {
                 self.cancelRequest0(request)
             }
         }
