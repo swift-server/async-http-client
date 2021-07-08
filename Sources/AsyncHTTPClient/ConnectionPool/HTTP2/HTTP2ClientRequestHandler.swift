@@ -24,9 +24,9 @@ class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
     private let eventLoop: EventLoop
 
-    private(set) var channelContext: ChannelHandlerContext?
-    private(set) var state: HTTPRequestStateMachine = .init(isChannelWritable: false)
-    private(set) var request: HTTPExecutingRequest?
+    private var channelContext: ChannelHandlerContext?
+    private var state: HTTPRequestStateMachine = .init(isChannelWritable: false)
+    private var request: HTTPExecutingRequest?
 
     init(eventLoop: EventLoop) {
         self.eventLoop = eventLoop
@@ -96,10 +96,13 @@ class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         case .sendRequestHead(let head, let startBody):
             if startBody {
                 context.writeAndFlush(self.wrapOutboundOut(.head(head)), promise: nil)
+                self.request!.requestHeadSent()
                 self.request!.resumeRequestBodyStream()
             } else {
-                context.writeAndFlush(self.wrapOutboundOut(.head(head)), promise: nil)
-                context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+                context.write(self.wrapOutboundOut(.head(head)), promise: nil)
+                context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
+                context.flush()
+                self.request!.requestHeadSent()
             }
 
         case .pauseRequestBodyStream:

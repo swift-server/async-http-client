@@ -120,7 +120,7 @@ extension HTTP2IdleHandler {
                 preconditionFailure("Invalid state")
             }
 
-            let maxStream = settings.first(where: { $0.parameter == .maxConcurrentStreams })?.value ?? 100
+            let maxStream = settings.last(where: { $0.parameter == .maxConcurrentStreams })?.value ?? 100
 
             self.state = .active(openStreams: 0, maxStreams: maxStream)
             return .notifyConnectionNewSettings(settings)
@@ -137,7 +137,7 @@ extension HTTP2IdleHandler {
                 self.state = .goAwayReceived(openStreams: openStreams, maxStreams: maxStreams)
                 return .notifyConnectionGoAwayReceived
             case .goAwayReceived:
-                preconditionFailure("Invalid state")
+                return .nothing
             case .closed:
                 preconditionFailure("Invalid state")
             }
