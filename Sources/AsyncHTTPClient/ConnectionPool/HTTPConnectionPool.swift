@@ -15,7 +15,7 @@
 import NIO
 
 enum HTTPConnectionPool {
-    struct Connection: Equatable {
+    struct Connection: Hashable {
         typealias ID = Int
 
         private enum Reference {
@@ -91,5 +91,38 @@ enum HTTPConnectionPool {
 //                return false
             }
         }
+
+        func hash(into hasher: inout Hasher) {
+            switch self._ref {
+            case .__testOnly_connection(let id, let eventLoop):
+                hasher.combine(id)
+                hasher.combine(eventLoop.id)
+            }
+        }
     }
+}
+
+struct EventLoopID: Hashable {
+    private var id: Identifier
+
+    private enum Identifier: Hashable {
+        case objectIdentifier(ObjectIdentifier)
+        case __testOnly_fakeID(Int)
+    }
+
+    init(_ eventLoop: EventLoop) {
+        self.init(.objectIdentifier(ObjectIdentifier(eventLoop)))
+    }
+
+    private init(_ id: Identifier) {
+        self.id = id
+    }
+
+    static func __testOnly_fakeID(_ id: Int) -> EventLoopID {
+        return EventLoopID(.__testOnly_fakeID(id))
+    }
+}
+
+extension EventLoop {
+    var id: EventLoopID { EventLoopID(self) }
 }
