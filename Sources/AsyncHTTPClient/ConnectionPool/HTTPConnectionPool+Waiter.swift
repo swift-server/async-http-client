@@ -15,30 +15,34 @@
 import NIO
 
 extension HTTPConnectionPool {
+    struct RequestID: Hashable {
+        private let objectIdentifier: ObjectIdentifier
+
+        init(_ request: HTTPScheduledRequest) {
+            self.objectIdentifier = ObjectIdentifier(request)
+        }
+    }
+
     struct Waiter {
-        struct ID: Hashable {
-            private let objectIdentifier: ObjectIdentifier
+        var requestID: RequestID {
+            RequestID(self.request)
+        }
 
-            init(_ request: HTTPScheduledRequest) {
-                self.objectIdentifier = ObjectIdentifier(request)
+        var request: HTTPScheduledRequest
+
+        private var eventLoopRequirement: EventLoop? {
+            switch self.request.eventLoopPreference.preference {
+            case .delegateAndChannel(on: let eventLoop),
+                 .testOnly_exact(channelOn: let eventLoop, delegateOn: _):
+                return eventLoop
+            case .delegate(on: _),
+                 .indifferent:
+                return nil
             }
         }
-
-        var id: ID {
-            ID(self.request)
-        }
-
-        var request: HTTPScheduledRequest {
-            didSet {
-                self.updateEventLoopRequirement()
-            }
-        }
-
-        private var eventLoopRequirement: EventLoop?
 
         init(request: HTTPScheduledRequest) {
             self.request = request
-            self.updateEventLoopRequirement()
         }
 
         func canBeRun(on option: EventLoop) -> Bool {
@@ -48,17 +52,6 @@ extension HTTPConnectionPool {
             }
 
             return requirement === option
-        }
-
-        private mutating func updateEventLoopRequirement() {
-            switch self.request.eventLoopPreference.preference {
-            case .delegateAndChannel(on: let eventLoop),
-                 .testOnly_exact(channelOn: let eventLoop, delegateOn: _):
-                self.eventLoopRequirement = eventLoop
-            case .delegate(on: _),
-                 .indifferent:
-                self.eventLoopRequirement = nil
-            }
         }
     }
 }
