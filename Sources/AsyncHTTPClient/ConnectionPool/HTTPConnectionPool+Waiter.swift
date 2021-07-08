@@ -24,14 +24,21 @@ extension HTTPConnectionPool {
             }
         }
 
-        let id: ID
-        let request: HTTPScheduledRequest
-        let eventLoopRequirement: EventLoop?
+        var id: ID {
+            ID(self.request)
+        }
 
-        init(request: HTTPScheduledRequest, eventLoopRequirement: EventLoop?) {
-            self.id = ID(request)
+        var request: HTTPScheduledRequest {
+            didSet {
+                self.updateEventLoopRequirement()
+            }
+        }
+
+        private var eventLoopRequirement: EventLoop?
+
+        init(request: HTTPScheduledRequest) {
             self.request = request
-            self.eventLoopRequirement = eventLoopRequirement
+            self.updateEventLoopRequirement()
         }
 
         func canBeRun(on option: EventLoop) -> Bool {
@@ -41,6 +48,17 @@ extension HTTPConnectionPool {
             }
 
             return requirement === option
+        }
+
+        private mutating func updateEventLoopRequirement() {
+            switch self.request.eventLoopPreference.preference {
+            case .delegateAndChannel(on: let eventLoop),
+                 .testOnly_exact(channelOn: let eventLoop, delegateOn: _):
+                self.eventLoopRequirement = eventLoop
+            case .delegate(on: _),
+                 .indifferent:
+                self.eventLoopRequirement = nil
+            }
         }
     }
 }

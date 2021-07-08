@@ -24,7 +24,9 @@ class HTTPConnectionPool_WaiterTests: XCTestCase {
         let theRightEL = eventLoopGroup.next()
         let theFalseEL = eventLoopGroup.next()
 
-        let waiter = HTTPConnectionPool.Waiter(request: MockScheduledRequest(), eventLoopRequirement: theRightEL)
+        let mockRequest = MockScheduledRequest(eventLoopPreference: .init(.testOnly_exact(channelOn: theRightEL, delegateOn: theFalseEL)))
+
+        let waiter = HTTPConnectionPool.Waiter(request: mockRequest)
 
         XCTAssertTrue(waiter.canBeRun(on: theRightEL))
         XCTAssertFalse(waiter.canBeRun(on: theFalseEL))
@@ -33,7 +35,8 @@ class HTTPConnectionPool_WaiterTests: XCTestCase {
     func testCanBeRunIfNoEventLoopIsSpecified() {
         let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 2)
 
-        let waiter = HTTPConnectionPool.Waiter(request: MockScheduledRequest(), eventLoopRequirement: nil)
+        let mockRequest = MockScheduledRequest(eventLoopPreference: .indifferent)
+        let waiter = HTTPConnectionPool.Waiter(request: mockRequest)
 
         for el in eventLoopGroup.makeIterator() {
             XCTAssertTrue(waiter.canBeRun(on: el))
@@ -42,11 +45,13 @@ class HTTPConnectionPool_WaiterTests: XCTestCase {
 }
 
 private class MockScheduledRequest: HTTPScheduledRequest {
-    init() {}
+    init(eventLoopPreference: HTTPClient.EventLoopPreference) {
+        self.eventLoopPreference = eventLoopPreference
+    }
 
     var logger: Logger { preconditionFailure("Unimplemented") }
     var connectionDeadline: NIODeadline { preconditionFailure("Unimplemented") }
-    var eventLoopPreference: HTTPClient.EventLoopPreference { preconditionFailure("Unimplemented") }
+    let eventLoopPreference: HTTPClient.EventLoopPreference
 
     func requestWasQueued(_: HTTPRequestScheduler) {
         preconditionFailure("Unimplemented")
