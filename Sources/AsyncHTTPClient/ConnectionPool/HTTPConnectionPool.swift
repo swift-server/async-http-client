@@ -18,6 +18,13 @@ enum HTTPConnectionPool {
     struct Connection: Hashable {
         typealias ID = Int
 
+        // PLEASE NOTE:
+        // The HTTP/1.1 connection code here is commented out, for a sad and simple reason: We
+        // don't have a HTTP1Connection yet. As soon as the HTTP1Connection has landed
+        // (https://github.com/swift-server/async-http-client/pull/400) we will enable
+        // HTTP1Connections here. Landing the connection box now enables us to already review the
+        // ConnectionPool StateMachines.
+
         private enum Reference {
 //            case http1_1(HTTP1Connection)
 
