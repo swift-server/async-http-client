@@ -200,8 +200,12 @@ struct HTTP1ConnectionStateMachine {
             preconditionFailure("This event must only happen, if the connection is leased. During startup this is impossible")
 
         case .idle:
-            self.state = .closing
-            return .close
+            if closeConnection {
+                self.state = .closing
+                return .close
+            } else {
+                return .wait
+            }
 
         case .inRequest(var requestStateMachine, close: let close):
             return self.avoidingStateMachineCoW { state -> Action in
