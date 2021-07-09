@@ -120,7 +120,7 @@ import NIOHTTP1
 ///      - The executor may have received an error in thread A that it passes along to the request.
 ///        After having passed on the error, the executor considers the request done and releases
 ///        the request's reference.
-///      - The request may issue a call to `writeRequestBodyPart(_: IOData, task: HTTPExecutingRequest)`
+///      - The request may issue a call to `writeRequestBodyPart(_: IOData, task: HTTPExecutableRequest)`
 ///        on thread B in the same moment the request error above occurred. For this reason it may
 ///        happen that the executor receives, the invocation of `writeRequestBodyPart` after it has
 ///        failed the request.

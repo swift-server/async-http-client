@@ -17,7 +17,7 @@ import NIO
 import NIOHTTP1
 
 final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
-    typealias OutboundIn = HTTPExecutingRequest
+    typealias OutboundIn = HTTPExecutableRequest
     typealias OutboundOut = HTTPClientRequestPart
     typealias InboundIn = HTTPClientResponsePart
 
@@ -35,7 +35,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     private var channelContext: ChannelHandlerContext?
 
     /// the currently executing request
-    private var request: HTTPExecutingRequest?
+    private var request: HTTPExecutableRequest?
     private var idleReadTimeoutTimer: Scheduled<Void>?
 
     let connection: HTTP1Connection
@@ -266,10 +266,10 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
     // MARK: Private HTTPRequestExecutor
 
-    private func writeRequestBodyPart0(_ data: IOData, request: HTTPExecutingRequest) {
+    private func writeRequestBodyPart0(_ data: IOData, request: HTTPExecutableRequest) {
         guard self.request === request, let context = self.channelContext else {
-            // Because the HTTPExecutingRequest may run in a different thread to our eventLoop,
-            // calls from the HTTPExecutingRequest to our ChannelHandler may arrive here after
+            // Because the HTTPExecutableRequest may run in a different thread to our eventLoop,
+            // calls from the HTTPExecutableRequest to our ChannelHandler may arrive here after
             // the request has been popped by the state machine or the ChannelHandler has been
             // removed from the Channel pipeline. This is a normal threading issue, noone has
             // screwed up.
@@ -280,7 +280,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         self.run(action, context: context)
     }
 
-    private func finishRequestBodyStream0(_ request: HTTPExecutingRequest) {
+    private func finishRequestBodyStream0(_ request: HTTPExecutableRequest) {
         guard self.request === request, let context = self.channelContext else {
             // See code comment in `writeRequestBodyPart0`
             return
@@ -290,7 +290,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         self.run(action, context: context)
     }
 
-    private func demandResponseBodyStream0(_ request: HTTPExecutingRequest) {
+    private func demandResponseBodyStream0(_ request: HTTPExecutableRequest) {
         guard self.request === request, let context = self.channelContext else {
             // See code comment in `writeRequestBodyPart0`
             return
@@ -302,7 +302,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         self.run(action, context: context)
     }
 
-    private func cancelRequest0(_ request: HTTPExecutingRequest) {
+    private func cancelRequest0(_ request: HTTPExecutableRequest) {
         guard self.request === request, let context = self.channelContext else {
             // See code comment in `writeRequestBodyPart0`
             return
@@ -314,7 +314,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 }
 
 extension HTTP1ClientChannelHandler: HTTPRequestExecutor {
-    func writeRequestBodyPart(_ data: IOData, request: HTTPExecutingRequest) {
+    func writeRequestBodyPart(_ data: IOData, request: HTTPExecutableRequest) {
         if self.eventLoop.inEventLoop {
             self.writeRequestBodyPart0(data, request: request)
         } else {
@@ -324,7 +324,7 @@ extension HTTP1ClientChannelHandler: HTTPRequestExecutor {
         }
     }
 
-    func finishRequestBodyStream(_ request: HTTPExecutingRequest) {
+    func finishRequestBodyStream(_ request: HTTPExecutableRequest) {
         if self.eventLoop.inEventLoop {
             self.finishRequestBodyStream0(request)
         } else {
@@ -334,7 +334,7 @@ extension HTTP1ClientChannelHandler: HTTPRequestExecutor {
         }
     }
 
-    func demandResponseBodyStream(_ request: HTTPExecutingRequest) {
+    func demandResponseBodyStream(_ request: HTTPExecutableRequest) {
         if self.eventLoop.inEventLoop {
             self.demandResponseBodyStream0(request)
         } else {
@@ -344,7 +344,7 @@ extension HTTP1ClientChannelHandler: HTTPRequestExecutor {
         }
     }
 
-    func cancelRequest(_ request: HTTPExecutingRequest) {
+    func cancelRequest(_ request: HTTPExecutableRequest) {
         if self.eventLoop.inEventLoop {
             self.cancelRequest0(request)
         } else {

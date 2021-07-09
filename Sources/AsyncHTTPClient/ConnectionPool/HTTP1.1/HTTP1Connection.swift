@@ -86,7 +86,7 @@ final class HTTP1Connection {
         }
     }
 
-    func execute(request: HTTPExecutingRequest) {
+    func execute(request: HTTPExecutableRequest) {
         self.channel.write(request, promise: nil)
     }
 
