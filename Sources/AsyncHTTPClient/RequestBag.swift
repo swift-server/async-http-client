@@ -312,7 +312,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
     }
 }
 
-extension RequestBag: HTTPScheduledRequest {
+extension RequestBag: HTTPSchedulableRequest {
     func requestWasQueued(_ scheduler: HTTPRequestScheduler) {
         if self.task.eventLoop.inEventLoop {
             self.requestWasQueued0(scheduler)
@@ -334,7 +334,7 @@ extension RequestBag: HTTPScheduledRequest {
     }
 }
 
-extension RequestBag: HTTPExecutingRequest {
+extension RequestBag: HTTPExecutableRequest {
     func willExecuteRequest(_ executor: HTTPRequestExecutor) {
         if self.task.eventLoop.inEventLoop {
             self.willExecuteRequest0(executor)
