@@ -402,22 +402,22 @@ class MockRequestExecutor: HTTPRequestExecutor {
     // this should always be called twice. When we receive the first call, the next call to produce
     // data is already scheduled. If we call pause here, once, after the second call new subsequent
     // calls should not be scheduled.
-    func writeRequestBodyPart(_ part: IOData, request: HTTPExecutingRequest) {
+    func writeRequestBodyPart(_ part: IOData, request: HTTPExecutableRequest) {
         if self.requestBodyParts.isEmpty, self.pauseRequestBodyPartStreamAfterASingleWrite {
             request.pauseRequestBodyStream()
         }
         self.requestBodyParts.append(.body(part))
     }
 
-    func finishRequestBodyStream(_: HTTPExecutingRequest) {
+    func finishRequestBodyStream(_: HTTPExecutableRequest) {
         self.requestBodyParts.append(.endOfStream)
     }
 
-    func demandResponseBodyStream(_: HTTPExecutingRequest) {
+    func demandResponseBodyStream(_: HTTPExecutableRequest) {
         self.signalledDemandForResponseBody = true
     }
 
-    func cancelRequest(_: HTTPExecutingRequest) {
+    func cancelRequest(_: HTTPExecutableRequest) {
         self.isCancelled = true
     }
 }
@@ -490,7 +490,7 @@ class MockTaskQueuer: HTTPRequestScheduler {
 
     init() {}
 
-    func cancelRequest(_: HTTPScheduledRequest) {
+    func cancelRequest(_: HTTPSchedulableRequest) {
         self.hitCancelCount += 1
     }
 }

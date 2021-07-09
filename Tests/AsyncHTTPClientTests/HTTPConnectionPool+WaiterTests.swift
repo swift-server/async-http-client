@@ -15,6 +15,7 @@
 @testable import AsyncHTTPClient
 import Logging
 import NIO
+import NIOHTTP1
 import XCTest
 
 class HTTPConnectionPool_WaiterTests: XCTestCase {
@@ -44,7 +45,7 @@ class HTTPConnectionPool_WaiterTests: XCTestCase {
     }
 }
 
-private class MockScheduledRequest: HTTPScheduledRequest {
+private class MockScheduledRequest: HTTPSchedulableRequest {
     init(eventLoopPreference: HTTPClient.EventLoopPreference) {
         self.eventLoopPreference = eventLoopPreference
     }
@@ -58,6 +59,40 @@ private class MockScheduledRequest: HTTPScheduledRequest {
     }
 
     func fail(_: Error) {
+        preconditionFailure("Unimplemented")
+    }
+
+    // MARK: HTTPExecutableRequest
+
+    var requestHead: HTTPRequestHead { preconditionFailure("Unimplemented") }
+    var requestFramingMetadata: RequestFramingMetadata { preconditionFailure("Unimplemented") }
+    var idleReadTimeout: TimeAmount? { preconditionFailure("Unimplemented") }
+
+    func willExecuteRequest(_: HTTPRequestExecutor) {
+        preconditionFailure("Unimplemented")
+    }
+
+    func requestHeadSent() {
+        preconditionFailure("Unimplemented")
+    }
+
+    func resumeRequestBodyStream() {
+        preconditionFailure("Unimplemented")
+    }
+
+    func pauseRequestBodyStream() {
+        preconditionFailure("Unimplemented")
+    }
+
+    func receiveResponseHead(_: HTTPResponseHead) {
+        preconditionFailure("Unimplemented")
+    }
+
+    func receiveResponseBodyParts(_: CircularBuffer<ByteBuffer>) {
+        preconditionFailure("Unimplemented")
+    }
+
+    func succeedRequest(_: CircularBuffer<ByteBuffer>?) {
         preconditionFailure("Unimplemented")
     }
 }

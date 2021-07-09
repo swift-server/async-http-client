@@ -18,7 +18,7 @@ extension HTTPConnectionPool {
     struct RequestID: Hashable {
         private let objectIdentifier: ObjectIdentifier
 
-        init(_ request: HTTPScheduledRequest) {
+        init(_ request: HTTPSchedulableRequest) {
             self.objectIdentifier = ObjectIdentifier(request)
         }
     }
@@ -28,7 +28,7 @@ extension HTTPConnectionPool {
             RequestID(self.request)
         }
 
-        var request: HTTPScheduledRequest
+        var request: HTTPSchedulableRequest
 
         private var eventLoopRequirement: EventLoop? {
             switch self.request.eventLoopPreference.preference {
@@ -41,7 +41,7 @@ extension HTTPConnectionPool {
             }
         }
 
-        init(request: HTTPScheduledRequest) {
+        init(request: HTTPSchedulableRequest) {
             self.request = request
         }
 

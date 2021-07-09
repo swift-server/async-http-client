@@ -70,7 +70,7 @@ enum HTTPConnectionPool {
             }
         }
 
-        fileprivate func execute(request: HTTPExecutingRequest) {
+        fileprivate func execute(request: HTTPExecutableRequest) {
             switch self._ref {
 //            case .http1_1(let connection):
 //                return connection.execute(request: request)
