@@ -98,7 +98,7 @@ class HTTP2Connection {
         }
     }
 
-    func execute(request: HTTPExecutingRequest) {
+    func execute(request: HTTPExecutableRequest) {
         let createStreamChannelPromise = self.channel.eventLoop.makePromise(of: Channel.self)
 
         self.multiplexer.createStreamChannel(promise: createStreamChannelPromise) { channel -> EventLoopFuture<Void> in
