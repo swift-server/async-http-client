@@ -92,8 +92,7 @@ class HTTP1ConnectionTests: XCTestCase {
         let server = NIOHTTP1TestServer(group: serverEL)
         defer { XCTAssertNoThrow(try server.stop()) }
 
-        var logger = Logger(label: "test")
-        logger.logLevel = .trace
+        let logger = Logger(label: "test")
         let delegate = MockHTTP1ConnectionDelegate()
         delegate.closePromise = clientEL.makePromise(of: Void.self)
 

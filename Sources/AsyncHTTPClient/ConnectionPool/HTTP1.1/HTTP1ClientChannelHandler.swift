@@ -24,10 +24,6 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     private var state: HTTP1ConnectionStateMachine = .init() {
         didSet {
             self.eventLoop.assertInEventLoop()
-
-            self.logger.trace("Connection state did change", metadata: [
-                "state": "\(String(describing: self.state))",
-            ])
         }
     }
 
@@ -36,6 +32,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
     /// the currently executing request
     private var request: HTTPExecutableRequest?
+    private var idleReadTimeoutStateMachine: IdleReadStateMachine?
     private var idleReadTimeoutTimer: Scheduled<Void>?
 
     let connection: HTTP1Connection
@@ -89,6 +86,10 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             "message": "\(httpPart)",
         ])
 
+        if let timeoutAction = self.idleReadTimeoutStateMachine?.channelRead(httpPart) {
+            self.runTimeoutAction(timeoutAction, context: context)
+        }
+
         let action = self.state.channelRead(httpPart)
         self.run(action, context: context)
     }
@@ -104,6 +105,10 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         assert(self.request == nil, "Only write to the ChannelHandler if you are sure, it is idle!")
         let req = self.unwrapOutboundIn(data)
         self.request = req
+
+        if let idleReadTimeout = self.request?.idleReadTimeout {
+            self.idleReadTimeoutStateMachine = .init(timeAmount: idleReadTimeout)
+        }
 
         req.willExecuteRequest(self)
 
@@ -137,7 +142,9 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         }
     }
 
-    // MARK: - Run Actions
+    // MARK: - Private Methods -
+
+    // MARK: Run Actions
 
     private func run(_ action: HTTP1ConnectionStateMachine.Action, context: ChannelHandlerContext) {
         switch action {
@@ -154,6 +161,10 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                 context.flush()
 
                 self.request!.requestHeadSent()
+
+                if let timeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
+                    self.runTimeoutAction(timeoutAction, context: context)
+                }
             }
 
         case .sendBodyPart(let part):
@@ -161,6 +172,10 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
         case .sendRequestEnd:
             context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+
+            if let timeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
+                self.runTimeoutAction(timeoutAction, context: context)
+            }
 
         case .pauseRequestBodyStream:
             self.request!.pauseRequestBodyStream()
@@ -208,6 +223,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
             let oldRequest = self.request!
             self.request = nil
+            self.idleReadTimeoutStateMachine = nil
 
             switch finalAction {
             case .close:
@@ -226,6 +242,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             // see comment in the `succeedRequest` case.
             let oldRequest = self.request!
             self.request = nil
+            self.idleReadTimeoutStateMachine = nil
 
             switch finalAction {
             case .close:
@@ -242,26 +259,35 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         }
     }
 
-    // MARK: - Private Methods -
+    private func runTimeoutAction(_ action: IdleReadStateMachine.Action, context: ChannelHandlerContext) {
+        switch action {
+        case .startIdleReadTimeoutTimer(let timeAmount):
+            assert(self.idleReadTimeoutTimer == nil, "Expected there is no timeout timer so far.")
 
-    private func resetIdleReadTimeoutTimer(_ idleReadTimeout: TimeAmount, context: ChannelHandlerContext) {
-        if let oldTimer = self.idleReadTimeoutTimer {
-            oldTimer.cancel()
+            self.idleReadTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
+                let action = self.state.idleReadTimeoutTriggered()
+                self.run(action, context: context)
+            }
+
+        case .resetIdleReadTimeoutTimer(let timeAmount):
+            if let oldTimer = self.idleReadTimeoutTimer {
+                oldTimer.cancel()
+            }
+
+            self.idleReadTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
+                let action = self.state.idleReadTimeoutTriggered()
+                self.run(action, context: context)
+            }
+
+        case .clearIdleReadTimeoutTimer:
+            if let oldTimer = self.idleReadTimeoutTimer {
+                self.idleReadTimeoutTimer = nil
+                oldTimer.cancel()
+            }
+
+        case .none:
+            break
         }
-
-        self.idleReadTimeoutTimer = context.channel.eventLoop.scheduleTask(in: idleReadTimeout) {
-            let action = self.state.idleReadTimeoutTriggered()
-            self.run(action, context: context)
-        }
-    }
-
-    private func clearIdleReadTimeoutTimer() {
-        guard let oldTimer = self.idleReadTimeoutTimer else {
-            preconditionFailure("Expected an idleReadTimeoutTimer to exist.")
-        }
-
-        self.idleReadTimeoutTimer = nil
-        oldTimer.cancel()
     }
 
     // MARK: Private HTTPRequestExecutor
@@ -351,6 +377,69 @@ extension HTTP1ClientChannelHandler: HTTPRequestExecutor {
             self.eventLoop.execute {
                 self.cancelRequest0(request)
             }
+        }
+    }
+}
+
+struct IdleReadStateMachine {
+    enum Action {
+        case startIdleReadTimeoutTimer(TimeAmount)
+        case resetIdleReadTimeoutTimer(TimeAmount)
+        case clearIdleReadTimeoutTimer
+        case none
+    }
+
+    enum State {
+        case waitingForRequestEnd
+        case waitingForMoreResponseData
+        case responseEndReceived
+    }
+
+    private var state: State = .waitingForRequestEnd
+    private let timeAmount: TimeAmount
+
+    init(timeAmount: TimeAmount) {
+        self.timeAmount = timeAmount
+    }
+
+    mutating func requestEndSent() -> Action {
+        switch self.state {
+        case .waitingForRequestEnd:
+            self.state = .waitingForMoreResponseData
+            return .startIdleReadTimeoutTimer(self.timeAmount)
+
+        case .waitingForMoreResponseData:
+            preconditionFailure("Invalid state. Waiting for response data must start after request head was sent")
+
+        case .responseEndReceived:
+            // the response end was received, before we send the request head. Idle timeout timer
+            // must never be started.
+            return .none
+        }
+    }
+
+    mutating func channelRead(_ part: HTTPClientResponsePart) -> Action {
+        switch self.state {
+        case .waitingForRequestEnd:
+            switch part {
+            case .head, .body:
+                return .none
+            case .end:
+                self.state = .responseEndReceived
+                return .none
+            }
+
+        case .waitingForMoreResponseData:
+            switch part {
+            case .head, .body:
+                return .resetIdleReadTimeoutTimer(self.timeAmount)
+            case .end:
+                self.state = .responseEndReceived
+                return .clearIdleReadTimeoutTimer
+            }
+
+        case .responseEndReceived:
+            preconditionFailure("How can we receive more data, if we already received the response end?")
         }
     }
 }
