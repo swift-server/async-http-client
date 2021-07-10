@@ -29,6 +29,7 @@ extension HTTP1ConnectionTests {
             ("testCreateNewConnectionWithoutDecompression", testCreateNewConnectionWithoutDecompression),
             ("testCreateNewConnectionFailureClosedIO", testCreateNewConnectionFailureClosedIO),
             ("testGETRequest", testGETRequest),
+            ("testConnectionClosesOnCloseHeader", testConnectionClosesOnCloseHeader),
         ]
     }
 }

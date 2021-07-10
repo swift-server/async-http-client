@@ -87,7 +87,13 @@ final class HTTP1Connection {
     }
 
     func execute(request: HTTPExecutableRequest) {
-        self.channel.write(request, promise: nil)
+        if self.channel.eventLoop.inEventLoop {
+            self.execute0(request: request)
+        } else {
+            self.channel.eventLoop.execute {
+                self.execute0(request: request)
+            }
+        }
     }
 
     func cancel() {
@@ -100,5 +106,13 @@ final class HTTP1Connection {
 
     func taskCompleted() {
         self.delegate.http1ConnectionReleased(self)
+    }
+
+    private func execute0(request: HTTPExecutableRequest) {
+        guard self.channel.isActive else {
+            return request.fail(ChannelError.ioOnClosedChannel)
+        }
+
+        self.channel.write(request, promise: nil)
     }
 }

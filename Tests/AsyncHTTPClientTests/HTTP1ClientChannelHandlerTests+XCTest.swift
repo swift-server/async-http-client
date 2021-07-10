@@ -25,6 +25,10 @@ import XCTest
 extension HTTP1ClientChannelHandlerTests {
     static var allTests: [(String, (HTTP1ClientChannelHandlerTests) -> () throws -> Void)] {
         return [
+            ("testResponseBackpressure", testResponseBackpressure),
+            ("testWriteBackpressure", testWriteBackpressure),
+            ("testClientHandlerCancelsRequestIfWeWantToShutdown", testClientHandlerCancelsRequestIfWeWantToShutdown),
+            ("testIdleReadTimeout", testIdleReadTimeout),
         ]
     }
 }

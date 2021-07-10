@@ -185,6 +185,72 @@ class HTTP1ConnectionTests: XCTestCase {
         // connection is closed
         XCTAssertNoThrow(try XCTUnwrap(delegate.closePromise).futureResult.wait())
     }
+
+    func testConnectionClosesOnCloseHeader() {
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        let eventLoop = eventLoopGroup.next()
+        defer { XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully()) }
+
+        let closeOnRequest = (30...100).randomElement()!
+        let httpBin = HTTPBin(handlerFactory: { _ in SuddenlySendsCloseHeaderChannel(closeOnRequest: closeOnRequest) })
+
+        var maybeChannel: Channel?
+
+        XCTAssertNoThrow(maybeChannel = try ClientBootstrap(group: eventLoop).connect(host: "localhost", port: httpBin.port).wait())
+        let connectionDelegate = MockConnectionDelegate()
+        let logger = Logger(label: "test")
+        var maybeConnection: HTTP1Connection?
+        XCTAssertNoThrow(maybeConnection = try eventLoop.submit { try HTTP1Connection(
+            channel: XCTUnwrap(maybeChannel),
+            connectionID: 0,
+            configuration: .init(),
+            delegate: connectionDelegate,
+            logger: logger
+        ) }.wait())
+        guard let connection = maybeConnection else { return XCTFail("Expected to have a connection here") }
+
+        var counter = 0
+        while true {
+            counter += 1
+
+            var maybeRequest: HTTPClient.Request?
+            XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/"))
+            guard let request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
+
+            let delegate = ResponseAccumulator(request: request)
+            var maybeRequestBag: RequestBag<ResponseAccumulator>?
+            XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: eventLoopGroup.next()),
+                task: .init(eventLoop: eventLoopGroup.next(), logger: logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                idleReadTimeout: nil,
+                delegate: delegate
+            ))
+            guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
+
+            connection.execute(request: requestBag)
+
+            var response: HTTPClient.Response?
+            if counter <= closeOnRequest {
+                XCTAssertNoThrow(response = try requestBag.task.futureResult.wait())
+                XCTAssertEqual(response?.status, .ok)
+
+                if response?.headers.first(name: "connection") == "close" {
+                    XCTAssertEqual(closeOnRequest, counter)
+                    XCTAssertEqual(maybeChannel?.isActive, false)
+                }
+            } else {
+                // io on close channel leads to error
+                XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
+                    XCTAssertEqual($0 as? ChannelError, .ioOnClosedChannel)
+                }
+
+                break // the loop
+            }
+        }
+    }
 }
 
 class MockHTTP1ConnectionDelegate: HTTP1ConnectionDelegate {
@@ -197,5 +263,40 @@ class MockHTTP1ConnectionDelegate: HTTP1ConnectionDelegate {
 
     func http1ConnectionClosed(_: HTTP1Connection) {
         self.closePromise?.succeed(())
+    }
+}
+
+class SuddenlySendsCloseHeaderChannel: ChannelInboundHandler {
+    typealias InboundIn = HTTPServerRequestPart
+    typealias OutboundOut = HTTPServerResponsePart
+
+    var counter = 1
+    let closeOnRequest: Int
+
+    init(closeOnRequest: Int) {
+        self.closeOnRequest = closeOnRequest
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        switch self.unwrapInboundIn(data) {
+        case .head(let head):
+            XCTAssertLessThanOrEqual(self.counter, self.closeOnRequest)
+            XCTAssertTrue(head.headers.contains(name: "host"))
+            XCTAssertEqual(head.method, .GET)
+        case .body:
+            break
+        case .end:
+            if self.closeOnRequest == self.counter {
+                context.write(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok, headers: ["connection": "close"]))), promise: nil)
+                context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
+                context.flush()
+                self.counter += 1
+            } else {
+                context.write(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok))), promise: nil)
+                context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
+                context.flush()
+                self.counter += 1
+            }
+        }
     }
 }
