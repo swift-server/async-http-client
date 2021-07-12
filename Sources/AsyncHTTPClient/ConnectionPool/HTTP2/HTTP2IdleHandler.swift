@@ -116,19 +116,30 @@ extension HTTP2IdleHandler {
         }
 
         mutating func settingsReceived(_ settings: HTTP2Settings) -> Action {
-            guard case .connected = self.state else {
-                preconditionFailure("Invalid state")
+            switch self.state {
+            case .initialized, .closed:
+                preconditionFailure("Invalid state: \(self.state)")
+                
+            case .connected:
+                let maxStreams = settings.last(where: { $0.parameter == .maxConcurrentStreams })?.value ?? 100
+                self.state = .active(openStreams: 0, maxStreams: maxStreams)
+                return .notifyConnectionNewSettings(settings)
+                
+            case .active(openStreams: let openStreams, maxStreams: let maxStreams):
+                if let newMaxStreams = settings.last(where: { $0.parameter == .maxConcurrentStreams })?.value, newMaxStreams != maxStreams {
+                    self.state = .active(openStreams: openStreams, maxStreams: newMaxStreams)
+                    return .notifyConnectionNewSettings(settings)
+                }
+                return .nothing
+                
+            case .goAwayReceived:
+                return .nothing
             }
-
-            let maxStream = settings.last(where: { $0.parameter == .maxConcurrentStreams })?.value ?? 100
-
-            self.state = .active(openStreams: 0, maxStreams: maxStream)
-            return .notifyConnectionNewSettings(settings)
         }
 
         mutating func goAwayReceived() -> Action {
             switch self.state {
-            case .initialized:
+            case .initialized, .closed:
                 preconditionFailure("Invalid state")
             case .connected:
                 self.state = .goAwayReceived(openStreams: 0, maxStreams: 0)
@@ -138,8 +149,6 @@ extension HTTP2IdleHandler {
                 return .notifyConnectionGoAwayReceived
             case .goAwayReceived:
                 return .nothing
-            case .closed:
-                preconditionFailure("Invalid state")
             }
         }
 
@@ -158,6 +167,7 @@ extension HTTP2IdleHandler {
         mutating func streamClosed() -> Action {
             guard case .active(var openStreams, let maxStreams) = self.state else {
                 preconditionFailure("Invalid state")
+                // TODO: What happens, if we received a go away?!??!
             }
 
             openStreams -= 1

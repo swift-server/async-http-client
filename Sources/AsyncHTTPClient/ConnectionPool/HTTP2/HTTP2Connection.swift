@@ -18,8 +18,13 @@ import NIOHTTP2
 
 protocol HTTP2ConnectionDelegate {
     func http2ConnectionStreamClosed(_: HTTP2Connection, availableStreams: Int)
+    func http2ConnectionGoAwayReceived(_: HTTP2Connection)
     func http2ConnectionClosed(_: HTTP2Connection)
 }
+
+struct HTTP2PushNotSupportedError: Error {}
+
+struct HTTP2ReceivedGoAwayBeforeSettingsError: Error {}
 
 class HTTP2Connection {
     let channel: Channel
@@ -30,22 +35,20 @@ class HTTP2Connection {
     let delegate: HTTP2ConnectionDelegate
 
     enum State {
+        case initialized
         case starting(EventLoopPromise<Void>)
         case active(HTTP2Settings)
+        case closing
         case closed
     }
-
-    var readyToAcceptConnectionsFuture: EventLoopFuture<Void>
 
     var settings: HTTP2Settings? {
         self.channel.eventLoop.assertInEventLoop()
         switch self.state {
-        case .starting:
+        case .initialized, .starting, .closing, .closed:
             return nil
         case .active(let settings):
             return settings
-        case .closed:
-            return nil
         }
     }
 
@@ -55,11 +58,9 @@ class HTTP2Connection {
     init(channel: Channel,
          connectionID: HTTPConnectionPool.Connection.ID,
          delegate: HTTP2ConnectionDelegate,
-         logger: Logger) throws {
+         logger: Logger) {
         precondition(channel.isActive)
         channel.eventLoop.preconditionInEventLoop()
-
-        let readyToAcceptConnectionsPromise = channel.eventLoop.makePromise(of: Void.self)
 
         self.channel = channel
         self.id = connectionID
@@ -71,31 +72,29 @@ class HTTP2Connection {
             outboundBufferSizeHighWatermark: 8196,
             outboundBufferSizeLowWatermark: 4092,
             inboundStreamInitializer: { (channel) -> EventLoopFuture<Void> in
-                struct HTTP2PushNotsupportedError: Error {}
-                return channel.eventLoop.makeFailedFuture(HTTP2PushNotsupportedError())
+                
+                return channel.eventLoop.makeFailedFuture(HTTP2PushNotSupportedError())
             }
         )
         self.delegate = delegate
-        self.state = .starting(readyToAcceptConnectionsPromise)
-        self.readyToAcceptConnectionsFuture = readyToAcceptConnectionsPromise.futureResult
-
-        // 1. Modify channel pipeline and add http2 handlers
-        let sync = channel.pipeline.syncOperations
-
-        let http2Handler = NIOHTTP2Handler(mode: .client, initialSettings: nioDefaultSettings)
-        let idleHandler = HTTP2IdleHandler(connection: self, logger: self.logger)
-
-        try sync.addHandler(http2Handler, position: .last)
-        try sync.addHandler(idleHandler, position: .last)
-        try sync.addHandler(self.multiplexer, position: .last)
-
-        // 2. set properties
-
-        // with this we create an intended retain cycle...
-        channel.closeFuture.whenComplete { _ in
-            self.state = .closed
-            self.delegate.http2ConnectionClosed(self)
+        self.state = .initialized
+    }
+    
+    deinit {
+        guard case .closed = self.state else {
+            preconditionFailure("")
         }
+    }
+    
+    static func start(
+        channel: Channel,
+        connectionID: HTTPConnectionPool.Connection.ID,
+        delegate: HTTP2ConnectionDelegate,
+        configuration: HTTPClient.Configuration,
+        logger: Logger
+    ) -> EventLoopFuture<HTTP2Connection> {
+        let connection = HTTP2Connection(channel: channel, connectionID: connectionID, delegate: delegate, logger: logger)
+        return connection.start().map{ _ in connection }
     }
 
     func execute(request: HTTPExecutableRequest) {
@@ -128,19 +127,68 @@ class HTTP2Connection {
         self.channel.eventLoop.assertInEventLoop()
 
         switch self.state {
+        case .initialized, .closed:
+            preconditionFailure("Invalid state: \(self.state)")
         case .starting(let promise):
             self.state = .active(settings)
             promise.succeed(())
         case .active:
             self.state = .active(settings)
-        case .closed:
-            preconditionFailure("Invalid state")
+        case .closing:
+            // ignore. we only wait for all connections to be closed anyway.
+            break
         }
     }
 
-    func http2GoAwayReceived() {}
+    func http2GoAwayReceived() {
+        self.channel.eventLoop.assertInEventLoop()
+
+        switch self.state {
+        case .initialized, .closed:
+            preconditionFailure("Invalid state: \(self.state)")
+            
+        case .starting(let promise):
+            self.state = .closing
+            promise.fail(HTTP2ReceivedGoAwayBeforeSettingsError())
+            
+        case .active:
+            self.state = .closing
+            self.delegate.http2ConnectionGoAwayReceived(self)
+            
+        case .closing:
+            // we are already closing. Nothing new
+            break
+        }
+    }
 
     func http2StreamClosed(availableStreams: Int) {
         self.delegate.http2ConnectionStreamClosed(self, availableStreams: availableStreams)
+    }
+    
+    private func start() -> EventLoopFuture<Void> {
+        
+        let readyToAcceptConnectionsPromise = channel.eventLoop.makePromise(of: Void.self)
+        
+        self.state = .starting(readyToAcceptConnectionsPromise)
+        self.channel.closeFuture.whenComplete { _ in
+            self.state = .closed
+            self.delegate.http2ConnectionClosed(self)
+        }
+        
+        do {
+            let sync = channel.pipeline.syncOperations
+
+            let http2Handler = NIOHTTP2Handler(mode: .client, initialSettings: nioDefaultSettings)
+            let idleHandler = HTTP2IdleHandler(connection: self, logger: self.logger)
+
+            try sync.addHandler(http2Handler, position: .last)
+            try sync.addHandler(idleHandler, position: .last)
+            try sync.addHandler(self.multiplexer, position: .last)
+        } catch {
+            self.channel.close(mode: .all, promise: nil)
+            readyToAcceptConnectionsPromise.fail(error)
+        }
+        
+        return readyToAcceptConnectionsPromise.futureResult
     }
 }
