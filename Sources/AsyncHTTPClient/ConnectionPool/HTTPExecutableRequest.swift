@@ -187,6 +187,9 @@ protocol HTTPRequestExecutor {
 }
 
 protocol HTTPExecutableRequest: AnyObject {
+    /// The request's logger
+    var logger: Logger { get }
+
     /// The request's head.
     ///
     /// The HTTP request head, that shall be sent. The HTTPRequestExecutor **will not** run any validation

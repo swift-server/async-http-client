@@ -31,18 +31,32 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     private var channelContext: ChannelHandlerContext?
 
     /// the currently executing request
-    private var request: HTTPExecutableRequest?
+    private var request: HTTPExecutableRequest? {
+        didSet {
+            if let request = request {
+                var requestLogger = request.logger
+                requestLogger[metadataKey: "ahc-connection-id"] = "\(self.connection.id)"
+                self.logger = requestLogger
+            } else {
+                self.logger = self.backgroundLogger
+            }
+        }
+    }
+
     private var idleReadTimeoutStateMachine: IdleReadStateMachine?
     private var idleReadTimeoutTimer: Scheduled<Void>?
 
+    private let backgroundLogger: Logger
+    private var logger: Logger
+
     let connection: HTTP1Connection
-    let logger: Logger
     let eventLoop: EventLoop
 
     init(connection: HTTP1Connection, eventLoop: EventLoop, logger: Logger) {
         self.connection = connection
         self.eventLoop = eventLoop
-        self.logger = logger
+        self.backgroundLogger = logger
+        self.logger = self.backgroundLogger
     }
 
     func handlerAdded(context: ChannelHandlerContext) {
@@ -72,7 +86,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
     func channelWritabilityChanged(context: ChannelHandlerContext) {
         self.logger.trace("Channel writability changed", metadata: [
-            "writable": "\(context.channel.isWritable)",
+            "ahc-channel-writable": "\(context.channel.isWritable)",
         ])
 
         let action = self.state.writabilityChanged(writable: context.channel.isWritable)
@@ -82,8 +96,8 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let httpPart = unwrapInboundIn(data)
 
-        self.logger.trace("Message received", metadata: [
-            "message": "\(httpPart)",
+        self.logger.trace("HTTP response part received", metadata: [
+            "ahc-http-part": "\(httpPart)",
         ])
 
         if let timeoutAction = self.idleReadTimeoutStateMachine?.channelRead(httpPart) {
@@ -95,16 +109,18 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     }
 
     func channelReadComplete(context: ChannelHandlerContext) {
+        self.logger.trace("Read complete caught")
+
         let action = self.state.channelReadComplete()
         self.run(action, context: context)
     }
 
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
-        self.logger.trace("New request to execute")
-
         assert(self.request == nil, "Only write to the ChannelHandler if you are sure, it is idle!")
         let req = self.unwrapOutboundIn(data)
         self.request = req
+
+        self.logger.trace("New request to execute")
 
         if let idleReadTimeout = self.request?.idleReadTimeout {
             self.idleReadTimeoutStateMachine = .init(timeAmount: idleReadTimeout)
@@ -117,7 +133,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     }
 
     func read(context: ChannelHandlerContext) {
-        self.logger.trace("Read")
+        self.logger.trace("Read event caught")
 
         let action = self.state.read()
         self.run(action, context: context)
@@ -135,6 +151,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     func triggerUserOutboundEvent(context: ChannelHandlerContext, event: Any, promise: EventLoopPromise<Void>?) {
         switch event {
         case HTTPConnectionEvent.cancelRequest:
+            self.logger.trace("User outbound event triggered: Cancel request for connection close")
             let action = self.state.requestCancelled(closeConnection: true)
             self.run(action, context: context)
         default:
@@ -333,6 +350,8 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             // See code comment in `writeRequestBodyPart0`
             return
         }
+
+        self.logger.trace("Request was cancelled")
 
         let action = self.state.requestCancelled(closeConnection: true)
         self.run(action, context: context)
