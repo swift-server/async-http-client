@@ -28,11 +28,11 @@ class HTTP1ConnectionTests: XCTestCase {
         XCTAssertNoThrow(try embedded.connect(to: SocketAddress(ipAddress: "127.0.0.1", port: 3000)).wait())
 
         var connection: HTTP1Connection?
-        XCTAssertNoThrow(connection = try HTTP1Connection(
+        XCTAssertNoThrow(connection = try HTTP1Connection.start(
             channel: embedded,
             connectionID: 0,
-            configuration: .init(decompression: .enabled(limit: .ratio(4))),
             delegate: MockHTTP1ConnectionDelegate(),
+            configuration: .init(decompression: .enabled(limit: .ratio(4))),
             logger: logger
         ))
 
@@ -51,11 +51,11 @@ class HTTP1ConnectionTests: XCTestCase {
 
         XCTAssertNoThrow(try embedded.connect(to: SocketAddress(ipAddress: "127.0.0.1", port: 3000)).wait())
 
-        XCTAssertNoThrow(try HTTP1Connection(
+        XCTAssertNoThrow(try HTTP1Connection.start(
             channel: embedded,
             connectionID: 0,
-            configuration: .init(decompression: .disabled),
             delegate: MockHTTP1ConnectionDelegate(),
+            configuration: .init(decompression: .disabled),
             logger: logger
         ))
 
@@ -75,11 +75,11 @@ class HTTP1ConnectionTests: XCTestCase {
         embedded.embeddedEventLoop.run()
         let logger = Logger(label: "test.http1.connection")
 
-        XCTAssertThrowsError(try HTTP1Connection(
+        XCTAssertThrowsError(try HTTP1Connection.start(
             channel: embedded,
             connectionID: 0,
-            configuration: .init(),
             delegate: MockHTTP1ConnectionDelegate(),
+            configuration: .init(),
             logger: logger
         ))
     }
@@ -99,11 +99,11 @@ class HTTP1ConnectionTests: XCTestCase {
         let connection = try! ClientBootstrap(group: clientEL)
             .connect(to: .init(ipAddress: "127.0.0.1", port: server.serverPort))
             .flatMapThrowing {
-                try HTTP1Connection(
+                try HTTP1Connection.start(
                     channel: $0,
                     connectionID: 0,
-                    configuration: .init(decompression: .disabled),
                     delegate: delegate,
+                    configuration: .init(decompression: .disabled),
                     logger: logger
                 )
             }
@@ -200,11 +200,11 @@ class HTTP1ConnectionTests: XCTestCase {
         let connectionDelegate = MockConnectionDelegate()
         let logger = Logger(label: "test")
         var maybeConnection: HTTP1Connection?
-        XCTAssertNoThrow(maybeConnection = try eventLoop.submit { try HTTP1Connection(
+        XCTAssertNoThrow(maybeConnection = try eventLoop.submit { try HTTP1Connection.start(
             channel: XCTUnwrap(maybeChannel),
             connectionID: 0,
-            configuration: .init(),
             delegate: connectionDelegate,
+            configuration: .init(),
             logger: logger
         ) }.wait())
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection here") }

@@ -30,60 +30,39 @@ final class HTTP1Connection {
     let delegate: HTTP1ConnectionDelegate
 
     enum State {
+        case initialized
         case active
         case closed
     }
 
-    private var state: State = .active
+    private var state: State = .initialized
 
     let id: HTTPConnectionPool.Connection.ID
 
     init(channel: Channel,
          connectionID: HTTPConnectionPool.Connection.ID,
-         configuration: HTTPClient.Configuration,
-         delegate: HTTP1ConnectionDelegate,
-         logger: Logger) throws {
-        channel.eventLoop.assertInEventLoop()
-
-        // let's add the channel handlers needed for h1
+         delegate: HTTP1ConnectionDelegate) {
         self.channel = channel
         self.id = connectionID
         self.delegate = delegate
-
-        // all properties are set here. Therefore the connection is fully initialized. If we
-        // run into an error, here we need to do the state handling ourselfes.
-
-        do {
-            let sync = channel.pipeline.syncOperations
-            try sync.addHTTPClientHandlers()
-
-            if case .enabled(let limit) = configuration.decompression {
-                let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
-                try sync.addHandler(decompressHandler)
-            }
-
-            let channelHandler = HTTP1ClientChannelHandler(
-                connection: self,
-                eventLoop: channel.eventLoop,
-                logger: logger
-            )
-            try sync.addHandler(channelHandler)
-
-            // with this we create an intended retain cycle...
-            self.channel.closeFuture.whenComplete { _ in
-                self.state = .closed
-                self.delegate.http1ConnectionClosed(self)
-            }
-        } catch {
-            self.state = .closed
-            throw error
-        }
     }
 
     deinit {
         guard case .closed = self.state else {
             preconditionFailure("Connection must be closed, before we can deinit it")
         }
+    }
+
+    static func start(
+        channel: Channel,
+        connectionID: HTTPConnectionPool.Connection.ID,
+        delegate: HTTP1ConnectionDelegate,
+        configuration: HTTPClient.Configuration,
+        logger: Logger
+    ) throws -> HTTP1Connection {
+        let connection = HTTP1Connection(channel: channel, connectionID: connectionID, delegate: delegate)
+        try connection.start(configuration: configuration, logger: logger)
+        return connection
     }
 
     func execute(request: HTTPExecutableRequest) {
@@ -114,5 +93,40 @@ final class HTTP1Connection {
         }
 
         self.channel.write(request, promise: nil)
+    }
+
+    private func start(configuration: HTTPClient.Configuration, logger: Logger) throws {
+        self.channel.eventLoop.assertInEventLoop()
+
+        guard case .initialized = self.state else {
+            preconditionFailure("Connection must be initialized, to start it")
+        }
+
+        self.state = .active
+        self.channel.closeFuture.whenComplete { _ in
+            self.state = .closed
+            self.delegate.http1ConnectionClosed(self)
+        }
+
+        do {
+            let sync = self.channel.pipeline.syncOperations
+            try sync.addHTTPClientHandlers()
+
+            if case .enabled(let limit) = configuration.decompression {
+                let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
+                try sync.addHandler(decompressHandler)
+            }
+
+            let channelHandler = HTTP1ClientChannelHandler(
+                connection: self,
+                eventLoop: channel.eventLoop,
+                logger: logger
+            )
+
+            try sync.addHandler(channelHandler)
+        } catch {
+            self.channel.close(mode: .all, promise: nil)
+            throw error
+        }
     }
 }

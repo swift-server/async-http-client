@@ -75,11 +75,17 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     // MARK: Channel Inbound Handler
 
     func channelActive(context: ChannelHandlerContext) {
+        self.logger.trace("Channel active", metadata: [
+            "ahc-channel-writable": "\(context.channel.isWritable)",
+        ])
+
         let action = self.state.channelActive(isWritable: context.channel.isWritable)
         self.run(action, context: context)
     }
 
     func channelInactive(context: ChannelHandlerContext) {
+        self.logger.trace("Channel inactive")
+
         let action = self.state.channelInactive()
         self.run(action, context: context)
     }

@@ -71,11 +71,11 @@ extension EmbeddedChannel {
         try self.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait()
 
         let connectionDelegate = MockConnectionDelegate()
-        let connection = try HTTP1Connection(
+        let connection = try HTTP1Connection.start(
             channel: self,
             connectionID: 1,
-            configuration: .init(),
             delegate: connectionDelegate,
+            configuration: .init(),
             logger: logger
         )
 
