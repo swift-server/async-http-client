@@ -497,9 +497,9 @@ extension RequestBag.StateMachine {
         case .executing(let executor, let requestState, .buffering(_, next: .eof)):
             self.state = .executing(executor, requestState, .buffering(.init(), next: .error(error)))
             return .cancelExecutor(executor)
-        case .executing(let executor, let requestState, .buffering(_, next: .askExecutorForMore)):
-            self.state = .executing(executor, requestState, .buffering(.init(), next: .error(error)))
-            return .cancelExecutor(executor)
+        case .executing(let executor, _, .buffering(_, next: .askExecutorForMore)):
+            self.state = .finished(error: error)
+            return .failTask(nil, executor)
         case .executing(let executor, _, .buffering(_, next: .error(_))):
             // this would override another error, let's keep the first one
             return .cancelExecutor(executor)

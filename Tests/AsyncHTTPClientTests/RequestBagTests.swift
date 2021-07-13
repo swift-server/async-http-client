@@ -306,6 +306,40 @@ final class RequestBagTests: XCTestCase {
         }
     }
 
+    func testFailsTaskWhenTaskIsWaitingForMoreFromServer() {
+        let embeddedEventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+        let logger = Logger(label: "test")
+
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://swift.org"))
+        guard let request = maybeRequest else { return XCTFail("Expected to have a request") }
+
+        let delegate = UploadCountingDelegate(eventLoop: embeddedEventLoop)
+        var maybeRequestBag: RequestBag<UploadCountingDelegate>?
+        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embeddedEventLoop),
+            task: .init(eventLoop: embeddedEventLoop, logger: logger),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(30),
+            idleReadTimeout: nil,
+            delegate: delegate
+        ))
+        guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
+
+        let executor = MockRequestExecutor()
+        bag.willExecuteRequest(executor)
+        bag.requestHeadSent()
+        bag.receiveResponseHead(.init(version: .http1_1, status: .ok))
+        XCTAssertEqual(executor.isCancelled, false)
+        bag.fail(HTTPClientError.readTimeout)
+        XCTAssertEqual(executor.isCancelled, true)
+        XCTAssertThrowsError(try bag.task.futureResult.wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .readTimeout)
+        }
+    }
+
     func testHTTPUploadIsCancelledEvenThoughRequestSucceeds() {
         let embeddedEventLoop = EmbeddedEventLoop()
         defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
