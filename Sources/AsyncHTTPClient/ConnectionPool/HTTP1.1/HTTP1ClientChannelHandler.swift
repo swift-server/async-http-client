@@ -33,12 +33,17 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     /// the currently executing request
     private var request: HTTPExecutableRequest? {
         didSet {
-            if let request = request {
-                var requestLogger = request.logger
+            if let newRequest = self.request {
+                var requestLogger = newRequest.logger
                 requestLogger[metadataKey: "ahc-connection-id"] = "\(self.connection.id)"
                 self.logger = requestLogger
+
+                if let idleReadTimeout = newRequest.idleReadTimeout {
+                    self.idleReadTimeoutStateMachine = .init(timeAmount: idleReadTimeout)
+                }
             } else {
                 self.logger = self.backgroundLogger
+                self.idleReadTimeoutStateMachine = nil
             }
         }
     }
@@ -100,7 +105,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-        let httpPart = unwrapInboundIn(data)
+        let httpPart = self.unwrapInboundIn(data)
 
         self.logger.trace("HTTP response part received", metadata: [
             "ahc-http-part": "\(httpPart)",
@@ -120,6 +125,17 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         let action = self.state.channelReadComplete()
         self.run(action, context: context)
     }
+
+    func errorCaught(context: ChannelHandlerContext, error: Error) {
+        self.logger.trace("Error caught", metadata: [
+            "error": "\(error)",
+        ])
+
+        let action = self.state.errorHappened(error)
+        self.run(action, context: context)
+    }
+
+    // MARK: Channel Outbound Handler
 
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
         assert(self.request == nil, "Only write to the ChannelHandler if you are sure, it is idle!")
@@ -142,15 +158,6 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         self.logger.trace("Read event caught")
 
         let action = self.state.read()
-        self.run(action, context: context)
-    }
-
-    func errorCaught(context: ChannelHandlerContext, error: Error) {
-        self.logger.trace("Error caught", metadata: [
-            "error": "\(error)",
-        ])
-
-        let action = self.state.errorHappened(error)
         self.run(action, context: context)
     }
 
@@ -246,7 +253,6 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
             let oldRequest = self.request!
             self.request = nil
-            self.idleReadTimeoutStateMachine = nil
 
             switch finalAction {
             case .close:
@@ -265,7 +271,6 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             // see comment in the `succeedRequest` case.
             let oldRequest = self.request!
             self.request = nil
-            self.idleReadTimeoutStateMachine = nil
 
             switch finalAction {
             case .close:
