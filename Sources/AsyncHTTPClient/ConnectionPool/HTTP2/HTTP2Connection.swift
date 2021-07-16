@@ -42,6 +42,35 @@ class HTTP2Connection {
         case closed
     }
 
+    /// A structure to store a Channel in a Set.
+    private struct ChannelBox: Hashable {
+        struct ID: Hashable {
+            private let id: ObjectIdentifier
+
+            init(_ channel: Channel) {
+                self.id = ObjectIdentifier(channel)
+            }
+        }
+
+        let channel: Channel
+
+        var id: ID {
+            ID(self.channel)
+        }
+
+        init(_ channel: Channel) {
+            self.channel = channel
+        }
+
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.channel === rhs.channel
+        }
+
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(self.id)
+        }
+    }
+
     var settings: HTTP2Settings? {
         self.channel.eventLoop.assertInEventLoop()
         switch self.state {
@@ -53,6 +82,11 @@ class HTTP2Connection {
     }
 
     private var state: State
+
+    /// We use this channel set to remember, which open streams we need to inform that
+    /// we want to close the connection. The channels shall than cancel their currently running
+    /// request.
+    private var openStreams = Set<ChannelBox>()
     let id: HTTPConnectionPool.Connection.ID
 
     init(channel: Channel,
@@ -68,24 +102,24 @@ class HTTP2Connection {
         self.multiplexer = HTTP2StreamMultiplexer(
             mode: .client,
             channel: channel,
-            targetWindowSize: 65535,
+            targetWindowSize: 8 * 1024 * 1024, // 8mb
             outboundBufferSizeHighWatermark: 8196,
             outboundBufferSizeLowWatermark: 4092,
             inboundStreamInitializer: { (channel) -> EventLoopFuture<Void> in
-                
-                return channel.eventLoop.makeFailedFuture(HTTP2PushNotSupportedError())
+
+                channel.eventLoop.makeFailedFuture(HTTP2PushNotSupportedError())
             }
         )
         self.delegate = delegate
         self.state = .initialized
     }
-    
+
     deinit {
         guard case .closed = self.state else {
             preconditionFailure("")
         }
     }
-    
+
     static func start(
         channel: Channel,
         connectionID: HTTPConnectionPool.Connection.ID,
@@ -94,7 +128,7 @@ class HTTP2Connection {
         logger: Logger
     ) -> EventLoopFuture<HTTP2Connection> {
         let connection = HTTP2Connection(channel: channel, connectionID: connectionID, delegate: delegate, logger: logger)
-        return connection.start().map{ _ in connection }
+        return connection.start().map { _ in connection }
     }
 
     func execute(request: HTTPExecutableRequest) {
@@ -108,6 +142,13 @@ class HTTP2Connection {
                 try channel.pipeline.syncOperations.addHandler(translate)
                 try channel.pipeline.syncOperations.addHandler(handler)
                 channel.write(request, promise: nil)
+
+                let box = ChannelBox(channel)
+                self.openStreams.insert(box)
+                self.channel.closeFuture.whenComplete { _ in
+                    self.openStreams.remove(box)
+                }
+
                 return channel.eventLoop.makeSucceededFuture(Void())
             } catch {
                 return channel.eventLoop.makeFailedFuture(error)
@@ -116,6 +157,16 @@ class HTTP2Connection {
 
         createStreamChannelPromise.futureResult.whenFailure { error in
             request.fail(error)
+        }
+    }
+
+    func cancel() {
+        if self.channel.eventLoop.inEventLoop {
+            self.cancel0()
+        } else {
+            self.channel.eventLoop.execute {
+                self.cancel0()
+            }
         }
     }
 
@@ -146,15 +197,15 @@ class HTTP2Connection {
         switch self.state {
         case .initialized, .closed:
             preconditionFailure("Invalid state: \(self.state)")
-            
+
         case .starting(let promise):
             self.state = .closing
             promise.fail(HTTP2ReceivedGoAwayBeforeSettingsError())
-            
+
         case .active:
             self.state = .closing
             self.delegate.http2ConnectionGoAwayReceived(self)
-            
+
         case .closing:
             // we are already closing. Nothing new
             break
@@ -162,21 +213,29 @@ class HTTP2Connection {
     }
 
     func http2StreamClosed(availableStreams: Int) {
+        self.channel.eventLoop.assertInEventLoop()
+
         self.delegate.http2ConnectionStreamClosed(self, availableStreams: availableStreams)
     }
-    
+
     private func start() -> EventLoopFuture<Void> {
-        
-        let readyToAcceptConnectionsPromise = channel.eventLoop.makePromise(of: Void.self)
-        
+        self.channel.eventLoop.assertInEventLoop()
+
+        let readyToAcceptConnectionsPromise = self.channel.eventLoop.makePromise(of: Void.self)
+
         self.state = .starting(readyToAcceptConnectionsPromise)
         self.channel.closeFuture.whenComplete { _ in
             self.state = .closed
             self.delegate.http2ConnectionClosed(self)
         }
-        
+
         do {
-            let sync = channel.pipeline.syncOperations
+            // We create and add the http handlers ourselves here, since we need to inject an
+            // `HTTP2IdleHandler` between the `NIOHTTP2Handler` and the `HTTP2StreamMultiplexer`.
+            // The purpose of the `HTTP2IdleHandler` is to count open streams in the multiplexer.
+            // We use the HTTP2IdleHandler's information to notify our delegate, whether more work
+            // can be scheduled on this connection.
+            let sync = self.channel.pipeline.syncOperations
 
             let http2Handler = NIOHTTP2Handler(mode: .client, initialSettings: nioDefaultSettings)
             let idleHandler = HTTP2IdleHandler(connection: self, logger: self.logger)
@@ -188,7 +247,17 @@ class HTTP2Connection {
             self.channel.close(mode: .all, promise: nil)
             readyToAcceptConnectionsPromise.fail(error)
         }
-        
+
         return readyToAcceptConnectionsPromise.futureResult
+    }
+
+    private func cancel0() {
+        self.channel.eventLoop.assertInEventLoop()
+
+        self.state = .closing
+
+        self.openStreams.forEach { box in
+            box.channel.triggerUserOutboundEvent(HTTPConnectionEvent.cancelRequest, promise: nil)
+        }
     }
 }
