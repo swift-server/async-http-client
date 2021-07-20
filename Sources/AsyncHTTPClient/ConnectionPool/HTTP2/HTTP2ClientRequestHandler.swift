@@ -17,7 +17,7 @@ import NIO
 import NIOHTTP1
 import NIOHTTP2
 
-class HTTP2ClientRequestHandler: ChannelDuplexHandler {
+final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
     typealias OutboundIn = HTTPExecutableRequest
     typealias OutboundOut = HTTPClientRequestPart
     typealias InboundIn = HTTPClientResponsePart
@@ -35,10 +35,8 @@ class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
     private var request: HTTPExecutableRequest? {
         didSet {
-            if let newRequest = self.request {
-                if let idleReadTimeout = newRequest.idleReadTimeout {
-                    self.idleReadTimeoutStateMachine = .init(timeAmount: idleReadTimeout)
-                }
+            if let newRequest = self.request, let idleReadTimeout = newRequest.idleReadTimeout {
+                self.idleReadTimeoutStateMachine = .init(timeAmount: idleReadTimeout)
             } else {
                 self.idleReadTimeoutStateMachine = nil
             }
@@ -88,7 +86,7 @@ class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             self.runTimeoutAction(timeoutAction, context: context)
         }
 
-        let action = self.state.channelRead(self.unwrapInboundIn(data))
+        let action = self.state.channelRead(httpPart)
         self.run(action, context: context)
     }
 

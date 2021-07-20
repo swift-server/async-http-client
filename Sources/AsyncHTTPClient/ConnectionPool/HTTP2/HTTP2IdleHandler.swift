@@ -16,7 +16,8 @@ import Logging
 import NIO
 import NIOHTTP2
 
-internal final class HTTP2IdleHandler: ChannelDuplexHandler {
+// This is a `ChannelDuplexHandler` since we need to intercept outgoing user events.
+final class HTTP2IdleHandler: ChannelDuplexHandler {
     typealias InboundIn = HTTP2Frame
     typealias InboundOut = HTTP2Frame
     typealias OutboundIn = HTTP2Frame
@@ -25,7 +26,7 @@ internal final class HTTP2IdleHandler: ChannelDuplexHandler {
     let logger: Logger
     let connection: HTTP2Connection
 
-    var state: StateMachine = .init()
+    private var state: StateMachine = .init()
 
     init(connection: HTTP2Connection, logger: Logger) {
         self.connection = connection
@@ -66,7 +67,7 @@ internal final class HTTP2IdleHandler: ChannelDuplexHandler {
         context.fireChannelRead(data)
     }
 
-    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+    func triggerUserOutboundEvent(context: ChannelHandlerContext, event: Any, promise: EventLoopPromise<Void>?) {
         switch event {
         case HTTPConnectionEvent.closeConnection:
             let action = self.state.closeEventReceived()
@@ -140,6 +141,9 @@ extension HTTP2IdleHandler {
                 preconditionFailure("Invalid state: \(self.state)")
 
             case .connected:
+                // a settings frame might have multiple entries for `maxConcurrentStreams`. We are
+                // only interested in the last value! If no `maxConcurrentStreams` is set, we assume
+                // the http/2 default of 100.
                 let maxStreams = settings.last(where: { $0.parameter == .maxConcurrentStreams })?.value ?? 100
                 self.state = .active(openStreams: 0, maxStreams: maxStreams)
                 return .notifyConnectionNewSettings(settings)
@@ -197,28 +201,41 @@ extension HTTP2IdleHandler {
         }
 
         mutating func streamCreated() -> Action {
-            guard case .active(var openStreams, let maxStreams) = self.state else {
-                preconditionFailure("Invalid state")
+            switch self.state {
+            case .active(var openStreams, let maxStreams):
+                openStreams += 1
+                self.state = .active(openStreams: openStreams, maxStreams: maxStreams)
+                return .nothing
+
+            case .closing(var openStreams, let maxStreams):
+                openStreams += 1
+                self.state = .active(openStreams: openStreams, maxStreams: maxStreams)
+                return .nothing
+
+            case .initialized, .connected, .closed:
+                preconditionFailure("Invalid state: \(self.state)")
             }
-
-            openStreams += 1
-            assert(openStreams <= maxStreams)
-
-            self.state = .active(openStreams: openStreams, maxStreams: maxStreams)
-            return .nothing
         }
 
         mutating func streamClosed() -> Action {
-            guard case .active(var openStreams, let maxStreams) = self.state else {
-                preconditionFailure("Invalid state")
-                // TODO: What happens, if we received a go away?!??!
+            switch self.state {
+            case .active(var openStreams, let maxStreams):
+                openStreams -= 1
+                self.state = .active(openStreams: openStreams, maxStreams: maxStreams)
+                return .notifyConnectionStreamClosed(currentlyAvailable: maxStreams - openStreams)
+
+            case .closing(var openStreams, let maxStreams):
+                openStreams -= 1
+                if openStreams == 0 {
+                    self.state = .closed
+                    return .close
+                }
+                self.state = .closing(openStreams: openStreams, maxStreams: maxStreams)
+                return .nothing
+
+            case .initialized, .connected, .closed:
+                preconditionFailure("Invalid state: \(self.state)")
             }
-
-            openStreams -= 1
-            assert(openStreams >= 0)
-
-            self.state = .active(openStreams: openStreams, maxStreams: maxStreams)
-            return .notifyConnectionStreamClosed(currentlyAvailable: maxStreams - openStreams)
         }
     }
 }

@@ -26,7 +26,7 @@ struct HTTP2PushNotSupportedError: Error {}
 
 struct HTTP2ReceivedGoAwayBeforeSettingsError: Error {}
 
-class HTTP2Connection {
+final class HTTP2Connection {
     let channel: Channel
     let multiplexer: HTTP2StreamMultiplexer
     let logger: Logger
@@ -42,7 +42,7 @@ class HTTP2Connection {
         case closed
     }
 
-    /// A structure to store a Channel in a Set.
+    /// A structure to store a http/2 stream channel in a set.
     private struct ChannelBox: Hashable {
         struct ID: Hashable {
             private let id: ObjectIdentifier
@@ -106,7 +106,6 @@ class HTTP2Connection {
             outboundBufferSizeHighWatermark: 8196,
             outboundBufferSizeLowWatermark: 4092,
             inboundStreamInitializer: { (channel) -> EventLoopFuture<Void> in
-
                 channel.eventLoop.makeFailedFuture(HTTP2PushNotSupportedError())
             }
         )
@@ -116,7 +115,7 @@ class HTTP2Connection {
 
     deinit {
         guard case .closed = self.state else {
-            preconditionFailure("")
+            preconditionFailure("Connection must be closed, before we can deinit it")
         }
     }
 
@@ -136,20 +135,25 @@ class HTTP2Connection {
 
         self.multiplexer.createStreamChannel(promise: createStreamChannelPromise) { channel -> EventLoopFuture<Void> in
             do {
+                // We only support http/2 over an https connection – using the Application-Layer
+                // Protocol Negotiation (ALPN). For this reason it is save to fix this to `.https`.
                 let translate = HTTP2FramePayloadToHTTP1ClientCodec(httpProtocol: .https)
                 let handler = HTTP2ClientRequestHandler(eventLoop: channel.eventLoop)
 
                 try channel.pipeline.syncOperations.addHandler(translate)
                 try channel.pipeline.syncOperations.addHandler(handler)
-                channel.write(request, promise: nil)
 
+                // We must add the new channel to the list of open channels BEFORE we write the
+                // request to it. In case of an error, we are sure that the channel was added
+                // before.
                 let box = ChannelBox(channel)
                 self.openStreams.insert(box)
                 self.channel.closeFuture.whenComplete { _ in
                     self.openStreams.remove(box)
                 }
 
-                return channel.eventLoop.makeSucceededFuture(Void())
+                channel.write(request, promise: nil)
+                return channel.eventLoop.makeSucceededVoidFuture()
             } catch {
                 return channel.eventLoop.makeFailedFuture(error)
             }
@@ -256,8 +260,13 @@ class HTTP2Connection {
 
         self.state = .closing
 
+        // inform all open streams, that the currently running request should be cancelled.
         self.openStreams.forEach { box in
             box.channel.triggerUserOutboundEvent(HTTPConnectionEvent.cancelRequest, promise: nil)
         }
+
+        // inform the idle connection handler, that connection should be closed, once all streams
+        // are closed.
+        self.channel.triggerUserOutboundEvent(HTTPConnectionEvent.closeConnection, promise: nil)
     }
 }
