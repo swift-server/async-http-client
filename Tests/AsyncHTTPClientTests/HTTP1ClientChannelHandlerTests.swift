@@ -105,58 +105,8 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
     }
 
     func testWriteBackpressure() {
-        class TestWriter {
-            let eventLoop: EventLoop
-
-            let parts: Int
-
-            var finishFuture: EventLoopFuture<Void> { self.finishPromise.futureResult }
-            private let finishPromise: EventLoopPromise<Void>
-            private(set) var written: Int = 0
-
-            private var channelIsWritable: Bool = false
-
-            init(eventLoop: EventLoop, parts: Int) {
-                self.eventLoop = eventLoop
-                self.parts = parts
-
-                self.finishPromise = eventLoop.makePromise(of: Void.self)
-            }
-
-            func start(writer: HTTPClient.Body.StreamWriter) -> EventLoopFuture<Void> {
-                func recursive() {
-                    XCTAssert(self.eventLoop.inEventLoop)
-                    XCTAssert(self.channelIsWritable)
-                    if self.written == self.parts {
-                        self.finishPromise.succeed(())
-                    } else {
-                        self.eventLoop.execute {
-                            let future = writer.write(.byteBuffer(.init(bytes: [0, 1])))
-                            self.written += 1
-                            future.whenComplete { result in
-                                switch result {
-                                case .success:
-                                    recursive()
-                                case .failure(let error):
-                                    XCTFail("Unexpected error: \(error)")
-                                }
-                            }
-                        }
-                    }
-                }
-
-                recursive()
-
-                return self.finishFuture
-            }
-
-            func writabilityChanged(_ newValue: Bool) {
-                self.channelIsWritable = newValue
-            }
-        }
-
         let embedded = EmbeddedChannel()
-        let testWriter = TestWriter(eventLoop: embedded.eventLoop, parts: 50)
+        let testWriter = TestBackpressureWriter(eventLoop: embedded.eventLoop, parts: 50)
         var maybeTestUtils: HTTP1TestTools?
         XCTAssertNoThrow(maybeTestUtils = try embedded.setupHTTP1Connection())
         guard let testUtils = maybeTestUtils else { return XCTFail("Expected connection setup works") }
@@ -334,6 +284,56 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .readTimeout)
         }
+    }
+}
+
+class TestBackpressureWriter {
+    let eventLoop: EventLoop
+
+    let parts: Int
+
+    var finishFuture: EventLoopFuture<Void> { self.finishPromise.futureResult }
+    private let finishPromise: EventLoopPromise<Void>
+    private(set) var written: Int = 0
+
+    private var channelIsWritable: Bool = false
+
+    init(eventLoop: EventLoop, parts: Int) {
+        self.eventLoop = eventLoop
+        self.parts = parts
+
+        self.finishPromise = eventLoop.makePromise(of: Void.self)
+    }
+
+    func start(writer: HTTPClient.Body.StreamWriter) -> EventLoopFuture<Void> {
+        func recursive() {
+            XCTAssert(self.eventLoop.inEventLoop)
+            XCTAssert(self.channelIsWritable)
+            if self.written == self.parts {
+                self.finishPromise.succeed(())
+            } else {
+                self.eventLoop.execute {
+                    let future = writer.write(.byteBuffer(.init(bytes: [0, 1])))
+                    self.written += 1
+                    future.whenComplete { result in
+                        switch result {
+                        case .success:
+                            recursive()
+                        case .failure(let error):
+                            XCTFail("Unexpected error: \(error)")
+                        }
+                    }
+                }
+            }
+        }
+
+        recursive()
+
+        return self.finishFuture
+    }
+
+    func writabilityChanged(_ newValue: Bool) {
+        self.channelIsWritable = newValue
     }
 }
 

@@ -200,7 +200,8 @@ struct HTTPRequestStateMachine {
             self.state = .failed(error)
             return .failRequest(error, .close)
         case .finished, .failed:
-            preconditionFailure("If the request is finished or failed, we expect the connection state machine to remove the request immediately from its state. Thus this state is unreachable.")
+            // ignore error
+            return .wait
         case .modifying:
             preconditionFailure("Invalid state: \(self.state)")
         }

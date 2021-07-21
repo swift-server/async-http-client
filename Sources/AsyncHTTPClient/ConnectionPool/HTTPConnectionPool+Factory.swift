@@ -30,19 +30,79 @@ extension HTTPConnectionPool {
         let tlsConfiguration: TLSConfiguration
         let sslContextCache: SSLContextCache
 
+        // This property can be removed once we enable true http/2 support
+        let allowHTTP2Connections: Bool
+
         init(key: ConnectionPool.Key,
              tlsConfiguration: TLSConfiguration?,
              clientConfiguration: HTTPClient.Configuration,
-             sslContextCache: SSLContextCache) {
+             sslContextCache: SSLContextCache,
+             allowHTTP2Connections: Bool = false) {
             self.key = key
             self.clientConfiguration = clientConfiguration
             self.sslContextCache = sslContextCache
             self.tlsConfiguration = tlsConfiguration ?? clientConfiguration.tlsConfiguration ?? .makeClientConfiguration()
+            self.allowHTTP2Connections = allowHTTP2Connections
         }
     }
 }
 
+protocol HTTPConnectionRequester {
+    func http1ConnectionCreated(_: HTTP1Connection)
+    func http2ConnectionCreated(_: HTTP2Connection, maximumStreams: Int)
+    func failedToCreateHTTPConnection(_: HTTPConnectionPool.Connection.ID, error: Error)
+}
+
 extension HTTPConnectionPool.ConnectionFactory {
+    func makeConnection<Requester: HTTPConnectionRequester>(
+        for requester: Requester,
+        connectionID: HTTPConnectionPool.Connection.ID,
+        http1ConnectionDelegate: HTTP1ConnectionDelegate,
+        http2ConnectionDelegate: HTTP2ConnectionDelegate,
+        deadline: NIODeadline,
+        eventLoop: EventLoop,
+        logger: Logger
+    ) {
+        var logger = logger
+        logger[metadataKey: "ahc-connection"] = "\(connectionID)"
+
+        self.makeChannel(connectionID: connectionID, deadline: deadline, eventLoop: eventLoop, logger: logger).whenComplete { result in
+            switch result {
+            case .success(.http1_1(let channel)):
+                do {
+                    let connection = try HTTP1Connection.start(
+                        channel: channel,
+                        connectionID: connectionID,
+                        delegate: http1ConnectionDelegate,
+                        configuration: self.clientConfiguration,
+                        logger: logger
+                    )
+                    requester.http1ConnectionCreated(connection)
+                } catch {
+                    requester.failedToCreateHTTPConnection(connectionID, error: error)
+                }
+            case .success(.http2(let channel)):
+                HTTP2Connection.start(
+                    channel: channel,
+                    connectionID: connectionID,
+                    delegate: http2ConnectionDelegate,
+                    configuration: self.clientConfiguration,
+                    logger: logger
+                ).whenComplete { result in
+                    switch result {
+                    case .success(let connection):
+                        requester.http2ConnectionCreated(connection, maximumStreams: 0)
+                    case .failure(let error):
+                        requester.failedToCreateHTTPConnection(connectionID, error: error)
+                    }
+                }
+
+            case .failure(let error):
+                requester.failedToCreateHTTPConnection(connectionID, error: error)
+            }
+        }
+    }
+
     enum NegotiatedProtocol {
         case http1_1(Channel)
         case http2(Channel)
@@ -243,7 +303,11 @@ extension HTTPConnectionPool.ConnectionFactory {
         case .https:
             var tlsConfig = self.tlsConfiguration
             // since we can support h2, we need to advertise this in alpn
-            tlsConfig.applicationProtocols = ["http/1.1" /* , "h2" */ ]
+            if self.allowHTTP2Connections {
+                tlsConfig.applicationProtocols = ["http/1.1", "h2"]
+            } else {
+                tlsConfig.applicationProtocols = ["http/1.1"]
+            }
             let tlsEventHandler = TLSEventsHandler(deadline: deadline)
 
             let sslContextFuture = self.sslContextCache.sslContext(
@@ -341,7 +405,11 @@ extension HTTPConnectionPool.ConnectionFactory {
         -> EventLoopFuture<NIOClientTCPBootstrapProtocol> {
         // since we can support h2, we need to advertise this in alpn
         var tlsConfig = self.tlsConfiguration
-        tlsConfig.applicationProtocols = ["http/1.1" /* , "h2" */ ]
+        if self.allowHTTP2Connections {
+            tlsConfig.applicationProtocols = ["http/1.1", "h2"]
+        } else {
+            tlsConfig.applicationProtocols = ["http/1.1"]
+        }
 
         #if canImport(Network)
             if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), let tsBootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoop) {

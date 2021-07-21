@@ -16,6 +16,7 @@
 import Logging
 import NIO
 import NIOHTTP1
+import NIOHTTP2
 
 extension EmbeddedChannel {
     public func receiveHeadAndVerify(_ verify: (HTTPRequestHead) throws -> Void = { _ in }) throws {

@@ -17,6 +17,7 @@ import NIO
 import NIOHTTP2
 
 protocol HTTP2ConnectionDelegate {
+    func http2Connection(_: HTTP2Connection, newMaxStreamSetting: Int)
     func http2ConnectionStreamClosed(_: HTTP2Connection, availableStreams: Int)
     func http2ConnectionGoAwayReceived(_: HTTP2Connection)
     func http2ConnectionClosed(_: HTTP2Connection)
@@ -37,7 +38,7 @@ final class HTTP2Connection {
     enum State {
         case initialized
         case starting(EventLoopPromise<Void>)
-        case active(HTTP2Settings)
+        case active(maxStreams: Int)
         case closing
         case closed
     }
@@ -71,16 +72,6 @@ final class HTTP2Connection {
         }
     }
 
-    var settings: HTTP2Settings? {
-        self.channel.eventLoop.assertInEventLoop()
-        switch self.state {
-        case .initialized, .starting, .closing, .closed:
-            return nil
-        case .active(let settings):
-            return settings
-        }
-    }
-
     private var state: State
 
     /// We use this channel set to remember, which open streams we need to inform that
@@ -93,9 +84,6 @@ final class HTTP2Connection {
          connectionID: HTTPConnectionPool.Connection.ID,
          delegate: HTTP2ConnectionDelegate,
          logger: Logger) {
-        precondition(channel.isActive)
-        channel.eventLoop.preconditionInEventLoop()
-
         self.channel = channel
         self.id = connectionID
         self.logger = logger
@@ -178,50 +166,6 @@ final class HTTP2Connection {
         self.channel.close()
     }
 
-    func http2SettingsReceived(_ settings: HTTP2Settings) {
-        self.channel.eventLoop.assertInEventLoop()
-
-        switch self.state {
-        case .initialized, .closed:
-            preconditionFailure("Invalid state: \(self.state)")
-        case .starting(let promise):
-            self.state = .active(settings)
-            promise.succeed(())
-        case .active:
-            self.state = .active(settings)
-        case .closing:
-            // ignore. we only wait for all connections to be closed anyway.
-            break
-        }
-    }
-
-    func http2GoAwayReceived() {
-        self.channel.eventLoop.assertInEventLoop()
-
-        switch self.state {
-        case .initialized, .closed:
-            preconditionFailure("Invalid state: \(self.state)")
-
-        case .starting(let promise):
-            self.state = .closing
-            promise.fail(HTTP2ReceivedGoAwayBeforeSettingsError())
-
-        case .active:
-            self.state = .closing
-            self.delegate.http2ConnectionGoAwayReceived(self)
-
-        case .closing:
-            // we are already closing. Nothing new
-            break
-        }
-    }
-
-    func http2StreamClosed(availableStreams: Int) {
-        self.channel.eventLoop.assertInEventLoop()
-
-        self.delegate.http2ConnectionStreamClosed(self, availableStreams: availableStreams)
-    }
-
     private func start() -> EventLoopFuture<Void> {
         self.channel.eventLoop.assertInEventLoop()
 
@@ -242,7 +186,7 @@ final class HTTP2Connection {
             let sync = self.channel.pipeline.syncOperations
 
             let http2Handler = NIOHTTP2Handler(mode: .client, initialSettings: nioDefaultSettings)
-            let idleHandler = HTTP2IdleHandler(connection: self, logger: self.logger)
+            let idleHandler = HTTP2IdleHandler(delegate: self, logger: self.logger)
 
             try sync.addHandler(http2Handler, position: .last)
             try sync.addHandler(idleHandler, position: .last)
@@ -268,5 +212,55 @@ final class HTTP2Connection {
         // inform the idle connection handler, that connection should be closed, once all streams
         // are closed.
         self.channel.triggerUserOutboundEvent(HTTPConnectionEvent.closeConnection, promise: nil)
+    }
+}
+
+extension HTTP2Connection: HTTP2IdleHandlerDelegate {
+    func http2SettingsReceived(maxStreams: Int) {
+        self.channel.eventLoop.assertInEventLoop()
+
+        switch self.state {
+        case .initialized:
+            preconditionFailure("Invalid state: \(self.state)")
+
+        case .starting(let promise):
+            self.state = .active(maxStreams: maxStreams)
+            promise.succeed(())
+
+        case .active:
+            self.state = .active(maxStreams: maxStreams)
+            self.delegate.http2Connection(self, newMaxStreamSetting: maxStreams)
+
+        case .closing, .closed:
+            // ignore. we only wait for all connections to be closed anyway.
+            break
+        }
+    }
+
+    func http2GoAwayReceived() {
+        self.channel.eventLoop.assertInEventLoop()
+
+        switch self.state {
+        case .initialized:
+            preconditionFailure("Invalid state: \(self.state)")
+
+        case .starting(let promise):
+            self.state = .closing
+            promise.fail(HTTP2ReceivedGoAwayBeforeSettingsError())
+
+        case .active:
+            self.state = .closing
+            self.delegate.http2ConnectionGoAwayReceived(self)
+
+        case .closing, .closed:
+            // we are already closing. Nothing new
+            break
+        }
+    }
+
+    func http2StreamClosed(availableStreams: Int) {
+        self.channel.eventLoop.assertInEventLoop()
+
+        self.delegate.http2ConnectionStreamClosed(self, availableStreams: availableStreams)
     }
 }

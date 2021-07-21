@@ -16,20 +16,29 @@ import Logging
 import NIO
 import NIOHTTP2
 
-// This is a `ChannelDuplexHandler` since we need to intercept outgoing user events.
-final class HTTP2IdleHandler: ChannelDuplexHandler {
+protocol HTTP2IdleHandlerDelegate {
+    func http2SettingsReceived(maxStreams: Int)
+
+    func http2GoAwayReceived()
+
+    func http2StreamClosed(availableStreams: Int)
+}
+
+// This is a `ChannelDuplexHandler` since we need to intercept outgoing user events. It is generic
+// over its delegate to allow for specialization.
+final class HTTP2IdleHandler<Delegate: HTTP2IdleHandlerDelegate>: ChannelDuplexHandler {
     typealias InboundIn = HTTP2Frame
     typealias InboundOut = HTTP2Frame
     typealias OutboundIn = HTTP2Frame
     typealias OutboundOut = HTTP2Frame
 
     let logger: Logger
-    let connection: HTTP2Connection
+    let delegate: Delegate
 
     private var state: StateMachine = .init()
 
-    init(connection: HTTP2Connection, logger: Logger) {
-        self.connection = connection
+    init(delegate: Delegate, logger: Logger) {
+        self.delegate = delegate
         self.logger = logger
     }
 
@@ -56,15 +65,37 @@ final class HTTP2IdleHandler: ChannelDuplexHandler {
         case .goAway:
             let action = self.state.goAwayReceived()
             self.run(action, context: context)
+
         case .settings(.settings(let settings)):
             let action = self.state.settingsReceived(settings)
             self.run(action, context: context)
+
         default:
             // We're not interested in other events.
-            ()
+            break
         }
 
         context.fireChannelRead(data)
+    }
+
+    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+        // We intercept calls between the `NIOHTTP2ChannelHandler` and the `HTTP2StreamMultiplexer`
+        // to learn, how many open streams we have.
+        switch event {
+        case is StreamClosedEvent:
+            let action = self.state.streamClosed()
+            self.run(action, context: context)
+
+        case is NIOHTTP2StreamCreatedEvent:
+            let action = self.state.streamCreated()
+            self.run(action, context: context)
+
+        default:
+            // We're not interested in other events.
+            break
+        }
+
+        context.fireUserInboundEventTriggered(event)
     }
 
     func triggerUserOutboundEvent(context: ChannelHandlerContext, event: Any, promise: EventLoopPromise<Void>?) {
@@ -83,14 +114,14 @@ final class HTTP2IdleHandler: ChannelDuplexHandler {
         case .nothing:
             break
 
-        case .notifyConnectionNewSettings(let settings):
-            self.connection.http2SettingsReceived(settings)
+        case .notifyConnectionNewMaxStreamsSettings(let maxStreams):
+            self.delegate.http2SettingsReceived(maxStreams: maxStreams)
 
         case .notifyConnectionStreamClosed(let currentlyAvailable):
-            self.connection.http2StreamClosed(availableStreams: currentlyAvailable)
+            self.delegate.http2StreamClosed(availableStreams: currentlyAvailable)
 
         case .notifyConnectionGoAwayReceived:
-            self.connection.http2GoAwayReceived()
+            self.delegate.http2GoAwayReceived()
 
         case .close:
             context.close(mode: .all, promise: nil)
@@ -101,7 +132,7 @@ final class HTTP2IdleHandler: ChannelDuplexHandler {
 extension HTTP2IdleHandler {
     struct StateMachine {
         enum Action {
-            case notifyConnectionNewSettings(HTTP2Settings)
+            case notifyConnectionNewMaxStreamsSettings(Int)
             case notifyConnectionGoAwayReceived(close: Bool)
             case notifyConnectionStreamClosed(currentlyAvailable: Int)
             case nothing
@@ -146,12 +177,12 @@ extension HTTP2IdleHandler {
                 // the http/2 default of 100.
                 let maxStreams = settings.last(where: { $0.parameter == .maxConcurrentStreams })?.value ?? 100
                 self.state = .active(openStreams: 0, maxStreams: maxStreams)
-                return .notifyConnectionNewSettings(settings)
+                return .notifyConnectionNewMaxStreamsSettings(maxStreams)
 
             case .active(openStreams: let openStreams, maxStreams: let maxStreams):
                 if let newMaxStreams = settings.last(where: { $0.parameter == .maxConcurrentStreams })?.value, newMaxStreams != maxStreams {
                     self.state = .active(openStreams: openStreams, maxStreams: newMaxStreams)
-                    return .notifyConnectionNewSettings(settings)
+                    return .notifyConnectionNewMaxStreamsSettings(newMaxStreams)
                 }
                 return .nothing
 
@@ -163,7 +194,8 @@ extension HTTP2IdleHandler {
         mutating func goAwayReceived() -> Action {
             switch self.state {
             case .initialized, .closed:
-                preconditionFailure("Invalid state")
+                preconditionFailure("Invalid state: \(self.state)")
+
             case .connected:
                 self.state = .closing(openStreams: 0, maxStreams: 0)
                 return .notifyConnectionGoAwayReceived(close: true)
@@ -180,7 +212,7 @@ extension HTTP2IdleHandler {
         mutating func closeEventReceived() -> Action {
             switch self.state {
             case .initialized:
-                preconditionFailure("")
+                preconditionFailure("Invalid state: \(self.state)")
 
             case .connected:
                 self.state = .closing(openStreams: 0, maxStreams: 0)

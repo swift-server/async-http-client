@@ -106,6 +106,8 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         let request = self.unwrapOutboundIn(data)
         self.request = request
 
+        request.willExecuteRequest(self)
+
         let action = self.state.startRequest(
             head: request.requestHead,
             metadata: request.requestFramingMetadata
@@ -116,6 +118,16 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
     func read(context: ChannelHandlerContext) {
         let action = self.state.read()
         self.run(action, context: context)
+    }
+
+    func triggerUserOutboundEvent(context: ChannelHandlerContext, event: Any, promise: EventLoopPromise<Void>?) {
+        switch event {
+        case HTTPConnectionEvent.cancelRequest:
+            let action = self.state.requestCancelled()
+            self.run(action, context: context)
+        default:
+            context.fireUserInboundEventTriggered(event)
+        }
     }
 
     // MARK: - Private Methods -
