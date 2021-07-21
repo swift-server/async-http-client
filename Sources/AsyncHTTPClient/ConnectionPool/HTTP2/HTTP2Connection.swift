@@ -80,6 +80,10 @@ final class HTTP2Connection {
     private var openStreams = Set<ChannelBox>()
     let id: HTTPConnectionPool.Connection.ID
 
+    var closeFuture: EventLoopFuture<Void> {
+        self.channel.closeFuture
+    }
+
     init(channel: Channel,
          connectionID: HTTPConnectionPool.Connection.ID,
          delegate: HTTP2ConnectionDelegate,

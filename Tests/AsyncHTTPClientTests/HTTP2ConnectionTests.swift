@@ -215,7 +215,7 @@ class HTTP2ConnectionTests: XCTestCase {
             }
         }
 
-        XCTAssertFalse(http2Connection.channel.isActive)
+        XCTAssertNoThrow(try http2Connection.closeFuture.wait())
     }
 }
 
