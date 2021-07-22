@@ -77,7 +77,7 @@ class HTTP2ConnectionTests: XCTestCase {
             return XCTFail("Expected to have a request bag at this point")
         }
 
-        http2Connection.execute(request: requestBag)
+        http2Connection.executeRequest(requestBag)
 
         XCTAssertEqual(delegate.hitStreamClosed, 0)
         var maybeResponse: HTTPClient.Response?
@@ -138,7 +138,7 @@ class HTTP2ConnectionTests: XCTestCase {
                 return XCTFail("Expected to have a request bag at this point")
             }
 
-            http2Connection.execute(request: requestBag)
+            http2Connection.executeRequest(requestBag)
 
             futures.append(requestBag.task.futureResult)
         }
@@ -200,14 +200,14 @@ class HTTP2ConnectionTests: XCTestCase {
                 return XCTFail("Expected to have a request bag at this point")
             }
 
-            http2Connection.execute(request: requestBag)
+            http2Connection.executeRequest(requestBag)
 
             XCTAssertEqual(delegate.hitStreamClosed, 0)
 
             futures.append(requestBag.task.futureResult)
         }
 
-        http2Connection.cancel()
+        http2Connection.shutdown()
 
         for future in futures {
             XCTAssertThrowsError(try future.wait()) {

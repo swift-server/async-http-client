@@ -105,7 +105,7 @@ final class HTTP2IdleHandler<Delegate: HTTP2IdleHandlerDelegate>: ChannelDuplexH
             self.run(action, context: context)
 
         default:
-            context.fireUserInboundEventTriggered(event)
+            context.triggerUserOutboundEvent(event, promise: promise)
         }
     }
 
@@ -240,8 +240,10 @@ extension HTTP2IdleHandler {
                 return .nothing
 
             case .closing(var openStreams, let maxStreams):
+                // A stream might be opened, while we are closing because of race conditions. For
+                // this reason, we should handle this case.
                 openStreams += 1
-                self.state = .active(openStreams: openStreams, maxStreams: maxStreams)
+                self.state = .closing(openStreams: openStreams, maxStreams: maxStreams)
                 return .nothing
 
             case .initialized, .connected, .closed:
@@ -253,11 +255,13 @@ extension HTTP2IdleHandler {
             switch self.state {
             case .active(var openStreams, let maxStreams):
                 openStreams -= 1
+                assert(openStreams >= 0)
                 self.state = .active(openStreams: openStreams, maxStreams: maxStreams)
                 return .notifyConnectionStreamClosed(currentlyAvailable: maxStreams - openStreams)
 
             case .closing(var openStreams, let maxStreams):
                 openStreams -= 1
+                assert(openStreams >= 0)
                 if openStreams == 0 {
                     self.state = .closed
                     return .close

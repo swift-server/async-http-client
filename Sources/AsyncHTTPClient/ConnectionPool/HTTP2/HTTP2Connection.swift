@@ -122,46 +122,24 @@ final class HTTP2Connection {
         return connection.start().map { _ in connection }
     }
 
-    func execute(request: HTTPExecutableRequest) {
-        let createStreamChannelPromise = self.channel.eventLoop.makePromise(of: Channel.self)
-
-        self.multiplexer.createStreamChannel(promise: createStreamChannelPromise) { channel -> EventLoopFuture<Void> in
-            do {
-                // We only support http/2 over an https connection – using the Application-Layer
-                // Protocol Negotiation (ALPN). For this reason it is safe to fix this to `.https`.
-                let translate = HTTP2FramePayloadToHTTP1ClientCodec(httpProtocol: .https)
-                let handler = HTTP2ClientRequestHandler(eventLoop: channel.eventLoop)
-
-                try channel.pipeline.syncOperations.addHandler(translate)
-                try channel.pipeline.syncOperations.addHandler(handler)
-
-                // We must add the new channel to the list of open channels BEFORE we write the
-                // request to it. In case of an error, we are sure that the channel was added
-                // before.
-                let box = ChannelBox(channel)
-                self.openStreams.insert(box)
-                self.channel.closeFuture.whenComplete { _ in
-                    self.openStreams.remove(box)
-                }
-
-                channel.write(request, promise: nil)
-                return channel.eventLoop.makeSucceededVoidFuture()
-            } catch {
-                return channel.eventLoop.makeFailedFuture(error)
+    func executeRequest(_ request: HTTPExecutableRequest) {
+        if self.channel.eventLoop.inEventLoop {
+            self.executeRequest0(request)
+        } else {
+            self.channel.eventLoop.execute {
+                self.executeRequest0(request)
             }
-        }
-
-        createStreamChannelPromise.futureResult.whenFailure { error in
-            request.fail(error)
         }
     }
 
-    func cancel() {
+    /// shuts down the connection by cancelling all running tasks and closing the connection once
+    /// all child streams/channels are closed.
+    func shutdown() {
         if self.channel.eventLoop.inEventLoop {
-            self.cancel0()
+            self.shutdown0()
         } else {
             self.channel.eventLoop.execute {
-                self.cancel0()
+                self.shutdown0()
             }
         }
     }
@@ -203,7 +181,60 @@ final class HTTP2Connection {
         return readyToAcceptConnectionsPromise.futureResult
     }
 
-    private func cancel0() {
+    private func executeRequest0(_ request: HTTPExecutableRequest) {
+        self.channel.eventLoop.assertInEventLoop()
+
+        switch self.state {
+        case .initialized, .starting:
+            preconditionFailure("Invalid state: \(self.state). Sending requests is not allowed before we are started.")
+
+        case .active:
+            let createStreamChannelPromise = self.channel.eventLoop.makePromise(of: Channel.self)
+            self.multiplexer.createStreamChannel(promise: createStreamChannelPromise) { channel -> EventLoopFuture<Void> in
+                do {
+                    // the connection may have been asked to shutdown while we created the child. in
+                    // this
+                    // channel.
+                    guard case .active = self.state else {
+                        throw HTTPClientError.cancelled
+                    }
+
+                    // We only support http/2 over an https connection – using the Application-Layer
+                    // Protocol Negotiation (ALPN). For this reason it is safe to fix this to `.https`.
+                    let translate = HTTP2FramePayloadToHTTP1ClientCodec(httpProtocol: .https)
+                    let handler = HTTP2ClientRequestHandler(eventLoop: channel.eventLoop)
+
+                    try channel.pipeline.syncOperations.addHandler(translate)
+                    try channel.pipeline.syncOperations.addHandler(handler)
+
+                    // We must add the new channel to the list of open channels BEFORE we write the
+                    // request to it. In case of an error, we are sure that the channel was added
+                    // before.
+                    let box = ChannelBox(channel)
+                    self.openStreams.insert(box)
+                    self.channel.closeFuture.whenComplete { _ in
+                        self.openStreams.remove(box)
+                    }
+
+                    channel.write(request, promise: nil)
+                    return channel.eventLoop.makeSucceededVoidFuture()
+                } catch {
+                    return channel.eventLoop.makeFailedFuture(error)
+                }
+            }
+
+            createStreamChannelPromise.futureResult.whenFailure { error in
+                request.fail(error)
+            }
+
+        case .closing, .closed:
+            // Because of race conditions requests might reach this point, even though the
+            // connection is already closing
+            return request.fail(HTTPClientError.cancelled)
+        }
+    }
+
+    private func shutdown0() {
         self.channel.eventLoop.assertInEventLoop()
 
         self.state = .closing
