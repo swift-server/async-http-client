@@ -128,7 +128,7 @@ final class HTTP2Connection {
         self.multiplexer.createStreamChannel(promise: createStreamChannelPromise) { channel -> EventLoopFuture<Void> in
             do {
                 // We only support http/2 over an https connection – using the Application-Layer
-                // Protocol Negotiation (ALPN). For this reason it is save to fix this to `.https`.
+                // Protocol Negotiation (ALPN). For this reason it is safe to fix this to `.https`.
                 let translate = HTTP2FramePayloadToHTTP1ClientCodec(httpProtocol: .https)
                 let handler = HTTP2ClientRequestHandler(eventLoop: channel.eventLoop)
 
