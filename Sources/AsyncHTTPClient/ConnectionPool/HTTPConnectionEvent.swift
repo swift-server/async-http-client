@@ -14,4 +14,5 @@
 
 enum HTTPConnectionEvent {
     case cancelRequest
+    case closeConnection
 }

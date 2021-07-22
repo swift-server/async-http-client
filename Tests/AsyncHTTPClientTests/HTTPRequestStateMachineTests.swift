@@ -350,6 +350,24 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.requestCancelled(), .failRequest(HTTPClientError.cancelled, .none))
     }
 
+    func testConnectionBecomesWritableBeforeFirstRequest() {
+        var state = HTTPRequestStateMachine(isChannelWritable: false)
+        XCTAssertEqual(state.writabilityChanged(writable: true), .wait)
+
+        // --- sending request
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
+
+        // --- receiving response
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["content-length": "4"])
+        XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
+        let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
+        XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
+        XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.none, .init([responseBody])))
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+    }
+
     func testCancellingARequestThatIsSent() {
         var state = HTTPRequestStateMachine(isChannelWritable: true)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")

@@ -42,6 +42,7 @@ extension HTTPRequestStateMachineTests {
             ("testResponseReadingWithBackpressureEndOfResponseAllowsReadEventsToTriggerDirectly", testResponseReadingWithBackpressureEndOfResponseAllowsReadEventsToTriggerDirectly),
             ("testCancellingARequestInStateInitializedKeepsTheConnectionAlive", testCancellingARequestInStateInitializedKeepsTheConnectionAlive),
             ("testCancellingARequestBeforeBeingSendKeepsTheConnectionAlive", testCancellingARequestBeforeBeingSendKeepsTheConnectionAlive),
+            ("testConnectionBecomesWritableBeforeFirstRequest", testConnectionBecomesWritableBeforeFirstRequest),
             ("testCancellingARequestThatIsSent", testCancellingARequestThatIsSent),
             ("testRemoteSuddenlyClosesTheConnection", testRemoteSuddenlyClosesTheConnection),
             ("testReadTimeoutLeadsToFailureWithEverythingAfterBeingIgnored", testReadTimeoutLeadsToFailureWithEverythingAfterBeingIgnored),
