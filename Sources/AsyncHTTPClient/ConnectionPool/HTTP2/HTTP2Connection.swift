@@ -64,7 +64,7 @@ final class HTTP2Connection {
         }
 
         static func == (lhs: Self, rhs: Self) -> Bool {
-            lhs.channel === rhs.channel
+            lhs.id == rhs.id
         }
 
         func hash(into hasher: inout Hasher) {

@@ -25,7 +25,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
     private let eventLoop: EventLoop
 
     private var state: HTTPRequestStateMachine = .init(isChannelWritable: false) {
-        didSet {
+        willSet {
             self.eventLoop.assertInEventLoop()
         }
     }
@@ -51,6 +51,8 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
     }
 
     func handlerAdded(context: ChannelHandlerContext) {
+        assert(context.eventLoop === self.eventLoop,
+               "The handler must be added to a channel that runs on the eventLoop it was initialized with.")
         self.channelContext = context
 
         let isWritable = context.channel.isActive && context.channel.isWritable
@@ -104,6 +106,8 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
         let request = self.unwrapOutboundIn(data)
+        // The `HTTPRequestStateMachine` ensures that a `HTTP2ClientRequestHandler` only handles
+        // a single request.
         self.request = request
 
         request.willExecuteRequest(self)
@@ -135,6 +139,11 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
     // MARK: Run Actions
 
     private func run(_ action: HTTPRequestStateMachine.Action, context: ChannelHandlerContext) {
+        // NOTE: We can bang the request in the following actions, since the `HTTPRequestStateMachine`
+        //       ensures, that actions that require a request are only called, if the request is
+        //       still present. The request is only nilled as a response to a state machine action
+        //       (.failRequest or .succeedRequest).
+
         switch action {
         case .sendRequestHead(let head, let startBody):
             if startBody {
