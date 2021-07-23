@@ -60,10 +60,10 @@ enum HTTPConnectionPool {
             }
         }
 
-        fileprivate func execute(request: HTTPExecutableRequest) {
+        fileprivate func executeRequest(_ request: HTTPExecutableRequest) {
             switch self._ref {
             case .http1_1(let connection):
-                return connection.execute(request: request)
+                return connection.executeRequest(request)
             case .http2(let connection):
                 return connection.executeRequest(request)
             case .__testOnly_connection:
@@ -83,7 +83,8 @@ enum HTTPConnectionPool {
             }
         }
 
-        /// Closes the connection without cancelling running requests.
+        /// Closes the connection without cancelling running requests. Use this when you are sure, that the
+        /// connection is currently idle.
         fileprivate func close() -> EventLoopFuture<Void> {
             switch self._ref {
             case .http1_1(let connection):

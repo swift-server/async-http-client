@@ -65,7 +65,7 @@ final class HTTP1Connection {
         return connection
     }
 
-    func execute(request: HTTPExecutableRequest) {
+    func executeRequest(_ request: HTTPExecutableRequest) {
         if self.channel.eventLoop.inEventLoop {
             self.execute0(request: request)
         } else {

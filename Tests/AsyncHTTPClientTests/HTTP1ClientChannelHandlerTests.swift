@@ -42,7 +42,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         ))
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
-        testUtils.connection.execute(request: requestBag)
+        testUtils.connection.executeRequest(requestBag)
 
         XCTAssertNoThrow(try embedded.receiveHeadAndVerify {
             XCTAssertEqual($0.method, .GET)
@@ -134,7 +134,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         embedded.isWritable = false
         testWriter.writabilityChanged(false)
         embedded.pipeline.fireChannelWritabilityChanged()
-        testUtils.connection.execute(request: requestBag)
+        testUtils.connection.executeRequest(requestBag)
 
         XCTAssertEqual(try embedded.readOutbound(as: HTTPClientRequestPart.self), .none)
 
@@ -211,7 +211,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         ))
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
-        testUtils.connection.execute(request: requestBag)
+        testUtils.connection.executeRequest(requestBag)
 
         XCTAssertNoThrow(try embedded.receiveHeadAndVerify {
             XCTAssertEqual($0.method, .GET)
@@ -257,7 +257,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         ))
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
-        testUtils.connection.execute(request: requestBag)
+        testUtils.connection.executeRequest(requestBag)
 
         XCTAssertNoThrow(try embedded.receiveHeadAndVerify {
             XCTAssertEqual($0.method, .GET)
