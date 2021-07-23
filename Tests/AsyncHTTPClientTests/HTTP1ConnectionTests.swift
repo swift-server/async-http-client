@@ -152,7 +152,7 @@ class HTTP1ConnectionTests: XCTestCase {
             delegate: ResponseAccumulator(request: request)
         ))
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
-        connection.execute(request: requestBag)
+        connection.executeRequest(requestBag)
 
         XCTAssertNoThrow(try server.receiveHeadAndVerify { head in
             XCTAssertEqual(head.method, .POST)
@@ -230,7 +230,7 @@ class HTTP1ConnectionTests: XCTestCase {
             ))
             guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
-            connection.execute(request: requestBag)
+            connection.executeRequest(requestBag)
 
             var response: HTTPClient.Response?
             if counter <= closeOnRequest {

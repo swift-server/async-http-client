@@ -65,7 +65,7 @@ final class HTTP1Connection {
         return connection
     }
 
-    func execute(request: HTTPExecutableRequest) {
+    func executeRequest(_ request: HTTPExecutableRequest) {
         if self.channel.eventLoop.inEventLoop {
             self.execute0(request: request)
         } else {
@@ -75,8 +75,8 @@ final class HTTP1Connection {
         }
     }
 
-    func cancel() {
-        self.channel.triggerUserOutboundEvent(HTTPConnectionEvent.cancelRequest, promise: nil)
+    func shutdown() {
+        self.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
     }
 
     func close() -> EventLoopFuture<Void> {

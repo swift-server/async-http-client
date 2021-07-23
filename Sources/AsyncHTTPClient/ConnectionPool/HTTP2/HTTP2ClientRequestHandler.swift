@@ -126,7 +126,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
     func triggerUserOutboundEvent(context: ChannelHandlerContext, event: Any, promise: EventLoopPromise<Void>?) {
         switch event {
-        case HTTPConnectionEvent.cancelRequest:
+        case HTTPConnectionEvent.shutdownRequested:
             let action = self.state.requestCancelled()
             self.run(action, context: context)
         default:

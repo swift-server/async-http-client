@@ -127,7 +127,7 @@ class HTTP2IdleHandlerTests: XCTestCase {
         XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
 
         XCTAssertTrue(embedded.isActive)
-        embedded.pipeline.triggerUserOutboundEvent(HTTPConnectionEvent.closeConnection, promise: nil)
+        embedded.pipeline.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
         XCTAssertFalse(embedded.isActive)
     }
 
@@ -143,7 +143,7 @@ class HTTP2IdleHandlerTests: XCTestCase {
         XCTAssertEqual(delegate.maxStreams, 10)
 
         XCTAssertTrue(embedded.isActive)
-        embedded.pipeline.triggerUserOutboundEvent(HTTPConnectionEvent.closeConnection, promise: nil)
+        embedded.pipeline.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
         XCTAssertFalse(embedded.isActive)
     }
 
@@ -167,7 +167,7 @@ class HTTP2IdleHandlerTests: XCTestCase {
             openStreams.insert(streamID)
         }
 
-        embedded.pipeline.triggerUserOutboundEvent(HTTPConnectionEvent.closeConnection, promise: nil)
+        embedded.pipeline.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
         XCTAssertTrue(embedded.isActive)
 
         while let streamID = openStreams.randomElement() {
