@@ -163,7 +163,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
     func triggerUserOutboundEvent(context: ChannelHandlerContext, event: Any, promise: EventLoopPromise<Void>?) {
         switch event {
-        case HTTPConnectionEvent.cancelRequest:
+        case HTTPConnectionEvent.shutdownRequested:
             self.logger.trace("User outbound event triggered: Cancel request for connection close")
             let action = self.state.requestCancelled(closeConnection: true)
             self.run(action, context: context)

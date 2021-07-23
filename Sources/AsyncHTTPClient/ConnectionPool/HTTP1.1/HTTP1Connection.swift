@@ -75,8 +75,8 @@ final class HTTP1Connection {
         }
     }
 
-    func cancel() {
-        self.channel.triggerUserOutboundEvent(HTTPConnectionEvent.cancelRequest, promise: nil)
+    func shutdown() {
+        self.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
     }
 
     func close() -> EventLoopFuture<Void> {

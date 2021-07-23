@@ -100,7 +100,7 @@ final class HTTP2IdleHandler<Delegate: HTTP2IdleHandlerDelegate>: ChannelDuplexH
 
     func triggerUserOutboundEvent(context: ChannelHandlerContext, event: Any, promise: EventLoopPromise<Void>?) {
         switch event {
-        case HTTPConnectionEvent.closeConnection:
+        case HTTPConnectionEvent.shutdownRequested:
             let action = self.state.closeEventReceived()
             self.run(action, context: context)
 

@@ -241,12 +241,12 @@ final class HTTP2Connection {
 
         // inform all open streams, that the currently running request should be cancelled.
         self.openStreams.forEach { box in
-            box.channel.triggerUserOutboundEvent(HTTPConnectionEvent.cancelRequest, promise: nil)
+            box.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
         }
 
         // inform the idle connection handler, that connection should be closed, once all streams
         // are closed.
-        self.channel.triggerUserOutboundEvent(HTTPConnectionEvent.closeConnection, promise: nil)
+        self.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
     }
 }
 

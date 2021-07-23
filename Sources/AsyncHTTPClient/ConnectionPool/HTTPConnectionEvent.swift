@@ -13,6 +13,5 @@
 //===----------------------------------------------------------------------===//
 
 enum HTTPConnectionEvent {
-    case cancelRequest
-    case closeConnection
+    case shutdownRequested
 }

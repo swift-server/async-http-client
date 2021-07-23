@@ -223,7 +223,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         XCTAssertTrue(embedded.isActive)
         XCTAssertEqual(testUtils.connectionDelegate.hitConnectionClosed, 0)
         XCTAssertEqual(testUtils.connectionDelegate.hitConnectionReleased, 0)
-        testUtils.connection.cancel()
+        testUtils.connection.shutdown()
         XCTAssertFalse(embedded.isActive)
         embedded.embeddedEventLoop.run()
         XCTAssertEqual(testUtils.connectionDelegate.hitConnectionClosed, 1)
