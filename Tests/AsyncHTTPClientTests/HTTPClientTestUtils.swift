@@ -1149,23 +1149,144 @@ struct CollectEverythingLogHandler: LogHandler {
     }
 }
 
+class StreamDelegate: HTTPClientResponseDelegate {
+    typealias Response = Void
+
+    enum State {
+        case idle
+        case waitingForBytes(EventLoopPromise<ByteBuffer?>)
+        case buffering(ByteBuffer, done: Bool)
+        case failed(Error)
+        case finished
+    }
+
+    let eventLoop: EventLoop
+    private var state: State = .idle
+
+    init(eventLoop: EventLoop) {
+        self.eventLoop = eventLoop
+    }
+
+    func next() -> EventLoopFuture<ByteBuffer?> {
+        if self.eventLoop.inEventLoop {
+            return self.next0()
+        } else {
+            return self.eventLoop.flatSubmit {
+                self.next0()
+            }
+        }
+    }
+
+    private func next0() -> EventLoopFuture<ByteBuffer?> {
+        switch self.state {
+        case .idle:
+            let promise = self.eventLoop.makePromise(of: ByteBuffer?.self)
+            self.state = .waitingForBytes(promise)
+            return promise.futureResult
+
+        case .buffering(let byteBuffer, done: false):
+            self.state = .idle
+            return self.eventLoop.makeSucceededFuture(byteBuffer)
+
+        case .buffering(let byteBuffer, done: true):
+            self.state = .finished
+            return self.eventLoop.makeSucceededFuture(byteBuffer)
+
+        case .waitingForBytes:
+            preconditionFailure("Don't call `.next` twice")
+
+        case .failed(let error):
+            self.state = .finished
+            return self.eventLoop.makeFailedFuture(error)
+
+        case .finished:
+            return self.eventLoop.makeSucceededFuture(nil)
+        }
+    }
+
+    // MARK: HTTPClientResponseDelegate
+
+    func didSendRequestHead(task: HTTPClient.Task<Response>, _ head: HTTPRequestHead) {
+        XCTAssert(self.eventLoop.inEventLoop)
+    }
+
+    func didSendRequestPart(task: HTTPClient.Task<Response>, _ part: IOData) {
+        XCTAssert(self.eventLoop.inEventLoop)
+    }
+
+    func didSendRequest(task: HTTPClient.Task<Response>) {
+        XCTAssert(self.eventLoop.inEventLoop)
+    }
+
+    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
+        XCTAssert(self.eventLoop.inEventLoop)
+        return task.eventLoop.makeSucceededVoidFuture()
+    }
+
+    func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+        XCTAssert(self.eventLoop.inEventLoop)
+
+        switch self.state {
+        case .idle:
+            self.state = .buffering(buffer, done: false)
+        case .waitingForBytes(let promise):
+            self.state = .idle
+            promise.succeed(buffer)
+        case .buffering(var byteBuffer, done: false):
+            var buffer = buffer
+            byteBuffer.writeBuffer(&buffer)
+            self.state = .buffering(byteBuffer, done: false)
+        case .buffering(_, done: true), .finished, .failed:
+            preconditionFailure("Invalid state: \(self.state)")
+        }
+
+        return task.eventLoop.makeSucceededVoidFuture()
+    }
+
+    func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
+        XCTAssert(self.eventLoop.inEventLoop)
+
+        switch self.state {
+        case .idle:
+            self.state = .failed(error)
+        case .waitingForBytes(let promise):
+            self.state = .finished
+            promise.fail(error)
+        case .buffering(_, done: false):
+            self.state = .failed(error)
+        case .buffering(_, done: true), .finished, .failed:
+            preconditionFailure("Invalid state: \(self.state)")
+        }
+    }
+
+    func didFinishRequest(task: HTTPClient.Task<Response>) throws {
+        XCTAssert(self.eventLoop.inEventLoop)
+
+        switch self.state {
+        case .idle:
+            self.state = .finished
+        case .waitingForBytes(let promise):
+            self.state = .finished
+            promise.succeed(nil)
+        case .buffering(let byteBuffer, done: false):
+            self.state = .buffering(byteBuffer, done: true)
+        case .buffering(_, done: true), .finished, .failed:
+            preconditionFailure("Invalid state: \(self.state)")
+        }
+    }
+}
+
 class HTTPEchoHandler: ChannelInboundHandler {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
-
-    var promises: CircularBuffer<EventLoopPromise<Void>> = CircularBuffer()
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let request = self.unwrapInboundIn(data)
         switch request {
         case .head:
-            context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .init(major: 1, minor: 1), status: .ok))), promise: nil)
+            context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok))), promise: nil)
         case .body(let bytes):
-            context.writeAndFlush(self.wrapOutboundOut(.body(.byteBuffer(bytes)))).whenSuccess {
-                if let promise = self.promises.popFirst() {
-                    promise.succeed(())
-                }
-            }
+            context.writeAndFlush(self.wrapOutboundOut(.body(.byteBuffer(bytes))), promise: nil)
         case .end:
             context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
             context.close(promise: nil)
