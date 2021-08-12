@@ -1149,14 +1149,27 @@ struct CollectEverythingLogHandler: LogHandler {
     }
 }
 
-class StreamDelegate: HTTPClientResponseDelegate {
+/// A ``HTTPClientResponseDelegate`` that buffers the incoming response parts for the consumer. The consumer can
+/// consume the bytes by calling ``next()`` on the delegate.
+///
+/// The sole purpose of this class is to enable straight-line stream tests.
+class ResponseStreamDelegate: HTTPClientResponseDelegate {
     typealias Response = Void
 
     enum State {
+        /// The delegate is in the idle state. There are no http response parts to be buffered
+        /// and the consumer did not signal a demand. Transitions to all other states are allowed.
         case idle
+        /// The consumer has signaled a demand for more bytes, but none where available. Can
+        /// transition to `.idle` (when new bytes arrive), `.finished` (when the stream finishes or fails)
         case waitingForBytes(EventLoopPromise<ByteBuffer?>)
+        /// The consumer has signaled no further demand but bytes keep arriving. Valid transitions
+        /// to `.idle` (when bytes are consumed), `.finished` (when bytes are consumed, and the
+        /// stream has ended), `.failed` (if an error is forwarded)
         case buffering(ByteBuffer, done: Bool)
+        /// Stores an error for consumption. Valid transitions are: `.finished`, when the error was consumed.
         case failed(Error)
+        /// The stream has finished and all bytes or errors where consumed.
         case finished
     }
 
@@ -1207,24 +1220,24 @@ class StreamDelegate: HTTPClientResponseDelegate {
     // MARK: HTTPClientResponseDelegate
 
     func didSendRequestHead(task: HTTPClient.Task<Response>, _ head: HTTPRequestHead) {
-        XCTAssert(self.eventLoop.inEventLoop)
+        self.eventLoop.preconditionInEventLoop()
     }
 
     func didSendRequestPart(task: HTTPClient.Task<Response>, _ part: IOData) {
-        XCTAssert(self.eventLoop.inEventLoop)
+        self.eventLoop.preconditionInEventLoop()
     }
 
     func didSendRequest(task: HTTPClient.Task<Response>) {
-        XCTAssert(self.eventLoop.inEventLoop)
+        self.eventLoop.preconditionInEventLoop()
     }
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
-        XCTAssert(self.eventLoop.inEventLoop)
+        self.eventLoop.preconditionInEventLoop()
         return task.eventLoop.makeSucceededVoidFuture()
     }
 
     func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
-        XCTAssert(self.eventLoop.inEventLoop)
+        self.eventLoop.preconditionInEventLoop()
 
         switch self.state {
         case .idle:
@@ -1244,7 +1257,7 @@ class StreamDelegate: HTTPClientResponseDelegate {
     }
 
     func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
-        XCTAssert(self.eventLoop.inEventLoop)
+        self.eventLoop.preconditionInEventLoop()
 
         switch self.state {
         case .idle:
@@ -1260,7 +1273,7 @@ class StreamDelegate: HTTPClientResponseDelegate {
     }
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws {
-        XCTAssert(self.eventLoop.inEventLoop)
+        self.eventLoop.preconditionInEventLoop()
 
         switch self.state {
         case .idle:

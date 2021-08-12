@@ -2831,13 +2831,14 @@ class HTTPClientTests: XCTestCase {
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
         defer { XCTAssertNoThrow(try httpClient.syncShutdown()) }
 
-        let delegate = StreamDelegate(eventLoop: delegateEL)
+        let delegate = ResponseStreamDelegate(eventLoop: delegateEL)
 
         let body: HTTPClient.Body = .stream { writer in
             let finalPromise = writeEL.makePromise(of: Void.self)
 
             func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
-                XCTAssert(writeEL.inEventLoop, "Always write from unexpected el")
+                // always invoke from the wrong el to test thread safety
+                writeEL.preconditionInEventLoop()
 
                 if index >= 30 {
                     return finalPromise.succeed(())
@@ -2845,7 +2846,8 @@ class HTTPClientTests: XCTestCase {
 
                 let sent = ByteBuffer(integer: index)
                 writer.write(.byteBuffer(sent)).flatMap { () -> EventLoopFuture<ByteBuffer?> in
-                    XCTAssert(delegateEL.inEventLoop, "Always dispatch back to delegate el")
+                    // ensure, that the writer dispatches back to the expected delegate el.
+                    delegateEL.preconditionInEventLoop()
                     return delegate.next()
                 }.whenComplete { result in
                     switch result {
