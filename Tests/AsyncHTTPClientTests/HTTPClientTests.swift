@@ -2815,40 +2815,67 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(result, .success, "we never closed the connection!")
     }
 
-    func testBiDirectionalStreaming() throws {
-        let handler = HTTPEchoHandler()
+    // In this test, we test that a request can continue to stream its body after the response head,
+    // was received. The client sends a number to the server and waits for the server to echo the
+    // number. Once the client receives the echoed number, it will continue with the next number.
+    // The client and server ping/pong 30 times.
+    func testBiDirectionalStreaming() {
+        let httpBin = HTTPBin(.http1_1(ssl: false, compress: false)) { _ in HTTPEchoHandler() }
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
 
-        let server = try ServerBootstrap(group: self.serverGroup)
-            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-            .childChannelInitializer { channel in
-                channel.pipeline.configureHTTPServerPipeline().flatMap {
-                    channel.pipeline.addHandler(handler)
-                }
-            }
-            .bind(host: "localhost", port: 0)
-            .wait()
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 2)
+        defer { XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully()) }
+        let writeEL = eventLoopGroup.next()
+        let delegateEL = eventLoopGroup.next()
 
-        defer {
-            server.close(promise: nil)
-        }
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
+        defer { XCTAssertNoThrow(try httpClient.syncShutdown()) }
+
+        let delegate = ResponseStreamDelegate(eventLoop: delegateEL)
 
         let body: HTTPClient.Body = .stream { writer in
-            let promise = self.clientGroup.next().makePromise(of: Void.self)
-            handler.promises.append(promise)
-            return writer.write(.byteBuffer(ByteBuffer(string: "hello"))).flatMap {
-                promise.futureResult
-            }.flatMap {
-                let promise = self.clientGroup.next().makePromise(of: Void.self)
-                handler.promises.append(promise)
-                return writer.write(.byteBuffer(ByteBuffer(string: "hello2"))).flatMap {
-                    promise.futureResult
+            let finalPromise = writeEL.makePromise(of: Void.self)
+
+            func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
+                // always invoke from the wrong el to test thread safety
+                writeEL.preconditionInEventLoop()
+
+                if index >= 30 {
+                    return finalPromise.succeed(())
+                }
+
+                let sent = ByteBuffer(integer: index)
+                writer.write(.byteBuffer(sent)).flatMap { () -> EventLoopFuture<ByteBuffer?> in
+                    // ensure, that the writer dispatches back to the expected delegate el.
+                    delegateEL.preconditionInEventLoop()
+                    return delegate.next()
+                }.whenComplete { result in
+                    switch result {
+                    case .success(let returned):
+                        XCTAssertEqual(returned, sent)
+
+                        writeEL.execute {
+                            writeLoop(writer, index: index + 1)
+                        }
+
+                    case .failure(let error):
+                        finalPromise.fail(error)
+                    }
                 }
             }
+
+            writeEL.execute {
+                writeLoop(writer, index: 0)
+            }
+
+            return finalPromise.futureResult
         }
 
-        let future = self.defaultClient.execute(url: "http://localhost:\(server.localAddress!.port!)", body: body)
+        let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)", body: body)
+        let future = httpClient.execute(request: request, delegate: delegate, eventLoop: .delegate(on: delegateEL))
 
         XCTAssertNoThrow(try future.wait())
+        XCTAssertNil(try delegate.next().wait())
     }
 
     func testSynchronousHandshakeErrorReporting() throws {

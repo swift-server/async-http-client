@@ -1149,23 +1149,157 @@ struct CollectEverythingLogHandler: LogHandler {
     }
 }
 
+/// A ``HTTPClientResponseDelegate`` that buffers the incoming response parts for the consumer. The consumer can
+/// consume the bytes by calling ``next()`` on the delegate.
+///
+/// The sole purpose of this class is to enable straight-line stream tests.
+class ResponseStreamDelegate: HTTPClientResponseDelegate {
+    typealias Response = Void
+
+    enum State {
+        /// The delegate is in the idle state. There are no http response parts to be buffered
+        /// and the consumer did not signal a demand. Transitions to all other states are allowed.
+        case idle
+        /// The consumer has signaled a demand for more bytes, but none where available. Can
+        /// transition to `.idle` (when new bytes arrive), `.finished` (when the stream finishes or fails)
+        case waitingForBytes(EventLoopPromise<ByteBuffer?>)
+        /// The consumer has signaled no further demand but bytes keep arriving. Valid transitions
+        /// to `.idle` (when bytes are consumed), `.finished` (when bytes are consumed, and the
+        /// stream has ended), `.failed` (if an error is forwarded)
+        case buffering(ByteBuffer, done: Bool)
+        /// Stores an error for consumption. Valid transitions are: `.finished`, when the error was consumed.
+        case failed(Error)
+        /// The stream has finished and all bytes or errors where consumed.
+        case finished
+    }
+
+    let eventLoop: EventLoop
+    private var state: State = .idle
+
+    init(eventLoop: EventLoop) {
+        self.eventLoop = eventLoop
+    }
+
+    func next() -> EventLoopFuture<ByteBuffer?> {
+        if self.eventLoop.inEventLoop {
+            return self.next0()
+        } else {
+            return self.eventLoop.flatSubmit {
+                self.next0()
+            }
+        }
+    }
+
+    private func next0() -> EventLoopFuture<ByteBuffer?> {
+        switch self.state {
+        case .idle:
+            let promise = self.eventLoop.makePromise(of: ByteBuffer?.self)
+            self.state = .waitingForBytes(promise)
+            return promise.futureResult
+
+        case .buffering(let byteBuffer, done: false):
+            self.state = .idle
+            return self.eventLoop.makeSucceededFuture(byteBuffer)
+
+        case .buffering(let byteBuffer, done: true):
+            self.state = .finished
+            return self.eventLoop.makeSucceededFuture(byteBuffer)
+
+        case .waitingForBytes:
+            preconditionFailure("Don't call `.next` twice")
+
+        case .failed(let error):
+            self.state = .finished
+            return self.eventLoop.makeFailedFuture(error)
+
+        case .finished:
+            return self.eventLoop.makeSucceededFuture(nil)
+        }
+    }
+
+    // MARK: HTTPClientResponseDelegate
+
+    func didSendRequestHead(task: HTTPClient.Task<Response>, _ head: HTTPRequestHead) {
+        self.eventLoop.preconditionInEventLoop()
+    }
+
+    func didSendRequestPart(task: HTTPClient.Task<Response>, _ part: IOData) {
+        self.eventLoop.preconditionInEventLoop()
+    }
+
+    func didSendRequest(task: HTTPClient.Task<Response>) {
+        self.eventLoop.preconditionInEventLoop()
+    }
+
+    func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
+        self.eventLoop.preconditionInEventLoop()
+        return task.eventLoop.makeSucceededVoidFuture()
+    }
+
+    func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+        self.eventLoop.preconditionInEventLoop()
+
+        switch self.state {
+        case .idle:
+            self.state = .buffering(buffer, done: false)
+        case .waitingForBytes(let promise):
+            self.state = .idle
+            promise.succeed(buffer)
+        case .buffering(var byteBuffer, done: false):
+            var buffer = buffer
+            byteBuffer.writeBuffer(&buffer)
+            self.state = .buffering(byteBuffer, done: false)
+        case .buffering(_, done: true), .finished, .failed:
+            preconditionFailure("Invalid state: \(self.state)")
+        }
+
+        return task.eventLoop.makeSucceededVoidFuture()
+    }
+
+    func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
+        self.eventLoop.preconditionInEventLoop()
+
+        switch self.state {
+        case .idle:
+            self.state = .failed(error)
+        case .waitingForBytes(let promise):
+            self.state = .finished
+            promise.fail(error)
+        case .buffering(_, done: false):
+            self.state = .failed(error)
+        case .buffering(_, done: true), .finished, .failed:
+            preconditionFailure("Invalid state: \(self.state)")
+        }
+    }
+
+    func didFinishRequest(task: HTTPClient.Task<Response>) throws {
+        self.eventLoop.preconditionInEventLoop()
+
+        switch self.state {
+        case .idle:
+            self.state = .finished
+        case .waitingForBytes(let promise):
+            self.state = .finished
+            promise.succeed(nil)
+        case .buffering(let byteBuffer, done: false):
+            self.state = .buffering(byteBuffer, done: true)
+        case .buffering(_, done: true), .finished, .failed:
+            preconditionFailure("Invalid state: \(self.state)")
+        }
+    }
+}
+
 class HTTPEchoHandler: ChannelInboundHandler {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
-
-    var promises: CircularBuffer<EventLoopPromise<Void>> = CircularBuffer()
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let request = self.unwrapInboundIn(data)
         switch request {
         case .head:
-            context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .init(major: 1, minor: 1), status: .ok))), promise: nil)
+            context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok))), promise: nil)
         case .body(let bytes):
-            context.writeAndFlush(self.wrapOutboundOut(.body(.byteBuffer(bytes)))).whenSuccess {
-                if let promise = self.promises.popFirst() {
-                    promise.succeed(())
-                }
-            }
+            context.writeAndFlush(self.wrapOutboundOut(.body(.byteBuffer(bytes))), promise: nil)
         case .end:
             context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
             context.close(promise: nil)
