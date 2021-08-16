@@ -150,7 +150,7 @@ extension HTTPClient {
           let response = try await httpClient.execute(request, deadline: .distantFuture)
         }
         
-        Task.sleep(500 * 1000 * 1000) // wait half a second
+        await Task.sleep(nanosecond: 500 * 1000 * 1000) // wait half a second
         task.cancel() // cancel the task after half a second
         ```
 
