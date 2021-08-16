@@ -12,12 +12,12 @@ This proposal describes what these APIs could look like and explores some of the
 
 ## Proposed API additions
 
-### New `AsyncRequest` type
+### New `HTTPClientRequest` type
 
-The proposed new `AsyncRequest` shall be a simple swift structure.
+The proposed new `HTTPClientRequest` shall be a simple swift structure.
 
 ```swift
-struct AsyncRequest {
+struct HTTPClientRequest {
   /// The requests url.
   var url: String
   
@@ -39,7 +39,7 @@ struct AsyncRequest {
 }
 ```
 
-A notable change from the current [`HTTPRequest`][HTTPRequest] is that the url is not of type `URL`. This makes the creation of a request non throwing. Existing issues regarding current API: 
+A notable change from the current [`HTTPClient.Request`][HTTPClient.Request] is that the url is not of type `URL`. This makes the creation of a request non throwing. Existing issues regarding current API: 
 
 - [HTTPClient.Request.url is a let constant][issue-395]
 - [refactor to make request non-throwing](https://github.com/swift-server/async-http-client/pull/56)
@@ -51,18 +51,18 @@ In normal try/catch flows this should not change the control flow:
 
 ```swift
 do {
-  var request = AsyncRequest(url: "invalidurl")
+  var request = HTTPClientRequest(url: "invalidurl")
   try await httpClient.execute(request, deadline: .now() + .seconds(3))
 } catch {
   print(error)
 }
 ```
 
-If the library code throws from the AsyncRequest creation or the request invocation the user will, in normal use cases, handle the error in the same catch block. 
+If the library code throws from the `HTTPClientRequest` creation or the request invocation the user will, in normal use cases, handle the error in the same catch block. 
 
-#### Body streaming
+#### Request body streaming
 
-The new AsyncRequest has a new body type, that is wrapper around an internal enum. This allows us to evolve this type for use-cases that we are not aware of today. 
+The new `HTTPClientRequest` has a new body type, that is wrapper around an internal enum. This allows us to evolve this type for use-cases that we are not aware of today. 
 
 ```swift
 public struct Body {
@@ -74,16 +74,16 @@ public struct Body {
 }
 ```
 
-The main difference to today's `Request.Body` type is the lack of a `StreamWriter` for streaming scenarios. The existing StreamWriter offered the user an API to write into (thus the user was in control of when writing happened). The new `AsyncRequest.Body` uses `AsyncSequence`s to stream requests. By iterating over the provided AsyncSequence, the HTTPClient is  in control when writes happen, and can ask for more data efficiently. 
+The main difference to today's `Request.Body` type is the lack of a `StreamWriter` for streaming scenarios. The existing StreamWriter offered the user an API to write into (thus the user was in control of when writing happened). The new `HTTPClientRequest.Body` uses `AsyncSequence`s to stream requests. By iterating over the provided AsyncSequence, the HTTPClient is  in control when writes happen, and can ask for more data efficiently. 
 
 Using the `AsyncSequence` from the Swift standard library as our upload stream mechanism dramatically reduces the learning curve for new users.
 
-### New `AsyncResponse` type
+### New `HTTPClientResponse` type
 
-The `AsyncResponse` looks more similar to the existing `Response` type. The biggest difference is again the `body` property, which is now an `AsyncSequence` of `ByteBuffer`s instead of a single optional `ByteBuffer?`. This will make every response on AsyncHTTPClient streaming by default.
+The `HTTPClientResponse` looks more similar to the existing [`HTTPClient.Response`][HTTPClient.Response] type. The biggest difference is again the `body` property, which is now an `AsyncSequence` of `ByteBuffer`s instead of a single optional `ByteBuffer?`. This will make every response on AsyncHTTPClient streaming by default. As with `HTTPClientRequest`, we dropped the namespacing on `HTTPClient` to allow easier discovery with autocompletion.
 
 ```swift
-public struct AsyncResponse {
+public struct HTTPClientResponse {
   /// the used http version
   public var version: HTTPVersion
   /// the http response status
@@ -94,7 +94,7 @@ public struct AsyncResponse {
   public var body: Body
 }
 
-extension AsyncResponse {
+extension HTTPClientResponse {
   public struct Body: AsyncSequence {
     public typealias Element = ByteBuffer
     public typealias AsyncIterator = Iterator
@@ -110,7 +110,11 @@ extension AsyncResponse {
 }
 ```
 
-At a later point we could add trailers to the AsyncResponse as effectful properties.
+Note: The user must consume the `Body` stream or drop the `HTTPClientResponse`, to ensure that the 
+internal HTTPClient connection can move forward. Dropping the `HTTPClientResponse` would lead to a 
+request cancellation which in turn would lead to a close of an exisiting HTTP/1.1 connection.
+
+At a later point we could add trailers to the `HTTPClientResponse` as effectful properties:
 
 ```swift
     public var trailers: HTTPHeaders? { async throws }
@@ -120,15 +124,16 @@ However we will need to make sure that the user has consumed the body stream com
 
 ```swift
 do {
-  var request = AsyncRequest(url: "https://swift.org/")
+  var request = HTTPClientRequest(url: "https://swift.org/")
   let response = try await httpClient.execute(request, deadline: .now() + .seconds(3))
   
   var trailers = try await response.trailers // can not move forward since body must be consumed before.
 } catch {
   print(error)
 }
-
 ```
+
+In such a case we can either throw an error or crash.
 
 ### New invocation
 
@@ -136,7 +141,7 @@ The new way to invoke a request shall look like this:
 
 ```swift
 extension HTTPClient {
-  func execute(_ request: AsyncRequest, deadline: NIODeadline) async throws -> AsyncResponse
+  func execute(_ request: HTTPClientRequest, deadline: NIODeadline) async throws -> HTTPClientResponse
 }
 ```
 
@@ -165,4 +170,5 @@ extension HTTPClient {
 [issue-392]: https://github.com/swift-server/async-http-client/issues/392
 [issue-395]: https://github.com/swift-server/async-http-client/issues/395
 
-[HTTPRequest]: https://github.com/swift-server/async-http-client/blob/main/Sources/AsyncHTTPClient/HTTPHandler.swift#L96-L318
+[HTTPClient.Request]: https://github.com/swift-server/async-http-client/blob/main/Sources/AsyncHTTPClient/HTTPHandler.swift#L96-L318
+[HTTPClient.Response]: https://github.com/swift-server/async-http-client/blob/main/Sources/AsyncHTTPClient/HTTPHandler.swift#L320-L364
