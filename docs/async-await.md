@@ -113,7 +113,7 @@ extension AsyncResponse {
 At a later point we could add trailers to the AsyncResponse as effectful properties.
 
 ```swift
-    public var trailers: HTTPHeaders { async throws }
+    public var trailers: HTTPHeaders? { async throws }
 ```
 
 However we will need to make sure that the user has consumed the body stream completely before, calling the trailers, because otherwise we might run into a situation from which we can not progress forward:
