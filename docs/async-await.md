@@ -65,12 +65,14 @@ If the library code throws from the `HTTPClientRequest` creation or the request 
 The new `HTTPClientRequest` has a new body type, that is wrapper around an internal enum. This allows us to evolve this type for use-cases that we are not aware of today. 
 
 ```swift
-public struct Body {
-  static func bytes<S: Sequence>(_ sequence: S) -> Body where S.Element == UInt8
-
-  static func stream<S: AsyncSequence>(_ sequence: S) -> Body where S.Element == ByteBuffer
-
-  static func stream<S: AsyncSequence>(_ sequence: S) -> Body where S.Element == UInt8
+extension HTTPClientRequest {
+  public struct Body {
+    static func bytes<S: Sequence>(_ sequence: S) -> Body where S.Element == UInt8
+  
+    static func stream<S: AsyncSequence>(_ sequence: S) -> Body where S.Element == ByteBuffer
+  
+    static func stream<S: AsyncSequence>(_ sequence: S) -> Body where S.Element == UInt8
+  }
 }
 ```
 
@@ -142,6 +144,27 @@ The new way to invoke a request shall look like this:
 ```swift
 extension HTTPClient {
   func execute(_ request: HTTPClientRequest, deadline: NIODeadline) async throws -> HTTPClientResponse
+}
+```
+
+Usage example:
+
+```swift
+var request = HTTPClientRequest(url: "https://swift.org")
+request.method = .POST
+request.headers = [
+  "content-type": "text/plain; charset=UTF-8"
+  "x-my-fancy-header": "super-awesome"
+]
+request.body = .sequence("Hello world!".utf8)
+
+var response = try await client.execute(request, deadline: .now() + .seconds(5))
+
+switch response.status {
+case .ok:
+  let body = try await response.body.collect(maxBytes: 1024 * 1024)
+default:
+  throw MyUnexpectedHTTPStatusError
 }
 ```
 
