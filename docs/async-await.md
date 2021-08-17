@@ -156,7 +156,7 @@ request.headers = [
   "content-type": "text/plain; charset=UTF-8"
   "x-my-fancy-header": "super-awesome"
 ]
-request.body = .sequence("Hello world!".utf8)
+request.body = .bytes("Hello world!".utf8)
 
 var response = try await client.execute(request, deadline: .now() + .seconds(5))
 
@@ -183,6 +183,7 @@ default:
         ```
 
 - **What happens with all the other configuration options?** Currently users can configure a TLSConfiguration on a request.  This API doesn't expose this option. We hope to create a three layer model in the future. For this reason, we currently don't want to add per request configuration on the request invocation. More info can be found in the issue: [RFC: design suggestion: Make this a "3-tier library"][issue-392]
+- **What about convenience APIs?** This is our first proposal for an async/await API. We are hesitant at the moment to think about convenience APIs, since we would like to observe actual API usage. Further before we define convenience APIs, we would like to come up with a final API design for the mentioned ["3-tier library"][issue-392], to ensure those would be covered with the convenience API as well.
 		
 
 [SE-0296]: https://github.com/apple/swift-evolution/blob/main/proposals/0296-async-await.md
