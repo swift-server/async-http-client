@@ -147,7 +147,7 @@ extension HTTPClient {
 }
 ```
 
-Usage example:
+Simple usage example:
 
 ```swift
 var request = HTTPClientRequest(url: "https://swift.org")
@@ -163,6 +163,40 @@ var response = try await client.execute(request, deadline: .now() + .seconds(5))
 switch response.status {
 case .ok:
   let body = try await response.body.collect(maxBytes: 1024 * 1024)
+default:
+  throw MyUnexpectedHTTPStatusError
+}
+```
+
+Stream upload and download example using the new `FileHandle` api:
+
+```swift
+let readHandle = FileHandle(forReadingFrom: URL(string: "file:///tmp/readfile")!))
+let writeHandle = FileHandle(forWritingTo: URL(string: "file:///tmp/writefile")!))
+
+var request = HTTPClientRequest(url: "https://swift.org/echo")
+request.method = .POST
+request.headers = [
+  "content-type": "text/plain; charset=UTF-8"
+  "x-my-fancy-header": "super-awesome"
+]
+request.body = .stream(readHandle.bytes)
+
+var response = try await client.execute(request, deadline: .now() + .seconds(5))
+
+switch response.status {
+case .ok:
+  Task {
+    var streamIterator = response.body.makeAsyncIterator()
+    writeHandle.writeabilityHandler = { handle in
+      switch try await streamIterator.next() {
+      case .some(let buffer):
+        handle.write(buffer.readData(buffer.readableBytes)!)
+      case .none:
+        handle.close()
+      }
+    }
+  }
 default:
   throw MyUnexpectedHTTPStatusError
 }
