@@ -15,10 +15,10 @@
 @testable import AsyncHTTPClient
 import Logging
 import NIOCore
-import NIOPosix
 import NIOEmbedded
 import NIOHTTP1
 import NIOHTTPCompression
+import NIOPosix
 import NIOTestUtils
 import XCTest
 

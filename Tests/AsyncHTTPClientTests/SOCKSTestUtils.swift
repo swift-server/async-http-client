@@ -14,8 +14,8 @@
 
 import AsyncHTTPClient
 import NIOCore
-import NIOPosix
 import NIOHTTP1
+import NIOPosix
 import NIOSOCKS
 import XCTest
 

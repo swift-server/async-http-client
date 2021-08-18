@@ -14,11 +14,11 @@
 
 import Foundation
 import Logging
-import NIOCore
-import NIOPosix
 import NIOConcurrencyHelpers
+import NIOCore
 import NIOHTTP1
 import NIOHTTPCompression
+import NIOPosix
 import NIOSOCKS
 import NIOSSL
 import NIOTLS

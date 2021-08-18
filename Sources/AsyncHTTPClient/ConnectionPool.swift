@@ -14,8 +14,8 @@
 
 import Foundation
 import Logging
-import NIOCore
 import NIOConcurrencyHelpers
+import NIOCore
 import NIOHTTP1
 import NIOSSL
 import NIOTLS

@@ -14,8 +14,8 @@
 
 import struct Foundation.URL
 import Logging
-import NIOCore
 import NIOConcurrencyHelpers
+import NIOCore
 import NIOHTTP1
 
 final class RequestBag<Delegate: HTTPClientResponseDelegate> {

@@ -15,12 +15,12 @@
 import AsyncHTTPClient
 import Foundation
 import Logging
-import NIOCore
-import NIOPosix
 import NIOConcurrencyHelpers
+import NIOCore
 import NIOHTTP1
 import NIOHTTP2
 import NIOHTTPCompression
+import NIOPosix
 import NIOSSL
 import NIOTLS
 import NIOTransportServices

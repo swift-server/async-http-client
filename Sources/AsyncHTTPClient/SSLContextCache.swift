@@ -14,8 +14,8 @@
 
 import Dispatch
 import Logging
-import NIOCore
 import NIOConcurrencyHelpers
+import NIOCore
 import NIOSSL
 
 class SSLContextCache {
