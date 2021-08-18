@@ -13,7 +13,8 @@
 //===----------------------------------------------------------------------===//
 
 import AsyncHTTPClient
-import NIO
+import NIOCore
+import NIOPosix
 import NIOHTTP1
 import NIOSOCKS
 import XCTest

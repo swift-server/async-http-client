@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-import NIO
+import NIOCore
 import NIOTLS
 
 final class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {

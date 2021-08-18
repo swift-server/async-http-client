@@ -14,7 +14,7 @@
 
 import struct Foundation.URL
 import Logging
-import NIO
+import NIOCore
 import NIOConcurrencyHelpers
 import NIOHTTP1
 

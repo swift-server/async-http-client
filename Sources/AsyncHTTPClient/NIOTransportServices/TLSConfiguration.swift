@@ -16,7 +16,7 @@
 
     import Foundation
     import Network
-    import NIO
+    import NIOCore
     import NIOSSL
     import NIOTransportServices
 

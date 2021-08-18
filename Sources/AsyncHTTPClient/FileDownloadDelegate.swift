@@ -12,7 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-import NIO
+import NIOCore
+import NIOPosix
 import NIOHTTP1
 
 /// Handles a streaming download to a given file path, allowing headers and progress to be reported.

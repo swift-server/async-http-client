@@ -13,7 +13,8 @@
 //===----------------------------------------------------------------------===//
 
 @testable import AsyncHTTPClient
-@testable import NIO
+@testable import NIOCore
+import NIOEmbedded
 import NIOConcurrencyHelpers
 import NIOFoundationCompat
 import NIOHTTP1

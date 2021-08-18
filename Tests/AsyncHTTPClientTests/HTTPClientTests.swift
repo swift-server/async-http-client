@@ -17,7 +17,8 @@
     import Network
 #endif
 import Logging
-import NIO
+import NIOCore
+import NIOPosix
 import NIOConcurrencyHelpers
 import NIOFoundationCompat
 import NIOHTTP1

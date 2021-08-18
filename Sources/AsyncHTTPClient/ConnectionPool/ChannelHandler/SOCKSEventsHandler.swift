@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-import NIO
+import NIOCore
 import NIOSOCKS
 
 final class SOCKSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {

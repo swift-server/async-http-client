@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Logging
-import NIO
+import NIOCore
 import NIOHTTP2
 
 protocol HTTP2ConnectionDelegate {
