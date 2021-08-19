@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y lsof dnsutils netcat-openbsd net-tools 
 RUN apt-get update && apt-get install -y ruby ruby-dev libsqlite3-dev build-essential
 # switch of gem docs building
 RUN echo "gem: --no-document" > ~/.gemrc
-RUN if [ "${ubuntu_version}" != "xenial" ] ; then gem install jazzy ; fi
+RUN if [ "${ubuntu_version}" != "xenial" ] ; then gem install jazzy -v 0.13.7 ; fi
 
 # tools
 RUN mkdir -p $HOME/.tools
