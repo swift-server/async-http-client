@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-import NIO
+import NIOCore
 
 extension HTTP1ConnectionProvider {
     enum Action<ConnectionType: PoolManageableConnection> {

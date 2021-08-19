@@ -14,7 +14,8 @@
 
 /* NOT @testable */ import AsyncHTTPClient // Tests that need @testable go into HTTPClientInternalTests.swift
 import Logging
-import NIO
+import NIOCore
+import NIOPosix
 import NIOSOCKS
 import XCTest
 

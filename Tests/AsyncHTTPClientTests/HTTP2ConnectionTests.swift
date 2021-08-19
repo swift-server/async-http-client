@@ -14,9 +14,11 @@
 
 @testable import AsyncHTTPClient
 import Logging
-import NIO
 import NIOConcurrencyHelpers
+import NIOCore
+import NIOEmbedded
 import NIOHTTP1
+import NIOPosix
 import NIOSSL
 import NIOTestUtils
 import XCTest

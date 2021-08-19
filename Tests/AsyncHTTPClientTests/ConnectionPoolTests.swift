@@ -13,8 +13,9 @@
 //===----------------------------------------------------------------------===//
 
 @testable import AsyncHTTPClient
-@testable import NIO
 import NIOConcurrencyHelpers
+import NIOCore
+import NIOEmbedded
 import NIOFoundationCompat
 import NIOHTTP1
 import NIOHTTPCompression

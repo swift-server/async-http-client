@@ -14,8 +14,9 @@
 
 @testable import AsyncHTTPClient
 import Logging
-import NIO
+import NIOCore
 import NIOHTTP1
+import NIOPosix
 import XCTest
 
 class HTTPConnectionPool_WaiterTests: XCTestCase {

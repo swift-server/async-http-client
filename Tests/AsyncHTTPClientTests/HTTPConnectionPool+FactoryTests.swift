@@ -14,7 +14,8 @@
 
 @testable import AsyncHTTPClient
 import Logging
-import NIO
+import NIOCore
+import NIOPosix
 import NIOSOCKS
 import NIOSSL
 import XCTest

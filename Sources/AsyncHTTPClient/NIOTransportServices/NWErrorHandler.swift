@@ -15,7 +15,7 @@
 #if canImport(Network)
     import Network
 #endif
-import NIO
+import NIOCore
 import NIOHTTP1
 import NIOTransportServices
 

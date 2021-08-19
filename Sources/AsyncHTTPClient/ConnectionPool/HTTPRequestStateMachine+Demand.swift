@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-import NIO
+import NIOCore
 
 extension HTTPRequestStateMachine {
     /// A sub state for receiving a response events. Stores whether the consumer has either signaled demand and whether the

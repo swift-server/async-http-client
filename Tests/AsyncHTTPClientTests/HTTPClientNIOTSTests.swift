@@ -16,7 +16,8 @@
 #if canImport(Network)
     import Network
 #endif
-import NIO
+import NIOCore
+import NIOPosix
 import NIOSSL
 import NIOTransportServices
 import XCTest

@@ -13,9 +13,10 @@
 //===----------------------------------------------------------------------===//
 
 import Logging
-import NIO
+import NIOCore
 import NIOHTTP1
 import NIOHTTPCompression
+import NIOPosix
 import NIOSOCKS
 import NIOSSL
 import NIOTLS

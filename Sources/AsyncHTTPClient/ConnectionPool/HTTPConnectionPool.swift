@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-import NIO
+import NIOCore
 
 enum HTTPConnectionPool {
     struct Connection: Hashable {

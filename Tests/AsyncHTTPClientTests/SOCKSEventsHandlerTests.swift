@@ -13,7 +13,8 @@
 //===----------------------------------------------------------------------===//
 
 @testable import AsyncHTTPClient
-import NIO
+import NIOCore
+import NIOEmbedded
 import NIOSOCKS
 import XCTest
 

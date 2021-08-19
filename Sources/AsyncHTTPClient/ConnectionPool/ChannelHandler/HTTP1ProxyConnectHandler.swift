@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-import NIO
+import NIOCore
 import NIOHTTP1
 
 final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHandler {

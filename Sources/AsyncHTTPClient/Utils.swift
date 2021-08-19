@@ -17,7 +17,7 @@ import Foundation
     import Network
 #endif
 import Logging
-import NIO
+import NIOCore
 import NIOHTTP1
 import NIOHTTPCompression
 import NIOSSL

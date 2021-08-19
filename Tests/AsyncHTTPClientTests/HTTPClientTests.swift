@@ -17,11 +17,12 @@
     import Network
 #endif
 import Logging
-import NIO
 import NIOConcurrencyHelpers
+import NIOCore
 import NIOFoundationCompat
 import NIOHTTP1
 import NIOHTTPCompression
+import NIOPosix
 import NIOSSL
 import NIOTestUtils
 import NIOTransportServices

@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import struct Foundation.URL
-import NIO
+import NIOCore
 import NIOHTTP1
 
 extension RequestBag {
