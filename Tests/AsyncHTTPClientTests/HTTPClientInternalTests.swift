@@ -265,17 +265,19 @@ class HTTPClientInternalTests: XCTestCase {
             XCTAssertNoThrow(try httpBin.shutdown())
         }
 
-        let body: HTTPClient.Body = .stream(length: 50) { writer in
+        let body: HTTPClient.Body = .stream2(length: 50) { writer in
             do {
                 var request = try Request(url: "http://localhost:\(httpBin.port)/events/10/1")
                 request.headers.add(name: "Accept", value: "text/event-stream")
 
                 let delegate = HTTPClientCopyingDelegate { part in
-                    writer.write(.byteBuffer(part))
+                    writer.write(part)
                 }
-                return httpClient.execute(request: request, delegate: delegate).futureResult
+                httpClient.execute(request: request, delegate: delegate).futureResult.whenComplete { _ in
+                    writer.end()
+                }
             } catch {
-                return httpClient.eventLoopGroup.next().makeFailedFuture(error)
+                writer.fail(error)
             }
         }
 
@@ -294,13 +296,13 @@ class HTTPClientInternalTests: XCTestCase {
             XCTAssertNoThrow(try httpBin.shutdown())
         }
 
-        var body: HTTPClient.Body = .stream(length: 50) { _ in
-            httpClient.eventLoopGroup.next().makeFailedFuture(HTTPClientError.invalidProxyResponse)
+        var body: HTTPClient.Body = .stream2(length: 50) { writer in
+            writer.fail(HTTPClientError.invalidProxyResponse)
         }
 
         XCTAssertThrowsError(try httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body).wait())
 
-        body = .stream(length: 50) { _ in
+        body = .stream2(length: 50) { writer in
             do {
                 var request = try Request(url: "http://localhost:\(httpBin.port)/events/10/1")
                 request.headers.add(name: "Accept", value: "text/event-stream")
@@ -308,9 +310,11 @@ class HTTPClientInternalTests: XCTestCase {
                 let delegate = HTTPClientCopyingDelegate { _ in
                     httpClient.eventLoopGroup.next().makeFailedFuture(HTTPClientError.invalidProxyResponse)
                 }
-                return httpClient.execute(request: request, delegate: delegate).futureResult
+                httpClient.execute(request: request, delegate: delegate).futureResult.whenComplete { _ in
+                    writer.end()
+                }
             } catch {
-                return httpClient.eventLoopGroup.next().makeFailedFuture(error)
+                writer.fail(error)
             }
         }
 
@@ -560,11 +564,11 @@ class HTTPClientInternalTests: XCTestCase {
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
         }
 
-        let body: HTTPClient.Body = .stream(length: 8) { writer in
-            let buffer = ByteBuffer(string: "1234")
-            return writer.write(.byteBuffer(buffer)).flatMap {
-                let buffer = ByteBuffer(string: "4321")
-                return writer.write(.byteBuffer(buffer))
+        let body: HTTPClient.Body = .stream2(length: 8) { writer in
+            writer.write(writer.allocator.buffer(string: "1234")).whenComplete { _ in
+                writer.write(writer.allocator.buffer(string: "4321")).whenComplete { _ in
+                    writer.end()
+                }
             }
         }
 
@@ -1013,13 +1017,13 @@ class HTTPClientInternalTests: XCTestCase {
         let el2 = group.next()
         XCTAssert(el1 !== el2)
 
-        let body: HTTPClient.Body = .stream(length: 8) { writer in
+        let body: HTTPClient.Body = .stream2(length: 8) { writer in
             XCTAssert(el1.inEventLoop)
-            let buffer = ByteBuffer(string: "1234")
-            return writer.write(.byteBuffer(buffer)).flatMap {
+            return writer.write(writer.allocator.buffer(string: "1234")).whenComplete { _ in
                 XCTAssert(el1.inEventLoop)
-                let buffer = ByteBuffer(string: "4321")
-                return writer.write(.byteBuffer(buffer))
+                writer.write(writer.allocator.buffer(string: "4321")).whenComplete { _ in
+                    writer.end()
+                }
             }
         }
         let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/post", method: .POST, body: body)
@@ -1049,17 +1053,17 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssert(el1 !== el2)
 
         let taskPromise = group.next().makePromise(of: HTTPClient.Task<HTTPClient.Response>.self)
-        let body: HTTPClient.Body = .stream(length: 8) { writer in
+        let body: HTTPClient.Body = .stream2(length: 8) { writer in
             XCTAssert(el1.inEventLoop)
-            let buffer = ByteBuffer(string: "1234")
-            return writer.write(.byteBuffer(buffer)).flatMap {
+            writer.write(writer.allocator.buffer(string: "1234")).whenComplete { _ in
                 XCTAssert(el1.inEventLoop)
-                let buffer = ByteBuffer(string: "4321")
                 return taskPromise.futureResult.map { (task: HTTPClient.Task<HTTPClient.Response>) -> Void in
                     XCTAssertNotNil(task.connection)
                     XCTAssert(task.connection?.channel.eventLoop === el2)
                 }.flatMap {
-                    writer.write(.byteBuffer(buffer))
+                    writer.write(writer.allocator.buffer(string: "4321"))
+                }.whenComplete { _ in
+                    writer.end()
                 }
             }
         }
@@ -1198,8 +1202,9 @@ class HTTPClientInternalTests: XCTestCase {
         try channel.pipeline.addHandler(handler).wait()
 
         var request = try Request(url: "http://localhost:8080/post")
-        request.body = .stream(length: 1) { writer in
-            writer.write(.byteBuffer(ByteBuffer(string: "1234")))
+        request.body = .stream2(length: 1) { writer in
+            writer.write(writer.allocator.buffer(string: "1234"), promise: nil)
+            writer.end()
         }
 
         XCTAssertThrowsError(try channel.writeOutbound(request))

@@ -155,8 +155,9 @@ class RequestValidationTests: XCTestCase {
         // Body length is _not_ known
         for method: HTTPMethod in [.GET, .HEAD, .DELETE, .CONNECT] {
             var headers: HTTPHeaders = .init()
-            let body: HTTPClient.Body = .stream { writer in
-                writer.write(.byteBuffer(ByteBuffer(bytes: [0])))
+            let body: HTTPClient.Body = .stream2 { writer in
+                writer.write(writer.allocator.buffer(bytes: [0]), promise: nil)
+                writer.end()
             }
             var metadata: RequestFramingMetadata?
             XCTAssertNoThrow(metadata = try headers.validate(method: method, body: body))
@@ -178,8 +179,9 @@ class RequestValidationTests: XCTestCase {
         // Body length is _not_ known
         for method: HTTPMethod in [.POST, .PUT] {
             var headers: HTTPHeaders = .init()
-            let body: HTTPClient.Body = .stream { writer in
-                writer.write(.byteBuffer(ByteBuffer(bytes: [0])))
+            let body: HTTPClient.Body = .stream2 { writer in
+                writer.write(writer.allocator.buffer(bytes: [0]), promise: nil)
+                writer.end()
             }
             var metadata: RequestFramingMetadata?
             XCTAssertNoThrow(metadata = try headers.validate(method: method, body: body))
