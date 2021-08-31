@@ -123,6 +123,46 @@ enum HTTPConnectionPool {
     }
 }
 
+extension HTTPConnectionPool {
+    /// This is a wrapper that we use inside the connection pool state machine to ensure that
+    /// the actual request can not be accessed at any time. Further it exposes all that is needed within
+    /// the state machine. A request ID and the `EventLoop` requirement.
+    struct Request {
+        struct ID: Hashable {
+            let objectIdentifier: ObjectIdentifier
+            let eventLoopID: EventLoopID?
+
+            fileprivate init(_ request: HTTPSchedulableRequest, eventLoopRequirement eventLoopID: EventLoopID?) {
+                self.objectIdentifier = ObjectIdentifier(request)
+                self.eventLoopID = eventLoopID
+            }
+        }
+
+        fileprivate let req: HTTPSchedulableRequest
+
+        init(_ request: HTTPSchedulableRequest) {
+            self.req = request
+        }
+
+        var id: HTTPConnectionPool.Request.ID {
+            HTTPConnectionPool.Request.ID(self.req, eventLoopRequirement: self.requiredEventLoop?.id)
+        }
+
+        var requiredEventLoop: EventLoop? {
+            switch self.req.eventLoopPreference.preference {
+            case .indifferent, .delegate:
+                return nil
+            case .delegateAndChannel(on: let eventLoop), .testOnly_exact(channelOn: let eventLoop, delegateOn: _):
+                return eventLoop
+            }
+        }
+
+        func __testOnly_internal_value() -> HTTPSchedulableRequest {
+            self.req
+        }
+    }
+}
+
 struct EventLoopID: Hashable {
     private var id: Identifier
 
