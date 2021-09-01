@@ -157,7 +157,7 @@ extension HTTPConnectionPool {
             }
         }
 
-        func __testOnly_internal_value() -> HTTPSchedulableRequest {
+        func __testOnly_wrapped_request() -> HTTPSchedulableRequest {
             self.req
         }
     }

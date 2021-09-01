@@ -35,10 +35,13 @@ class HTTPConnectionPool_RequestQueueTests: XCTestCase {
         let req2ID = queue.push(.init(req2))
         XCTAssertEqual(queue.count, 2)
 
-        XCTAssert(queue.popFirst()?.__testOnly_internal_value() === req1)
+        XCTAssert(queue.popFirst()?.__testOnly_wrapped_request() === req1)
         XCTAssertEqual(queue.count, 1)
-        XCTAssert(queue.remove(req2ID)?.__testOnly_internal_value() === req2)
+        XCTAssertFalse(queue.isEmpty)
+        XCTAssert(queue.remove(req2ID)?.__testOnly_wrapped_request() === req2)
         XCTAssertNil(queue.remove(req1ID))
+        XCTAssertEqual(queue.count, 0)
+        XCTAssertTrue(queue.isEmpty)
 
         let eventLoop = EmbeddedEventLoop()
 
@@ -48,23 +51,33 @@ class HTTPConnectionPool_RequestQueueTests: XCTestCase {
         let req3ID = queue.push(.init(req3))
         XCTAssertFalse(queue.isEmpty(for: eventLoop))
         XCTAssertEqual(queue.count(for: eventLoop), 1)
-        XCTAssert(queue.popFirst(for: eventLoop)?.__testOnly_internal_value() === req3)
+        XCTAssertFalse(queue.isEmpty)
+        XCTAssertEqual(queue.count, 1)
+        XCTAssert(queue.popFirst(for: eventLoop)?.__testOnly_wrapped_request() === req3)
         XCTAssertNil(queue.remove(req3ID))
+        XCTAssertTrue(queue.isEmpty(for: eventLoop))
+        XCTAssertEqual(queue.count(for: eventLoop), 0)
+        XCTAssertTrue(queue.isEmpty)
+        XCTAssertEqual(queue.count, 0)
 
         let req4 = MockScheduledRequest(eventLoopPreference: .delegateAndChannel(on: eventLoop))
         let req4ID = queue.push(.init(req4))
-        XCTAssert(queue.remove(req4ID)?.__testOnly_internal_value() === req4)
+        XCTAssert(queue.remove(req4ID)?.__testOnly_wrapped_request() === req4)
 
         let req5 = MockScheduledRequest(eventLoopPreference: .indifferent)
         queue.push(.init(req5))
         let req6 = MockScheduledRequest(eventLoopPreference: .delegateAndChannel(on: eventLoop))
         queue.push(.init(req6))
         let all = queue.removeAll()
-        let testSet = all.map { $0.__testOnly_internal_value() }
+        let testSet = all.map { $0.__testOnly_wrapped_request() }
         XCTAssertEqual(testSet.count, 2)
         XCTAssertTrue(testSet.contains(where: { $0 === req5 }))
         XCTAssertTrue(testSet.contains(where: { $0 === req6 }))
         XCTAssertFalse(testSet.contains(where: { $0 === req4 }))
+        XCTAssertTrue(queue.isEmpty(for: eventLoop))
+        XCTAssertEqual(queue.count(for: eventLoop), 0)
+        XCTAssertTrue(queue.isEmpty)
+        XCTAssertEqual(queue.count, 0)
     }
 }
 
