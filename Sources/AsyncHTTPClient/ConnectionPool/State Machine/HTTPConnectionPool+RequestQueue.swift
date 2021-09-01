@@ -23,10 +23,11 @@ extension HTTPConnectionPool {
         init() {
             self.generalPurposeQueue = CircularBuffer(initialCapacity: 32)
             self.eventLoopQueues = [:]
-            self.count = 0
         }
 
-        private(set) var count: Int
+        var count: Int {
+            self.generalPurposeQueue.count + self.eventLoopQueues.reduce(0) { $0 + $1.value.count }
+        }
 
         var isEmpty: Bool {
             self.count == 0
@@ -48,7 +49,6 @@ extension HTTPConnectionPool {
 
         @discardableResult
         mutating func push(_ request: Request) -> Request.ID {
-            self.count += 1
             if let eventLoop = request.requiredEventLoop {
                 self.withEventLoopQueue(for: eventLoop.id) { queue in
                     queue.append(request)
@@ -60,24 +60,18 @@ extension HTTPConnectionPool {
         }
 
         mutating func popFirst(for eventLoop: EventLoop? = nil) -> Request? {
-            let request: Request?
             if let eventLoop = eventLoop {
-                request = self.withEventLoopQueue(for: eventLoop.id) { queue in
+                return self.withEventLoopQueue(for: eventLoop.id) { queue in
                     queue.popFirst()
                 }
             } else {
-                request = self.generalPurposeQueue.popFirst()
+                return self.generalPurposeQueue.popFirst()
             }
-            if request != nil {
-                self.count -= 1
-            }
-            return request
         }
 
         mutating func remove(_ requestID: Request.ID) -> Request? {
-            let request: Request?
             if let eventLoopID = requestID.eventLoopID {
-                request = self.withEventLoopQueue(for: eventLoopID) { queue in
+                return self.withEventLoopQueue(for: eventLoopID) { queue in
                     guard let index = queue.firstIndex(where: { $0.id == requestID }) else {
                         return nil
                     }
@@ -86,15 +80,10 @@ extension HTTPConnectionPool {
             } else {
                 if let index = self.generalPurposeQueue.firstIndex(where: { $0.id == requestID }) {
                     // TBD: This is slow. Do we maybe want something more sophisticated here?
-                    request = self.generalPurposeQueue.remove(at: index)
-                } else {
-                    request = nil
+                    return self.generalPurposeQueue.remove(at: index)
                 }
+                return nil
             }
-            if request != nil {
-                self.count -= 1
-            }
-            return request
         }
 
         mutating func removeAll() -> [Request] {
@@ -104,7 +93,6 @@ extension HTTPConnectionPool {
 
             self.eventLoopQueues.removeAll()
             self.generalPurposeQueue.removeAll()
-            self.count = 0
             return result
         }
 
@@ -122,8 +110,8 @@ extension HTTPConnectionPool {
             for eventLoopID: EventLoopID,
             _ closure: (CircularBuffer<Request>) -> Result
         ) -> Result? {
-            if self.eventLoopQueues[eventLoopID] != nil {
-                return closure(self.eventLoopQueues[eventLoopID]!)
+            if let queue = self.eventLoopQueues[eventLoopID] {
+                return closure(queue)
             }
             return nil
         }
