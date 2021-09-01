@@ -1,0 +1,159 @@
+{
+  "warnings": [
+    {
+      "file": "/code/Sources/AsyncHTTPClient/FileDownloadDelegate.swift",
+      "line": 23,
+      "symbol": "FileDownloadDelegate.Progress.totalBytes",
+      "symbol_kind": "source.lang.swift.decl.var.instance",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/FileDownloadDelegate.swift",
+      "line": 24,
+      "symbol": "FileDownloadDelegate.Progress.receivedBytes",
+      "symbol_kind": "source.lang.swift.decl.var.instance",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/FileDownloadDelegate.swift",
+      "line": 29,
+      "symbol": "FileDownloadDelegate.Response",
+      "symbol_kind": "source.lang.swift.decl.typealias",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/HTTPClient.swift",
+      "line": 67,
+      "symbol": "HTTPClient.eventLoopGroup",
+      "symbol_kind": "source.lang.swift.decl.var.instance",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/HTTPClient.swift",
+      "line": 664,
+      "symbol": "HTTPClient.Configuration.init(tlsConfiguration:redirectConfiguration:timeout:connectionPool:proxy:ignoreUncleanSSLShutdown:decompression:)",
+      "symbol_kind": "source.lang.swift.decl.function.method.instance",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/HTTPClient.swift",
+      "line": 680,
+      "symbol": "HTTPClient.Configuration.init(tlsConfiguration:redirectConfiguration:timeout:proxy:ignoreUncleanSSLShutdown:decompression:)",
+      "symbol_kind": "source.lang.swift.decl.function.method.instance",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/HTTPClient.swift",
+      "line": 697,
+      "symbol": "HTTPClient.Configuration.init(certificateVerification:redirectConfiguration:timeout:maximumAllowedIdleTimeInConnectionPool:proxy:ignoreUncleanSSLShutdown:decompression:)",
+      "symbol_kind": "source.lang.swift.decl.function.method.instance",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/HTTPClient.swift",
+      "line": 715,
+      "symbol": "HTTPClient.Configuration.init(certificateVerification:redirectConfiguration:timeout:connectionPool:proxy:ignoreUncleanSSLShutdown:decompression:backgroundActivityLogger:)",
+      "symbol_kind": "source.lang.swift.decl.function.method.instance",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/HTTPClient.swift",
+      "line": 734,
+      "symbol": "HTTPClient.Configuration.init(certificateVerification:redirectConfiguration:timeout:proxy:ignoreUncleanSSLShutdown:decompression:)",
+      "symbol_kind": "source.lang.swift.decl.function.method.instance",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/HTTPClient.swift",
+      "line": 888,
+      "symbol": "HTTPClient.Configuration.ConnectionPool.idleTimeout",
+      "symbol_kind": "source.lang.swift.decl.var.instance",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/HTTPClient.swift",
+      "line": 890,
+      "symbol": "HTTPClient.Configuration.ConnectionPool.init(idleTimeout:)",
+      "symbol_kind": "source.lang.swift.decl.function.method.instance",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/HTTPHandler.swift",
+      "line": 357,
+      "symbol": "HTTPClient.Authorization.basic(username:password:)",
+      "symbol_kind": "source.lang.swift.decl.function.method.static",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/HTTPHandler.swift",
+      "line": 361,
+      "symbol": "HTTPClient.Authorization.basic(credentials:)",
+      "symbol_kind": "source.lang.swift.decl.function.method.static",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/HTTPHandler.swift",
+      "line": 365,
+      "symbol": "HTTPClient.Authorization.bearer(tokens:)",
+      "symbol_kind": "source.lang.swift.decl.function.method.static",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/HTTPHandler.swift",
+      "line": 369,
+      "symbol": "HTTPClient.Authorization.headerValue",
+      "symbol_kind": "source.lang.swift.decl.var.instance",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/HTTPHandler.swift",
+      "line": 380,
+      "symbol": "ResponseAccumulator",
+      "symbol_kind": "source.lang.swift.decl.class",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/HTTPHandler.swift",
+      "line": 381,
+      "symbol": "ResponseAccumulator.Response",
+      "symbol_kind": "source.lang.swift.decl.typealias",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/HTTPHandler.swift",
+      "line": 394,
+      "symbol": "ResponseAccumulator.init(request:)",
+      "symbol_kind": "source.lang.swift.decl.function.method.instance",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/HTTPHandler.swift",
+      "line": 487,
+      "symbol": "HTTPClientResponseDelegate.Response",
+      "symbol_kind": "source.lang.swift.decl.associatedtype",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/Utils.swift",
+      "line": 26,
+      "symbol": "HTTPClientCopyingDelegate",
+      "symbol_kind": "source.lang.swift.decl.class",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/Utils.swift",
+      "line": 27,
+      "symbol": "HTTPClientCopyingDelegate.Response",
+      "symbol_kind": "source.lang.swift.decl.typealias",
+      "warning": "undocumented"
+    },
+    {
+      "file": "/code/Sources/AsyncHTTPClient/Utils.swift",
+      "line": 31,
+      "symbol": "HTTPClientCopyingDelegate.init(chunkHandler:)",
+      "symbol_kind": "source.lang.swift.decl.function.method.instance",
+      "warning": "undocumented"
+    }
+  ],
+  "source_directory": "/code"
+}
