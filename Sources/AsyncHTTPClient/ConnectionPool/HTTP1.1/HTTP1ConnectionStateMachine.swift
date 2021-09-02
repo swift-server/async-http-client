@@ -387,7 +387,7 @@ extension HTTP1ConnectionStateMachine.State {
             case .initialized:
                 preconditionFailure("Invalid state")
             case .idle:
-                preconditionFailure("How can we fail a task, if we are idle")
+                preconditionFailure("Can't fail an idle request")
             case .inRequest(_, close: let close):
                 if close || finalAction == .close {
                     self = .closing

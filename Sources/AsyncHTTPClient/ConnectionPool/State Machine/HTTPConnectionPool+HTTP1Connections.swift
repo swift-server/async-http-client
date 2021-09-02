@@ -371,6 +371,11 @@ extension HTTPConnectionPool {
             self.connections[index].lease()
         }
 
+        mutating func parkConnection(at index: Int) -> (Connection.ID, EventLoop) {
+            assert(self.connections[index].isIdle)
+            return (self.connections[index].connectionID, self.connections[index].eventLoop)
+        }
+
         /// A new HTTP/1.1 connection was released.
         ///
         /// This will put the position into the idle state.
@@ -596,23 +601,5 @@ extension HTTPConnectionPool {
         var leased: Int = 0
         var connecting: Int = 0
         var backingOff: Int = 0
-    }
-
-    /// The pool cleanup todo list.
-    struct CleanupContext: Equatable {
-        /// the connections to close right away. These are idle.
-        var close: [Connection]
-
-        /// the connections that currently run a request that needs to be cancelled to close the connections
-        var cancel: [Connection]
-
-        /// the connections that are backing off from connection creation
-        var connectBackoff: [Connection.ID]
-
-        init(close: [Connection] = [], cancel: [Connection] = [], connectBackoff: [Connection.ID] = []) {
-            self.close = close
-            self.cancel = cancel
-            self.connectBackoff = connectBackoff
-        }
     }
 }

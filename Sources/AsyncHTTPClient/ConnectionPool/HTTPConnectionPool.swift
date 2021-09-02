@@ -149,12 +149,15 @@ extension HTTPConnectionPool {
         }
 
         var requiredEventLoop: EventLoop? {
-            switch self.req.eventLoopPreference.preference {
-            case .indifferent, .delegate:
-                return nil
-            case .delegateAndChannel(on: let eventLoop), .testOnly_exact(channelOn: let eventLoop, delegateOn: _):
-                return eventLoop
-            }
+            self.req.requiredEventLoop
+        }
+
+        var preferredEventLoop: EventLoop {
+            self.req.preferredEventLoop
+        }
+
+        var connectionDeadline: NIODeadline? {
+            self.req.connectionDeadline
         }
 
         func __testOnly_wrapped_request() -> HTTPSchedulableRequest {

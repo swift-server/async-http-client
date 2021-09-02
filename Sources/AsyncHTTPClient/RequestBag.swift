@@ -335,6 +335,26 @@ extension RequestBag: HTTPSchedulableRequest {
 }
 
 extension RequestBag: HTTPExecutableRequest {
+    var requiredEventLoop: EventLoop? {
+        switch self.eventLoopPreference.preference {
+        case .indifferent, .delegate:
+            return nil
+        case .delegateAndChannel(on: let eventLoop), .testOnly_exact(channelOn: let eventLoop, delegateOn: _):
+            return eventLoop
+        }
+    }
+
+    var preferredEventLoop: EventLoop {
+        switch self.eventLoopPreference.preference {
+        case .indifferent:
+            return self.task.eventLoop
+        case .delegate(let eventLoop),
+             .delegateAndChannel(on: let eventLoop),
+             .testOnly_exact(channelOn: let eventLoop, delegateOn: _):
+            return eventLoop
+        }
+    }
+
     func willExecuteRequest(_ executor: HTTPRequestExecutor) {
         if self.task.eventLoop.inEventLoop {
             self.willExecuteRequest0(executor)

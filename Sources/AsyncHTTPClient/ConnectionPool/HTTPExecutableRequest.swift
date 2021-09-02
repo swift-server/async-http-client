@@ -147,7 +147,10 @@ protocol HTTPSchedulableRequest: HTTPExecutableRequest {
     var connectionDeadline: NIODeadline { get }
 
     /// The task's `EventLoop` preference
-    var eventLoopPreference: HTTPClient.EventLoopPreference { get }
+    var preferredEventLoop: EventLoop { get }
+
+    /// The task's `EventLoop` requirement, if any
+    var requiredEventLoop: EventLoop? { get }
 
     /// Informs the task, that it was queued for execution
     ///
