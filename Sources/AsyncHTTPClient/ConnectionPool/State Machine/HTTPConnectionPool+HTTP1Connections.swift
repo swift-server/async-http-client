@@ -18,10 +18,11 @@ extension HTTPConnectionPool {
     /// Represents the state of a single HTTP/1.1 connection
     private struct HTTP1ConnectionState {
         enum State {
-            /// the connection is creating a connection. Valid transitions are to: .idle, .available and .closed
+            /// the connection is creating a connection. Valid transitions are to: .backingOff, .idle, and .closed
             case starting
-            /// the connection is waiting to retry the establishing a connection. Transition to .closed. From .closed
-            /// a new connection state must be created for a retry.
+            /// the connection is waiting to retry the establishing a connection. Valid transitions are to: .closed.
+            /// This means, the connection can be removed from the connections without cancelling external
+            /// state. The connection state can then be replaced by a new one.
             case backingOff
             /// the connection is idle for a new request. Valid transitions to: .leased and .closed
             case idle(Connection, since: NIODeadline)
@@ -152,6 +153,11 @@ extension HTTPConnectionPool {
             }
         }
 
+        enum CleanupAction {
+            case removeConnection
+            case keepConnection
+        }
+
         /// Cleanup the current connection for shutdown.
         ///
         /// This method is called, when the connections shall shutdown. Depending on the state
@@ -164,21 +170,21 @@ extension HTTPConnectionPool {
         /// or fail until we finalize the shutdown.
         ///
         /// - Parameter context: A cleanup context to add the connection to based on its state.
-        /// - Returns: A bool weather the connection can be removed from the connections
-        ///            struct immediately.
-        func cleanup(_ context: inout CleanupContext) -> Bool {
+        /// - Returns: A cleanup action indicating if the connection can be removed from the
+        ///            connection list.
+        func cleanup(_ context: inout CleanupContext) -> CleanupAction {
             switch self.state {
             case .backingOff:
                 context.connectBackoff.append(self.connectionID)
-                return true
+                return .removeConnection
             case .starting:
-                return false
+                return .keepConnection
             case .idle(let connection, since: _):
                 context.close.append(connection)
-                return true
+                return .removeConnection
             case .leased(let connection):
                 context.cancel.append(connection)
-                return false
+                return .keepConnection
             case .closed:
                 preconditionFailure("Unexpected state: Did not expect to have connections with this state in the state machine: \(self.state)")
             }
@@ -215,15 +221,17 @@ extension HTTPConnectionPool {
 
         var stats: Stats {
             var stats = Stats()
+            // all additions here can be unchecked, since we will have at max self.connections.count
+            // which itself is an Int. For this reason we will never overflow.
             for connectionState in self.connections {
                 if connectionState.isConnecting {
-                    stats.connecting += 1
+                    stats.connecting &+= 1
                 } else if connectionState.isBackingOff {
-                    stats.backingOff += 1
+                    stats.backingOff &+= 1
                 } else if connectionState.isLeased {
-                    stats.leased += 1
+                    stats.leased &+= 1
                 } else if connectionState.isIdle {
-                    stats.idle += 1
+                    stats.idle &+= 1
                 }
             }
             return stats
@@ -234,11 +242,7 @@ extension HTTPConnectionPool {
         }
 
         var canGrow: Bool {
-            if self.overflowIndex < self.connections.endIndex {
-                return self.overflowIndex < self.maximumConcurrentConnections
-            } else {
-                return self.connections.endIndex < self.maximumConcurrentConnections
-            }
+            self.overflowIndex < self.maximumConcurrentConnections
         }
 
         var startingGeneralPurposeConnections: Int {
@@ -254,7 +258,7 @@ extension HTTPConnectionPool {
         }
 
         func startingEventLoopConnections(on eventLoop: EventLoop) -> Int {
-            self.connections[self.overflowIndex..<self.connections.endIndex].reduce(into: 0) { count, connection in
+            return self.connections[self.overflowIndex..<self.connections.endIndex].reduce(into: 0) { count, connection in
                 guard connection.eventLoop === eventLoop else { return }
                 if connection.isConnecting || connection.isBackingOff {
                     count += 1
@@ -292,7 +296,7 @@ extension HTTPConnectionPool {
         // MARK: Connection creation
 
         mutating func createNewConnection(on eventLoop: EventLoop) -> Connection.ID {
-            assert(self.canGrow)
+            precondition(self.canGrow)
             let connection = HTTP1ConnectionState(connectionID: self.generator.next(), eventLoop: eventLoop)
             self.connections.insert(connection, at: self.overflowIndex)
             self.overflowIndex = self.connections.index(after: self.overflowIndex)
@@ -307,7 +311,7 @@ extension HTTPConnectionPool {
 
         /// A new HTTP/1.1 connection was established.
         ///
-        /// This will put the position into the idle state.
+        /// This will put the connection into the idle state.
         ///
         /// - Parameter connection: The new established connection.
         /// - Returns: An index and an IdleConnectionContext to determine the next action for the now idle connection.
@@ -317,7 +321,7 @@ extension HTTPConnectionPool {
             guard let index = self.connections.firstIndex(where: { $0.connectionID == connection.id }) else {
                 preconditionFailure("There is a new connection that we didn't request!")
             }
-            assert(connection.eventLoop === self.connections[index].eventLoop, "Expected the new connection to be on EL")
+            precondition(connection.eventLoop === self.connections[index].eventLoop, "Expected the new connection to be on EL")
             self.connections[index].connected(connection)
             let context = self.generateIdleConnectionContextForConnection(at: index)
             return (index, context)
@@ -391,14 +395,17 @@ extension HTTPConnectionPool {
 
         // MARK: Connection close/removal
 
+        /// Closes the connection at the given index. This will also remove the connection right away.
         mutating func closeConnection(at index: Int) -> Connection {
+            if index < self.overflowIndex {
+                self.overflowIndex = self.connections.index(before: self.overflowIndex)
+            }
             var connectionState = self.connections.remove(at: index)
-            self.overflowIndex = self.connections.index(before: self.overflowIndex)
             return connectionState.close()
         }
 
         mutating func removeConnection(at index: Int) {
-            assert(self.connections[index].isClosed)
+            precondition(self.connections[index].isClosed)
             if index < self.overflowIndex {
                 self.overflowIndex = self.connections.index(before: self.overflowIndex)
             }
@@ -421,7 +428,7 @@ extension HTTPConnectionPool {
         }
 
         mutating func replaceConnection(at index: Int) -> (Connection.ID, EventLoop) {
-            assert(self.connections[index].isClosed)
+            precondition(self.connections[index].isClosed)
             let newConnection = HTTP1ConnectionState(
                 connectionID: self.generator.next(),
                 eventLoop: self.connections[index].eventLoop
@@ -444,7 +451,7 @@ extension HTTPConnectionPool {
         ///            supplied index after this.
         mutating func failConnection(_ connectionID: Connection.ID) -> (Int, FailedConnectionContext) {
             guard let index = self.connections.firstIndex(where: { $0.connectionID == connectionID }) else {
-                preconditionFailure("We tried to create a new connection that we know nothing about?")
+                preconditionFailure("We tried to fail a new connection that we know nothing about?")
             }
 
             let use: ConnectionUse
@@ -474,13 +481,16 @@ extension HTTPConnectionPool {
             let initialOverflowIndex = self.overflowIndex
 
             self.connections = self.connections.enumerated().compactMap { index, connectionState in
-                if connectionState.cleanup(&cleanupContext) {
+                switch connectionState.cleanup(&cleanupContext) {
+                case .removeConnection:
                     if index < initialOverflowIndex {
-                        self.overflowIndex -= 1
+                        self.overflowIndex = self.connections.index(before: self.overflowIndex)
                     }
                     return nil
+
+                case .keepConnection:
+                    return connectionState
                 }
-                return connectionState
             }
 
             return cleanupContext
@@ -489,7 +499,7 @@ extension HTTPConnectionPool {
         // MARK: - Private functions -
 
         private func generateIdleConnectionContextForConnection(at index: Int) -> IdleConnectionContext {
-            assert(self.connections[index].isIdle)
+            precondition(self.connections[index].isIdle)
             let eventLoop = self.connections[index].eventLoop
             let use: ConnectionUse
             if index < self.overflowIndex {
