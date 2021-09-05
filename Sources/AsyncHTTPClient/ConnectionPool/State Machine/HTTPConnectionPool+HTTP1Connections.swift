@@ -162,7 +162,7 @@ extension HTTPConnectionPool {
         ///
         /// This method is called, when the connections shall shutdown. Depending on the state
         /// the connection is in, it adds itself to one of the arrays that are used to signal shutdown
-        /// intend to the underlying connections. Connections that are backing off can be easily
+        /// intent to the underlying connections. Connections that are backing off can be easily
         /// dropped (since, we only need to cancel the backoff timer), connections that are leased
         /// need to be cancelled (notifying the `ChannelHandler` that we want to cancel the
         /// running request), connections that are idle can be closed right away. Sadly we can't
