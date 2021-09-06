@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+@testable import AsyncHTTPClient
 import Dispatch
 import NIOConcurrencyHelpers
 import NIOCore
@@ -48,6 +49,19 @@ final class EmbeddedEventLoopGroup: EventLoopGroup {
 
         queue.sync {
             callback(shutdownError)
+        }
+    }
+}
+
+extension HTTPConnectionPool.HTTP1Connections.ConnectionUse: Equatable {
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        switch (lhs, rhs) {
+        case (.eventLoop(let lhsEventLoop), .eventLoop(let rhsEventLoop)):
+            return lhsEventLoop === rhsEventLoop
+        case (.generalPurpose, .generalPurpose):
+            return true
+        default:
+            return false
         }
     }
 }
