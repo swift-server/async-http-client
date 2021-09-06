@@ -261,7 +261,7 @@ extension HTTPConnectionPool {
             return self.connections[self.overflowIndex..<self.connections.endIndex].reduce(into: 0) { count, connection in
                 guard connection.eventLoop === eventLoop else { return }
                 if connection.isConnecting || connection.isBackingOff {
-                    count += 1
+                    count &+= 1
                 }
             }
         }
