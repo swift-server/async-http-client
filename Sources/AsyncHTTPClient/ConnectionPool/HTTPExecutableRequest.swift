@@ -146,8 +146,12 @@ protocol HTTPSchedulableRequest: HTTPExecutableRequest {
     /// A connection to run this task on needs to be found before this deadline!
     var connectionDeadline: NIODeadline { get }
 
-    /// The task's `EventLoop` preference
-    var eventLoopPreference: HTTPClient.EventLoopPreference { get }
+    /// The user has expressed an intent for this request to be executed on this EventLoop. If a
+    /// connection is available on another one, just use the one handy.
+    var preferredEventLoop: EventLoop { get }
+
+    /// The user required the request to be executed on a connection that is handled by this EventLoop.
+    var requiredEventLoop: EventLoop? { get }
 
     /// Informs the task, that it was queued for execution
     ///
