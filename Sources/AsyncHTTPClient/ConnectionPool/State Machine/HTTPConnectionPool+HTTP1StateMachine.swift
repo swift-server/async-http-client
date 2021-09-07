@@ -63,7 +63,7 @@ extension HTTPConnectionPool {
             }
         }
 
-        mutating func executeRequestOnPreferredEventLoop(_ request: Request, eventLoop: EventLoop) -> Action {
+        private mutating func executeRequestOnPreferredEventLoop(_ request: Request, eventLoop: EventLoop) -> Action {
             if let connection = self.connections.leaseConnection(onPreferred: eventLoop) {
                 return .init(
                     request: .executeRequest(request, connection, cancelTimeout: nil),
@@ -76,7 +76,7 @@ extension HTTPConnectionPool {
             let requestAction: StateMachine.RequestAction = .scheduleRequestTimeout(
                 request.connectionDeadline,
                 for: requestID,
-                on: request.preferredEventLoop
+                on: eventLoop
             )
 
             if !self.connections.canGrow {
@@ -101,7 +101,7 @@ extension HTTPConnectionPool {
             )
         }
 
-        mutating func executeRequestOnRequiredEventLoop(_ request: Request, eventLoop: EventLoop) -> Action {
+        private mutating func executeRequestOnRequiredEventLoop(_ request: Request, eventLoop: EventLoop) -> Action {
             if let connection = self.connections.leaseConnection(onRequired: eventLoop) {
                 return .init(
                     request: .executeRequest(request, connection, cancelTimeout: nil),
@@ -114,7 +114,7 @@ extension HTTPConnectionPool {
             let requestAction: StateMachine.RequestAction = .scheduleRequestTimeout(
                 request.connectionDeadline,
                 for: requestID,
-                on: request.preferredEventLoop
+                on: eventLoop
             )
 
             let starting = self.connections.startingEventLoopConnections(on: eventLoop)
@@ -156,12 +156,10 @@ extension HTTPConnectionPool {
                 // decision about the retry will be made in `connectionCreationBackoffDone(_:)`
                 let eventLoop = self.connections.backoffNextConnectionAttempt(connectionID)
 
-                let backoff = TimeAmount.milliseconds(100) * Int(pow(1.25, Double(self.failedConsecutiveConnectionAttempts)))
-                let jitterRange = backoff.nanoseconds / 100 * 5
-                let jitteredBackoff = backoff + .nanoseconds((-jitterRange...jitterRange).randomElement()!)
+                let backoff = self.calculateBackoff(for: self.failedConsecutiveConnectionAttempts)
                 return .init(
                     request: .none,
-                    connection: .scheduleBackoffTimer(connectionID, backoff: jitteredBackoff, on: eventLoop)
+                    connection: .scheduleBackoffTimer(connectionID, backoff: backoff, on: eventLoop)
                 )
 
             case .shuttingDown:
@@ -186,7 +184,7 @@ extension HTTPConnectionPool {
                 return .none
             }
 
-            assert(self.state == .running, "If we are shutting down, we must not have any idle connections")
+            precondition(self.state == .running, "If we are shutting down, we must not have any idle connections")
 
             return .init(
                 request: .none,
@@ -382,7 +380,7 @@ extension HTTPConnectionPool {
                 return .none
 
             case .shutDown:
-                preconditionFailure("It the pool is already shutdown, all connections must have been torn down.")
+                preconditionFailure("If the pool is already shutdown, all connections must have been torn down.")
             }
         }
 
@@ -418,6 +416,30 @@ extension HTTPConnectionPool {
             }
             self.connections.removeConnection(at: index)
             return .none
+        }
+
+        private mutating func calculateBackoff(for attempt: Int) -> TimeAmount {
+            // Our backoff formula is: 100ms * 1.25^attempt that is capped of at 1minute
+            // This means for:
+            //   -  1 failed attempt :  100ms
+            //   -  5 failed attempts: ~300ms
+            //   - 10 failed attempts: ~930ms
+            //   - 15 failed attempts: ~2.84s
+            //   - 20 failed attempts: ~8.67s
+            //   - 25 failed attempts: ~26s
+            //   - 29 failed attempts: ~60s (max out)
+
+            let start = Double(TimeAmount.milliseconds(100).nanoseconds)
+            let backoffNanoseconds = Int64(start * pow(1.25, Double(self.failedConsecutiveConnectionAttempts)))
+
+            let backoff: TimeAmount = .nanoseconds(backoffNanoseconds)
+
+            // Calculate a 3% jitter range
+            let jitterRange = (backoff.nanoseconds / 100) * 3
+            // Pick a random element from the range +/- jitter range.
+            let jitter: TimeAmount = .nanoseconds((-jitterRange...jitterRange).randomElement()!)
+            let jitteredBackoff = backoff + jitter
+            return jitteredBackoff
         }
     }
 }

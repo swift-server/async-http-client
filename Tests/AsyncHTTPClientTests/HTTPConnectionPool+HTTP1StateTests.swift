@@ -428,11 +428,11 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         XCTAssertEqual(action.request, .executeRequest(request, connectionToAbort, cancelTimeout: nil))
         XCTAssertNoThrow(try connections.execute(mockRequest, on: connectionToAbort))
         XCTAssertEqual(connections.parked, 7)
-        XCTAssertEqual(connections.leased, 1)
+        XCTAssertEqual(connections.used, 1)
         XCTAssertNoThrow(try connections.abortConnection(connectionToAbort.id))
         XCTAssertEqual(state.connectionClosed(connectionToAbort.id), .none)
         XCTAssertEqual(connections.parked, 7)
-        XCTAssertEqual(connections.leased, 0)
+        XCTAssertEqual(connections.used, 0)
     }
 
     func testConnectionCloseLeadsToTumbleWeedIfThereNoQueuedRequests() {

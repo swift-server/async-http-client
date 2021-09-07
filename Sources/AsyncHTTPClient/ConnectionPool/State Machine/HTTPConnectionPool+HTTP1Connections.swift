@@ -376,7 +376,7 @@ extension HTTPConnectionPool {
         }
 
         mutating func parkConnection(at index: Int) -> (Connection.ID, EventLoop) {
-            assert(self.connections[index].isIdle)
+            precondition(self.connections[index].isIdle)
             return (self.connections[index].connectionID, self.connections[index].eventLoop)
         }
 
