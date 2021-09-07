@@ -80,8 +80,8 @@ extension HTTPConnectionPool {
 
         var idleSince: NIODeadline? {
             switch self.state {
-            case .idle(_, since: let lastReturn):
-                return lastReturn
+            case .idle(_, since: let idleSince):
+                return idleSince
             case .backingOff, .starting, .leased, .closed:
                 return nil
             }

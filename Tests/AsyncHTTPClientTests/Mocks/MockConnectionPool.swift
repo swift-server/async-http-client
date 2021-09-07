@@ -22,37 +22,46 @@ import NIOHTTP1
 struct MockConnectionPool {
     typealias Connection = HTTPConnectionPool.Connection
 
-    enum Errors: Error {
+    enum Errors: Error, Hashable {
         case connectionIDAlreadyUsed
         case connectionNotFound
         case connectionExists
         case connectionNotIdle
-        case connectionAlreadyParked
         case connectionNotParked
         case connectionIsParked
         case connectionIsClosed
         case connectionIsNotStarting
         case connectionIsNotExecuting
         case connectionDoesNotFulfillEventLoopRequirement
+        case connectionDoesNotHaveHTTP2StreamAvailable
         case connectionBackoffTimerExists
         case connectionBackoffTimerNotFound
     }
 
-    private struct MockConnectionState {
+    fileprivate struct MockConnectionState {
         typealias ID = HTTPConnectionPool.Connection.ID
 
-        enum State {
+        private enum State {
+            enum HTTP1State {
+                case inUse
+                case idle(parked: Bool, idleSince: NIODeadline)
+            }
+
+            enum HTTP2State {
+                case inUse(maxConcurrentStreams: Int, used: Int)
+                case idle(maxConcurrentStreams: Int, parked: Bool, lastIdle: NIODeadline)
+            }
+
             case starting
-            case http1(leased: Bool, lastIdle: NIODeadline)
-            case http2(streams: Int, used: Int)
+            case http1(HTTP1State)
+            case http2(HTTP2State)
             case closed
         }
 
         let id: ID
         let eventLoop: EventLoop
 
-        private(set) var state: State = .starting
-        private(set) var isParked: Bool = false
+        private var state: State = .starting
 
         init(id: ID, eventLoop: EventLoop) {
             self.id = id
@@ -68,36 +77,60 @@ struct MockConnectionPool {
             }
         }
 
+        /// Is the connection idle (meaning there are no requests executing on it)
         var isIdle: Bool {
             switch self.state {
-            case .starting, .closed:
+            case .starting, .closed, .http1(.inUse), .http2(.inUse):
                 return false
-            case .http1(let leased, _):
-                return !leased
-            case .http2(_, let used):
-                return used == 0
+
+            case .http1(.idle), .http2(.idle):
+                return true
             }
         }
 
-        var isLeased: Bool {
+        /// Is the connection available (can another request be executed on it)
+        var isAvailable: Bool {
             switch self.state {
-            case .starting, .closed:
+            case .starting, .closed, .http1(.inUse):
                 return false
-            case .http1(let leased, _):
-                return leased
-            case .http2(_, let used):
-                return used > 0
+
+            case .http2(.inUse(let maxStreams, let used)):
+                return used < maxStreams
+
+            case .http1(.idle), .http2(.idle):
+                return true
             }
         }
 
-        var lastIdle: NIODeadline? {
+        /// Is the connection idle and did we create a timeout timer for it?
+        var isParked: Bool {
             switch self.state {
-            case .starting, .closed:
+            case .starting, .closed, .http1(.inUse), .http2(.inUse):
+                return false
+
+            case .http1(.idle(let parked, _)), .http2(.idle(_, let parked, _)):
+                return parked
+            }
+        }
+
+        /// Is the connection in use (are there requests executing on it)
+        var isUsed: Bool {
+            switch self.state {
+            case .starting, .closed, .http1(.idle), .http2(.idle):
+                return false
+
+            case .http1(.inUse), .http2(.inUse):
+                return true
+            }
+        }
+
+        var idleSince: NIODeadline? {
+            switch self.state {
+            case .starting, .closed, .http1(.inUse), .http2(.inUse):
                 return nil
-            case .http1(_, let lastReturn):
-                return lastReturn
-            case .http2:
-                return nil
+
+            case .http1(.idle(_, let lastIdle)), .http2(.idle(_, _, let lastIdle)):
+                return lastIdle
             }
         }
 
@@ -106,76 +139,93 @@ struct MockConnectionPool {
                 throw Errors.connectionIsNotStarting
             }
 
-            self.state = .http1(leased: false, lastIdle: .now())
+            self.state = .http1(.idle(parked: false, idleSince: .now()))
         }
 
         mutating func park() throws {
-            guard self.isIdle else {
+            switch self.state {
+            case .starting, .closed, .http1(.inUse), .http2(.inUse):
                 throw Errors.connectionNotIdle
-            }
 
-            guard !self.isParked else {
-                throw Errors.connectionAlreadyParked
-            }
+            case .http1(.idle(true, _)), .http2(.idle(_, true, _)):
+                throw Errors.connectionIsParked
 
-            self.isParked = true
+            case .http1(.idle(false, let lastIdle)):
+                self.state = .http1(.idle(parked: true, idleSince: lastIdle))
+
+            case .http2(.idle(let maxStreams, false, let lastIdle)):
+                self.state = .http2(.idle(maxConcurrentStreams: maxStreams, parked: true, lastIdle: lastIdle))
+            }
         }
 
         mutating func activate() throws {
-            guard self.isIdle else {
+            switch self.state {
+            case .starting, .closed, .http1(.inUse), .http2(.inUse):
                 throw Errors.connectionNotIdle
-            }
 
-            guard self.isParked else {
+            case .http1(.idle(false, _)), .http2(.idle(_, false, _)):
                 throw Errors.connectionNotParked
-            }
 
-            self.isParked = false
+            case .http1(.idle(true, let lastIdle)):
+                self.state = .http1(.idle(parked: false, idleSince: lastIdle))
+
+            case .http2(.idle(let maxStreams, true, let lastIdle)):
+                self.state = .http2(.idle(maxConcurrentStreams: maxStreams, parked: false, lastIdle: lastIdle))
+            }
         }
 
         mutating func execute(_ request: HTTPSchedulableRequest) throws {
-            guard !self.isParked else {
-                throw Errors.connectionIsParked
-            }
-
-            if let required = request.requiredEventLoop, required !== self.eventLoop {
-                throw Errors.connectionDoesNotFulfillEventLoopRequirement
-            }
-
             switch self.state {
-            case .starting:
-                preconditionFailure("Should be unreachable")
-            case .http1(leased: true, _):
+            case .starting, .http1(.inUse):
                 throw Errors.connectionNotIdle
-            case .http1(leased: false, let lastIdle):
-                self.state = .http1(leased: true, lastIdle: lastIdle)
-            case .http2(let streams, let used) where used >= streams:
-                throw Errors.connectionNotIdle
-            case .http2(let streams, var used):
-                used += 1
-                self.state = .http2(streams: streams, used: used)
+
+            case .http1(.idle(true, _)), .http2(.idle(_, true, _)):
+                throw Errors.connectionIsParked
+
+            case .http1(.idle(false, _)):
+                if let required = request.requiredEventLoop, required !== self.eventLoop {
+                    throw Errors.connectionDoesNotFulfillEventLoopRequirement
+                }
+                self.state = .http1(.inUse)
+
+            case .http2(.idle(let maxStreams, false, _)):
+                if let required = request.requiredEventLoop, required !== self.eventLoop {
+                    throw Errors.connectionDoesNotFulfillEventLoopRequirement
+                }
+                if maxStreams < 1 {
+                    throw Errors.connectionDoesNotHaveHTTP2StreamAvailable
+                }
+                self.state = .http2(.inUse(maxConcurrentStreams: maxStreams, used: 1))
+
+            case .http2(.inUse(let maxStreams, let used)):
+                if let required = request.requiredEventLoop, required !== self.eventLoop {
+                    throw Errors.connectionDoesNotFulfillEventLoopRequirement
+                }
+                if used + 1 > maxStreams {
+                    throw Errors.connectionDoesNotHaveHTTP2StreamAvailable
+                }
+                self.state = .http2(.inUse(maxConcurrentStreams: maxStreams, used: used + 1))
+
             case .closed:
                 throw Errors.connectionIsClosed
             }
         }
 
         mutating func finishRequest() throws {
-            guard !self.isParked else {
-                throw Errors.connectionIsParked
-            }
-
             switch self.state {
-            case .starting:
+            case .starting, .http1(.idle), .http2(.idle):
                 throw Errors.connectionIsNotExecuting
-            case .http1(leased: true, _):
-                self.state = .http1(leased: false, lastIdle: .now())
-            case .http1(leased: false, _):
-                throw Errors.connectionIsNotExecuting
-            case .http2(_, let used) where used <= 0:
-                throw Errors.connectionIsNotExecuting
-            case .http2(let streams, var used):
-                used -= 1
-                self.state = .http2(streams: streams, used: used)
+
+            case .http1(.inUse):
+                self.state = .http1(.idle(parked: false, idleSince: .now()))
+
+            case .http2(.inUse(let maxStreams, let used)):
+                if used == 1 {
+                    self.state = .http2(.idle(maxConcurrentStreams: maxStreams, parked: false, lastIdle: .now()))
+                } else {
+                    self.state = .http2(.inUse(maxConcurrentStreams: maxStreams, used: used))
+                }
+
             case .closed:
                 throw Errors.connectionIsClosed
             }
@@ -185,14 +235,12 @@ struct MockConnectionPool {
             switch self.state {
             case .starting:
                 throw Errors.connectionNotIdle
-            case .http1(let leased, _):
-                if leased {
-                    throw Errors.connectionNotIdle
-                }
-            case .http2(_, let used):
-                if used > 0 {
-                    throw Errors.connectionNotIdle
-                }
+            case .http1(.idle), .http2(.idle):
+                self.state = .closed
+
+            case .http1(.inUse), .http2(.inUse):
+                throw Errors.connectionNotIdle
+
             case .closed:
                 throw Errors.connectionIsClosed
             }
@@ -209,7 +257,7 @@ struct MockConnectionPool {
     }
 
     var leased: Int {
-        self.connections.values.filter { $0.isLeased }.count
+        self.connections.values.filter { $0.isUsed }.count
     }
 
     var starting: Int {
@@ -227,22 +275,21 @@ struct MockConnectionPool {
     var newestParkedConnection: Connection? {
         self.connections.values
             .filter { $0.isParked }
-            .max(by: { $0.lastIdle! < $1.lastIdle! })
+            .max(by: { $0.idleSince! < $1.idleSince! })
             .flatMap { .__testOnly_connection(id: $0.id, eventLoop: $0.eventLoop) }
     }
 
     var oldestParkedConnection: Connection? {
         self.connections.values
             .filter { $0.isParked }
-            .min(by: { $0.lastIdle! < $1.lastIdle! })
+            .min(by: { $0.idleSince! < $1.idleSince! })
             .flatMap { .__testOnly_connection(id: $0.id, eventLoop: $0.eventLoop) }
     }
 
     func newestParkedConnection(for eventLoop: EventLoop) -> Connection? {
         self.connections.values
             .filter { $0.eventLoop === eventLoop && $0.isParked }
-            .sorted(by: { $0.lastIdle! > $1.lastIdle! })
-            .max(by: { $0.lastIdle! < $1.lastIdle! })
+            .max(by: { $0.idleSince! < $1.idleSince! })
             .flatMap { .__testOnly_connection(id: $0.id, eventLoop: $0.eventLoop) }
     }
 
@@ -254,7 +301,7 @@ struct MockConnectionPool {
 
     mutating func createConnection(_ connectionID: Connection.ID, on eventLoop: EventLoop) throws {
         guard self.connections[connectionID] == nil else {
-            throw Errors.connectionIDAlreadyUsed
+            throw Errors.connectionExists
         }
         self.connections[connectionID] = .init(id: connectionID, eventLoop: eventLoop)
     }
@@ -307,7 +354,7 @@ struct MockConnectionPool {
 
     // MARK: Connection destruction
 
-    /// Closing a connection signals intend. For this reason, it is verified, that the connection is not running any
+    /// Closing a connection signals intent. For this reason, it is verified, that the connection is not running any
     /// requests when closing.
     mutating func closeConnection(_ connection: Connection) throws {
         guard var mockConnection = self.connections.removeValue(forKey: connection.id) else {
@@ -361,7 +408,9 @@ struct MockConnectionPool {
         try connection.finishRequest()
         self.connections[connectionID] = connection
     }
+}
 
+extension MockConnectionPool {
     mutating func randomStartingConnection() -> Connection.ID? {
         self.connections.values
             .filter { $0.isStarting }
@@ -371,7 +420,7 @@ struct MockConnectionPool {
 
     mutating func randomActiveConnection() -> Connection.ID? {
         self.connections.values
-            .filter { $0.isLeased || $0.isParked }
+            .filter { $0.isUsed || $0.isParked }
             .randomElement()
             .map(\.id)
     }
@@ -385,7 +434,7 @@ struct MockConnectionPool {
 
     mutating func randomLeasedConnection() -> Connection? {
         self.connections.values
-            .filter { $0.isLeased }
+            .filter { $0.isUsed }
             .randomElement()
             .flatMap { .__testOnly_connection(id: $0.id, eventLoop: $0.eventLoop) }
     }
