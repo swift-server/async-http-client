@@ -48,11 +48,11 @@ extension HTTPConnectionPool {
         }
 
         enum RequestAction {
-            case executeRequest(Request, Connection, cancelTimeout: Request.ID?)
-            case executeRequests([(Request, cancelTimeout: Request.ID?)], Connection)
+            case executeRequest(Request, Connection, cancelTimeout: Bool)
+            case executeRequestsAndCancelTimeouts([Request], Connection)
 
-            case failRequest(Request, Error, cancelTimeout: Request.ID?)
-            case failRequests([(Request, cancelTimeout: Request.ID?)], Error)
+            case failRequest(Request, Error, cancelTimeout: Bool)
+            case failRequestsAndCancelTimeouts([Request], Error)
 
             case scheduleRequestTimeout(NIODeadline?, for: Request.ID, on: EventLoop)
             case cancelRequestTimeout(Request.ID)

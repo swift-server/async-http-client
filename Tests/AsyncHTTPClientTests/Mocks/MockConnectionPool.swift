@@ -513,7 +513,7 @@ extension MockConnectionPool {
             let newConnection = try connections.succeedConnectionCreationHTTP1(connectionID)
             let action = state.newHTTP1ConnectionCreated(newConnection)
 
-            guard case .executeRequest(let request, newConnection, cancelTimeout: .some(let requestID)) = action.request else {
+            guard case .executeRequest(let request, newConnection, cancelTimeout: true) = action.request else {
                 throw SetupError.expectedPreviouslyQueuedRequestToBeRunNow
             }
 
@@ -521,7 +521,7 @@ extension MockConnectionPool {
                 throw SetupError.expectedNoConnectionAction
             }
 
-            let mockRequest = try queuer.get(requestID, request: request.__testOnly_wrapped_request())
+            let mockRequest = try queuer.get(request.id, request: request.__testOnly_wrapped_request())
             try connections.execute(mockRequest, on: newConnection)
         }
 

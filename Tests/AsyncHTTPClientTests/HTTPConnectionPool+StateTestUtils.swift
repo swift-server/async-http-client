@@ -100,12 +100,12 @@ extension HTTPConnectionPool.StateMachine.RequestAction: Equatable {
         switch (lhs, rhs) {
         case (.executeRequest(let lhsReq, let lhsConn, let lhsReqID), .executeRequest(let rhsReq, let rhsConn, let rhsReqID)):
             return lhsReq == rhsReq && lhsConn == rhsConn && lhsReqID == rhsReqID
-        case (.executeRequests(let lhsReqs, let lhsConn), .executeRequests(let rhsReqs, let rhsConn)):
-            return lhsReqs.elementsEqual(rhsReqs, by: { $0.0 == $1.0 && $0.1 == $1.1 }) && lhsConn == rhsConn
+        case (.executeRequestsAndCancelTimeouts(let lhsReqs, let lhsConn), .executeRequestsAndCancelTimeouts(let rhsReqs, let rhsConn)):
+            return lhsReqs.elementsEqual(rhsReqs, by: { $0 == $1 }) && lhsConn == rhsConn
         case (.failRequest(let lhsReq, _, cancelTimeout: let lhsReqID), .failRequest(let rhsReq, _, cancelTimeout: let rhsReqID)):
             return lhsReq == rhsReq && lhsReqID == rhsReqID
-        case (.failRequests(let lhsReqs, _), .failRequests(let rhsReqs, _)):
-            return lhsReqs.elementsEqual(rhsReqs, by: { $0.0 == $1.0 && $0.1 == $1.1 })
+        case (.failRequestsAndCancelTimeouts(let lhsReqs, _), .failRequestsAndCancelTimeouts(let rhsReqs, _)):
+            return lhsReqs.elementsEqual(rhsReqs, by: { $0 == $1 })
         case (.scheduleRequestTimeout(let lhsDeadline, for: let lhsReqID, on: let lhsEL), .scheduleRequestTimeout(let rhsDeadline, for: let rhsReqID, on: let rhsEL)):
             return lhsDeadline == rhsDeadline && lhsReqID == rhsReqID && lhsEL === rhsEL
         case (.cancelRequestTimeout(let lhsReqID), .cancelRequestTimeout(let rhsReqID)):

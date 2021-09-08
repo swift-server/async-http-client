@@ -57,7 +57,7 @@ extension HTTPConnectionPool {
                 //
                 // (Order in one lock does not guarantee order in the next lock!)
                 return .init(
-                    request: .failRequest(request, HTTPClientError.alreadyShutdown, cancelTimeout: nil),
+                    request: .failRequest(request, HTTPClientError.alreadyShutdown, cancelTimeout: false),
                     connection: .none
                 )
             }
@@ -66,7 +66,7 @@ extension HTTPConnectionPool {
         private mutating func executeRequestOnPreferredEventLoop(_ request: Request, eventLoop: EventLoop) -> Action {
             if let connection = self.connections.leaseConnection(onPreferred: eventLoop) {
                 return .init(
-                    request: .executeRequest(request, connection, cancelTimeout: nil),
+                    request: .executeRequest(request, connection, cancelTimeout: false),
                     connection: .cancelTimeoutTimer(connection.id)
                 )
             }
@@ -104,7 +104,7 @@ extension HTTPConnectionPool {
         private mutating func executeRequestOnRequiredEventLoop(_ request: Request, eventLoop: EventLoop) -> Action {
             if let connection = self.connections.leaseConnection(onRequired: eventLoop) {
                 return .init(
-                    request: .executeRequest(request, connection, cancelTimeout: nil),
+                    request: .executeRequest(request, connection, cancelTimeout: false),
                     connection: .cancelTimeoutTimer(connection.id)
                 )
             }
@@ -173,7 +173,12 @@ extension HTTPConnectionPool {
 
         mutating func connectionCreationBackoffDone(_ connectionID: Connection.ID) -> Action {
             assert(self.connections.stats.backingOff >= 1, "At least this connection is currently in backoff")
+            // The naming of `failConnection` is a little confusing here. All it does is moving the
+            // connection state from `.backingOff` to `.closed` here. It also returns the
+            // connection's index.
             let (index, context) = self.connections.failConnection(connectionID)
+            // In `nextActionForFailedConnection` a decision will be made whether the failed
+            // connection should be replaced or removed.
             return self.nextActionForFailedConnection(at: index, context: context)
         }
 
@@ -207,7 +212,7 @@ extension HTTPConnectionPool {
             // 1. check requests in queue
             if let request = self.queue.remove(requestID) {
                 return .init(
-                    request: .failRequest(request, HTTPClientError.getConnectionFromPoolTimeout, cancelTimeout: nil),
+                    request: .failRequest(request, HTTPClientError.getConnectionFromPoolTimeout, cancelTimeout: false),
                     connection: .none
                 )
             }
@@ -238,11 +243,11 @@ extension HTTPConnectionPool {
 
             // If we have remaining request queued, we should fail all of them with a cancelled
             // error.
-            let waitingRequests = self.queue.removeAll().map { ($0, $0.id) }
+            let waitingRequests = self.queue.removeAll()
 
             var requestAction: StateMachine.RequestAction = .none
             if !waitingRequests.isEmpty {
-                requestAction = .failRequests(waitingRequests, HTTPClientError.cancelled)
+                requestAction = .failRequestsAndCancelTimeouts(waitingRequests, HTTPClientError.cancelled)
             }
 
             // clean up the connections, we can cleanup now!
@@ -307,7 +312,7 @@ extension HTTPConnectionPool {
             // 1. Check if there are waiting requests in the general purpose queue
             if let request = self.queue.popFirst(for: nil) {
                 return .init(
-                    request: .executeRequest(request, self.connections.leaseConnection(at: index), cancelTimeout: request.id),
+                    request: .executeRequest(request, self.connections.leaseConnection(at: index), cancelTimeout: true),
                     connection: .none
                 )
             }
@@ -315,7 +320,7 @@ extension HTTPConnectionPool {
             // 2. Check if there are waiting requests in the matching eventLoop queue
             if let request = self.queue.popFirst(for: context.eventLoop) {
                 return .init(
-                    request: .executeRequest(request, self.connections.leaseConnection(at: index), cancelTimeout: request.id),
+                    request: .executeRequest(request, self.connections.leaseConnection(at: index), cancelTimeout: true),
                     connection: .none
                 )
             }
@@ -336,7 +341,7 @@ extension HTTPConnectionPool {
             // Check if there are waiting requests in the matching eventLoop queue
             if let request = self.queue.popFirst(for: context.eventLoop) {
                 return .init(
-                    request: .executeRequest(request, self.connections.leaseConnection(at: index), cancelTimeout: request.id),
+                    request: .executeRequest(request, self.connections.leaseConnection(at: index), cancelTimeout: true),
                     connection: .none
                 )
             }
@@ -432,7 +437,7 @@ extension HTTPConnectionPool {
             let start = Double(TimeAmount.milliseconds(100).nanoseconds)
             let backoffNanoseconds = Int64(start * pow(1.25, Double(self.failedConsecutiveConnectionAttempts)))
 
-            let backoff: TimeAmount = .nanoseconds(backoffNanoseconds)
+            let backoff: TimeAmount = min(.nanoseconds(backoffNanoseconds), .seconds(60))
 
             // Calculate a 3% jitter range
             let jitterRange = (backoff.nanoseconds / 100) * 3
