@@ -141,12 +141,13 @@ final class HTTPConnectionPool {
 
     private static let fallbackConnectTimeout: TimeAmount = .seconds(30)
 
+    let key: ConnectionPool.Key
+
     private let timerLock = Lock()
     private var _requestTimer = [Request.ID: Scheduled<Void>]()
     private var _idleTimer = [Connection.ID: Scheduled<Void>]()
     private var _backoffTimer = [Connection.ID: Scheduled<Void>]()
 
-    private let key: ConnectionPool.Key
     private var logger: Logger
 
     private let eventLoopGroup: EventLoopGroup

@@ -17,6 +17,7 @@ import Logging
 import NIOCore
 import NIOEmbedded
 import NIOHTTP1
+import NIOSSL
 import XCTest
 
 class HTTPConnectionPool_RequestQueueTests: XCTestCase {
@@ -88,6 +89,8 @@ private class MockScheduledRequest: HTTPSchedulableRequest {
         self.requiredEventLoop = requiredEventLoop
     }
 
+    var poolKey: ConnectionPool.Key { preconditionFailure("Unimplemented") }
+    var tlsConfiguration: TLSConfiguration? { nil }
     var logger: Logger { preconditionFailure("Unimplemented") }
     var connectionDeadline: NIODeadline { preconditionFailure("Unimplemented") }
     var preferredEventLoop: EventLoop { preconditionFailure("Unimplemented") }
