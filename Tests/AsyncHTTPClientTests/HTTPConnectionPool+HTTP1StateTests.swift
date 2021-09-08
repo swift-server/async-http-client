@@ -40,10 +40,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             guard case .createConnection(let connectionID, let connectionEL) = action.connection else {
                 return XCTFail("Unexpected connection action")
             }
-            guard case .scheduleRequestTimeout(_, for: request.id, on: let queueEL) = action.request else {
-                return XCTFail("Unexpected request action")
-            }
-            XCTAssert(queueEL === mockRequest.eventLoop)
+            XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), action.request)
             XCTAssert(connectionEL === mockRequest.eventLoop)
 
             XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
@@ -59,10 +56,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             guard case .none = action.connection else {
                 return XCTFail("Unexpected connection action")
             }
-            guard case .scheduleRequestTimeout(_, for: request.id, on: let queueEL) = action.request else {
-                return XCTFail("Unexpected request action")
-            }
-            XCTAssert(queueEL === mockRequest.eventLoop)
+            XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), action.request)
             XCTAssertNoThrow(try queuer.queue(mockRequest, id: request.id))
         }
 
@@ -122,10 +116,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         let request = HTTPConnectionPool.Request(mockRequest)
 
         let action = state.executeRequest(request)
-        guard case .scheduleRequestTimeout(_, request.id, on: let returnedEL) = action.request else {
-            return XCTFail("Unexpected request action: \(action.request)")
-        }
-        XCTAssert(returnedEL === mockRequest.eventLoop) // XCTAssertIdentical not available on Linux
+        XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), action.request)
 
         // 1. connection attempt
         guard case .createConnection(let connectionID, on: let connectionEL) = action.connection else {
@@ -183,10 +174,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         let request = HTTPConnectionPool.Request(mockRequest)
 
         let executeAction = state.executeRequest(request)
-        guard case .scheduleRequestTimeout(_, request.id, on: let returnedEL) = executeAction.request else {
-            return XCTFail("Unexpected request action: \(executeAction.request)")
-        }
-        XCTAssert(returnedEL === mockRequest.eventLoop) // XCTAssertIdentical not available on Linux
+        XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), executeAction.request)
 
         // 1. connection attempt
         guard case .createConnection(let connectionID, on: let connectionEL) = executeAction.connection else {
@@ -223,10 +211,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         let request = HTTPConnectionPool.Request(mockRequest)
 
         let executeAction = state.executeRequest(request)
-        guard case .scheduleRequestTimeout(_, request.id, on: let returnedEL) = executeAction.request else {
-            return XCTFail("Unexpected request action: \(executeAction.request)")
-        }
-        XCTAssert(returnedEL === mockRequest.eventLoop) // XCTAssertIdentical not available on Linux
+        XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), executeAction.request)
 
         // 1. connection attempt
         guard case .createConnection(let connectionID, on: let connectionEL) = executeAction.connection else {
@@ -314,11 +299,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             let action = state.executeRequest(request)
 
             XCTAssertEqual(action.connection, .none)
-            guard case .scheduleRequestTimeout(_, request.id, on: let timeoutEL) = action.request else {
-                return XCTFail("Unexpected request action: \(action.request)")
-            }
-
-            XCTAssert(timeoutEL === mockRequest.eventLoop)
+            XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), action.request)
 
             XCTAssertNoThrow(try queuer.queue(mockRequest, id: request.id))
             queuedRequestsOrder.append(request.id)
@@ -495,12 +476,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             let request = HTTPConnectionPool.Request(mockRequest)
             let action = state.executeRequest(request)
 
-            XCTAssertEqual(action.connection, .none)
-            guard case .scheduleRequestTimeout(_, request.id, on: let timeoutEL) = action.request else {
-                return XCTFail("Unexpected request action: \(action.request)")
-            }
-
-            XCTAssert(mockRequest.eventLoop === timeoutEL)
+            XCTAssertEqual(.none, action.connection)
+            XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), action.request)
             XCTAssertNoThrow(try queuer.queue(mockRequest, id: request.id))
             queuedRequestsOrder.append(request.id)
         }

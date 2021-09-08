@@ -496,8 +496,7 @@ extension MockConnectionPool {
             let request = HTTPConnectionPool.Request(mockRequest)
             let action = state.executeRequest(request)
 
-            guard case .scheduleRequestTimeout(_, request.id, on: let waitEL) = action.request,
-                mockRequest.eventLoop === waitEL else {
+            guard case .scheduleRequestTimeout(request, on: let waitEL) = action.request, mockRequest.eventLoop === waitEL else {
                 throw SetupError.expectedRequestToBeAddedToQueue
             }
 

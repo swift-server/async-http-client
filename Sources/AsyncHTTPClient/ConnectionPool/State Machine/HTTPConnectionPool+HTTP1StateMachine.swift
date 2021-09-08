@@ -72,10 +72,9 @@ extension HTTPConnectionPool {
             }
 
             // No matter what we do now, the request will need to wait!
-            let requestID = self.queue.push(request)
+            self.queue.push(request)
             let requestAction: StateMachine.RequestAction = .scheduleRequestTimeout(
-                request.connectionDeadline,
-                for: requestID,
+                for: request,
                 on: eventLoop
             )
 
@@ -110,10 +109,9 @@ extension HTTPConnectionPool {
             }
 
             // No matter what we do now, the request will need to wait!
-            let requestID = self.queue.push(request)
+            self.queue.push(request)
             let requestAction: StateMachine.RequestAction = .scheduleRequestTimeout(
-                request.connectionDeadline,
-                for: requestID,
+                for: request,
                 on: eventLoop
             )
 
@@ -423,7 +421,7 @@ extension HTTPConnectionPool {
             return .none
         }
 
-        private mutating func calculateBackoff(for attempt: Int) -> TimeAmount {
+        private func calculateBackoff(for attempt: Int) -> TimeAmount {
             // Our backoff formula is: 100ms * 1.25^attempt that is capped of at 1minute
             // This means for:
             //   -  1 failed attempt :  100ms
@@ -435,7 +433,7 @@ extension HTTPConnectionPool {
             //   - 29 failed attempts: ~60s (max out)
 
             let start = Double(TimeAmount.milliseconds(100).nanoseconds)
-            let backoffNanoseconds = Int64(start * pow(1.25, Double(self.failedConsecutiveConnectionAttempts)))
+            let backoffNanoseconds = Int64(start * pow(1.25, Double(attempt)))
 
             let backoff: TimeAmount = min(.nanoseconds(backoffNanoseconds), .seconds(60))
 

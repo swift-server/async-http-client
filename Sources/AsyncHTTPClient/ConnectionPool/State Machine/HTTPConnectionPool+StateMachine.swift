@@ -54,7 +54,7 @@ extension HTTPConnectionPool {
             case failRequest(Request, Error, cancelTimeout: Bool)
             case failRequestsAndCancelTimeouts([Request], Error)
 
-            case scheduleRequestTimeout(NIODeadline?, for: Request.ID, on: EventLoop)
+            case scheduleRequestTimeout(for: Request, on: EventLoop)
             case cancelRequestTimeout(Request.ID)
 
             case none

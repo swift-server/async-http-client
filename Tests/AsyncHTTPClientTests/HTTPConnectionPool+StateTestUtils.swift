@@ -106,8 +106,8 @@ extension HTTPConnectionPool.StateMachine.RequestAction: Equatable {
             return lhsReq == rhsReq && lhsReqID == rhsReqID
         case (.failRequestsAndCancelTimeouts(let lhsReqs, _), .failRequestsAndCancelTimeouts(let rhsReqs, _)):
             return lhsReqs.elementsEqual(rhsReqs, by: { $0 == $1 })
-        case (.scheduleRequestTimeout(let lhsDeadline, for: let lhsReqID, on: let lhsEL), .scheduleRequestTimeout(let rhsDeadline, for: let rhsReqID, on: let rhsEL)):
-            return lhsDeadline == rhsDeadline && lhsReqID == rhsReqID && lhsEL === rhsEL
+        case (.scheduleRequestTimeout(for: let lhsReq, on: let lhsEL), .scheduleRequestTimeout(for: let rhsReq, on: let rhsEL)):
+            return lhsReq == rhsReq && lhsEL === rhsEL
         case (.cancelRequestTimeout(let lhsReqID), .cancelRequestTimeout(let rhsReqID)):
             return lhsReqID == rhsReqID
         case (.none, .none):
