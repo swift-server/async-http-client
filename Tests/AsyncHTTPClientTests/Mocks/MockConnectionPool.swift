@@ -42,6 +42,25 @@ struct MockConnectionPool {
         typealias ID = HTTPConnectionPool.Connection.ID
 
         private enum State {
+            // A note about idle vs. parked connections
+            //
+            // In our state machine we differentiate the concept of a connection being idle vs. it
+            // being parked. An idle connection is a connection that we are not executing any
+            // request on. A parked connection is an idle connection that will remain in this state
+            // for a longer period of time. For parked connections we create idle timeout timers.
+            //
+            // Consider those two flows to better understand the difference:
+            //
+            // 1. A connection becomes `idle` and there is more work queued. This will lead to a new
+            //    request being executed on the connection. It will switch back to be in use without
+            //    having been parked in the meantime.
+            //
+            // 2. A connection becomes `idle` and there is no more work queued. We don't want to get
+            //    rid of the connection right away. For this reason we create an idle timeout timer
+            //    for the connection. After having created the timer we consider the connection
+            //    being parked. If a new request arrives, before the connection timed out, we need
+            //    to cancel the idle timeout timer.
+
             enum HTTP1State {
                 case inUse
                 case idle(parked: Bool, idleSince: NIODeadline)
@@ -102,7 +121,7 @@ struct MockConnectionPool {
             }
         }
 
-        /// Is the connection idle and did we create a timeout timer for it?
+        /// Is the connection idle and did we create an idle timeout timer for it?
         var isParked: Bool {
             switch self.state {
             case .starting, .closed, .http1(.inUse), .http2(.inUse):
@@ -192,9 +211,6 @@ struct MockConnectionPool {
                 if let required = request.requiredEventLoop, required !== self.eventLoop {
                     throw Errors.connectionDoesNotFulfillEventLoopRequirement
                 }
-                if maxStreams < 1 {
-                    throw Errors.connectionDoesNotHaveHTTP2StreamAvailable
-                }
                 self.state = .http2(.inUse(maxConcurrentStreams: maxStreams, used: 1))
 
             case .http2(.inUse(let maxStreams, let used)):
@@ -223,7 +239,7 @@ struct MockConnectionPool {
                 if used == 1 {
                     self.state = .http2(.idle(maxConcurrentStreams: maxStreams, parked: false, lastIdle: .now()))
                 } else {
-                    self.state = .http2(.inUse(maxConcurrentStreams: maxStreams, used: used))
+                    self.state = .http2(.inUse(maxConcurrentStreams: maxStreams, used: used - 1))
                 }
 
             case .closed:
