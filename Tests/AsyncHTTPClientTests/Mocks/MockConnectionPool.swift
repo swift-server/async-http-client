@@ -201,7 +201,7 @@ struct MockConnectionPool {
                 if let required = request.requiredEventLoop, required !== self.eventLoop {
                     throw Errors.connectionDoesNotFulfillEventLoopRequirement
                 }
-                if used + 1 > maxStreams {
+                if used >= maxStreams {
                     throw Errors.connectionDoesNotHaveHTTP2StreamAvailable
                 }
                 self.state = .http2(.inUse(maxConcurrentStreams: maxStreams, used: used + 1))
@@ -256,7 +256,7 @@ struct MockConnectionPool {
         self.connections.values.filter { $0.isParked }.count
     }
 
-    var leased: Int {
+    var used: Int {
         self.connections.values.filter { $0.isUsed }.count
     }
 
@@ -411,28 +411,28 @@ struct MockConnectionPool {
 }
 
 extension MockConnectionPool {
-    mutating func randomStartingConnection() -> Connection.ID? {
+    func randomStartingConnection() -> Connection.ID? {
         self.connections.values
             .filter { $0.isStarting }
             .randomElement()
             .map(\.id)
     }
 
-    mutating func randomActiveConnection() -> Connection.ID? {
+    func randomActiveConnection() -> Connection.ID? {
         self.connections.values
             .filter { $0.isUsed || $0.isParked }
             .randomElement()
             .map(\.id)
     }
 
-    mutating func randomParkedConnection() -> Connection? {
+    func randomParkedConnection() -> Connection? {
         self.connections.values
             .filter { $0.isParked }
             .randomElement()
             .flatMap { .__testOnly_connection(id: $0.id, eventLoop: $0.eventLoop) }
     }
 
-    mutating func randomLeasedConnection() -> Connection? {
+    func randomLeasedConnection() -> Connection? {
         self.connections.values
             .filter { $0.isUsed }
             .randomElement()
