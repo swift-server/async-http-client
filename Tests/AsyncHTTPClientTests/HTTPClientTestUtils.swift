@@ -306,9 +306,13 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
 
     let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
 
-    private let activeConnCounterHandler: CountActiveConnectionsHandler
+    private let activeConnCounterHandler: ConnectionsCountHandler
     var activeConnections: Int {
         return self.activeConnCounterHandler.currentlyActiveConnections
+    }
+
+    var createdConnections: Int {
+        return self.activeConnCounterHandler.createdConnections
     }
 
     var port: Int {
@@ -343,7 +347,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
             socketAddress = try! SocketAddress(unixDomainSocketPath: path)
         }
 
-        self.activeConnCounterHandler = CountActiveConnectionsHandler()
+        self.activeConnCounterHandler = ConnectionsCountHandler()
 
         let connectionIDAtomic = NIOAtomic<Int>.makeAtomic(value: 0)
 
@@ -908,19 +912,25 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
     }
 }
 
-final class CountActiveConnectionsHandler: ChannelInboundHandler {
+final class ConnectionsCountHandler: ChannelInboundHandler {
     typealias InboundIn = Channel
 
     private let activeConns = NIOAtomic<Int>.makeAtomic(value: 0)
+    private let createdConns = NIOAtomic<Int>.makeAtomic(value: 0)
 
-    public var currentlyActiveConnections: Int {
-        return self.activeConns.load()
+    var createdConnections: Int {
+        self.createdConns.load()
+    }
+
+    var currentlyActiveConnections: Int {
+        self.activeConns.load()
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let channel = self.unwrapInboundIn(data)
 
         _ = self.activeConns.add(1)
+        _ = self.createdConns.add(1)
         channel.closeFuture.whenComplete { _ in
             _ = self.activeConns.sub(1)
         }

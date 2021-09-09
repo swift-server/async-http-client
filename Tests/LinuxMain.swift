@@ -40,6 +40,7 @@ import XCTest
         testCase(HTTPClientNIOTSTests.allTests),
         testCase(HTTPClientSOCKSTests.allTests),
         testCase(HTTPClientTests.allTests),
+        testCase(HTTPConnectionPoolTests.allTests),
         testCase(HTTPConnectionPool_FactoryTests.allTests),
         testCase(HTTPConnectionPool_HTTP1ConnectionsTests.allTests),
         testCase(HTTPConnectionPool_HTTP1StateMachineTests.allTests),
