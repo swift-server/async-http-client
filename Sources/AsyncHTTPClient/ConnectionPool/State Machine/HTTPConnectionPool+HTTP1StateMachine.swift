@@ -168,16 +168,25 @@ extension HTTPConnectionPool {
         }
 
         mutating func connectionCreationBackoffDone(_ connectionID: Connection.ID) -> Action {
-            assert(self.connections.stats.backingOff >= 1, "At least this connection is currently in backoff")
-            // The naming of `failConnection` is a little confusing here. All it does is moving the
-            // connection state from `.backingOff` to `.closed` here. It also returns the
-            // connection's index.
-            guard let (index, context) = self.connections.failConnection(connectionID) else {
-                preconditionFailure("Backing off a connection that is unknown to us?")
+            switch self.state {
+            case .running:
+                // The naming of `failConnection` is a little confusing here. All it does is moving the
+                // connection state from `.backingOff` to `.closed` here. It also returns the
+                // connection's index.
+                guard let (index, context) = self.connections.failConnection(connectionID) else {
+                    preconditionFailure("Backing off a connection that is unknown to us?")
+                }
+                // In `nextActionForFailedConnection` a decision will be made whether the failed
+                // connection should be replaced or removed.
+                return self.nextActionForFailedConnection(at: index, context: context)
+
+            case .shuttingDown, .shutDown:
+                // There might be a race between shutdown and a backoff timer firing. On thread A
+                // we might call shutdown which removes the backoff timer. On thread B the backoff
+                // timer might fire at the same time and be blocked by the state lock. In this case
+                // we would look for the backoff timer that was removed just before by the shutdown.
+                return .none
             }
-            // In `nextActionForFailedConnection` a decision will be made whether the failed
-            // connection should be replaced or removed.
-            return self.nextActionForFailedConnection(at: index, context: context)
         }
 
         mutating func connectionIdleTimeout(_ connectionID: Connection.ID) -> Action {

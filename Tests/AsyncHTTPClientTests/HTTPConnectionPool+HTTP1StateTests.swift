@@ -587,4 +587,43 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         // triggered by timer
         XCTAssertEqual(state.connectionIdleTimeout(connection.id), .none)
     }
+
+    func testConnectionBackoffVsShutdownRace() {
+        let elg = EmbeddedEventLoopGroup(loops: 2)
+        defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
+
+        var state = HTTPConnectionPool.StateMachine(
+            eventLoopGroup: elg,
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 6
+        )
+
+        let mockRequest = MockHTTPRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
+        let request = HTTPConnectionPool.Request(mockRequest)
+
+        let executeAction = state.executeRequest(request)
+        guard case .createConnection(let connectionID, on: let connEL) = executeAction.connection else {
+            return XCTFail("Expected to create a connection")
+        }
+
+        XCTAssertEqual(executeAction.request, .scheduleRequestTimeout(for: request, on: mockRequest.eventLoop))
+
+        let failAction = state.failedToCreateNewConnection(HTTPClientError.cancelled, connectionID: connectionID)
+        guard case .scheduleBackoffTimer(connectionID, backoff: _, on: let timerEL) = failAction.connection else {
+            return XCTFail("Expected to create a backoff timer")
+        }
+        XCTAssert(timerEL === connEL)
+        XCTAssertEqual(failAction.request, .none)
+
+        let shutdownAction = state.shutdown()
+        guard case .cleanupConnections(let context, isShutdown: .yes(unclean: true)) = shutdownAction.connection else {
+            return XCTFail("Expected to cleanup")
+        }
+        XCTAssertEqual(context.close.count, 0)
+        XCTAssertEqual(context.cancel.count, 0)
+        XCTAssertEqual(context.connectBackoff, [connectionID])
+        XCTAssertEqual(shutdownAction.request, .failRequestsAndCancelTimeouts([request], HTTPClientError.cancelled))
+
+        XCTAssertEqual(state.connectionCreationBackoffDone(connectionID), .none)
+    }
 }
