@@ -451,12 +451,13 @@ extension HTTPConnectionPool {
         /// This will put the position into the closed state.
         ///
         /// - Parameter connectionID: The failed connection's id.
-        /// - Returns: An index and an IdleConnectionContext to determine the next action for the now closed connection.
+        /// - Returns: An optional index and an IdleConnectionContext to determine the next action for the closed connection.
         ///            You must call ``removeConnection(at:)`` or ``replaceConnection(at:)`` with the
-        ///            supplied index after this.
-        mutating func failConnection(_ connectionID: Connection.ID) -> (Int, FailedConnectionContext) {
+        ///            supplied index after this. If nil is returned the connection was closed by the state machine and was
+        ///            therefore already removed.
+        mutating func failConnection(_ connectionID: Connection.ID) -> (Int, FailedConnectionContext)? {
             guard let index = self.connections.firstIndex(where: { $0.connectionID == connectionID }) else {
-                preconditionFailure("We tried to fail a new connection that we know nothing about?")
+                return nil
             }
 
             let use: ConnectionUse

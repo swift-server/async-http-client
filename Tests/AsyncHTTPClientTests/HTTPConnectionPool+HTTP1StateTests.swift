@@ -290,11 +290,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         var queuer = MockRequestQueuer()
         for _ in 0..<100 {
             let eventLoop = elg.next()
-
-            // in 10% of the cases, we require an explicit EventLoop.
-//            let elRequired = (0..<10).randomElement().flatMap { $0 == 0 ? true : false }!
-            let elRequired = false
-            let mockRequest = MockHTTPRequest(eventLoop: eventLoop, requiresEventLoopForChannel: elRequired)
+            let mockRequest = MockHTTPRequest(eventLoop: eventLoop, requiresEventLoopForChannel: false)
             let request = HTTPConnectionPool.Request(mockRequest)
             let action = state.executeRequest(request)
 
@@ -345,26 +341,45 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             // Every iteration we start with eight parked connections
             XCTAssertEqual(connections.parked, 8)
 
-            var eventLoop: EventLoop = elg.next()
+            var reqEventLoop: EventLoop = elg.next()
             for _ in 0..<((0..<63).randomElement()!) {
                 // pick a random eventLoop for the next request
-                eventLoop = elg.next()
+                reqEventLoop = elg.next()
             }
 
             // 10% of the cases enforce the eventLoop
-//            let elRequired = (0..<10).randomElement().flatMap { $0 == 0 ? true : false }!
-            let elRequired = false
-            let mockRequest = MockHTTPRequest(eventLoop: eventLoop, requiresEventLoopForChannel: elRequired)
+            let elRequired = (0..<10).randomElement().flatMap { $0 == 0 ? true : false }!
+            let mockRequest = MockHTTPRequest(eventLoop: reqEventLoop, requiresEventLoopForChannel: elRequired)
             let request = HTTPConnectionPool.Request(mockRequest)
 
             let action = state.executeRequest(request)
 
-            guard let expectedConnection = connections.newestParkedConnection(for: eventLoop) ?? connections.newestParkedConnection else {
-                return XCTFail("Expected to have connections available")
-            }
-
             switch action.connection {
+            case .createConnection(let connectionID, on: let connEventLoop):
+                XCTAssertTrue(elRequired)
+                XCTAssertNil(connections.newestParkedConnection(for: reqEventLoop))
+                XCTAssert(connEventLoop === reqEventLoop)
+                XCTAssertEqual(action.request, .scheduleRequestTimeout(for: request, on: reqEventLoop))
+
+                let connection: HTTPConnectionPool.Connection = .__testOnly_connection(id: connectionID, eventLoop: connEventLoop)
+                let createdAction = state.newHTTP1ConnectionCreated(connection)
+                XCTAssertEqual(createdAction.request, .executeRequest(request, connection, cancelTimeout: true))
+                XCTAssertEqual(createdAction.connection, .none)
+
+                let doneAction = state.http1ConnectionReleased(connectionID)
+                XCTAssertEqual(doneAction.request, .none)
+                XCTAssertEqual(doneAction.connection, .closeConnection(connection, isShutdown: .no))
+                XCTAssertEqual(state.connectionClosed(connectionID), .none)
+
             case .cancelTimeoutTimer(let connectionID):
+                guard let expectedConnection = connections.newestParkedConnection(for: reqEventLoop) ?? connections.newestParkedConnection else {
+                    return XCTFail("Expected to have connections available")
+                }
+
+                if elRequired {
+                    XCTAssert(expectedConnection.eventLoop === reqEventLoop)
+                }
+
                 XCTAssertEqual(connectionID, expectedConnection.id, "Request is scheduled on the connection we expected")
                 XCTAssertNoThrow(try connections.activateConnection(connectionID))
 
@@ -469,10 +484,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         for _ in 0..<100 {
             let eventLoop = elg.next()
 
-            // in 10% of the cases, we require an explicit EventLoop.
-//            let elRequired = (0..<10).randomElement().flatMap { $0 == 0 ? true : false }!
-            let elRequired = false
-            let mockRequest = MockHTTPRequest(eventLoop: eventLoop, requiresEventLoopForChannel: elRequired)
+            let mockRequest = MockHTTPRequest(eventLoop: eventLoop, requiresEventLoopForChannel: false)
             let request = HTTPConnectionPool.Request(mockRequest)
             let action = state.executeRequest(request)
 

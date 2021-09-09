@@ -60,11 +60,11 @@ extension HTTPConnectionPool {
             case none
         }
 
-        enum HTTPTypeStateMachine {
+        enum HTTPVersionState {
             case http1(HTTP1StateMachine)
         }
 
-        var state: HTTPTypeStateMachine
+        var state: HTTPVersionState
         var isShuttingDown: Bool = false
 
         let eventLoopGroup: EventLoopGroup
@@ -176,9 +176,7 @@ extension HTTPConnectionPool {
         }
 
         mutating func shutdown() -> Action {
-            guard !self.isShuttingDown else {
-                preconditionFailure("Shutdown must only be called once")
-            }
+            precondition(!self.isShuttingDown, "Shutdown must only be called once")
 
             self.isShuttingDown = true
 
