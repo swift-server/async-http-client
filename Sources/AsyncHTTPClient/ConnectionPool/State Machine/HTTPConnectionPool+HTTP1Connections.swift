@@ -375,6 +375,11 @@ extension HTTPConnectionPool {
             self.connections[index].lease()
         }
 
+        func parkConnection(at index: Int) -> (Connection.ID, EventLoop) {
+            precondition(self.connections[index].isIdle)
+            return (self.connections[index].connectionID, self.connections[index].eventLoop)
+        }
+
         /// A new HTTP/1.1 connection was released.
         ///
         /// This will put the position into the idle state.
@@ -446,12 +451,13 @@ extension HTTPConnectionPool {
         /// This will put the position into the closed state.
         ///
         /// - Parameter connectionID: The failed connection's id.
-        /// - Returns: An index and an IdleConnectionContext to determine the next action for the now closed connection.
+        /// - Returns: An optional index and an IdleConnectionContext to determine the next action for the closed connection.
         ///            You must call ``removeConnection(at:)`` or ``replaceConnection(at:)`` with the
-        ///            supplied index after this.
-        mutating func failConnection(_ connectionID: Connection.ID) -> (Int, FailedConnectionContext) {
+        ///            supplied index after this. If nil is returned the connection was closed by the state machine and was
+        ///            therefore already removed.
+        mutating func failConnection(_ connectionID: Connection.ID) -> (Int, FailedConnectionContext)? {
             guard let index = self.connections.firstIndex(where: { $0.connectionID == connectionID }) else {
-                preconditionFailure("We tried to fail a new connection that we know nothing about?")
+                return nil
             }
 
             let use: ConnectionUse
@@ -606,23 +612,5 @@ extension HTTPConnectionPool {
         var leased: Int = 0
         var connecting: Int = 0
         var backingOff: Int = 0
-    }
-
-    /// The pool cleanup todo list.
-    struct CleanupContext: Equatable {
-        /// the connections to close right away. These are idle.
-        var close: [Connection]
-
-        /// the connections that currently run a request that needs to be cancelled to close the connections
-        var cancel: [Connection]
-
-        /// the connections that are backing off from connection creation
-        var connectBackoff: [Connection.ID]
-
-        init(close: [Connection] = [], cancel: [Connection] = [], connectBackoff: [Connection.ID] = []) {
-            self.close = close
-            self.cancel = cancel
-            self.connectBackoff = connectBackoff
-        }
     }
 }

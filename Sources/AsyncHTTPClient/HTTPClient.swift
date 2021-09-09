@@ -925,6 +925,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case tlsHandshakeTimeout
         case serverOfferedUnsupportedApplicationProtocol(String)
         case requestStreamCancelled
+        case getConnectionFromPoolTimeout
     }
 
     private var code: Code
@@ -997,4 +998,11 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     /// The remote server responded with a status code >= 300, before the full request was sent. The request stream
     /// was therefore cancelled
     public static let requestStreamCancelled = HTTPClientError(code: .requestStreamCancelled)
+
+    /// Aquiring a HTTP connection from the connection pool timed out.
+    ///
+    /// This can have multiple reasons:
+    ///  - A connection could not be created within the timout period.
+    ///  - Tasks are not processed fast enough on the existing connections, to process all waiters in time
+    public static let getConnectionFromPoolTimeout = HTTPClientError(code: .getConnectionFromPoolTimeout)
 }

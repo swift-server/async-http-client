@@ -68,7 +68,9 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         let backoff1EL = connections.backoffNextConnectionAttempt(conn1ID)
         XCTAssert(backoff1EL === el1)
         // backoff done. 2. decide what's next
-        let (conn1FailIndex, conn1FailContext) = connections.failConnection(conn1ID)
+        guard let (conn1FailIndex, conn1FailContext) = connections.failConnection(conn1ID) else {
+            return XCTFail("Expected that the connection is remembered")
+        }
         XCTAssert(conn1FailContext.eventLoop === el1)
         XCTAssertEqual(conn1FailContext.use, .generalPurpose)
         XCTAssertEqual(conn1FailContext.connectionsStartingForUseCase, 0)
@@ -83,7 +85,9 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         XCTAssertEqual(connections.startingEventLoopConnections(on: el2), 1)
         let backoff2EL = connections.backoffNextConnectionAttempt(conn2ID)
         XCTAssert(backoff2EL === el2)
-        let (conn2FailIndex, conn2FailContext) = connections.failConnection(conn2ID)
+        guard let (conn2FailIndex, conn2FailContext) = connections.failConnection(conn2ID) else {
+            return XCTFail("Expected that the connection is remembered")
+        }
         XCTAssert(conn2FailContext.eventLoop === el2)
         XCTAssertEqual(conn2FailContext.use, .eventLoop(el2))
         XCTAssertEqual(conn2FailContext.connectionsStartingForUseCase, 0)
@@ -329,7 +333,9 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         XCTAssertEqual(connections.closeConnection(at: releaseIndex), lease)
         XCTAssertFalse(connections.isEmpty)
 
-        let (failIndex, _) = connections.failConnection(startingID)
+        guard let (failIndex, _) = connections.failConnection(startingID) else {
+            return XCTFail("Expected that the connection is remembered")
+        }
         connections.removeConnection(at: failIndex)
         XCTAssertTrue(connections.isEmpty)
     }

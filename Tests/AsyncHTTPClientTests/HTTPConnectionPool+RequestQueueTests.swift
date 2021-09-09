@@ -29,7 +29,7 @@ class HTTPConnectionPool_RequestQueueTests: XCTestCase {
         XCTAssertFalse(queue.isEmpty)
         XCTAssertFalse(queue.isEmpty(for: nil))
         XCTAssertEqual(queue.count, 1)
-        XCTAssertEqual(queue.count(for: nil), 1)
+        XCTAssertEqual(queue.generalPurposeCount, 1)
 
         let req2 = MockScheduledRequest(requiredEventLoop: nil)
         let req2ID = queue.push(.init(req2))

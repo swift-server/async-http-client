@@ -33,11 +33,12 @@ extension HTTPConnectionPool {
             self.count == 0
         }
 
-        func count(for eventLoop: EventLoop?) -> Int {
-            if let eventLoop = eventLoop {
-                return self.withEventLoopQueueIfAvailable(for: eventLoop.id) { $0.count } ?? 0
-            }
-            return self.generalPurposeQueue.count
+        var generalPurposeCount: Int {
+            self.generalPurposeQueue.count
+        }
+
+        func count(for eventLoop: EventLoop) -> Int {
+            self.withEventLoopQueueIfAvailable(for: eventLoop.id) { $0.count } ?? 0
         }
 
         func isEmpty(for eventLoop: EventLoop?) -> Bool {

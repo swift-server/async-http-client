@@ -467,6 +467,79 @@ extension MockConnectionPool {
         self.connections.removeValue(forKey: connectionID)
         return connectionID
     }
+
+    enum SetupError: Error {
+        case totalNumberOfConnectionsMustBeLowerThanIdle
+        case expectedConnectionToBeCreated
+        case expectedRequestToBeAddedToQueue
+        case expectedPreviouslyQueuedRequestToBeRunNow
+        case expectedNoConnectionAction
+        case expectedConnectionToBeParked
+    }
+
+    static func http1(
+        elg: EventLoopGroup,
+        on eventLoop: EventLoop? = nil,
+        numberOfConnections: Int,
+        maxNumberOfConnections: Int = 8
+    ) throws -> (Self, HTTPConnectionPool.StateMachine) {
+        var state = HTTPConnectionPool.StateMachine(
+            eventLoopGroup: elg,
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: maxNumberOfConnections
+        )
+        var connections = MockConnectionPool()
+        var queuer = MockRequestQueuer()
+
+        for _ in 0..<numberOfConnections {
+            let mockRequest = MockHTTPRequest(eventLoop: eventLoop ?? elg.next())
+            let request = HTTPConnectionPool.Request(mockRequest)
+            let action = state.executeRequest(request)
+
+            guard case .scheduleRequestTimeout(request, on: let waitEL) = action.request, mockRequest.eventLoop === waitEL else {
+                throw SetupError.expectedRequestToBeAddedToQueue
+            }
+
+            guard case .createConnection(let connectionID, on: let eventLoop) = action.connection else {
+                throw SetupError.expectedConnectionToBeCreated
+            }
+
+            try connections.createConnection(connectionID, on: eventLoop)
+            try queuer.queue(mockRequest, id: request.id)
+        }
+
+        while let connectionID = connections.randomStartingConnection() {
+            let newConnection = try connections.succeedConnectionCreationHTTP1(connectionID)
+            let action = state.newHTTP1ConnectionCreated(newConnection)
+
+            guard case .executeRequest(let request, newConnection, cancelTimeout: true) = action.request else {
+                throw SetupError.expectedPreviouslyQueuedRequestToBeRunNow
+            }
+
+            guard case .none = action.connection else {
+                throw SetupError.expectedNoConnectionAction
+            }
+
+            let mockRequest = try queuer.get(request.id, request: request.__testOnly_wrapped_request())
+            try connections.execute(mockRequest, on: newConnection)
+        }
+
+        while let connection = connections.randomLeasedConnection() {
+            try connections.finishExecution(connection.id)
+
+            let expected: HTTPConnectionPool.StateMachine.ConnectionAction = .scheduleTimeoutTimer(
+                connection.id,
+                on: connection.eventLoop
+            )
+            guard state.http1ConnectionReleased(connection.id) == .init(request: .none, connection: expected) else {
+                throw SetupError.expectedConnectionToBeParked
+            }
+
+            try connections.parkConnection(connection.id)
+        }
+
+        return (connections, state)
+    }
 }
 
 /// A request that can be used when testing the `HTTPConnectionPool.StateMachine`
