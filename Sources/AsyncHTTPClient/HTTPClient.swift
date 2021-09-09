@@ -829,7 +829,7 @@ public class HTTPClient {
 extension HTTPClient.Configuration {
     /// Timeout configuration.
     public struct Timeout {
-        /// Specifies connect timeout.
+        /// Specifies connect timeout. If no connect timeout is given, a default 30 seconds timeout will applied.
         public var connect: TimeAmount?
         /// Specifies read timeout.
         public var read: TimeAmount?

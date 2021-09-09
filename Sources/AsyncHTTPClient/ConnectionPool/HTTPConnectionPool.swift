@@ -21,7 +21,7 @@ protocol HTTPConnectionPoolDelegate {
     func connectionPoolDidShutdown(_ pool: HTTPConnectionPool, unclean: Bool)
 }
 
-class HTTPConnectionPool {
+final class HTTPConnectionPool {
     struct Connection: Hashable {
         typealias ID = Int
 
@@ -92,14 +92,14 @@ class HTTPConnectionPool {
 
         /// Closes the connection without cancelling running requests. Use this when you are sure, that the
         /// connection is currently idle.
-        fileprivate func close() -> EventLoopFuture<Void> {
+        fileprivate func close(promise: EventLoopPromise<Void>?) {
             switch self._ref {
             case .http1_1(let connection):
-                return connection.close()
+                return connection.close(promise: promise)
             case .http2(let connection):
-                return connection.close()
-            case .__testOnly_connection(_, let eventLoop):
-                return eventLoop.makeSucceededFuture(())
+                return connection.close(promise: promise)
+            case .__testOnly_connection:
+                promise?.succeed(())
             }
         }
 
@@ -139,18 +139,20 @@ class HTTPConnectionPool {
         }
     }
 
-    let timerLock = Lock()
+    static let fallbackConnectTimeout: TimeAmount = .seconds(30)
+
+    private let timerLock = Lock()
     private var _requestTimer = [Request.ID: Scheduled<Void>]()
     private var _idleTimer = [Connection.ID: Scheduled<Void>]()
     private var _backoffTimer = [Connection.ID: Scheduled<Void>]()
 
-    let key: ConnectionPool.Key
-    var logger: Logger
+    private let key: ConnectionPool.Key
+    private var logger: Logger
 
-    let eventLoopGroup: EventLoopGroup
-    let connectionFactory: ConnectionFactory
-    let clientConfiguration: HTTPClient.Configuration
-    let idleConnectionTimeout: TimeAmount
+    private let eventLoopGroup: EventLoopGroup
+    private let connectionFactory: ConnectionFactory
+    private let clientConfiguration: HTTPClient.Configuration
+    private let idleConnectionTimeout: TimeAmount
 
     let delegate: HTTPConnectionPoolDelegate
 
@@ -197,12 +199,14 @@ class HTTPConnectionPool {
         self.run(action: action)
     }
 
-    func run(action: StateMachine.Action) {
+    // MARK: Run actions
+
+    private func run(action: StateMachine.Action) {
         self.runConnectionAction(action.connection)
         self.runRequestAction(action.request)
     }
 
-    func runConnectionAction(_ action: StateMachine.ConnectionAction) {
+    private func runConnectionAction(_ action: StateMachine.ConnectionAction) {
         switch action {
         case .createConnection(let connectionID, let eventLoop):
             self.createConnection(connectionID, on: eventLoop)
@@ -218,7 +222,7 @@ class HTTPConnectionPool {
 
         case .closeConnection(let connection, isShutdown: let isShutdown):
             // we are not interested in the close future...
-            _ = connection.close()
+            connection.close(promise: nil)
 
             if case .yes(let unclean) = isShutdown {
                 self.delegate.connectionPoolDidShutdown(self, unclean: unclean)
@@ -226,11 +230,11 @@ class HTTPConnectionPool {
 
         case .cleanupConnections(let cleanupContext, isShutdown: let isShutdown):
             for connection in cleanupContext.close {
-                _ = connection.close()
+                connection.close(promise: nil)
             }
 
             for connection in cleanupContext.cancel {
-                _ = connection.close()
+                connection.close(promise: nil)
             }
 
             for connectionID in cleanupContext.connectBackoff {
@@ -246,7 +250,11 @@ class HTTPConnectionPool {
         }
     }
 
-    func runRequestAction(_ action: StateMachine.RequestAction) {
+    private func runRequestAction(_ action: StateMachine.RequestAction) {
+        // The order of execution fail/execute request vs cancelling the request timeout timer does
+        // not matter in the actions here. The actions don't cause any side effects that will be
+        // reported back to the state machine and are not dependent on each other.
+
         switch action {
         case .executeRequest(let request, let connection, cancelTimeout: let cancelTimeout):
             connection.executeRequest(request.req)
@@ -255,10 +263,8 @@ class HTTPConnectionPool {
             }
 
         case .executeRequestsAndCancelTimeouts(let requests, let connection):
-            for request in requests {
-                connection.executeRequest(request.req)
-                self.cancelRequestTimeout(request.id)
-            }
+            requests.forEach { connection.executeRequest($0.req) }
+            self.cancelRequestTimeouts(requests)
 
         case .failRequest(let request, let error, cancelTimeout: let cancelTimeout):
             if cancelTimeout {
@@ -267,10 +273,8 @@ class HTTPConnectionPool {
             request.req.fail(error)
 
         case .failRequestsAndCancelTimeouts(let requests, let error):
-            for request in requests {
-                self.cancelRequestTimeout(request.id)
-                request.req.fail(error)
-            }
+            requests.forEach { $0.req.fail(error) }
+            self.cancelRequestTimeouts(requests)
 
         case .scheduleRequestTimeout(let request, on: let eventLoop):
             self.scheduleRequestTimeout(request, on: eventLoop)
@@ -283,15 +287,15 @@ class HTTPConnectionPool {
         }
     }
 
-    // MARK: Run actions
-
     private func createConnection(_ connectionID: Connection.ID, on eventLoop: EventLoop) {
+        // Even though this function is called make it actually creates/establishes a connection.
+        // TBD: Should we rename it? To what?
         self.connectionFactory.makeConnection(
             for: self,
             connectionID: connectionID,
             http1ConnectionDelegate: self,
             http2ConnectionDelegate: self,
-            deadline: .now() + (self.clientConfiguration.timeout.connect ?? .seconds(30)),
+            deadline: .now() + (self.clientConfiguration.timeout.connect ?? Self.fallbackConnectTimeout),
             eventLoop: eventLoop,
             logger: self.logger
         )
@@ -303,17 +307,16 @@ class HTTPConnectionPool {
             // The timer has fired. Now we need to do a couple of things:
             //
             // 1. Remove ourselves from the timer dictionary to not leak any data. If our
-            //    waiter entry still exist, we need to tell the state machine, that we want
+            //    waiter entry still exists, we need to tell the state machine, that we want
             //    to fail the request.
-
-            let timeout = self.timerLock.withLock {
+            let timeoutFired = self.timerLock.withLock {
                 self._requestTimer.removeValue(forKey: requestID) != nil
             }
 
             // 2. If the entry did not exists anymore, we can assume that the request was
             //    scheduled on another connection. The timer still fired anyhow because of a
             //    race. In such a situation we don't need to do anything.
-            guard timeout else { return }
+            guard timeoutFired else { return }
 
             // 3. Tell the state machine about the timeout
             let action = self.stateLock.withLock {
@@ -337,6 +340,15 @@ class HTTPConnectionPool {
         }
 
         scheduled?.cancel()
+    }
+
+    private func cancelRequestTimeouts(_ requests: [Request]) {
+        let scheduled = self.timerLock.withLock {
+            requests.compactMap {
+                self._requestTimer.removeValue(forKey: $0.id)
+            }
+        }
+        scheduled.forEach { $0.cancel() }
     }
 
     private func scheduleIdleTimerForConnection(_ connectionID: Connection.ID, on eventLoop: EventLoop) {
