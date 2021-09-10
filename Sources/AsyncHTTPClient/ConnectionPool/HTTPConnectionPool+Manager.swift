@@ -21,16 +21,16 @@ extension HTTPConnectionPool {
     final class Manager {
         private typealias Key = ConnectionPool.Key
 
-        enum State {
+        private enum State {
             case active
-            case shuttingDown(promise: EventLoopPromise<Bool>, unclean: Bool)
+            case shuttingDown(promise: EventLoopPromise<Bool>?, unclean: Bool)
             case shutDown
         }
 
-        let eventLoopGroup: EventLoopGroup
-        let configuration: HTTPClient.Configuration
-        let connectionIDGenerator = Connection.ID.globalGenerator
-        let logger: Logger
+        private let eventLoopGroup: EventLoopGroup
+        private let configuration: HTTPClient.Configuration
+        private let connectionIDGenerator = Connection.ID.globalGenerator
+        private let logger: Logger
 
         private var state: State = .active
         private var _pools: [Key: HTTPConnectionPool] = [:]
@@ -44,12 +44,6 @@ extension HTTPConnectionPool {
             self.eventLoopGroup = eventLoopGroup
             self.configuration = configuration
             self.logger = logger
-        }
-
-        deinit {
-            guard case .shutDown = self.state else {
-                preconditionFailure("Manager must be shutdown before deinit")
-            }
         }
 
         func executeRequest(_ request: HTTPSchedulableRequest) {
@@ -87,10 +81,15 @@ extension HTTPConnectionPool {
             }
         }
 
-        func shutdown(on eventLoop: EventLoop) -> EventLoopFuture<Bool> {
+        /// Shutdown the connection pool manager. You **must** shutdown the pool manager, since it leak otherwise.
+        ///
+        /// - Parameter promise: An `EventLoopPromise` that is succeeded once all connections pools are shutdown.
+        /// - Returns: An EventLoopFuture that is succeeded once the pool is shutdown. The bool indicates if the
+        ///            shutdown was unclean.
+        func shutdown(promise: EventLoopPromise<Bool>?) {
             enum ShutdownAction {
-                case done(EventLoopFuture<Bool>)
-                case shutdown([Key: HTTPConnectionPool], EventLoopFuture<Bool>)
+                case done(EventLoopPromise<Bool>?)
+                case shutdown([Key: HTTPConnectionPool])
             }
 
             let action = self.lock.withLock { () -> ShutdownAction in
@@ -98,13 +97,12 @@ extension HTTPConnectionPool {
                 case .active:
                     // If there aren't any pools, we can mark the pool as shut down right away.
                     if self._pools.isEmpty {
-                        let future = eventLoop.makeSucceededFuture(true)
                         self.state = .shutDown
-                        return .done(future)
+                        return .done(promise)
                     } else {
-                        let promise = eventLoop.makePromise(of: Bool.self)
+                        // this promise will be succeeded once all connection pools are shutdown
                         self.state = .shuttingDown(promise: promise, unclean: false)
-                        return .shutdown(self._pools, promise.futureResult)
+                        return .shutdown(self._pools)
                     }
 
                 case .shuttingDown, .shutDown:
@@ -115,14 +113,13 @@ extension HTTPConnectionPool {
             // if no pools are returned, the manager is already shutdown completely. Inform the
             // delegate. This is a very clean shutdown...
             switch action {
-            case .done(let future):
-                return future
+            case .done(let promise):
+                promise?.succeed(false)
 
-            case .shutdown(let pools, let future):
+            case .shutdown(let pools):
                 pools.values.forEach { pool in
                     pool.shutdown()
                 }
-                return future
             }
         }
     }
@@ -131,7 +128,7 @@ extension HTTPConnectionPool {
 extension HTTPConnectionPool.Manager: HTTPConnectionPoolDelegate {
     func connectionPoolDidShutdown(_ pool: HTTPConnectionPool, unclean: Bool) {
         enum CloseAction {
-            case close(EventLoopPromise<Bool>, unclean: Bool)
+            case close(EventLoopPromise<Bool>?, unclean: Bool)
             case wait
         }
 
@@ -142,7 +139,7 @@ extension HTTPConnectionPool.Manager: HTTPConnectionPoolDelegate {
 
             case .shuttingDown(let promise, let soFarUnclean):
                 guard self._pools.removeValue(forKey: pool.key) === pool else {
-                    preconditionFailure("Expected that the pool was ")
+                    preconditionFailure("Expected that the pool was created by this manager and is known for this reason.")
                 }
 
                 if self._pools.isEmpty {
@@ -157,7 +154,7 @@ extension HTTPConnectionPool.Manager: HTTPConnectionPoolDelegate {
 
         switch closeAction {
         case .close(let promise, unclean: let unclean):
-            promise.succeed(unclean)
+            promise?.succeed(unclean)
         case .wait:
             break
         }

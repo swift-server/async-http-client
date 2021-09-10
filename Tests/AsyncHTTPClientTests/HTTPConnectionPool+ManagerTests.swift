@@ -37,10 +37,9 @@ class HTTPConnectionPool_ManagerTests: XCTestCase {
         )
 
         defer {
-            let eventLoop = eventLoopGroup.next()
-            let future = poolManager.shutdown(on: eventLoop)
-            XCTAssert(future.eventLoop === eventLoop)
-            XCTAssertNoThrow(try future.wait())
+            let promise = eventLoopGroup.next().makePromise(of: Bool.self)
+            poolManager.shutdown(promise: promise)
+            XCTAssertNoThrow(try promise.futureResult.wait())
         }
 
         for i in 0..<9 {
@@ -79,7 +78,9 @@ class HTTPConnectionPool_ManagerTests: XCTestCase {
         )
 
         let eventLoop = eventLoopGroup.next()
-        XCTAssertNoThrow(try poolManager.shutdown(on: eventLoop).wait())
+        let promise = eventLoop.makePromise(of: Bool.self)
+        poolManager.shutdown(promise: promise)
+        XCTAssertFalse(try promise.futureResult.wait())
     }
 
     func testExecutingARequestOnAShutdownPoolManager() {
@@ -96,7 +97,9 @@ class HTTPConnectionPool_ManagerTests: XCTestCase {
         )
 
         let eventLoop = eventLoopGroup.next()
-        XCTAssertNoThrow(try poolManager.shutdown(on: eventLoop).wait())
+        let promise = eventLoop.makePromise(of: Bool.self)
+        poolManager.shutdown(promise: promise)
+        XCTAssertFalse(try promise.futureResult.wait())
 
         var maybeRequest: HTTPClient.Request?
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
