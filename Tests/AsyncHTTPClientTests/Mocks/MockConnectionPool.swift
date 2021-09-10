@@ -16,6 +16,7 @@
 import Logging
 import NIO
 import NIOHTTP1
+import NIOSSL
 
 /// A mock connection pool (not creating any actual connections) that is used to validate
 /// connection actions returned by the `HTTPConnectionPool.StateMachine`.
@@ -575,6 +576,12 @@ class MockHTTPRequest: HTTPSchedulableRequest {
     }
 
     // MARK: HTTPSchedulableRequest
+
+    var poolKey: ConnectionPool.Key {
+        preconditionFailure("Unimplemented")
+    }
+
+    var tlsConfiguration: TLSConfiguration? { nil }
 
     func requestWasQueued(_: HTTPRequestScheduler) {
         preconditionFailure("Unimplemented")

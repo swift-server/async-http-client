@@ -17,6 +17,7 @@ import Logging
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
+import NIOSSL
 
 final class RequestBag<Delegate: HTTPClientResponseDelegate> {
     let task: HTTPClient.Task<Delegate.Response>
@@ -313,6 +314,14 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
 }
 
 extension RequestBag: HTTPSchedulableRequest {
+    var poolKey: ConnectionPool.Key {
+        ConnectionPool.Key(self.request)
+    }
+
+    var tlsConfiguration: TLSConfiguration? {
+        self.request.tlsConfiguration
+    }
+
     func requestWasQueued(_ scheduler: HTTPRequestScheduler) {
         if self.task.eventLoop.inEventLoop {
             self.requestWasQueued0(scheduler)

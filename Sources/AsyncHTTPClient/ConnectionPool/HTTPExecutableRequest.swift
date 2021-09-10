@@ -15,6 +15,7 @@
 import Logging
 import NIOCore
 import NIOHTTP1
+import NIOSSL
 
 /// # Protocol Overview
 ///
@@ -140,6 +141,16 @@ protocol HTTPRequestScheduler {
 /// queuer and executor. The client's methods will be called synchronously on an `EventLoop` by the
 /// executor. For this reason it is very important that the implementation of these functions never blocks.
 protocol HTTPSchedulableRequest: HTTPExecutableRequest {
+    /// The tasks connection pool key
+    ///
+    /// Based on this key the correct connection pool will be chosen for the request
+    var poolKey: ConnectionPool.Key { get }
+
+    /// An optional custom `TLSConfiguration`.
+    ///
+    /// If you want to override the default `TLSConfiguration` ensure that this property is non nil
+    var tlsConfiguration: TLSConfiguration? { get }
+
     /// The task's logger
     var logger: Logger { get }
 

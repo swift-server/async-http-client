@@ -144,8 +144,14 @@ final class HTTP2Connection {
         }
     }
 
+    func close(promise: EventLoopPromise<Void>?) {
+        return self.channel.close(mode: .all, promise: promise)
+    }
+
     func close() -> EventLoopFuture<Void> {
-        self.channel.close()
+        let promise = self.channel.eventLoop.makePromise(of: Void.self)
+        self.close(promise: promise)
+        return promise.futureResult
     }
 
     private func start() -> EventLoopFuture<Void> {

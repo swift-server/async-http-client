@@ -79,8 +79,14 @@ final class HTTP1Connection {
         self.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
     }
 
+    func close(promise: EventLoopPromise<Void>?) {
+        return self.channel.close(mode: .all, promise: promise)
+    }
+
     func close() -> EventLoopFuture<Void> {
-        return self.channel.close()
+        let promise = self.channel.eventLoop.makePromise(of: Void.self)
+        self.close(promise: promise)
+        return promise.futureResult
     }
 
     func taskCompleted() {
