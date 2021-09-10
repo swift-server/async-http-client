@@ -129,7 +129,7 @@ final class HTTPConnectionPool {
         }
     }
 
-    let stateLock = Lock()
+    private let stateLock = Lock()
     private var _state: StateMachine {
         didSet {
             self.logger.trace("Connection Pool State changed", metadata: [
@@ -139,7 +139,7 @@ final class HTTPConnectionPool {
         }
     }
 
-    static let fallbackConnectTimeout: TimeAmount = .seconds(30)
+    private static let fallbackConnectTimeout: TimeAmount = .seconds(30)
 
     private let timerLock = Lock()
     private var _requestTimer = [Request.ID: Scheduled<Void>]()
@@ -257,14 +257,14 @@ final class HTTPConnectionPool {
 
         switch action {
         case .executeRequest(let request, let connection, cancelTimeout: let cancelTimeout):
-            connection.executeRequest(request.req)
             if cancelTimeout {
                 self.cancelRequestTimeout(request.id)
             }
+            connection.executeRequest(request.req)
 
         case .executeRequestsAndCancelTimeouts(let requests, let connection):
-            requests.forEach { connection.executeRequest($0.req) }
             self.cancelRequestTimeouts(requests)
+            requests.forEach { connection.executeRequest($0.req) }
 
         case .failRequest(let request, let error, cancelTimeout: let cancelTimeout):
             if cancelTimeout {
@@ -273,8 +273,8 @@ final class HTTPConnectionPool {
             request.req.fail(error)
 
         case .failRequestsAndCancelTimeouts(let requests, let error):
-            requests.forEach { $0.req.fail(error) }
             self.cancelRequestTimeouts(requests)
+            requests.forEach { $0.req.fail(error) }
 
         case .scheduleRequestTimeout(let request, on: let eventLoop):
             self.scheduleRequestTimeout(request, on: eventLoop)
