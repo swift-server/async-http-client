@@ -38,6 +38,9 @@ extension HTTPConnectionPool_HTTP1StateMachineTests {
             ("testConnectionPoolFullOfParkedConnectionsIsShutdownImmediately", testConnectionPoolFullOfParkedConnectionsIsShutdownImmediately),
             ("testParkedConnectionTimesOutButIsAlsoClosedByRemote", testParkedConnectionTimesOutButIsAlsoClosedByRemote),
             ("testConnectionBackoffVsShutdownRace", testConnectionBackoffVsShutdownRace),
+            ("testRequestThatTimesOutIsFailedWithLastConnectionCreationError", testRequestThatTimesOutIsFailedWithLastConnectionCreationError),
+            ("testRequestThatTimesOutBeforeAConnectionIsEstablishedIsFailedWithConnectTimeoutError", testRequestThatTimesOutBeforeAConnectionIsEstablishedIsFailedWithConnectTimeoutError),
+            ("testRequestThatTimesOutAfterAConnectionWasEstablishedSuccessfullyTimesOutWithGenericError", testRequestThatTimesOutAfterAConnectionWasEstablishedSuccessfullyTimesOutWithGenericError),
         ]
     }
 }

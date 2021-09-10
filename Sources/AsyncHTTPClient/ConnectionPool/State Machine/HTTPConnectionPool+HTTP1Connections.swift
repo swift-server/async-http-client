@@ -257,6 +257,11 @@ extension HTTPConnectionPool {
             return connecting
         }
 
+        /// Is there at least one connection that is able to run requests
+        var hasActiveConnections: Bool {
+            self.connections.contains(where: { $0.isIdle || $0.isLeased })
+        }
+
         func startingEventLoopConnections(on eventLoop: EventLoop) -> Int {
             return self.connections[self.overflowIndex..<self.connections.endIndex].reduce(into: 0) { count, connection in
                 guard connection.eventLoop === eventLoop else { return }

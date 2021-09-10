@@ -229,7 +229,7 @@ class HTTPConnectionPoolTests: XCTestCase {
 
         pool.executeRequest(requestBag)
         XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
-            XCTAssertEqual($0 as? HTTPClientError, .getConnectionFromPoolTimeout)
+            XCTAssertEqual($0 as? HTTPClientError, .proxyAuthenticationRequired)
         }
         XCTAssertGreaterThanOrEqual(httpBin.createdConnections, 8)
         XCTAssertEqual(httpBin.activeConnections, 0)

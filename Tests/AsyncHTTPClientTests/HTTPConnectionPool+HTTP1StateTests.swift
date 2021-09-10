@@ -153,7 +153,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             return XCTFail("Unexpected request action: \(action.request)")
         }
         XCTAssert(requestToFail.__testOnly_wrapped_request() === mockRequest) // XCTAssertIdentical not available on Linux
-        XCTAssertEqual(requestError as? HTTPClientError, .getConnectionFromPoolTimeout)
+        XCTAssertEqual(requestError as? HTTPClientError, .connectTimeout)
         XCTAssertEqual(failRequest.connection, .none)
 
         // 4. retry connection, but no more queued requests.
@@ -625,5 +625,111 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         XCTAssertEqual(shutdownAction.request, .failRequestsAndCancelTimeouts([request], HTTPClientError.cancelled))
 
         XCTAssertEqual(state.connectionCreationBackoffDone(connectionID), .none)
+    }
+
+    func testRequestThatTimesOutIsFailedWithLastConnectionCreationError() {
+        let elg = EmbeddedEventLoopGroup(loops: 1)
+        defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
+
+        var state = HTTPConnectionPool.StateMachine(
+            eventLoopGroup: elg,
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 6
+        )
+
+        let mockRequest = MockHTTPRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
+        let request = HTTPConnectionPool.Request(mockRequest)
+
+        let executeAction = state.executeRequest(request)
+        guard case .createConnection(let connectionID, on: let connEL) = executeAction.connection else {
+            return XCTFail("Expected to create a connection")
+        }
+
+        XCTAssertEqual(executeAction.request, .scheduleRequestTimeout(for: request, on: mockRequest.eventLoop))
+
+        let failAction = state.failedToCreateNewConnection(HTTPClientError.httpProxyHandshakeTimeout, connectionID: connectionID)
+        guard case .scheduleBackoffTimer(connectionID, backoff: _, on: let timerEL) = failAction.connection else {
+            return XCTFail("Expected to create a backoff timer")
+        }
+        XCTAssert(timerEL === connEL)
+        XCTAssertEqual(failAction.request, .none)
+
+        let timeoutAction = state.timeoutRequest(request.id)
+        XCTAssertEqual(timeoutAction.request, .failRequest(request, HTTPClientError.httpProxyHandshakeTimeout, cancelTimeout: false))
+        XCTAssertEqual(timeoutAction.connection, .none)
+    }
+
+    func testRequestThatTimesOutBeforeAConnectionIsEstablishedIsFailedWithConnectTimeoutError() {
+        let eventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try eventLoop.syncShutdownGracefully()) }
+
+        var state = HTTPConnectionPool.StateMachine(
+            eventLoopGroup: eventLoop,
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 6
+        )
+
+        let mockRequest = MockHTTPRequest(eventLoop: eventLoop.next(), requiresEventLoopForChannel: false)
+        let request = HTTPConnectionPool.Request(mockRequest)
+
+        let executeAction = state.executeRequest(request)
+        guard case .createConnection(_, on: _) = executeAction.connection else {
+            return XCTFail("Expected to create a connection")
+        }
+        XCTAssertEqual(executeAction.request, .scheduleRequestTimeout(for: request, on: mockRequest.eventLoop))
+
+        let timeoutAction = state.timeoutRequest(request.id)
+        XCTAssertEqual(timeoutAction.request, .failRequest(request, HTTPClientError.connectTimeout, cancelTimeout: false))
+        XCTAssertEqual(timeoutAction.connection, .none)
+    }
+
+    func testRequestThatTimesOutAfterAConnectionWasEstablishedSuccessfullyTimesOutWithGenericError() {
+        let elg = EmbeddedEventLoopGroup(loops: 1)
+        defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
+
+        var state = HTTPConnectionPool.StateMachine(
+            eventLoopGroup: elg,
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 6
+        )
+
+        let mockRequest1 = MockHTTPRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
+        let request1 = HTTPConnectionPool.Request(mockRequest1)
+
+        let executeAction1 = state.executeRequest(request1)
+        guard case .createConnection(let connectionID1, on: let connEL1) = executeAction1.connection else {
+            return XCTFail("Expected to create a connection")
+        }
+        XCTAssert(mockRequest1.eventLoop === connEL1)
+
+        XCTAssertEqual(executeAction1.request, .scheduleRequestTimeout(for: request1, on: mockRequest1.eventLoop))
+
+        let mockRequest2 = MockHTTPRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
+        let request2 = HTTPConnectionPool.Request(mockRequest2)
+
+        let executeAction2 = state.executeRequest(request2)
+        guard case .createConnection(let connectionID2, on: let connEL2) = executeAction2.connection else {
+            return XCTFail("Expected to create a connection")
+        }
+        XCTAssert(mockRequest2.eventLoop === connEL2)
+
+        XCTAssertEqual(executeAction2.request, .scheduleRequestTimeout(for: request2, on: connEL1))
+
+        let failAction = state.failedToCreateNewConnection(HTTPClientError.httpProxyHandshakeTimeout, connectionID: connectionID1)
+        guard case .scheduleBackoffTimer(connectionID1, backoff: _, on: let timerEL) = failAction.connection else {
+            return XCTFail("Expected to create a backoff timer")
+        }
+        XCTAssert(timerEL === connEL2)
+        XCTAssertEqual(failAction.request, .none)
+
+        let conn2 = HTTPConnectionPool.Connection.__testOnly_connection(id: connectionID2, eventLoop: connEL2)
+        let createdAction = state.newHTTP1ConnectionCreated(conn2)
+
+        XCTAssertEqual(createdAction.request, .executeRequest(request1, conn2, cancelTimeout: true))
+        XCTAssertEqual(createdAction.connection, .none)
+
+        let timeoutAction = state.timeoutRequest(request2.id)
+        XCTAssertEqual(timeoutAction.request, .failRequest(request2, HTTPClientError.getConnectionFromPoolTimeout, cancelTimeout: false))
+        XCTAssertEqual(timeoutAction.connection, .none)
     }
 }

@@ -26,6 +26,8 @@ extension HTTPConnectionPool {
 
         private var connections: HTTP1Connections
         private var failedConsecutiveConnectionAttempts: Int = 0
+        /// the error from the last connection creation
+        private var lastConnectFailure: Error?
 
         private var requests: RequestQueue
         private var state: State = .running
@@ -136,12 +138,14 @@ extension HTTPConnectionPool {
 
         mutating func newHTTP1ConnectionEstablished(_ connection: Connection) -> Action {
             self.failedConsecutiveConnectionAttempts = 0
+            self.lastConnectFailure = nil
             let (index, context) = self.connections.newHTTP1ConnectionEstablished(connection)
             return self.nextActionForIdleConnection(at: index, context: context)
         }
 
         mutating func failedToCreateNewConnection(_ error: Error, connectionID: Connection.ID) -> Action {
             self.failedConsecutiveConnectionAttempts += 1
+            self.lastConnectFailure = error
 
             switch self.state {
             case .running:
@@ -223,8 +227,14 @@ extension HTTPConnectionPool {
         mutating func timeoutRequest(_ requestID: Request.ID) -> Action {
             // 1. check requests in queue
             if let request = self.requests.remove(requestID) {
+                var error: Error = HTTPClientError.getConnectionFromPoolTimeout
+                if let lastError = self.lastConnectFailure {
+                    error = lastError
+                } else if !self.connections.hasActiveConnections {
+                    error = HTTPClientError.connectTimeout
+                }
                 return .init(
-                    request: .failRequest(request, HTTPClientError.getConnectionFromPoolTimeout, cancelTimeout: false),
+                    request: .failRequest(request, error, cancelTimeout: false),
                     connection: .none
                 )
             }
