@@ -30,6 +30,8 @@ extension HTTP1ConnectionTests {
             ("testCreateNewConnectionFailureClosedIO", testCreateNewConnectionFailureClosedIO),
             ("testGETRequest", testGETRequest),
             ("testConnectionClosesOnCloseHeader", testConnectionClosesOnCloseHeader),
+            ("testConnectionClosesOnRandomlyAppearingCloseHeader", testConnectionClosesOnRandomlyAppearingCloseHeader),
+            ("testConnectionClosesAfterTheRequestWithoutHavingSentAnCloseHeader", testConnectionClosesAfterTheRequestWithoutHavingSentAnCloseHeader),
         ]
     }
 }

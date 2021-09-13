@@ -465,18 +465,3 @@ class ReadEventHitHandler: ChannelOutboundHandler {
         context.read()
     }
 }
-
-class MockConnectionDelegate: HTTP1ConnectionDelegate {
-    private(set) var hitConnectionReleased = 0
-    private(set) var hitConnectionClosed = 0
-
-    init() {}
-
-    func http1ConnectionReleased(_: HTTP1Connection) {
-        self.hitConnectionReleased += 1
-    }
-
-    func http1ConnectionClosed(_: HTTP1Connection) {
-        self.hitConnectionClosed += 1
-    }
-}
