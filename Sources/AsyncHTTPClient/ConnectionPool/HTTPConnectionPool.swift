@@ -235,7 +235,7 @@ final class HTTPConnectionPool {
             }
 
             for connection in cleanupContext.cancel {
-                connection.close(promise: nil)
+                connection.shutdown()
             }
 
             for connectionID in cleanupContext.connectBackoff {
