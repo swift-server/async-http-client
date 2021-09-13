@@ -294,7 +294,7 @@ class HTTPConnectionPoolTests: XCTestCase {
         let eventLoop = eventLoopGroup.next()
         defer { XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully()) }
 
-        let request = try! HTTPClient.Request(url: "http://localhost:9000")
+        let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)")
         let poolDelegate = TestDelegate(eventLoop: eventLoop)
 
         let pool = HTTPConnectionPool(
@@ -318,7 +318,7 @@ class HTTPConnectionPoolTests: XCTestCase {
 
         var maybeRequest: HTTPClient.Request?
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
-        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://localhost:\(httpBin.port)"))
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)"))
         XCTAssertNoThrow(maybeRequestBag = try RequestBag(
             request: XCTUnwrap(maybeRequest),
             eventLoopPreference: .indifferent,
@@ -332,13 +332,63 @@ class HTTPConnectionPoolTests: XCTestCase {
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to get a request") }
 
         pool.executeRequest(requestBag)
-        XCTAssertNoThrow(try eventLoop.scheduleTask(in: .milliseconds(100)) {}.futureResult.wait())
+        XCTAssertNoThrow(try eventLoop.scheduleTask(in: .seconds(1)) {}.futureResult.wait())
         requestBag.cancel()
 
         XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .cancelled)
         }
+        XCTAssertGreaterThanOrEqual(httpBin.createdConnections, 3)
+    }
+
+    func testConnectionShutdownIsCalledOnActiveConnections() {
+        let httpBin = HTTPBin()
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        let eventLoop = eventLoopGroup.next()
+        defer { XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully()) }
+
+        let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)")
+        let poolDelegate = TestDelegate(eventLoop: eventLoop)
+
+        let pool = HTTPConnectionPool(
+            eventLoopGroup: eventLoopGroup,
+            sslContextCache: .init(),
+            tlsConfiguration: .none,
+            clientConfiguration: .init(),
+            key: .init(request),
+            delegate: poolDelegate,
+            idGenerator: .init(),
+            backgroundActivityLogger: .init(label: "test")
+        )
+
+        var maybeRequest: HTTPClient.Request?
+        var maybeRequestBag: RequestBag<ResponseAccumulator>?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/wait"))
+        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+            request: XCTUnwrap(maybeRequest),
+            eventLoopPreference: .indifferent,
+            task: .init(eventLoop: eventLoopGroup.next(), logger: .init(label: "test")),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(5),
+            idleReadTimeout: nil,
+            delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
+        ))
+
+        guard let requestBag = maybeRequestBag else { return XCTFail("Expected to get a request") }
+
+        pool.executeRequest(requestBag)
+        XCTAssertNoThrow(try eventLoop.scheduleTask(in: .milliseconds(500)) {}.futureResult.wait())
+        pool.shutdown()
+
+        XCTAssertNoThrow(try poolDelegate.future.wait())
+
+        XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .cancelled)
+        }
+
         XCTAssertGreaterThanOrEqual(httpBin.createdConnections, 1)
+        XCTAssertGreaterThanOrEqual(httpBin.activeConnections, 0)
     }
 }
 
