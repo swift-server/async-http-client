@@ -556,15 +556,13 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(0, progress.receivedBytes)
     }
 
-    func testRemoteClose() throws {
-        XCTAssertThrowsError(try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "close").wait(), "Should fail") { error in
-            guard case let error = error as? HTTPClientError, error == .remoteConnectionClosed else {
-                return XCTFail("Should fail with remoteConnectionClosed")
-            }
+    func testRemoteClose() {
+        XCTAssertThrowsError(try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "close").wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .remoteConnectionClosed)
         }
     }
 
-    func testReadTimeout() throws {
+    func testReadTimeout() {
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: HTTPClient.Configuration(timeout: HTTPClient.Configuration.Timeout(read: .milliseconds(150))))
 
@@ -572,14 +570,12 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try localClient.syncShutdown())
         }
 
-        XCTAssertThrowsError(try localClient.get(url: self.defaultHTTPBinURLPrefix + "wait").wait(), "Should fail") { error in
-            guard case let error = error as? HTTPClientError, error == .readTimeout else {
-                return XCTFail("Should fail with readTimeout")
-            }
+        XCTAssertThrowsError(try localClient.get(url: self.defaultHTTPBinURLPrefix + "wait").wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .readTimeout)
         }
     }
 
-    func testConnectTimeout() throws {
+    func testConnectTimeout() {
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: .init(timeout: .init(connect: .milliseconds(100), read: .milliseconds(150))))
 
@@ -588,16 +584,14 @@ class HTTPClientTests: XCTestCase {
         }
 
         // This must throw as 198.51.100.254 is reserved for documentation only
-        XCTAssertThrowsError(try httpClient.get(url: "http://198.51.100.254:65535/get").wait()) {
+        XCTAssertThrowsError(try httpClient.get(url: "http://198.51.100.254/get").wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
         }
     }
 
-    func testDeadline() throws {
-        XCTAssertThrowsError(try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "wait", deadline: .now() + .milliseconds(150)).wait(), "Should fail") { error in
-            guard case let error = error as? HTTPClientError, error == .readTimeout else {
-                return XCTFail("Should fail with readTimeout")
-            }
+    func testDeadline() {
+        XCTAssertThrowsError(try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "wait", deadline: .now() + .milliseconds(150)).wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .readTimeout)
         }
     }
 
