@@ -968,11 +968,8 @@ class HTTPClientTests: XCTestCase {
         request.body = .byteBuffer(ByteBuffer(bytes: [120, 156, 75, 76, 28, 5, 200, 0, 0, 248, 66, 103, 17]))
         request.headers.add(name: "Accept-Encoding", value: "deflate")
 
-        XCTAssertThrowsError(try localClient.execute(request: request).wait()) { error in
-            guard case .some(.limit) = error as? NIOHTTPDecompression.DecompressionError else {
-                XCTFail("wrong error: \(error)")
-                return
-            }
+        XCTAssertThrowsError(try localClient.execute(request: request).wait()) {
+            XCTAssertEqual($0 as? NIOHTTPDecompression.DecompressionError, .limit)
         }
     }
 
@@ -2644,19 +2641,45 @@ class HTTPClientTests: XCTestCase {
         }
 
         let tooLong = "XBAD BAD BAD NOT HTTP/1.1\r\n\r\n"
-        let future = self.defaultClient.execute(
-            request: try Request(url: "http://localhost:\(server.serverPort)",
-                                 body: .stream(length: 1) { streamWriter in
-                                     streamWriter.write(.byteBuffer(ByteBuffer(string: tooLong)))
-                                 }))
 
-        XCTAssertNoThrow(try server.readInbound()) // .head
-        // this should fail if client detects that we are about to send more bytes than body limit and closes the connection
-        // We can test that this test actually fails if we remove limit check in `writeBodyPart` - it will send bytes, meaning that the next
-        // call will not throw, but the future will still throw body mismatch error
-        XCTAssertThrowsError(try server.readInbound()) { error in XCTAssertEqual(error as? HTTPParserError, HTTPParserError.invalidEOFState) }
+        let request = try Request(
+            url: "http://localhost:\(server.serverPort)",
+            body: .stream(length: 1) { streamWriter in
+                streamWriter.write(.byteBuffer(ByteBuffer(string: tooLong)))
+            }
+        )
 
-        XCTAssertThrowsError(try future.wait())
+        let future = self.defaultClient.execute(request: request)
+
+        // Okay, what happens here needs an explanation:
+        //
+        // In the request state machine, we should start the request, which will lead to an
+        // invocation of `context.write(HTTPRequestHead)`. Since we will receive a streamed request
+        // body a `context.flush()` will be issued. Further the request stream will be started.
+        // Since the request stream immediately produces to much data, the request will be failed
+        // and the connection will be closed.
+        //
+        // Even though a flush was issued after the request head, there is no guarantee that the
+        // request head was written to the network. For this reason we must accept not receiving a
+        // request and receiving a request head.
+
+        do {
+            _ = try server.receiveHead()
+
+            // A request head was sent. We expect the request now to fail with a parsing error,
+            // since the client ended the connection to early (from the server's point of view.)
+            XCTAssertThrowsError(try server.readInbound()) {
+                XCTAssertEqual($0 as? HTTPParserError, HTTPParserError.invalidEOFState)
+            }
+        } catch {
+            // TBD: We sadly can't verify the error type, since it is private in `NIOTestUtils`:
+            //      NIOTestUtils.BlockingQueue<Element>.TimeoutError
+        }
+
+        // request must always be failed with this error
+        XCTAssertThrowsError(try future.wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .bodyLengthMismatch)
+        }
     }
 
     func testDoubleError() throws {
