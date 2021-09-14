@@ -117,10 +117,10 @@ struct HTTP1ConnectionStateMachine {
             self.state = .closed
             return .fireChannelError(error, closeConnection: false)
 
-        case .inRequest(var requestStateMachine, close: _):
+        case .inRequest(var requestStateMachine, close: let close):
             return self.avoidingStateMachineCoW { state -> Action in
                 let action = requestStateMachine.errorHappened(error)
-                state = .closed
+                state = .inRequest(requestStateMachine, close: close)
                 return state.modify(with: action)
             }
 
