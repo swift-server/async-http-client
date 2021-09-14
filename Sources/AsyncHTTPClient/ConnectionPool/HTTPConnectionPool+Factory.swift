@@ -65,7 +65,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         logger: Logger
     ) {
         var logger = logger
-        logger[metadataKey: "ahc-connection"] = "\(connectionID)"
+        logger[metadataKey: "ahc-connection-id"] = "\(connectionID)"
 
         self.makeChannel(connectionID: connectionID, deadline: deadline, eventLoop: eventLoop, logger: logger).whenComplete { result in
             switch result {

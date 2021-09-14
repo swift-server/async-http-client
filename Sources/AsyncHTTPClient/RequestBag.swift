@@ -73,6 +73,8 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
     }
 
     private func requestWasQueued0(_ scheduler: HTTPRequestScheduler) {
+        self.logger.debug("Request was queued (waiting for a connection to become available)")
+
         self.task.eventLoop.assertInEventLoop()
         self.state.requestWasQueued(scheduler)
     }

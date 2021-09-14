@@ -130,14 +130,7 @@ final class HTTPConnectionPool {
     }
 
     private let stateLock = Lock()
-    private var _state: StateMachine {
-        didSet {
-            self.logger.trace("Connection Pool State changed", metadata: [
-                "key": "\(self.key)",
-                "state": "\(self._state)",
-            ])
-        }
-    }
+    private var _state: StateMachine
 
     private static let fallbackConnectTimeout: TimeAmount = .seconds(30)
 
@@ -175,6 +168,8 @@ final class HTTPConnectionPool {
         self.clientConfiguration = clientConfiguration
         self.key = key
         self.delegate = delegate
+        var logger = logger
+        logger[metadataKey: "ahc-pool-key"] = "\(key)"
         self.logger = logger
 
         self.idleConnectionTimeout = clientConfiguration.connectionPool.idleTimeout
@@ -222,7 +217,11 @@ final class HTTPConnectionPool {
             self.cancelIdleTimerForConnection(connectionID)
 
         case .closeConnection(let connection, isShutdown: let isShutdown):
-            // we are not interested in the close future...
+            self.logger.trace("close connection", metadata: [
+                "ahc-connection-id": "\(connection.id)",
+            ])
+
+            // we are not interested in the close promise...
             connection.close(promise: nil)
 
             if case .yes(let unclean) = isShutdown {
@@ -289,6 +288,9 @@ final class HTTPConnectionPool {
     }
 
     private func createConnection(_ connectionID: Connection.ID, on eventLoop: EventLoop) {
+        self.logger.trace("Opening fresh connection", metadata: [
+            "ahc-connection-id": "\(connectionID)",
+        ])
         // Even though this function is called make it actually creates/establishes a connection.
         // TBD: Should we rename it? To what?
         self.connectionFactory.makeConnection(
@@ -353,6 +355,9 @@ final class HTTPConnectionPool {
     }
 
     private func scheduleIdleTimerForConnection(_ connectionID: Connection.ID, on eventLoop: EventLoop) {
+        self.logger.trace("Schedule idle connection timeout timer", metadata: [
+            "ahc-connection-id": "\(connectionID)",
+        ])
         let scheduled = eventLoop.scheduleTask(in: self.idleConnectionTimeout) {
             // there might be a race between a cancelTimer call and the triggering
             // of this scheduled task. both want to acquire the lock
@@ -375,6 +380,10 @@ final class HTTPConnectionPool {
     }
 
     private func cancelIdleTimerForConnection(_ connectionID: Connection.ID) {
+        self.logger.trace("Cancel idle connection timeout timer", metadata: [
+            "ahc-connection-id": "\(connectionID)",
+        ])
+
         let cancelTimer = self.timerLock.withLock {
             self._idleTimer.removeValue(forKey: connectionID)
         }
@@ -387,6 +396,10 @@ final class HTTPConnectionPool {
         _ timeAmount: TimeAmount,
         on eventLoop: EventLoop
     ) {
+        self.logger.trace("Schedule connection creation backoff timer", metadata: [
+            "ahc-connection-id": "\(connectionID)",
+        ])
+
         let scheduled = eventLoop.scheduleTask(in: timeAmount) {
             // there might be a race between a backoffTimer and the pool shutting down.
             let timerExisted = self.timerLock.withLock {
@@ -420,6 +433,10 @@ final class HTTPConnectionPool {
 
 extension HTTPConnectionPool: HTTPConnectionRequester {
     func http1ConnectionCreated(_ connection: HTTP1Connection) {
+        self.logger.trace("successfully created connection", metadata: [
+            "ahc-connection-id": "\(connection.id)",
+            "ahc-http-version": "http/1.1",
+        ])
         let action = self.stateLock.withLock {
             self._state.newHTTP1ConnectionCreated(.http1_1(connection))
         }
@@ -442,6 +459,10 @@ extension HTTPConnectionPool: HTTPConnectionRequester {
     }
 
     func failedToCreateHTTPConnection(_ connectionID: HTTPConnectionPool.Connection.ID, error: Error) {
+        self.logger.debug("connection attempt failed", metadata: [
+            "ahc-error": "\(error)",
+            "ahc-connection-id": "\(connectionID)",
+        ])
         let action = self.stateLock.withLock {
             self._state.failedToCreateNewConnection(error, connectionID: connectionID)
         }
@@ -451,6 +472,10 @@ extension HTTPConnectionPool: HTTPConnectionRequester {
 
 extension HTTPConnectionPool: HTTP1ConnectionDelegate {
     func http1ConnectionClosed(_ connection: HTTP1Connection) {
+        self.logger.debug("connection closed", metadata: [
+            "ahc-connection-id": "\(connection.id)",
+            "ahc-http-version": "http/1.1",
+        ])
         let action = self.stateLock.withLock {
             self._state.connectionClosed(connection.id)
         }
@@ -458,6 +483,10 @@ extension HTTPConnectionPool: HTTP1ConnectionDelegate {
     }
 
     func http1ConnectionReleased(_ connection: HTTP1Connection) {
+        self.logger.trace("releasing connection", metadata: [
+            "ahc-connection-id": "\(connection.id)",
+            "ahc-http-version": "http/1.1",
+        ])
         let action = self.stateLock.withLock {
             self._state.http1ConnectionReleased(connection.id)
         }
