@@ -37,6 +37,7 @@ extension HTTP1ConnectionStateMachineTests {
             ("testReadsAreForwardedIfConnectionIsClosing", testReadsAreForwardedIfConnectionIsClosing),
             ("testChannelReadsAreIgnoredIfConnectionIsClosing", testChannelReadsAreIgnoredIfConnectionIsClosing),
             ("testRequestIsCancelledWhileWaitingForWritable", testRequestIsCancelledWhileWaitingForWritable),
+            ("testConnectionIsClosedIfErrorHappensWhileInRequest", testConnectionIsClosedIfErrorHappensWhileInRequest),
         ]
     }
 }

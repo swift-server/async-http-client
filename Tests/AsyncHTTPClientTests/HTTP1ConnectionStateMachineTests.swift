@@ -15,6 +15,7 @@
 @testable import AsyncHTTPClient
 import NIOCore
 import NIOHTTP1
+import NIOHTTPCompression
 import XCTest
 
 class HTTP1ConnectionStateMachineTests: XCTestCase {
@@ -22,7 +23,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         var state = HTTP1ConnectionStateMachine()
         XCTAssertEqual(state.channelActive(isWritable: false), .fireChannelActive)
 
-        let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "4")]))
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: ["content-length": "4"])
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(4))
         XCTAssertEqual(state.runNewRequest(head: requestHead, metadata: metadata), .wait)
         XCTAssertEqual(state.writabilityChanged(writable: true), .sendRequestHead(requestHead, startBody: true))
@@ -64,7 +65,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
         XCTAssertEqual(state.runNewRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
 
-        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: HTTPHeaders([("content-length", "12")]))
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["content-length": "12"])
         XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
         let part0 = ByteBuffer(bytes: 0...3)
         let part1 = ByteBuffer(bytes: 4...7)
@@ -141,7 +142,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         var state = HTTP1ConnectionStateMachine()
         XCTAssertEqual(state.channelActive(isWritable: false), .fireChannelActive)
 
-        let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "4")]))
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: ["content-length": "4"])
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(4))
         XCTAssertEqual(state.runNewRequest(head: requestHead, metadata: metadata), .wait)
         XCTAssertEqual(state.writabilityChanged(writable: true), .sendRequestHead(requestHead, startBody: true))
@@ -185,10 +186,24 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
     func testRequestIsCancelledWhileWaitingForWritable() {
         var state = HTTP1ConnectionStateMachine()
         XCTAssertEqual(state.channelActive(isWritable: false), .fireChannelActive)
-        let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "4")]))
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: ["content-length": "4"])
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(4))
         XCTAssertEqual(state.runNewRequest(head: requestHead, metadata: metadata), .wait)
         XCTAssertEqual(state.requestCancelled(closeConnection: false), .failRequest(HTTPClientError.cancelled, .informConnectionIsIdle))
+    }
+
+    func testConnectionIsClosedIfErrorHappensWhileInRequest() {
+        var state = HTTP1ConnectionStateMachine()
+        XCTAssertEqual(state.channelActive(isWritable: true), .fireChannelActive)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        XCTAssertEqual(state.runNewRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
+        XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
+        XCTAssertEqual(state.channelRead(.body(ByteBuffer(string: "Hello world!\n"))), .wait)
+        XCTAssertEqual(state.channelRead(.body(ByteBuffer(string: "Foo Bar!\n"))), .wait)
+        let decompressionError = NIOHTTPDecompression.DecompressionError.limit
+        XCTAssertEqual(state.errorHappened(decompressionError), .failRequest(decompressionError, .close))
     }
 }
 
