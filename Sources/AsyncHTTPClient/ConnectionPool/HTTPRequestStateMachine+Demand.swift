@@ -50,14 +50,32 @@ extension HTTPRequestStateMachine {
                 self.state = .modifying
                 buffer.append(body)
                 self.state = .waitingForBytes(buffer)
-
-            case .waitingForRead,
-                 .waitingForDemand,
-                 .waitingForReadOrDemand:
-                preconditionFailure("How can we receive a body part, after a channelReadComplete, but no read has been forwarded yet. Invalid state: \(self.state)")
-
+                
             case .modifying:
                 preconditionFailure("Invalid state: \(self.state)")
+
+            // For all the following cases, please note:
+            // Normally these code paths should never be hit. However there is one way to trigger
+            // this:
+            //
+            // If the server decides to close a connection, NIO will forward all outstanding
+            // `channelRead`s without waiting for a next `context.read` call. For this reason we
+            // might receive further bytes, when we don't expect them here.
+
+            case .waitingForRead(var buffer):
+                self.state = .modifying
+                buffer.append(body)
+                self.state = .waitingForRead(buffer)
+
+            case .waitingForDemand(var buffer):
+                self.state = .modifying
+                buffer.append(body)
+                self.state = .waitingForDemand(buffer)
+
+            case .waitingForReadOrDemand(var buffer):
+                self.state = .modifying
+                buffer.append(body)
+                self.state = .waitingForReadOrDemand(buffer)
             }
         }
 
@@ -134,15 +152,26 @@ extension HTTPRequestStateMachine {
             }
         }
 
-        mutating func end() -> CircularBuffer<ByteBuffer> {
+        enum ConnectionAction {
+            case none
+            case close
+        }
+
+        mutating func end() -> (CircularBuffer<ByteBuffer>, ConnectionAction) {
             switch self.state {
             case .waitingForBytes(let buffer):
-                return buffer
+                return (buffer, .none)
 
-            case .waitingForReadOrDemand,
-                 .waitingForRead,
-                 .waitingForDemand:
-                preconditionFailure("How can we receive a body end, after a channelReadComplete, but no read has been forwarded yet. Invalid state: \(self.state)")
+            case .waitingForReadOrDemand(let buffer),
+                 .waitingForRead(let buffer),
+                 .waitingForDemand(let buffer):
+                // Normally this code path should never be hit. However there is one way to trigger
+                // this:
+                //
+                // If the server decides to close a connection, NIO will forward all outstanding
+                // `channelRead`s without waiting for a next `context.read` call. For this reason we
+                // might receive a call to `end()`, when we don't expect it here.
+                return (buffer, .close)
 
             case .modifying:
                 preconditionFailure("Invalid state: \(self.state)")

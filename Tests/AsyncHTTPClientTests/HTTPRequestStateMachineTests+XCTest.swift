@@ -50,6 +50,8 @@ extension HTTPRequestStateMachineTests {
             ("testReadTimeoutThatFiresToLateIsIgnored", testReadTimeoutThatFiresToLateIsIgnored),
             ("testCancellationThatIsInvokedToLateIsIgnored", testCancellationThatIsInvokedToLateIsIgnored),
             ("testErrorWhileRunningARequestClosesTheStream", testErrorWhileRunningARequestClosesTheStream),
+            ("testCanReadHTTP1_0ResponseWithoutBody", testCanReadHTTP1_0ResponseWithoutBody),
+            ("testCanReadHTTP1_0ResponseWithBody", testCanReadHTTP1_0ResponseWithBody),
         ]
     }
 }

@@ -523,7 +523,7 @@ struct HTTPRequestStateMachine {
             where head.status.code < 300:
 
             return self.avoidingStateMachineCoW { state -> Action in
-                let remainingBuffer = responseStreamState.end()
+                let (remainingBuffer, _) = responseStreamState.end()
                 state = .running(
                     .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: producerState),
                     .endReceived
@@ -536,16 +536,21 @@ struct HTTPRequestStateMachine {
             assert(producerState == .paused, "Expected to have paused the request body stream, when the head was received. Invalid state: \(self.state)")
 
             return self.avoidingStateMachineCoW { state -> Action in
-                let remainingBuffer = responseStreamState.end()
+                let (remainingBuffer, _) = responseStreamState.end()
                 state = .finished
                 return .succeedRequest(.close, remainingBuffer)
             }
 
         case .running(.endSent, .receivingBody(_, var responseStreamState)):
             return self.avoidingStateMachineCoW { state -> Action in
-                let remainingBuffer = responseStreamState.end()
+                let (remainingBuffer, action) = responseStreamState.end()
                 state = .finished
-                return .succeedRequest(.none, remainingBuffer)
+                switch action {
+                case .none:
+                    return .succeedRequest(.none, remainingBuffer)
+                case .close:
+                    return .succeedRequest(.close, remainingBuffer)
+                }
             }
 
         case .running(_, .endReceived), .finished:
