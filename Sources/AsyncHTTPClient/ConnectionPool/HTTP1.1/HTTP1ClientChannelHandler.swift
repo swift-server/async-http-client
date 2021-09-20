@@ -36,6 +36,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             if let newRequest = self.request {
                 var requestLogger = newRequest.logger
                 requestLogger[metadataKey: "ahc-connection-id"] = "\(self.connection.id)"
+                requestLogger[metadataKey: "ahc-el"] = "\(self.connection.channel.eventLoop)"
                 self.logger = requestLogger
 
                 if let idleReadTimeout = newRequest.idleReadTimeout {
@@ -120,15 +121,15 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     }
 
     func channelReadComplete(context: ChannelHandlerContext) {
-        self.logger.trace("Read complete caught")
+        self.logger.trace("Channel read complete caught")
 
         let action = self.state.channelReadComplete()
         self.run(action, context: context)
     }
 
     func errorCaught(context: ChannelHandlerContext, error: Error) {
-        self.logger.trace("Error caught", metadata: [
-            "error": "\(error)",
+        self.logger.trace("Channel error caught", metadata: [
+            "ahc-error": "\(error)",
         ])
 
         let action = self.state.errorHappened(error)
@@ -142,12 +143,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         let req = self.unwrapOutboundIn(data)
         self.request = req
 
-        self.logger.trace("New request to execute")
-
-        if let idleReadTimeout = self.request?.idleReadTimeout {
-            self.idleReadTimeoutStateMachine = .init(timeAmount: idleReadTimeout)
-        }
-
+        self.logger.debug("Request was scheduled on connection")
         req.willExecuteRequest(self)
 
         let action = self.state.runNewRequest(head: req.requestHead, metadata: req.requestFramingMetadata)
