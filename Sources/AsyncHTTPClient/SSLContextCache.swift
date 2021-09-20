@@ -34,12 +34,12 @@ extension SSLContextCache {
         }
 
         if let sslContext = sslContext {
-            logger.debug("found SSL context in cache",
+            logger.trace("found SSL context in cache",
                          metadata: ["ahc-tls-config": "\(tlsConfiguration)"])
             return eventLoop.makeSucceededFuture(sslContext)
         }
 
-        logger.debug("creating new SSL context",
+        logger.trace("creating new SSL context",
                      metadata: ["ahc-tls-config": "\(tlsConfiguration)"])
         let newSSLContext = self.offloadQueue.asyncWithFuture(eventLoop: eventLoop) {
             try NIOSSLContext(configuration: tlsConfiguration)
