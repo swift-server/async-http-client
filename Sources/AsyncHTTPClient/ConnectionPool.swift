@@ -124,7 +124,7 @@ final class ConnectionPool {
     /// A key is initialized from a `URL`, it uses the components to derive a hashed value
     /// used by the `providers` dictionary to allow retrieving and creating
     /// connection providers associated to a certain request in constant time.
-    struct Key: Hashable {
+    struct Key: Hashable, CustomStringConvertible {
         init(_ request: HTTPClient.Request) {
             switch request.scheme {
             case "http":
@@ -178,6 +178,19 @@ final class ConnectionPool {
                 config.tlsConfiguration = tlsConfiguration.base
             }
             return config
+        }
+
+        var description: String {
+            var hasher = Hasher()
+            self.tlsConfiguration?.hash(into: &hasher)
+            let hash = hasher.finalize()
+            var path = ""
+            if self.unixPath != "" {
+                path = self.unixPath
+            } else {
+                path = "\(self.host):\(self.port)"
+            }
+            return "\(self.scheme)://\(path) TLS-hash: \(hash)"
         }
     }
 }
