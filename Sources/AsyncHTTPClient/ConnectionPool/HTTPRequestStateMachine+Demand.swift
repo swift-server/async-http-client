@@ -50,7 +50,7 @@ extension HTTPRequestStateMachine {
                 self.state = .modifying
                 buffer.append(body)
                 self.state = .waitingForBytes(buffer)
-                
+
             case .modifying:
                 preconditionFailure("Invalid state: \(self.state)")
 

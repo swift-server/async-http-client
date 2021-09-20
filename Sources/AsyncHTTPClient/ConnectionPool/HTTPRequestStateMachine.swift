@@ -523,12 +523,22 @@ struct HTTPRequestStateMachine {
             where head.status.code < 300:
 
             return self.avoidingStateMachineCoW { state -> Action in
-                let (remainingBuffer, _) = responseStreamState.end()
-                state = .running(
-                    .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: producerState),
-                    .endReceived
-                )
-                return .forwardResponseBodyParts(remainingBuffer)
+                let (remainingBuffer, connectionAction) = responseStreamState.end()
+                switch connectionAction {
+                case .none:
+                    state = .running(
+                        .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: producerState),
+                        .endReceived
+                    )
+                    return .forwardResponseBodyParts(remainingBuffer)
+                case .close:
+                    // If we receive a `.close` as a connectionAction from the responseStreamState
+                    // this means, that the response end was signaled by a connection close. Since
+                    // the request is still uploading, we will not be able to finish the upload. For
+                    // this reason we can fail the request here.
+                    state = .failed(HTTPClientError.remoteConnectionClosed)
+                    return .failRequest(HTTPClientError.remoteConnectionClosed, .close)
+                }
             }
 
         case .running(.streaming(_, _, let producerState), .receivingBody(let head, var responseStreamState)):
@@ -536,6 +546,8 @@ struct HTTPRequestStateMachine {
             assert(producerState == .paused, "Expected to have paused the request body stream, when the head was received. Invalid state: \(self.state)")
 
             return self.avoidingStateMachineCoW { state -> Action in
+                // We can ignore the connectionAction from the responseStreamState, since the
+                // connection should be closed anyway.
                 let (remainingBuffer, _) = responseStreamState.end()
                 state = .finished
                 return .succeedRequest(.close, remainingBuffer)
