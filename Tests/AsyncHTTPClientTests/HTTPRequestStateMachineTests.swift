@@ -451,6 +451,60 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.errorHappened(NIOSSLError.uncleanShutdown), .failRequest(NIOSSLError.uncleanShutdown, .close))
         XCTAssertEqual(state.requestCancelled(), .wait, "A cancellation that happens to late is ignored")
     }
+
+    func testCanReadHTTP1_0ResponseWithoutBody() {
+        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
+
+        let responseHead = HTTPResponseHead(version: .http1_0, status: .internalServerError)
+        XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
+        XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+        XCTAssertEqual(state.read(), .read)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+        XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.close, []))
+        XCTAssertEqual(state.channelInactive(), .wait)
+    }
+
+    func testCanReadHTTP1_0ResponseWithBody() {
+        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
+
+        let responseHead = HTTPResponseHead(version: .http1_0, status: .internalServerError)
+        let body = ByteBuffer(string: "foo bar")
+        XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
+        XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+        XCTAssertEqual(state.read(), .read)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+        XCTAssertEqual(state.channelRead(.body(body)), .wait)
+        XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.close, [body]))
+        XCTAssertEqual(state.channelInactive(), .wait)
+    }
+
+    func testFailHTTP1_0RequestThatIsStillUploading() {
+        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .stream)
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
+
+        let part1: ByteBuffer = .init(string: "foo")
+        XCTAssertEqual(state.requestStreamPartReceived(.byteBuffer(part1)), .sendBodyPart(.byteBuffer(part1)))
+        let responseHead = HTTPResponseHead(version: .http1_0, status: .ok)
+        let body = ByteBuffer(string: "foo bar")
+        XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
+        XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+        XCTAssertEqual(state.read(), .read)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+        XCTAssertEqual(state.channelRead(.body(body)), .wait)
+        XCTAssertEqual(state.channelRead(.end(nil)), .failRequest(HTTPClientError.remoteConnectionClosed, .close))
+        XCTAssertEqual(state.channelInactive(), .wait)
+    }
 }
 
 extension HTTPRequestStateMachine.Action: Equatable {
