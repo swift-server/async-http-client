@@ -97,6 +97,37 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
         XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
         XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.close, .init([responseBody])))
+        XCTAssertEqual(state.channelInactive(), .fireChannelInactive)
+    }
+
+    func testAHTTP1_0ResponseWithoutKeepAliveHeaderLeadsToConnectionCloseAfterRequest() {
+        var state = HTTP1ConnectionStateMachine()
+        XCTAssertEqual(state.channelActive(isWritable: true), .fireChannelActive)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        XCTAssertEqual(state.runNewRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
+
+        let responseHead = HTTPResponseHead(version: .http1_0, status: .ok, headers: ["content-length": "4"])
+        XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
+        let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
+        XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
+        XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.close, .init([responseBody])))
+        XCTAssertEqual(state.channelInactive(), .fireChannelInactive)
+    }
+
+    func testAHTTP1_0ResponseWithKeepAliveHeaderLeadsToConnectionBeingKeptAlive() {
+        var state = HTTP1ConnectionStateMachine()
+        XCTAssertEqual(state.channelActive(isWritable: true), .fireChannelActive)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        XCTAssertEqual(state.runNewRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
+
+        let responseHead = HTTPResponseHead(version: .http1_0, status: .ok, headers: ["content-length": "4", "connection": "keep-alive"])
+        XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
+        let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
+        XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
+        XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.informConnectionIsIdle, .init([responseBody])))
+        XCTAssertEqual(state.channelInactive(), .fireChannelInactive)
     }
 
     func testAConnectionCloseHeaderInTheResponseLeadsToConnectionCloseAfterRequest() {

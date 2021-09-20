@@ -256,7 +256,7 @@ struct HTTP1ConnectionStateMachine {
                 let action = requestStateMachine.channelRead(part)
 
                 if case .head(let head) = part, close == false {
-                    close = head.headers[canonicalForm: "connection"].contains(where: { $0.lowercased() == "close" })
+                    close = !head.isKeepAlive
                 }
                 state = .inRequest(requestStateMachine, close: close)
                 return state.modify(with: action)

@@ -28,6 +28,8 @@ extension HTTP1ConnectionStateMachineTests {
             ("testPOSTRequestWithWriteAndReadBackpressure", testPOSTRequestWithWriteAndReadBackpressure),
             ("testResponseReadingWithBackpressure", testResponseReadingWithBackpressure),
             ("testAConnectionCloseHeaderInTheRequestLeadsToConnectionCloseAfterRequest", testAConnectionCloseHeaderInTheRequestLeadsToConnectionCloseAfterRequest),
+            ("testAHTTP1_0ResponseWithoutKeepAliveHeaderLeadsToConnectionCloseAfterRequest", testAHTTP1_0ResponseWithoutKeepAliveHeaderLeadsToConnectionCloseAfterRequest),
+            ("testAHTTP1_0ResponseWithKeepAliveHeaderLeadsToConnectionBeingKeptAlive", testAHTTP1_0ResponseWithKeepAliveHeaderLeadsToConnectionBeingKeptAlive),
             ("testAConnectionCloseHeaderInTheResponseLeadsToConnectionCloseAfterRequest", testAConnectionCloseHeaderInTheResponseLeadsToConnectionCloseAfterRequest),
             ("testNIOTriggersChannelActiveTwice", testNIOTriggersChannelActiveTwice),
             ("testIdleConnectionBecomesInactive", testIdleConnectionBecomesInactive),
