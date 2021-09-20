@@ -548,7 +548,7 @@ extension MockConnectionPool {
 class MockHTTPRequest: HTTPSchedulableRequest {
     let logger: Logger
     let connectionDeadline: NIODeadline
-    let idleReadTimeout: TimeAmount?
+    let requestOptions: RequestOptions
 
     let preferredEventLoop: EventLoop
     let requiredEventLoop: EventLoop?
@@ -556,12 +556,11 @@ class MockHTTPRequest: HTTPSchedulableRequest {
     init(eventLoop: EventLoop,
          logger: Logger = Logger(label: "mock"),
          connectionTimeout: TimeAmount = .seconds(60),
-         idleReadTimeout: TimeAmount? = nil,
          requiresEventLoopForChannel: Bool = false) {
         self.logger = logger
 
         self.connectionDeadline = .now() + connectionTimeout
-        self.idleReadTimeout = idleReadTimeout
+        self.requestOptions = .forTests()
 
         self.preferredEventLoop = eventLoop
         if requiresEventLoopForChannel {

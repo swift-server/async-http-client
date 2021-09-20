@@ -53,6 +53,9 @@ extension HTTPRequestStateMachineTests {
             ("testCanReadHTTP1_0ResponseWithoutBody", testCanReadHTTP1_0ResponseWithoutBody),
             ("testCanReadHTTP1_0ResponseWithBody", testCanReadHTTP1_0ResponseWithBody),
             ("testFailHTTP1_0RequestThatIsStillUploading", testFailHTTP1_0RequestThatIsStillUploading),
+            ("testFailHTTP1RequestWithoutContentLengthWithNIOSSLErrorUncleanShutdown", testFailHTTP1RequestWithoutContentLengthWithNIOSSLErrorUncleanShutdown),
+            ("testFailHTTP1RequestWithoutContentLengthWithNIOSSLErrorUncleanShutdownButIgnoreIt", testFailHTTP1RequestWithoutContentLengthWithNIOSSLErrorUncleanShutdownButIgnoreIt),
+            ("testFailHTTP1RequestWithContentLengthWithNIOSSLErrorUncleanShutdownButIgnoreIt", testFailHTTP1RequestWithContentLengthWithNIOSSLErrorUncleanShutdownButIgnoreIt),
         ]
     }
 }

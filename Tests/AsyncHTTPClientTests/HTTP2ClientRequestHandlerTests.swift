@@ -40,7 +40,7 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
             task: .init(eventLoop: embedded.eventLoop, logger: logger),
             redirectHandler: nil,
             connectionDeadline: .now() + .seconds(30),
-            idleReadTimeout: nil,
+            requestOptions: .forTests(),
             delegate: delegate
         ))
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
@@ -128,7 +128,7 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
             task: .init(eventLoop: embedded.eventLoop, logger: logger),
             redirectHandler: nil,
             connectionDeadline: .now() + .seconds(30),
-            idleReadTimeout: .milliseconds(200),
+            requestOptions: .forTests(idleReadTimeout: .milliseconds(200)),
             delegate: delegate
         ))
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
@@ -204,7 +204,7 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
             task: .init(eventLoop: embedded.eventLoop, logger: logger),
             redirectHandler: nil,
             connectionDeadline: .now() + .seconds(30),
-            idleReadTimeout: .milliseconds(200),
+            requestOptions: .forTests(idleReadTimeout: .milliseconds(200)),
             delegate: delegate
         ))
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }

@@ -72,7 +72,7 @@ class HTTP2ConnectionTests: XCTestCase {
             task: .init(eventLoop: eventLoop, logger: .init(label: "test")),
             redirectHandler: nil,
             connectionDeadline: .distantFuture,
-            idleReadTimeout: nil,
+            requestOptions: .forTests(),
             delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
         ))
         guard let requestBag = maybeRequestBag else {
@@ -133,7 +133,7 @@ class HTTP2ConnectionTests: XCTestCase {
                 task: .init(eventLoop: eventLoop, logger: .init(label: "test")),
                 redirectHandler: nil,
                 connectionDeadline: .distantFuture,
-                idleReadTimeout: nil,
+                requestOptions: .forTests(),
                 delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
             ))
             guard let requestBag = maybeRequestBag else {
@@ -195,7 +195,7 @@ class HTTP2ConnectionTests: XCTestCase {
                 task: .init(eventLoop: eventLoop, logger: .init(label: "test")),
                 redirectHandler: nil,
                 connectionDeadline: .distantFuture,
-                idleReadTimeout: nil,
+                requestOptions: .forTests(),
                 delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
             ))
             guard let requestBag = maybeRequestBag else {

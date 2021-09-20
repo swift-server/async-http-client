@@ -24,7 +24,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
     private let eventLoop: EventLoop
 
-    private var state: HTTPRequestStateMachine = .init(isChannelWritable: false) {
+    private var state: HTTPRequestStateMachine = .init(isChannelWritable: false, ignoreUncleanSSLShutdown: false) {
         willSet {
             self.eventLoop.assertInEventLoop()
         }
@@ -35,7 +35,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
     private var request: HTTPExecutableRequest? {
         didSet {
-            if let newRequest = self.request, let idleReadTimeout = newRequest.idleReadTimeout {
+            if let newRequest = self.request, let idleReadTimeout = newRequest.requestOptions.idleReadTimeout {
                 self.idleReadTimeoutStateMachine = .init(timeAmount: idleReadTimeout)
             } else {
                 self.idleReadTimeoutStateMachine = nil

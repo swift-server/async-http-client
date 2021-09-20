@@ -39,7 +39,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
 
     let connectionDeadline: NIODeadline
 
-    let idleReadTimeout: TimeAmount?
+    let requestOptions: RequestOptions
 
     let requestHead: HTTPRequestHead
     let requestFramingMetadata: RequestFramingMetadata
@@ -51,14 +51,14 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
          task: HTTPClient.Task<Delegate.Response>,
          redirectHandler: RedirectHandler<Delegate.Response>?,
          connectionDeadline: NIODeadline,
-         idleReadTimeout: TimeAmount?,
+         requestOptions: RequestOptions,
          delegate: Delegate) throws {
         self.eventLoopPreference = eventLoopPreference
         self.task = task
         self.state = .init(redirectHandler: redirectHandler)
         self.request = request
         self.connectionDeadline = connectionDeadline
-        self.idleReadTimeout = idleReadTimeout
+        self.requestOptions = requestOptions
         self.delegate = delegate
 
         let (head, metadata) = try request.createRequestHead()

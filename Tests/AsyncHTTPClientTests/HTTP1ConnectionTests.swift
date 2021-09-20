@@ -151,7 +151,7 @@ class HTTP1ConnectionTests: XCTestCase {
             task: task,
             redirectHandler: nil,
             connectionDeadline: .now() + .seconds(60),
-            idleReadTimeout: nil,
+            requestOptions: .forTests(),
             delegate: ResponseAccumulator(request: request)
         ))
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
@@ -223,7 +223,7 @@ class HTTP1ConnectionTests: XCTestCase {
             task: .init(eventLoop: eventLoopGroup.next(), logger: logger),
             redirectHandler: nil,
             connectionDeadline: .now() + .seconds(30),
-            idleReadTimeout: nil,
+            requestOptions: .forTests(),
             delegate: delegate
         ))
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
@@ -281,7 +281,7 @@ class HTTP1ConnectionTests: XCTestCase {
                 task: .init(eventLoop: eventLoopGroup.next(), logger: logger),
                 redirectHandler: nil,
                 connectionDeadline: .now() + .seconds(30),
-                idleReadTimeout: nil,
+                requestOptions: .forTests(),
                 delegate: delegate
             ))
             guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
@@ -348,7 +348,7 @@ class HTTP1ConnectionTests: XCTestCase {
             task: .init(eventLoop: eventLoopGroup.next(), logger: logger),
             redirectHandler: nil,
             connectionDeadline: .now() + .seconds(30),
-            idleReadTimeout: nil,
+            requestOptions: .forTests(),
             delegate: delegate
         ))
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }

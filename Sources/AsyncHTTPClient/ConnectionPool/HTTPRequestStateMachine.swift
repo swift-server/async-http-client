@@ -14,6 +14,7 @@
 
 import NIOCore
 import NIOHTTP1
+import NIOSSL
 
 struct HTTPRequestStateMachine {
     fileprivate enum State {
@@ -102,8 +103,11 @@ struct HTTPRequestStateMachine {
 
     private var isChannelWritable: Bool
 
-    init(isChannelWritable: Bool) {
+    private let ignoreUncleanSSLShutdown: Bool
+
+    init(isChannelWritable: Bool, ignoreUncleanSSLShutdown: Bool) {
         self.isChannelWritable = isChannelWritable
+        self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
     }
 
     mutating func startRequest(head: HTTPRequestHead, metadata: RequestFramingMetadata) -> Action {
@@ -196,6 +200,12 @@ struct HTTPRequestStateMachine {
             // the request failed, before it was sent onto the wire.
             self.state = .failed(error)
             return .failRequest(error, .none)
+
+        case .running(.streaming, .receivingBody),
+             .running(.endSent, .receivingBody)
+                 where error as? NIOSSLError == .uncleanShutdown && self.ignoreUncleanSSLShutdown == true:
+            return .wait
+
         case .running:
             self.state = .failed(error)
             return .failRequest(error, .close)
