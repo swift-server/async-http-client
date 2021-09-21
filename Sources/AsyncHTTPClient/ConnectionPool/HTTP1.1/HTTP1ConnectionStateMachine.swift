@@ -154,13 +154,18 @@ struct HTTP1ConnectionStateMachine {
         }
     }
 
-    mutating func runNewRequest(head: HTTPRequestHead, metadata: RequestFramingMetadata) -> Action {
+    mutating func runNewRequest(
+        head: HTTPRequestHead,
+        metadata: RequestFramingMetadata,
+        ignoreUncleanSSLShutdown: Bool
+    ) -> Action {
         guard case .idle = self.state else {
             preconditionFailure("Invalid state")
         }
 
         var requestStateMachine = HTTPRequestStateMachine(
-            isChannelWritable: self.isChannelWritable
+            isChannelWritable: self.isChannelWritable,
+            ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown
         )
         let action = requestStateMachine.startRequest(head: head, metadata: metadata)
 

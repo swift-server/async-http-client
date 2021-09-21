@@ -865,17 +865,21 @@ class HTTPClientTests: XCTestCase {
         guard !isTestingNIOTS() else { return }
 
         let localHTTPBin = HttpBinForSSLUncleanShutdown()
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: HTTPClient.Configuration(certificateVerification: .none,
-                                                                             ignoreUncleanSSLShutdown: true))
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: HTTPClient.Configuration(
+                certificateVerification: .none,
+                ignoreUncleanSSLShutdown: true
+            )
+        )
 
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
             localHTTPBin.shutdown()
         }
 
-        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/wrongcontentlength").wait(), "Should fail") { error in
-            XCTAssertEqual(.invalidEOFState, error as? HTTPParserError)
+        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/wrongcontentlength").wait()) {
+            XCTAssertEqual($0 as? HTTPParserError, .invalidEOFState)
         }
     }
 

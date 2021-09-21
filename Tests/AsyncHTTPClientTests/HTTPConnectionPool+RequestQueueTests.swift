@@ -107,7 +107,7 @@ private class MockScheduledRequest: HTTPSchedulableRequest {
 
     var requestHead: HTTPRequestHead { preconditionFailure("Unimplemented") }
     var requestFramingMetadata: RequestFramingMetadata { preconditionFailure("Unimplemented") }
-    var idleReadTimeout: TimeAmount? { preconditionFailure("Unimplemented") }
+    var requestOptions: RequestOptions { preconditionFailure("Unimplemented") }
 
     func willExecuteRequest(_: HTTPRequestExecutor) {
         preconditionFailure("Unimplemented")

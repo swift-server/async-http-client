@@ -20,7 +20,7 @@ import XCTest
 
 class HTTPRequestStateMachineTests: XCTestCase {
     func testSimpleGETRequest() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
@@ -34,7 +34,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testPOSTRequestWithWriterBackpressure() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "4")]))
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(4))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
@@ -68,7 +68,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testPOSTContentLengthIsTooLong() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "4")]))
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(4))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
@@ -85,7 +85,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testPOSTContentLengthIsTooShort() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "8")]))
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(8))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
@@ -101,7 +101,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testRequestBodyStreamIsCancelledIfServerRespondsWith301() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "12")]))
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(12))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
@@ -126,7 +126,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testRequestBodyStreamIsCancelledIfServerRespondsWith301WhileWriteBackpressure() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "12")]))
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(12))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
@@ -151,7 +151,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testRequestBodyStreamIsContinuedIfServerRespondsWith200() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "12")]))
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(12))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
@@ -171,7 +171,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testRequestBodyStreamIsContinuedIfServerSendHeadWithStatus200() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "12")]))
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(12))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
@@ -192,7 +192,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testRequestIsFailedIfRequestBodySizeIsWrongEvenAfterServerRespondedWith200() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "12")]))
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(12))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
@@ -211,7 +211,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testRequestIsFailedIfRequestBodySizeIsWrongEvenAfterServerSendHeadWithStatus200() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: HTTPHeaders([("content-length", "12")]))
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(12))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
@@ -229,7 +229,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testRequestIsNotSendUntilChannelIsWritable() {
-        var state = HTTPRequestStateMachine(isChannelWritable: false)
+        var state = HTTPRequestStateMachine(isChannelWritable: false, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .wait)
@@ -245,7 +245,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testConnectionBecomesInactiveWhileWaitingForWritable() {
-        var state = HTTPRequestStateMachine(isChannelWritable: false)
+        var state = HTTPRequestStateMachine(isChannelWritable: false, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .wait)
@@ -253,7 +253,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testResponseReadingWithBackpressure() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
@@ -280,7 +280,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testChannelReadCompleteTriggersButNoBodyDataWasReceivedSoFar() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
@@ -307,7 +307,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testResponseReadingWithBackpressureEndOfResponseAllowsReadEventsToTriggerDirectly() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
@@ -338,12 +338,12 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testCancellingARequestInStateInitializedKeepsTheConnectionAlive() {
-        var state = HTTPRequestStateMachine(isChannelWritable: false)
+        var state = HTTPRequestStateMachine(isChannelWritable: false, ignoreUncleanSSLShutdown: false)
         XCTAssertEqual(state.requestCancelled(), .failRequest(HTTPClientError.cancelled, .none))
     }
 
     func testCancellingARequestBeforeBeingSendKeepsTheConnectionAlive() {
-        var state = HTTPRequestStateMachine(isChannelWritable: false)
+        var state = HTTPRequestStateMachine(isChannelWritable: false, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .wait)
@@ -351,7 +351,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testConnectionBecomesWritableBeforeFirstRequest() {
-        var state = HTTPRequestStateMachine(isChannelWritable: false)
+        var state = HTTPRequestStateMachine(isChannelWritable: false, ignoreUncleanSSLShutdown: false)
         XCTAssertEqual(state.writabilityChanged(writable: true), .wait)
 
         // --- sending request
@@ -369,7 +369,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testCancellingARequestThatIsSent() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
@@ -377,7 +377,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testRemoteSuddenlyClosesTheConnection() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/", headers: .init([("content-length", "4")]))
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(4))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
@@ -386,7 +386,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testReadTimeoutLeadsToFailureWithEverythingAfterBeingIgnored() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
@@ -403,7 +403,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testResponseWithStatus1XXAreIgnored() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
@@ -419,7 +419,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testReadTimeoutThatFiresToLateIsIgnored() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
@@ -431,7 +431,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testCancellationThatIsInvokedToLateIsIgnored() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
@@ -443,7 +443,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testErrorWhileRunningARequestClosesTheStream() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
@@ -453,7 +453,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testCanReadHTTP1_0ResponseWithoutBody() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
@@ -469,7 +469,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testCanReadHTTP1_0ResponseWithBody() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
@@ -487,7 +487,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
     }
 
     func testFailHTTP1_0RequestThatIsStillUploading() {
-        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .stream)
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
@@ -503,6 +503,58 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelReadComplete(), .wait)
         XCTAssertEqual(state.channelRead(.body(body)), .wait)
         XCTAssertEqual(state.channelRead(.end(nil)), .failRequest(HTTPClientError.remoteConnectionClosed, .close))
+        XCTAssertEqual(state.channelInactive(), .wait)
+    }
+
+    func testFailHTTP1RequestWithoutContentLengthWithNIOSSLErrorUncleanShutdown() {
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
+
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
+        let body = ByteBuffer(string: "foo bar")
+        XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
+        XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
+        XCTAssertEqual(state.channelRead(.body(body)), .wait)
+        XCTAssertEqual(state.errorHappened(NIOSSLError.uncleanShutdown), .failRequest(NIOSSLError.uncleanShutdown, .close))
+        XCTAssertEqual(state.channelRead(.end(nil)), .wait)
+        XCTAssertEqual(state.channelInactive(), .wait)
+    }
+
+    func testFailHTTP1RequestWithoutContentLengthWithNIOSSLErrorUncleanShutdownButIgnoreIt() {
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: true)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
+
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
+        let body = ByteBuffer(string: "foo bar")
+        XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
+        XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
+        XCTAssertEqual(state.read(), .read)
+        XCTAssertEqual(state.channelRead(.body(body)), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .forwardResponseBodyParts([body]))
+        XCTAssertEqual(state.errorHappened(NIOSSLError.uncleanShutdown), .wait)
+        XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.close, []))
+        XCTAssertEqual(state.channelInactive(), .wait)
+    }
+
+    func testFailHTTP1RequestWithContentLengthWithNIOSSLErrorUncleanShutdownButIgnoreIt() {
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: true)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
+
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["content-length": "30"])
+        let body = ByteBuffer(string: "foo bar")
+        XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
+        XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
+        XCTAssertEqual(state.read(), .read)
+        XCTAssertEqual(state.channelRead(.body(body)), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .forwardResponseBodyParts([body]))
+        XCTAssertEqual(state.errorHappened(NIOSSLError.uncleanShutdown), .wait)
+        XCTAssertEqual(state.errorHappened(HTTPParserError.invalidEOFState), .failRequest(HTTPParserError.invalidEOFState, .close))
         XCTAssertEqual(state.channelInactive(), .wait)
     }
 }

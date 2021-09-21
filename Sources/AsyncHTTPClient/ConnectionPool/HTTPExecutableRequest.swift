@@ -219,8 +219,8 @@ protocol HTTPExecutableRequest: AnyObject {
     /// ``requestHeadSent``.
     var requestFramingMetadata: RequestFramingMetadata { get }
 
-    /// The maximal `TimeAmount` that is allowed to pass between `channelRead`s from the Channel.
-    var idleReadTimeout: TimeAmount? { get }
+    /// Request specific configurations
+    var requestOptions: RequestOptions { get }
 
     /// Will be called by the ChannelHandler to indicate that the request is going to be sent.
     ///

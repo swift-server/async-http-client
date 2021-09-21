@@ -58,7 +58,7 @@ class HTTPConnectionPoolTests: XCTestCase {
                 task: .init(eventLoop: eventLoop, logger: .init(label: "test")),
                 redirectHandler: nil,
                 connectionDeadline: .distantFuture,
-                idleReadTimeout: nil,
+                requestOptions: .forTests(),
                 delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
             ))
 
@@ -112,7 +112,7 @@ class HTTPConnectionPoolTests: XCTestCase {
                 task: .init(eventLoop: eventLoop, logger: .init(label: "test")),
                 redirectHandler: nil,
                 connectionDeadline: .distantFuture,
-                idleReadTimeout: nil,
+                requestOptions: .forTests(),
                 delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
             ))
 
@@ -167,7 +167,7 @@ class HTTPConnectionPoolTests: XCTestCase {
                 task: .init(eventLoop: eventLoopGroup.next(), logger: .init(label: "test")),
                 redirectHandler: nil,
                 connectionDeadline: .distantFuture,
-                idleReadTimeout: nil,
+                requestOptions: .forTests(),
                 delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
             ))
 
@@ -221,7 +221,7 @@ class HTTPConnectionPoolTests: XCTestCase {
             task: .init(eventLoop: eventLoopGroup.next(), logger: .init(label: "test")),
             redirectHandler: nil,
             connectionDeadline: .now() + .seconds(5),
-            idleReadTimeout: nil,
+            requestOptions: .forTests(),
             delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
         ))
 
@@ -269,7 +269,7 @@ class HTTPConnectionPoolTests: XCTestCase {
             task: .init(eventLoop: eventLoopGroup.next(), logger: .init(label: "test")),
             redirectHandler: nil,
             connectionDeadline: .now() + .seconds(5),
-            idleReadTimeout: nil,
+            requestOptions: .forTests(),
             delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
         ))
 
@@ -325,7 +325,7 @@ class HTTPConnectionPoolTests: XCTestCase {
             task: .init(eventLoop: eventLoopGroup.next(), logger: .init(label: "test")),
             redirectHandler: nil,
             connectionDeadline: .now() + .seconds(5),
-            idleReadTimeout: nil,
+            requestOptions: .forTests(),
             delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
         ))
 
@@ -371,7 +371,7 @@ class HTTPConnectionPoolTests: XCTestCase {
             task: .init(eventLoop: eventLoopGroup.next(), logger: .init(label: "test")),
             redirectHandler: nil,
             connectionDeadline: .now() + .seconds(5),
-            idleReadTimeout: nil,
+            requestOptions: .forTests(),
             delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
         ))
 

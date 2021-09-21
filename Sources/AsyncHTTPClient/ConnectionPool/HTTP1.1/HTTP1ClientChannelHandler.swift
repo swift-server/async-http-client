@@ -39,7 +39,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                 requestLogger[metadataKey: "ahc-el"] = "\(self.connection.channel.eventLoop)"
                 self.logger = requestLogger
 
-                if let idleReadTimeout = newRequest.idleReadTimeout {
+                if let idleReadTimeout = newRequest.requestOptions.idleReadTimeout {
                     self.idleReadTimeoutStateMachine = .init(timeAmount: idleReadTimeout)
                 }
             } else {
@@ -146,7 +146,11 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         self.logger.debug("Request was scheduled on connection")
         req.willExecuteRequest(self)
 
-        let action = self.state.runNewRequest(head: req.requestHead, metadata: req.requestFramingMetadata)
+        let action = self.state.runNewRequest(
+            head: req.requestHead,
+            metadata: req.requestFramingMetadata,
+            ignoreUncleanSSLShutdown: req.requestOptions.ignoreUncleanSSLShutdown
+        )
         self.run(action, context: context)
     }
 
