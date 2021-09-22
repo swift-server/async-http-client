@@ -81,6 +81,7 @@ final class HTTPConnectionPool {
     }
 
     func shutdown() {
+        self.logger.debug("Shutting down connection pool")
         self.modifyStateAndRunActions { $0.shutdown() }
     }
 

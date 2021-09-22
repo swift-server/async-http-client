@@ -591,7 +591,7 @@ class HTTPClientTests: XCTestCase {
 
     func testDeadline() {
         XCTAssertThrowsError(try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "wait", deadline: .now() + .milliseconds(150)).wait()) {
-            XCTAssertEqual($0 as? HTTPClientError, .readTimeout)
+            XCTAssertEqual($0 as? HTTPClientError, .deadlineExceeded)
         }
     }
 
@@ -1098,14 +1098,16 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try web.stop())
         }
         let result = self.defaultClient.get(url: "http://localhost:\(web.serverPort)/foo")
+        XCTAssertNoThrow(try web.receiveHeadAndVerify {
+            XCTAssertEqual($0, HTTPRequestHead(
+                version: .init(major: 1, minor: 1),
+                method: .GET,
+                uri: "/foo",
+                headers: HTTPHeaders([("Host", "localhost:\(web.serverPort)")])
+            ))
+        })
+        XCTAssertNoThrow(try web.receiveEnd())
 
-        XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
-                                                    method: .GET,
-                                                    uri: "/foo",
-                                                    headers: HTTPHeaders([("Host", "localhost:\(web.serverPort)")]))),
-                                        try web.readInbound()))
-        XCTAssertNoThrow(XCTAssertEqual(.end(nil),
-                                        try web.readInbound()))
         XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 0),
                                                            status: .internalServerError))))
         XCTAssertNoThrow(try web.writeOutbound(.end(nil)))
@@ -2199,7 +2201,17 @@ class HTTPClientTests: XCTestCase {
             }
         })
         XCTAssert(logsAfterReq1.contains { entry in
-            entry.message == "opening fresh connection (no connections to reuse available)"
+            // Since a new connection must be created first we expect that the request is queued
+            // and log message describing this is emitted.
+            entry.message == "Request was queued (waiting for a connection to become available)"
+                && entry.level == .debug
+        })
+        XCTAssert(logsAfterReq1.contains { entry in
+            // After the new connection was created we expect a log message that describes that the
+            // request was scheduled on a connection. The connection id must be set from here on.
+            entry.message == "Request was scheduled on connection"
+                && entry.level == .debug
+                && entry.metadata["ahc-connection-id"] != nil
         })
 
         XCTAssert(logsAfterReq2.allSatisfy { entry in
@@ -2214,8 +2226,13 @@ class HTTPClientTests: XCTestCase {
                 return false
             }
         })
+        XCTAssertFalse(logsAfterReq2.contains { entry in
+            entry.message == "Request was queued (waiting for a connection to become available)"
+        })
         XCTAssert(logsAfterReq2.contains { entry in
-            entry.message.starts(with: "leasing existing connection")
+            entry.message == "Request was scheduled on connection"
+                && entry.level == .debug
+                && entry.metadata["ahc-connection-id"] != nil
         })
 
         XCTAssert(logsAfterReq3.allSatisfy { entry in
@@ -2230,8 +2247,13 @@ class HTTPClientTests: XCTestCase {
                 return false
             }
         })
+        XCTAssertFalse(logsAfterReq3.contains { entry in
+            entry.message == "Request was queued (waiting for a connection to become available)"
+        })
         XCTAssert(logsAfterReq3.contains { entry in
-            entry.message.starts(with: "leasing existing connection")
+            entry.message == "Request was scheduled on connection"
+                && entry.level == .debug
+                && entry.metadata["ahc-connection-id"] != nil
         })
     }
 
@@ -2271,7 +2293,7 @@ class HTTPClientTests: XCTestCase {
                                                         logger: logger).wait())
         XCTAssertEqual(0, logStore.allEntries.count)
 
-        XCTAssertEqual(0, self.backgroundLogStore.allEntries.count)
+        XCTAssertEqual(0, self.backgroundLogStore.allEntries.filter { $0.level >= .info }.count)
 
         // === Synthesized Socket Path Request
         XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
@@ -2297,7 +2319,7 @@ class HTTPClientTests: XCTestCase {
                                                      logger: logger).wait())
             XCTAssertEqual(0, logStore.allEntries.count)
 
-            XCTAssertEqual(0, backgroundLogStore.allEntries.count)
+            XCTAssertEqual(0, backgroundLogStore.allEntries.filter { $0.level >= .info }.count)
         })
 
         // === Synthesized Secure Socket Path Request
@@ -2325,7 +2347,7 @@ class HTTPClientTests: XCTestCase {
                                                      logger: logger).wait())
             XCTAssertEqual(0, logStore.allEntries.count)
 
-            XCTAssertEqual(0, backgroundLogStore.allEntries.count)
+            XCTAssertEqual(0, backgroundLogStore.allEntries.filter { $0.level >= .info }.count)
         })
     }
 
@@ -2375,7 +2397,7 @@ class HTTPClientTests: XCTestCase {
         }.status))
 
         // No background activity expected here.
-        XCTAssertEqual(0, self.backgroundLogStore.allEntries.count)
+        XCTAssertEqual(0, self.backgroundLogStore.allEntries.filter { $0.level >= .debug }.count)
 
         XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
             let backgroundLogStore = CollectEverythingLogHandler.LogStore()
@@ -2397,7 +2419,7 @@ class HTTPClientTests: XCTestCase {
             }.status))
 
             // No background activity expected here.
-            XCTAssertEqual(0, backgroundLogStore.allEntries.count)
+            XCTAssertEqual(0, backgroundLogStore.allEntries.filter { $0.level >= .debug }.count)
         })
 
         XCTAssertNoThrow(try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
@@ -2421,7 +2443,7 @@ class HTTPClientTests: XCTestCase {
             }.status))
 
             // No background activity expected here.
-            XCTAssertEqual(0, backgroundLogStore.allEntries.count)
+            XCTAssertEqual(0, backgroundLogStore.allEntries.filter { $0.level >= .debug }.count)
         })
     }
 
@@ -2432,12 +2454,12 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertGreaterThanOrEqual(self.backgroundLogStore.allEntries.count, 0)
         XCTAssert(self.backgroundLogStore.allEntries.contains { entry in
-            entry.message == "closing provider"
+            entry.message == "Shutting down connection pool"
         })
         XCTAssert(self.backgroundLogStore.allEntries.allSatisfy { entry in
             entry.metadata["ahc-request-id"] == nil &&
                 entry.metadata["ahc-request"] == nil &&
-                entry.metadata["ahc-provider"] != nil
+                entry.metadata["ahc-pool-key"] != nil
         })
 
         self.defaultClient = nil // so it doesn't get shut down again.
