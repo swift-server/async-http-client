@@ -15,6 +15,7 @@
 @testable import AsyncHTTPClient
 import Logging
 import NIOCore
+import NIOHTTP1
 import NIOPosix
 import XCTest
 
@@ -389,6 +390,68 @@ class HTTPConnectionPoolTests: XCTestCase {
 
         XCTAssertGreaterThanOrEqual(httpBin.createdConnections, 1)
         XCTAssertGreaterThanOrEqual(httpBin.activeConnections, 0)
+    }
+
+    func testConnectionPoolStressResistanceHTTP1() {
+        let numberOfRequestsPerThread = 1000
+        let numberOfParallelWorkers = 8
+
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 8)
+        defer { XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully()) }
+
+        let httpBin = HTTPBin()
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
+
+        let logger = Logger(label: "Test")
+        let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)")
+        let poolDelegate = TestDelegate(eventLoop: eventLoopGroup.next())
+
+        let pool = HTTPConnectionPool(
+            eventLoopGroup: eventLoopGroup,
+            sslContextCache: .init(),
+            tlsConfiguration: nil,
+            clientConfiguration: .init(),
+            key: .init(request),
+            delegate: poolDelegate,
+            idGenerator: .init(),
+            backgroundActivityLogger: logger
+        )
+
+        let dispatchGroup = DispatchGroup()
+        for workerID in 0..<numberOfParallelWorkers {
+            DispatchQueue(label: "\(#file):\(#line):worker-\(workerID)").async(group: dispatchGroup) {
+                func makeRequest() {
+                    let url = "http://localhost:\(httpBin.port)"
+                    var maybeRequest: HTTPClient.Request?
+                    var maybeRequestBag: RequestBag<ResponseAccumulator>?
+
+                    XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: url))
+                    XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+                        request: XCTUnwrap(maybeRequest),
+                        eventLoopPreference: .indifferent,
+                        task: .init(eventLoop: eventLoopGroup.next(), logger: logger),
+                        redirectHandler: nil,
+                        connectionDeadline: .now() + .seconds(5),
+                        requestOptions: .forTests(),
+                        delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
+                    ))
+
+                    guard let requestBag = maybeRequestBag else { return XCTFail("Expected to get a request") }
+                    pool.executeRequest(requestBag)
+
+                    XCTAssertNoThrow(try requestBag.task.futureResult.wait())
+                }
+
+                for _ in 0..<numberOfRequestsPerThread {
+                    makeRequest()
+                }
+            }
+        }
+
+        let timeout = DispatchTime.now() + .seconds(180)
+        XCTAssertEqual(dispatchGroup.wait(timeout: timeout), .success)
+        pool.shutdown()
+        XCTAssertNoThrow(try poolDelegate.future.wait())
     }
 }
 
