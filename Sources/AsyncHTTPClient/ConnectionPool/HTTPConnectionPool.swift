@@ -88,7 +88,9 @@ final class HTTPConnectionPool {
 
     // MARK: Actions
 
-    ///
+    /// An `HTTPConnectionPool` internal action type that matches the `StateMachine`'s action.
+    /// However it splits up the actions into actions that need to be executed inside the `stateLock`
+    /// and outside the `stateLock`.
     private struct Actions {
         enum ConnectionAction {
             enum Unlocked {
