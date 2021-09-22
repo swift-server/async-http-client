@@ -32,6 +32,7 @@ extension HTTPConnectionPoolTests {
             ("testConnectionCreationIsRetriedUntilPoolIsShutdown", testConnectionCreationIsRetriedUntilPoolIsShutdown),
             ("testConnectionCreationIsRetriedUntilRequestIsCancelled", testConnectionCreationIsRetriedUntilRequestIsCancelled),
             ("testConnectionShutdownIsCalledOnActiveConnections", testConnectionShutdownIsCalledOnActiveConnections),
+            ("testConnectionPoolStressResistanceHTTP1", testConnectionPoolStressResistanceHTTP1),
         ]
     }
 }
