@@ -382,13 +382,11 @@ class HTTP1ConnectionTests: XCTestCase {
 
             let lock: Lock
             let backpressurePromise: EventLoopPromise<Void>
-            let optionsApplied: EventLoopPromise<Void>
             let messageReceived: EventLoopPromise<Void>
 
             init(eventLoop: EventLoop) {
                 self.lock = Lock()
                 self.backpressurePromise = eventLoop.makePromise()
-                self.optionsApplied = eventLoop.makePromise()
                 self.messageReceived = eventLoop.makePromise()
             }
 
@@ -405,16 +403,7 @@ class HTTP1ConnectionTests: XCTestCase {
             }
 
             func didReceiveHead(task: HTTPClient.Task<Void>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
-                // This is to force NIO to send only 1 byte at a time.
-                guard let channel = self.lock.withLock({ self._channel }) else {
-                    preconditionFailure("Expected to have a channel at this point")
-                }
-
-                let future = channel.setOption(ChannelOptions.maxMessagesPerRead, value: 1).flatMap {
-                    channel.setOption(ChannelOptions.recvAllocator, value: FixedSizeRecvByteBufferAllocator(capacity: 1))
-                }
-                future.cascade(to: self.optionsApplied)
-                return future
+                return task.futureResult.eventLoop.makeSucceededVoidFuture()
             }
 
             func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
@@ -434,11 +423,9 @@ class HTTP1ConnectionTests: XCTestCase {
             typealias InboundIn = HTTPServerRequestPart
             typealias OutboundOut = HTTPServerResponsePart
 
-            let bodyFuture: EventLoopFuture<Void>
             let endFuture: EventLoopFuture<Void>
 
-            init(bodyFuture: EventLoopFuture<Void>, endFuture: EventLoopFuture<Void>) {
-                self.bodyFuture = bodyFuture
+            init(endFuture: EventLoopFuture<Void>) {
                 self.endFuture = endFuture
             }
 
@@ -451,10 +438,8 @@ class HTTP1ConnectionTests: XCTestCase {
                     // ignore
                     break
                 case .end:
-                    self.bodyFuture.hop(to: context.eventLoop).whenSuccess {
-                        let buffer = context.channel.allocator.buffer(string: "1234")
-                        context.writeAndFlush(self.wrapOutboundOut(.body(.byteBuffer(buffer))), promise: nil)
-                    }
+                    let buffer = context.channel.allocator.buffer(string: "1234")
+                    context.writeAndFlush(self.wrapOutboundOut(.body(.byteBuffer(buffer))), promise: nil)
 
                     self.endFuture.hop(to: context.eventLoop).whenSuccess {
                         context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
@@ -473,7 +458,6 @@ class HTTP1ConnectionTests: XCTestCase {
 
         let httpBin = HTTPBin { _ in
             WriteAfterFutureSucceedsHandler(
-                bodyFuture: backpressureDelegate.optionsApplied.futureResult,
                 endFuture: backpressureDelegate.backpressurePromise.futureResult
             )
         }
@@ -481,6 +465,8 @@ class HTTP1ConnectionTests: XCTestCase {
 
         var maybeChannel: Channel?
         XCTAssertNoThrow(maybeChannel = try ClientBootstrap(group: eventLoopGroup)
+            .channelOption(ChannelOptions.maxMessagesPerRead, value: 1)
+            .channelOption(ChannelOptions.recvAllocator, value: FixedSizeRecvByteBufferAllocator(capacity: 1))
             .connect(host: "localhost", port: httpBin.port)
             .wait())
         guard let channel = maybeChannel else { return XCTFail("Expected to have a channel at this point") }
@@ -512,9 +498,6 @@ class HTTP1ConnectionTests: XCTestCase {
         connection.executeRequest(requestBag)
 
         let requestFuture = requestBag.task.futureResult
-
-        // We need to wait for channel options that limit NIO to sending only one byte at a time.
-        XCTAssertNoThrow(try backpressureDelegate.optionsApplied.futureResult.wait())
 
         // Send 4 bytes, but only one should be received until the backpressure promise is succeeded.
 
