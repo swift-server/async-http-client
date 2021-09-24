@@ -13,15 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Foundation
-#if canImport(Network)
-    import Network
-#endif
-import Logging
 import NIOCore
-import NIOHTTP1
-import NIOHTTPCompression
-import NIOSSL
-import NIOTransportServices
 
 public final class HTTPClientCopyingDelegate: HTTPClientResponseDelegate {
     public typealias Response = Void

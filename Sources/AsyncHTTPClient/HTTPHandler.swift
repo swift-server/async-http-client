@@ -16,9 +16,7 @@ import Foundation
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
-import NIOFoundationCompat
 import NIOHTTP1
-import NIOHTTPCompression
 import NIOSSL
 
 extension HTTPClient {

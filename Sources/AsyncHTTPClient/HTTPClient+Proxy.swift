@@ -12,9 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-import NIOCore
-import NIOHTTP1
-
 extension HTTPClient.Configuration {
     /// Proxy server configuration
     /// Specifies the remote address of an HTTP proxy.
