@@ -26,8 +26,6 @@ import XCTest
     @testable import AsyncHTTPClientTests
 
     XCTMain([
-        testCase(ConnectionPoolTests.allTests),
-        testCase(ConnectionTests.allTests),
         testCase(HTTP1ClientChannelHandlerTests.allTests),
         testCase(HTTP1ConnectionStateMachineTests.allTests),
         testCase(HTTP1ConnectionTests.allTests),
