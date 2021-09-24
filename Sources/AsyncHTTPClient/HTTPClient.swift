@@ -849,11 +849,21 @@ extension HTTPClient.Configuration {
 
     /// Connection pool configuration.
     public struct ConnectionPool: Hashable {
-        // Specifies amount of time connections are kept idle in the pool.
+        /// Specifies amount of time connections are kept idle in the pool. After this time has passed without a new
+        /// request the connections are closed.
         public var idleTimeout: TimeAmount
 
+        /// The maximum number of connections that are kept alive in the connection pool per host. If requests with
+        /// an explicit eventLoopRequirement are sent, this number might be exceeded due to overflow connections.
+        public var concurrentHTTP1ConnectionsPerHostSoftLimit: Int
+
         public init(idleTimeout: TimeAmount = .seconds(60)) {
+            self.init(idleTimeout: idleTimeout, concurrentHTTP1ConnectionsPerHostSoftLimit: 8)
+        }
+
+        public init(idleTimeout: TimeAmount, concurrentHTTP1ConnectionsPerHostSoftLimit: Int) {
             self.idleTimeout = idleTimeout
+            self.concurrentHTTP1ConnectionsPerHostSoftLimit = concurrentHTTP1ConnectionsPerHostSoftLimit
         }
     }
 }
