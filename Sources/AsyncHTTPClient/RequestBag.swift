@@ -65,11 +65,10 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
         self.requestHead = head
         self.requestFramingMetadata = metadata
 
-        // TODO: comment in once we switch to using the Request bag in AHC
-//        self.task.taskDelegate = self
-//        self.task.futureResult.whenComplete { _ in
-//            self.task.taskDelegate = nil
-//        }
+        self.task.taskDelegate = self
+        self.task.futureResult.whenComplete { _ in
+            self.task.taskDelegate = nil
+        }
     }
 
     private func requestWasQueued0(_ scheduler: HTTPRequestScheduler) {
@@ -113,7 +112,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
                 self.writeNextRequestPart($0)
             }
 
-            body.stream(writer).whenComplete {
+            body.stream(writer).hop(to: self.eventLoop).whenComplete {
                 self.finishRequestBodyStream($0)
             }
 
@@ -142,7 +141,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
     }
 
     private func writeNextRequestPart0(_ part: IOData) -> EventLoopFuture<Void> {
-        self.task.eventLoop.assertInEventLoop()
+        self.eventLoop.assertInEventLoop()
 
         let action = self.state.writeNextRequestPart(part, taskEventLoop: self.task.eventLoop)
 

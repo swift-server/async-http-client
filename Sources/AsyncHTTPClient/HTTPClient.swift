@@ -68,7 +68,7 @@ public class HTTPClient {
     public let eventLoopGroup: EventLoopGroup
     let eventLoopGroupProvider: EventLoopGroupProvider
     let configuration: Configuration
-    let pool: ConnectionPool
+    let poolManager: HTTPConnectionPool.Manager
     var state: State
     private let stateLock = Lock()
 
@@ -110,14 +110,18 @@ public class HTTPClient {
             #endif
         }
         self.configuration = configuration
-        self.pool = ConnectionPool(configuration: configuration,
-                                   backgroundActivityLogger: backgroundActivityLogger)
+        self.poolManager = HTTPConnectionPool.Manager(
+            eventLoopGroup: self.eventLoopGroup,
+            configuration: self.configuration,
+            backgroundActivityLogger: backgroundActivityLogger
+        )
         self.state = .upAndRunning
     }
 
     deinit {
-        assert(self.pool.count == 0)
-        assert(self.state == .shutDown, "Client not shut down before the deinit. Please call client.syncShutdown() when no longer needed.")
+        guard case .shutDown = self.state else {
+            preconditionFailure("Client not shut down before the deinit. Please call client.syncShutdown() when no longer needed.")
+        }
     }
 
     /// Shuts down the client and `EventLoopGroup` if it was created by the client.
@@ -175,14 +179,16 @@ public class HTTPClient {
             switch self.eventLoopGroupProvider {
             case .shared:
                 self.state = .shutDown
-                callback(nil)
+                queue.async {
+                    callback(nil)
+                }
             case .createNew:
                 switch self.state {
                 case .shuttingDown:
                     self.state = .shutDown
                     self.eventLoopGroup.shutdownGracefully(queue: queue, callback)
                 case .shutDown, .upAndRunning:
-                    assertionFailure("The only valid state at this point is \(State.shutDown)")
+                    assertionFailure("The only valid state at this point is \(String(describing: State.shuttingDown))")
                 }
             }
         }
@@ -191,33 +197,35 @@ public class HTTPClient {
     private func shutdown(requiresCleanClose: Bool, queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
         do {
             try self.stateLock.withLock {
-                if self.state != .upAndRunning {
+                guard case .upAndRunning = self.state else {
                     throw HTTPClientError.alreadyShutdown
                 }
-                self.state = .shuttingDown
+                self.state = .shuttingDown(requiresCleanClose: requiresCleanClose, callback: callback)
             }
         } catch {
             callback(error)
             return
         }
 
-        self.pool.close(on: self.eventLoopGroup.next()).whenComplete { result in
-            var closeError: Error?
+        let promise = self.eventLoopGroup.next().makePromise(of: Bool.self)
+        self.poolManager.shutdown(promise: promise)
+        promise.futureResult.whenComplete { result in
             switch result {
-            case .failure(let error):
-                closeError = error
-            case .success(let cleanShutdown):
-                if !cleanShutdown, requiresCleanClose {
-                    closeError = HTTPClientError.uncleanShutdown
+            case .failure:
+                preconditionFailure("Shutting down the connection pool must not fail, ever.")
+            case .success(let unclean):
+                let (callback, uncleanError) = self.stateLock.withLock { () -> ((Error?) -> Void, Error?) in
+                    guard case .shuttingDown(let requiresClean, callback: let callback) = self.state else {
+                        preconditionFailure("Why did the pool manager shut down, if it was not instructed to")
+                    }
+
+                    let error: Error? = (requiresClean && unclean) ? HTTPClientError.uncleanShutdown : nil
+                    return (callback, error)
                 }
 
-                self.shutdownEventLoop(queue: queue) { eventLoopError in
-                    // we prioritise .uncleanShutdown here
-                    if let error = closeError {
-                        callback(error)
-                    } else {
-                        callback(eventLoopError)
-                    }
+                self.shutdownEventLoop(queue: queue) { error in
+                    let reportedError = error ?? uncleanError
+                    callback(reportedError)
                 }
             }
         }
@@ -492,7 +500,7 @@ public class HTTPClient {
         let taskEL: EventLoop
         switch eventLoopPreference.preference {
         case .indifferent:
-            taskEL = self.pool.associatedEventLoop(for: ConnectionPool.Key(request)) ?? self.eventLoopGroup.next()
+            taskEL = self.eventLoopGroup.next()
         case .delegate(on: let eventLoop):
             precondition(self.eventLoopGroup.makeIterator().contains { $0 === eventLoop }, "Provided EventLoop must be part of clients EventLoopGroup.")
             taskEL = eventLoop
@@ -540,75 +548,31 @@ public class HTTPClient {
         }
 
         let task = Task<Delegate.Response>(eventLoop: taskEL, logger: logger)
-        let setupComplete = taskEL.makePromise(of: Void.self)
-        let connection = self.pool.getConnection(request,
-                                                 preference: eventLoopPreference,
-                                                 taskEventLoop: taskEL,
-                                                 deadline: deadline,
-                                                 setupComplete: setupComplete.futureResult,
-                                                 logger: logger)
+        do {
+            let requestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: eventLoopPreference,
+                task: task,
+                redirectHandler: redirectHandler,
+                connectionDeadline: .now() + (self.configuration.timeout.connect ?? .seconds(10)),
+                requestOptions: .fromClientConfiguration(self.configuration),
+                delegate: delegate
+            )
 
-        let taskHandler = TaskHandler(task: task,
-                                      kind: request.kind,
-                                      delegate: delegate,
-                                      redirectHandler: redirectHandler,
-                                      ignoreUncleanSSLShutdown: self.configuration.ignoreUncleanSSLShutdown,
-                                      logger: logger)
-
-        connection.flatMap { connection -> EventLoopFuture<Void> in
-            logger.debug("got connection for request",
-                         metadata: ["ahc-connection": "\(connection)",
-                                    "ahc-request": "\(request.method) \(request.url)",
-                                    "ahc-channel-el": "\(connection.channel.eventLoop)",
-                                    "ahc-task-el": "\(taskEL)"])
-
-            let channel = connection.channel
-
-            func prepareChannelForTask0() -> EventLoopFuture<Void> {
-                do {
-                    let syncPipelineOperations = channel.pipeline.syncOperations
-
-                    if let timeout = self.resolve(timeout: self.configuration.timeout.read, deadline: deadline) {
-                        try syncPipelineOperations.addHandler(IdleStateHandler(readTimeout: timeout))
-                    }
-
-                    try syncPipelineOperations.addHandler(taskHandler)
-                } catch {
-                    connection.release(closing: true, logger: logger)
-                    return channel.eventLoop.makeFailedFuture(error)
+            var deadlineSchedule: Scheduled<Void>?
+            if let deadline = deadline {
+                deadlineSchedule = taskEL.scheduleTask(deadline: deadline) {
+                    requestBag.fail(HTTPClientError.deadlineExceeded)
                 }
 
-                task.setConnection(connection)
-
-                let isCancelled = task.lock.withLock {
-                    task.cancelled
-                }
-
-                if !isCancelled {
-                    return channel.writeAndFlush(request).flatMapError { _ in
-                        // At this point the `TaskHandler` will already be present
-                        // to handle the failure and pass it to the `promise`
-                        channel.eventLoop.makeSucceededVoidFuture()
-                    }
-                } else {
-                    return channel.eventLoop.makeSucceededVoidFuture()
+                task.promise.futureResult.whenComplete { _ in
+                    deadlineSchedule?.cancel()
                 }
             }
 
-            if channel.eventLoop.inEventLoop {
-                return prepareChannelForTask0()
-            } else {
-                return channel.eventLoop.flatSubmit {
-                    return prepareChannelForTask0()
-                }
-            }
-        }.always { _ in
-            setupComplete.succeed(())
-        }.whenFailure { error in
-            taskHandler.callOutToDelegateFireAndForget { task in
-                delegate.didReceiveError(task: task, error)
-            }
-            task.promise.fail(error)
+            self.poolManager.executeRequest(requestBag)
+        } catch {
+            task.fail(with: error, delegateType: Delegate.self)
         }
 
         return task
@@ -821,7 +785,7 @@ public class HTTPClient {
 
     enum State {
         case upAndRunning
-        case shuttingDown
+        case shuttingDown(requiresCleanClose: Bool, callback: (Error?) -> Void)
         case shutDown
     }
 }
@@ -926,6 +890,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case serverOfferedUnsupportedApplicationProtocol(String)
         case requestStreamCancelled
         case getConnectionFromPoolTimeout
+        case deadlineExceeded
     }
 
     private var code: Code
@@ -994,6 +959,9 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static func serverOfferedUnsupportedApplicationProtocol(_ proto: String) -> HTTPClientError {
         return HTTPClientError(code: .serverOfferedUnsupportedApplicationProtocol(proto))
     }
+
+    /// The request deadline was exceeded. The request was cancelled because of this.
+    public static let deadlineExceeded = HTTPClientError(code: .deadlineExceeded)
 
     /// The remote server responded with a status code >= 300, before the full request was sent. The request stream
     /// was therefore cancelled
