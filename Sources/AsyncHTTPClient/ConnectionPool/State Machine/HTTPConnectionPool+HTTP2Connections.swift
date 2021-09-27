@@ -49,6 +49,15 @@ extension HTTPConnectionPool {
             }
         }
 
+        var canOrWillBeAbleToExecuteRequests: Bool {
+            switch self.state {
+            case .starting, .backingOff, .active:
+                return true
+            case .draining, .closed:
+                return false
+            }
+        }
+
         /// A request can be scheduled on the connection
         var isAvailable: Bool {
             switch self.state {
@@ -92,6 +101,7 @@ extension HTTPConnectionPool {
             switch self.state {
             case .active, .draining, .backingOff, .closed:
                 preconditionFailure("Invalid state: \(self.state)")
+
             case .starting:
                 self.state = .active(conn, maxStreams: maxStreams, usedStreams: 0, lastIdle: .now())
                 return maxStreams
@@ -106,12 +116,14 @@ extension HTTPConnectionPool {
             switch self.state {
             case .starting, .backingOff, .closed:
                 preconditionFailure("Invalid state for updating max concurrent streams: \(self.state)")
-            case .draining(let conn, _, let usedStreams):
-                self.state = .draining(conn, maxStreams: maxStreams, usedStreams: usedStreams)
-                return 0
+
             case .active(let conn, _, let usedStreams, let lastIdle):
                 self.state = .active(conn, maxStreams: maxStreams, usedStreams: usedStreams, lastIdle: lastIdle)
                 return max(maxStreams - usedStreams, 0)
+
+            case .draining(let conn, _, let usedStreams):
+                self.state = .draining(conn, maxStreams: maxStreams, usedStreams: usedStreams)
+                return 0
             }
         }
 
@@ -119,11 +131,13 @@ extension HTTPConnectionPool {
             switch self.state {
             case .starting, .backingOff, .closed:
                 preconditionFailure("Invalid state for draining a connection: \(self.state)")
-            case .draining(let conn, _, _):
-                // we could potentially receive another go away while we drain all active streams and we just ignore it
-                return conn.eventLoop
+
             case .active(let conn, let maxStreams, let usedStreams, _):
                 self.state = .draining(conn, maxStreams: maxStreams, usedStreams: usedStreams)
+                return conn.eventLoop
+
+            case .draining(let conn, _, _):
+                // we could potentially receive another go away while we drain all active streams and we just ignore it
                 return conn.eventLoop
             }
         }
@@ -151,6 +165,7 @@ extension HTTPConnectionPool {
             switch self.state {
             case .starting, .backingOff, .draining, .closed:
                 preconditionFailure("Invalid state for leasing a stream: \(self.state)")
+
             case .active(let conn, let maxStreams, var usedStreams, let lastIdle):
                 usedStreams += count
                 precondition(usedStreams <= maxStreams, "tried to lease a connection which is not available")
@@ -165,11 +180,7 @@ extension HTTPConnectionPool {
             switch self.state {
             case .starting, .backingOff, .closed:
                 preconditionFailure("Invalid state: \(self.state)")
-            case .draining(let conn, let maxStreams, var usedStreams):
-                usedStreams -= 1
-                assert(usedStreams >= 0)
-                self.state = .draining(conn, maxStreams: maxStreams, usedStreams: usedStreams)
-                return 0
+
             case .active(let conn, let maxStreams, var usedStreams, var lastIdle):
                 usedStreams -= 1
                 assert(usedStreams >= 0)
@@ -178,6 +189,12 @@ extension HTTPConnectionPool {
                 }
                 self.state = .active(conn, maxStreams: maxStreams, usedStreams: usedStreams, lastIdle: lastIdle)
                 return max(maxStreams - usedStreams, 0)
+
+            case .draining(let conn, let maxStreams, var usedStreams):
+                usedStreams -= 1
+                assert(usedStreams >= 0)
+                self.state = .draining(conn, maxStreams: maxStreams, usedStreams: usedStreams)
+                return 0
             }
         }
 
@@ -186,6 +203,7 @@ extension HTTPConnectionPool {
             case .active(let conn, _, 0, _):
                 self.state = .closed
                 return conn
+
             case .starting, .backingOff, .draining, .closed, .active:
                 preconditionFailure("Invalid state for closing a connection: \(self.state)")
             }
@@ -214,9 +232,11 @@ extension HTTPConnectionPool {
             switch self.state {
             case .starting:
                 return .keepConnection
+
             case .backingOff:
                 context.connectBackoff.append(self.connectionID)
                 return .removeConnection
+
             case .active(let connection, _, let usedStreams, _):
                 if usedStreams <= 0 {
                     context.close.append(connection)
@@ -225,9 +245,11 @@ extension HTTPConnectionPool {
                     context.cancel.append(connection)
                     return .keepConnection
                 }
+
             case .draining(let connection, _, _):
                 context.cancel.append(connection)
                 return .keepConnection
+
             case .closed:
                 preconditionFailure("Unexpected state for cleanup: Did not expect to have closed connections in the state machine.")
             }
@@ -240,15 +262,19 @@ extension HTTPConnectionPool {
             switch self.state {
             case .starting:
                 stats.startingConnections &+= 1
+
             case .backingOff:
                 stats.backingOffConnections &+= 1
+
             case .active(_, let maxStreams, let usedStreams, _):
                 stats.availableStreams += max(maxStreams - usedStreams, 0)
                 stats.leasedStreams += usedStreams
                 stats.availableConnections &+= 1
+
             case .draining(_, _, let usedStreams):
                 stats.drainingConnections &+= 1
                 stats.leasedStreams += usedStreams
+
             case .closed:
                 break
             }
@@ -310,7 +336,7 @@ extension HTTPConnectionPool {
 
         /// used in general purpose connection scenarios to check if at least one connection exist, or if should we create a new one
         var hasConnectionThatCanOrWillBeAbleToExecuteRequests: Bool {
-            self.connections.contains { $0.isStartingOrBackingOff || $0.isActive }
+            self.connections.contains { $0.canOrWillBeAbleToExecuteRequests }
         }
 
         /// used in eventLoop scenarios. does at least one connection exist for this eventLoop, or should we create a new one?
@@ -318,13 +344,15 @@ extension HTTPConnectionPool {
         /// - Returns: true if at least one connection is starting or active for the given `eventLoop`
         func hasConnectionThatCanOrWillBeAbleToExecuteRequests(for eventLoop: EventLoop) -> Bool {
             self.connections.contains {
-                $0.eventLoop === eventLoop && ($0.isStartingOrBackingOff || $0.isActive)
+                $0.eventLoop === eventLoop && $0.canOrWillBeAbleToExecuteRequests
             }
         }
 
         mutating func createNewConnection(on eventLoop: EventLoop) -> Connection.ID {
-            // assert no active connection exists on the requested eventLoop
-            assert(self.connections.allSatisfy { $0.eventLoop !== eventLoop || !$0.isActive })
+            assert(
+                !self.hasConnectionThatCanOrWillBeAbleToExecuteRequests(for: eventLoop),
+                "we should not create more than one connection per event loop"
+            )
 
             let connection = HTTP2ConnectionState(connectionID: self.generator.next(), eventLoop: eventLoop)
             self.connections.append(connection)
@@ -353,10 +381,11 @@ extension HTTPConnectionPool {
             return (index, context)
         }
 
-        /// Move the HTTP1ConnectionState to backingOff.
+        /// Move the connection state to backingOff.
         ///
         /// - Parameter connectionID: The connectionID of the failed connection attempt
         /// - Returns: The eventLoop on which to schedule the backoff timer
+        /// - Precondition: connection needs to be in the `.starting` state
         mutating func backoffNextConnectionAttempt(_ connectionID: Connection.ID) -> EventLoop {
             guard let index = self.connections.firstIndex(where: { $0.connectionID == connectionID }) else {
                 preconditionFailure("We tried to create a new connection that we know nothing about?")
@@ -368,6 +397,9 @@ extension HTTPConnectionPool {
 
         // MARK: Connection lifecycle events
 
+        /// Sets the connection with the given `connectionId` to the draining state.
+        /// - Returns: the `EventLoop` to create a new connection on if applicable
+        /// - Precondition: connection with given `connectionId` must be either `.active` or already in the `.draining` state
         mutating func goAwayReceived(_ connectionID: Connection.ID) -> GoAwayContext {
             guard let index = self.connections.firstIndex(where: { $0.connectionID == connectionID }) else {
                 preconditionFailure("go away recieved for a connection that does not exists")
@@ -376,12 +408,18 @@ extension HTTPConnectionPool {
             return GoAwayContext(eventLoop: eventLoop)
         }
 
+        /// Update the maximum number of concurrent streams for the given connection.
+        /// - Parameters:
+        ///   - connectionID: The connectionID for which we received new settings
+        ///   - newMaxStreams: new maximum concurrent streams
+        /// - Returns: index of the connection and new number of available streams in the `AvailableConnectionContext`
+        /// - Precondition: Connections must be in the `.active` or `.draining` state.
         mutating func newHTTP2MaxConcurrentStreamsReceived(
             _ connectionID: Connection.ID,
             newMaxStreams: Int
         ) -> (Int, AvailableConnectionContext) {
             guard let index = self.connections.firstIndex(where: { $0.connectionID == connectionID }) else {
-                preconditionFailure("We tried to update the maximum concurren streams number for a connection that does not exists")
+                preconditionFailure("We tried to update the maximum number of concurrent streams for a connection that does not exists")
             }
             let availableStreams = self.connections[index].newMaxConcurrentStreams(newMaxStreams)
             let context = AvailableConnectionContext(
@@ -413,7 +451,7 @@ extension HTTPConnectionPool {
             return availableConnection
         }
 
-        mutating func leaseStreams(onRequired eventLoop: EventLoop) -> Connection? {
+        mutating func leaseStream(onRequired eventLoop: EventLoop) -> Connection? {
             guard let index = self.findAvailableConnection(onRequired: eventLoop) else { return nil }
             return self.leaseStreams(at: index, count: 1)
         }
@@ -453,7 +491,7 @@ extension HTTPConnectionPool {
         /// - Returns: closed and removed connection
         mutating func closeConnection(at index: Int) -> Connection {
             let connection = self.connections[index].close()
-            self.connections.remove(at: index)
+            self.removeConnection(at: index)
             return connection
         }
 
@@ -479,7 +517,7 @@ extension HTTPConnectionPool {
         }
 
         /// replaces a closed connection by creating a new starting connection.
-        /// - Parameter index: index of the connection which we get from `failConnection(_:)`
+        /// - Parameter index: index of the connection which we got from `failConnection(_:)`
         /// - Precondition: connection must be closed
         mutating func createNewConnectionByReplacingClosedConnection(at index: Int) -> (Connection.ID, EventLoop) {
             precondition(self.connections[index].isClosed)

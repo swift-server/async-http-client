@@ -164,7 +164,7 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
             XCTAssert(conn1CreatedContext.eventLoop === el)
         }
 
-        XCTAssertNil(connections.leaseStreams(onRequired: el5))
+        XCTAssertNil(connections.leaseStream(onRequired: el5))
     }
 
     func testCloseConnectionIfIdle() {
@@ -238,7 +238,7 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         _ = connections.newHTTP2ConnectionEstablished(conn1, maxConcurrentStreams: 100)
 
         // we lease it just before timeout
-        XCTAssertEqual(connections.leaseStreams(onRequired: el1), conn1)
+        XCTAssertEqual(connections.leaseStream(onRequired: el1), conn1)
 
         // timeout arrives minimal to late
         XCTAssertEqual(connections.closeConnectionIfIdle(conn1ID), nil)
@@ -324,14 +324,14 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         XCTAssertEqual(conn1CreatedContext.availableStreams, 100)
         XCTAssertEqual(connections.leaseStreams(at: conn1Index, count: 100), conn1)
 
-        XCTAssertNil(connections.leaseStreams(onRequired: el1), "should not be able to lease stream because they are all already leased")
+        XCTAssertNil(connections.leaseStream(onRequired: el1), "should not be able to lease stream because they are all already leased")
 
         let (_, releaseContext) = connections.releaseStream(conn1ID)
         XCTAssertFalse(releaseContext.isIdle)
         XCTAssertEqual(releaseContext.availableStreams, 1)
 
-        XCTAssertEqual(connections.leaseStreams(onRequired: el1), conn1)
-        XCTAssertNil(connections.leaseStreams(onRequired: el1), "should not be able to lease stream because they are all already leased")
+        XCTAssertEqual(connections.leaseStream(onRequired: el1), conn1)
+        XCTAssertNil(connections.leaseStream(onRequired: el1), "should not be able to lease stream because they are all already leased")
     }
 
     func testGoAway() {
@@ -360,7 +360,7 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
             )
         )
 
-        XCTAssertNil(connections.leaseStreams(onRequired: el1), "we should not be able to lease a stream because the connection is draining")
+        XCTAssertNil(connections.leaseStream(onRequired: el1), "we should not be able to lease a stream because the connection is draining")
 
         // a server can potentially send more than one connection go away and we should not crash
         XCTAssertTrue(connections.goAwayReceived(conn1ID).eventLoop === el1)
@@ -423,14 +423,14 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         XCTAssertEqual(conn1CreatedContext.availableStreams, 1)
         XCTAssertEqual(connections.leaseStreams(at: conn1Index, count: 1), conn1)
 
-        XCTAssertNil(connections.leaseStreams(onRequired: el1), "all streams are in use")
+        XCTAssertNil(connections.leaseStream(onRequired: el1), "all streams are in use")
 
         let (_, newSettingsContext1) = connections.newHTTP2MaxConcurrentStreamsReceived(conn1ID, newMaxStreams: 2)
         XCTAssertEqual(newSettingsContext1.availableStreams, 1)
         XCTAssertTrue(newSettingsContext1.eventLoop === el1)
         XCTAssertFalse(newSettingsContext1.isIdle)
 
-        XCTAssertEqual(connections.leaseStreams(onRequired: el1), conn1)
+        XCTAssertEqual(connections.leaseStream(onRequired: el1), conn1)
 
         let (_, newSettingsContext2) = connections.newHTTP2MaxConcurrentStreamsReceived(conn1ID, newMaxStreams: 1)
         XCTAssertEqual(newSettingsContext2.availableStreams, 0)
@@ -442,14 +442,14 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         XCTAssertFalse(release1Context.isIdle)
         XCTAssertEqual(release1Context.availableStreams, 0)
 
-        XCTAssertNil(connections.leaseStreams(onRequired: el1), "all streams are in use")
+        XCTAssertNil(connections.leaseStream(onRequired: el1), "all streams are in use")
 
         // release a connection
         let (_, release2Context) = connections.releaseStream(conn1ID)
         XCTAssertTrue(release2Context.isIdle)
         XCTAssertEqual(release2Context.availableStreams, 1)
 
-        XCTAssertEqual(connections.leaseStreams(onRequired: el1), conn1)
+        XCTAssertEqual(connections.leaseStream(onRequired: el1), conn1)
     }
 
     func testLeaseOnPreferredEventLoopWithoutAnyAvailable() {
