@@ -342,12 +342,9 @@ extension RequestBag.StateMachine {
                 preconditionFailure("If we have received an error or eof before, why did we get another body part? Next: \(next)")
             }
 
-            if buffer.isEmpty, newChunks == nil || newChunks!.isEmpty {
-                self.state = .finished(error: nil)
-                return .succeedRequest
-            } else if buffer.isEmpty, let newChunks = newChunks {
+            if buffer.isEmpty, let newChunks = newChunks, !newChunks.isEmpty {
                 buffer = newChunks
-            } else if let newChunks = newChunks {
+            } else if let newChunks = newChunks, !newChunks.isEmpty {
                 buffer.append(contentsOf: newChunks)
             }
 
@@ -433,9 +430,11 @@ extension RequestBag.StateMachine {
     private mutating func consumeMoreBodyData() -> ConsumeAction {
         switch self.state {
         case .initialized, .queued:
-            preconditionFailure("Invalid state")
+            preconditionFailure("Invalid state: \(self.state)")
+
         case .executing(_, _, .initialized):
             preconditionFailure("Invalid state: Must have received response head, before this method is called for the first time")
+
         case .executing(let executor, let requestState, .buffering(var buffer, next: .askExecutorForMore)):
             self.state = .modifying
 
@@ -473,7 +472,7 @@ extension RequestBag.StateMachine {
             return .doNothing
 
         case .finished(error: .none):
-            preconditionFailure("Invalid state... If no error occured, this must not be called, after the request was finished")
+            preconditionFailure("Invalid state... If no error occurred, this must not be called, after the request was finished")
 
         case .modifying:
             preconditionFailure()

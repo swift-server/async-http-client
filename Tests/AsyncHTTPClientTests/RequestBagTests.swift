@@ -399,6 +399,7 @@ final class RequestBagTests: XCTestCase {
         XCTAssertEqual(executor.nextBodyPart(), .body(.byteBuffer(.init(bytes: 0...3))))
         // receive a 301 response immediately.
         bag.receiveResponseHead(.init(version: .http1_1, status: .movedPermanently))
+        XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
         bag.succeedRequest(.init())
 
         // if we now write our second part of the response this should fail the backpressure promise
@@ -406,6 +407,62 @@ final class RequestBagTests: XCTestCase {
 
         XCTAssertEqual(delegate.receivedHead?.status, .movedPermanently)
         XCTAssertNoThrow(try bag.task.futureResult.wait())
+    }
+
+    func testRaceBetweenConnectionCloseAndDemandMoreData() {
+        let embeddedEventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+        let logger = Logger(label: "test")
+
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://swift.org"))
+        guard let request = maybeRequest else { return XCTFail("Expected to have a request") }
+
+        let delegate = UploadCountingDelegate(eventLoop: embeddedEventLoop)
+        var maybeRequestBag: RequestBag<UploadCountingDelegate>?
+        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embeddedEventLoop),
+            task: .init(eventLoop: embeddedEventLoop, logger: logger),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(),
+            delegate: delegate
+        ))
+        guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
+
+        let executor = MockRequestExecutor()
+        bag.willExecuteRequest(executor)
+        bag.requestHeadSent()
+        bag.receiveResponseHead(.init(version: .http1_1, status: .ok))
+        XCTAssertFalse(executor.signalledDemandForResponseBody)
+        XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
+        XCTAssertTrue(executor.signalledDemandForResponseBody)
+        executor.resetDemandSignal()
+
+        // "foo" is forwarded for consumption. We expect the RequestBag to consume "foo" with the
+        // delegate and call demandMoreBody afterwards.
+        XCTAssertEqual(delegate.hitDidReceiveBodyPart, 0)
+        bag.receiveResponseBodyParts([ByteBuffer(string: "foo")])
+        XCTAssertFalse(executor.signalledDemandForResponseBody)
+        XCTAssertEqual(delegate.hitDidReceiveBodyPart, 1)
+        XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
+        XCTAssertTrue(executor.signalledDemandForResponseBody)
+        executor.resetDemandSignal()
+
+        bag.receiveResponseBodyParts([ByteBuffer(string: "bar")])
+        XCTAssertEqual(delegate.hitDidReceiveBodyPart, 2)
+
+        // the remote closes the connection, which leads to more data and a succeed of the request
+        bag.succeedRequest([ByteBuffer(string: "baz")])
+        XCTAssertEqual(delegate.hitDidReceiveBodyPart, 2)
+
+        XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
+        XCTAssertEqual(delegate.hitDidReceiveBodyPart, 3)
+
+        XCTAssertEqual(delegate.hitDidReceiveResponse, 0)
+        XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
+        XCTAssertEqual(delegate.hitDidReceiveResponse, 1)
     }
 }
 
