@@ -135,6 +135,7 @@ extension HTTPClientTests {
             ("testCloseWhileBackpressureIsExertedIsFine", testCloseWhileBackpressureIsExertedIsFine),
             ("testErrorAfterCloseWhileBackpressureExerted", testErrorAfterCloseWhileBackpressureExerted),
             ("testRequestSpecificTLS", testRequestSpecificTLS),
+            ("testConnectionPoolSizeConfigValueIsRespected", testConnectionPoolSizeConfigValueIsRespected),
         ]
     }
 }

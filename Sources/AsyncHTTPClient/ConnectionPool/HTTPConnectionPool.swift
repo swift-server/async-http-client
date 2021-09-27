@@ -71,7 +71,7 @@ final class HTTPConnectionPool {
         self._state = StateMachine(
             eventLoopGroup: eventLoopGroup,
             idGenerator: idGenerator,
-            maximumConcurrentHTTP1Connections: 8
+            maximumConcurrentHTTP1Connections: clientConfiguration.connectionPool.concurrentHTTP1ConnectionsPerHostSoftLimit
         )
     }
 
