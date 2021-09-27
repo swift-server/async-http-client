@@ -450,8 +450,10 @@ struct HTTPRequestStateMachine {
     }
 
     private mutating func receivedHTTPResponseHead(_ head: HTTPResponseHead) -> Action {
-        guard head.status.code >= 200 else {
-            // we ignore any leading 1xx headers... No state change needed.
+        guard head.status.code >= 200 || head.status == .switchingProtocols else {
+            // We ignore any leading 1xx headers except for 101 (switching protocols). The
+            // HTTP1ConnectionStateMachine ensures the connection close for 101 after the `.end` is
+            // received.
             return .wait
         }
 

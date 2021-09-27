@@ -243,6 +243,18 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         let decompressionError = NIOHTTPDecompression.DecompressionError.limit
         XCTAssertEqual(state.errorHappened(decompressionError), .failRequest(decompressionError, .close))
     }
+
+    func testConnectionIsClosedAfterSwitchingProtocols() {
+        var state = HTTP1ConnectionStateMachine()
+        XCTAssertEqual(state.channelActive(isWritable: true), .fireChannelActive)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        let newRequestAction = state.runNewRequest(head: requestHead, metadata: metadata, ignoreUncleanSSLShutdown: false)
+        XCTAssertEqual(newRequestAction, .sendRequestHead(requestHead, startBody: false))
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .switchingProtocols)
+        XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
+        XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.close, []))
+    }
 }
 
 extension HTTP1ConnectionStateMachine.Action: Equatable {
