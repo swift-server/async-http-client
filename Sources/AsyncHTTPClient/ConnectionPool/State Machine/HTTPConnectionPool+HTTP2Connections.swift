@@ -19,25 +19,16 @@ extension HTTPConnectionPool {
         private enum State {
             /// the pool is establishing a connection. Valid transitions are to: .backingOff, .active and .closed
             case starting
-            /// the connection is waiting to retry to establish a connection. Transition to .closed. From .closed
-            /// a new connection state must be created for a retry.
+            /// the connection is waiting to retry to establish a connection. Valid transitions are to .closed.
+            /// From .closed a new connection state must be created for a retry.
             case backingOff
-            /// the connection is active and is able to run requests. Valid transitions to: .draining and .closed
+            /// the connection is active and is able to run requests. Valid transitions are to: .draining and .closed
             case active(Connection, maxStreams: Int, usedStreams: Int, lastIdle: NIODeadline)
             /// the connection is active and is running requests. No new requests must be scheduled.
             /// Valid transitions to: .draining and .closed
             case draining(Connection, maxStreams: Int, usedStreams: Int)
             /// the connection is closed
             case closed
-        }
-
-        var isActive: Bool {
-            switch self.state {
-            case .starting, .backingOff, .draining, .closed:
-                return false
-            case .active:
-                return true
-            }
         }
 
         var isStartingOrBackingOff: Bool {
@@ -182,17 +173,17 @@ extension HTTPConnectionPool {
                 preconditionFailure("Invalid state: \(self.state)")
 
             case .active(let conn, let maxStreams, var usedStreams, var lastIdle):
-                usedStreams -= 1
-                assert(usedStreams >= 0)
+                precondition(usedStreams > 0, "we cannot release more streams than we have leased")
+                usedStreams &-= 1
                 if usedStreams == 0 {
                     lastIdle = .now()
                 }
                 self.state = .active(conn, maxStreams: maxStreams, usedStreams: usedStreams, lastIdle: lastIdle)
-                return max(maxStreams - usedStreams, 0)
+                return max(maxStreams &- usedStreams, 0)
 
             case .draining(let conn, let maxStreams, var usedStreams):
-                usedStreams -= 1
-                assert(usedStreams >= 0)
+                precondition(usedStreams > 0, "we cannot release more streams than we have leased")
+                usedStreams &-= 1
                 self.state = .draining(conn, maxStreams: maxStreams, usedStreams: usedStreams)
                 return 0
             }
@@ -238,7 +229,8 @@ extension HTTPConnectionPool {
                 return .removeConnection
 
             case .active(let connection, _, let usedStreams, _):
-                if usedStreams <= 0 {
+                precondition(usedStreams >= 0)
+                if usedStreams == 0 {
                     context.close.append(connection)
                     return .removeConnection
                 } else {
@@ -256,9 +248,6 @@ extension HTTPConnectionPool {
         }
 
         func addStats(into stats: inout HTTP2Connections.Stats) {
-            if self.isIdle {
-                stats.idleConnections &+= 1
-            }
             switch self.state {
             case .starting:
                 stats.startingConnections &+= 1
@@ -270,11 +259,17 @@ extension HTTPConnectionPool {
                 stats.availableStreams += max(maxStreams - usedStreams, 0)
                 stats.leasedStreams += usedStreams
                 stats.availableConnections &+= 1
-
+                precondition(usedStreams >= 0)
+                if usedStreams == 0 {
+                    stats.idleConnections &+= 1
+                }
             case .draining(_, _, let usedStreams):
                 stats.drainingConnections &+= 1
                 stats.leasedStreams += usedStreams
-
+                precondition(usedStreams >= 0)
+                if usedStreams == 0 {
+                    stats.idleConnections &+= 1
+                }
             case .closed:
                 break
             }
@@ -359,7 +354,7 @@ extension HTTPConnectionPool {
             return connection.connectionID
         }
 
-        /// A new HTTP/2.0 connection was established.
+        /// A new HTTP/2 connection was established.
         ///
         /// This will put the connection into the idle state.
         ///
