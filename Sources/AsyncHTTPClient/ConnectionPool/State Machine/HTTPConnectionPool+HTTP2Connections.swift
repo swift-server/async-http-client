@@ -432,18 +432,18 @@ extension HTTPConnectionPool {
             return self.leaseStreams(at: index, count: 1)
         }
 
-        /// tries to find an available connection on the prefered `eventLoop`. If it can't find one with the given `eventLoop`, it returns the first available connection
+        /// tries to find an available connection on the preferred `eventLoop`. If it can't find one with the given `eventLoop`, it returns the first available connection
         private func findAvailableConnection(onPreferred eventLoop: EventLoop) -> Int? {
-            var availableConnection: Int?
-            for (index, connection) in self.connections.enumerated() {
+            var availableConnectionIndex: Int?
+            for (offset, connection) in self.connections.enumerated() {
                 guard connection.isAvailable else { continue }
                 if connection.eventLoop === eventLoop {
-                    return index
-                } else if availableConnection == nil {
-                    availableConnection = index
+                    return self.connections.index(self.connections.startIndex, offsetBy: offset)
+                } else if availableConnectionIndex == nil {
+                    availableConnectionIndex = self.connections.index(self.connections.startIndex, offsetBy: offset)
                 }
             }
-            return availableConnection
+            return availableConnectionIndex
         }
 
         mutating func leaseStream(onRequired eventLoop: EventLoop) -> Connection? {
