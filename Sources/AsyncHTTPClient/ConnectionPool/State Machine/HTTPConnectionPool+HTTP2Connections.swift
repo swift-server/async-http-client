@@ -267,9 +267,6 @@ extension HTTPConnectionPool {
                 stats.drainingConnections &+= 1
                 stats.leasedStreams += usedStreams
                 precondition(usedStreams >= 0)
-                if usedStreams == 0 {
-                    stats.idleConnections &+= 1
-                }
             case .closed:
                 break
             }
