@@ -316,4 +316,24 @@ class RequestValidationTests: XCTestCase {
             XCTAssertThrowsError(try headers.validate(method: method, body: .byteBuffer(ByteBuffer(bytes: [0]))))
         }
     }
+
+    func testHostHeaderIsSetCorrectlyInCreateRequestHead() {
+        let req1 = try! HTTPClient.Request(url: "http://localhost:80/get")
+        XCTAssertEqual(try req1.createRequestHead().0.headers["host"].first, "localhost")
+
+        let req2 = try! HTTPClient.Request(url: "https://localhost/get")
+        XCTAssertEqual(try req2.createRequestHead().0.headers["host"].first, "localhost")
+
+        let req3 = try! HTTPClient.Request(url: "http://localhost:8080/get")
+        XCTAssertEqual(try req3.createRequestHead().0.headers["host"].first, "localhost:8080")
+
+        let req4 = try! HTTPClient.Request(url: "http://localhost:443/get")
+        XCTAssertEqual(try req4.createRequestHead().0.headers["host"].first, "localhost:443")
+
+        let req5 = try! HTTPClient.Request(url: "https://localhost:80/get")
+        XCTAssertEqual(try req5.createRequestHead().0.headers["host"].first, "localhost:80")
+
+        let req6 = try! HTTPClient.Request(url: "https://localhost/get", headers: ["host": "foo"])
+        XCTAssertEqual(try req6.createRequestHead().0.headers["host"].first, "foo")
+    }
 }
