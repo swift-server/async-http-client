@@ -41,6 +41,7 @@ extension HTTP1ConnectionStateMachineTests {
             ("testRequestIsCancelledWhileWaitingForWritable", testRequestIsCancelledWhileWaitingForWritable),
             ("testConnectionIsClosedIfErrorHappensWhileInRequest", testConnectionIsClosedIfErrorHappensWhileInRequest),
             ("testConnectionIsClosedAfterSwitchingProtocols", testConnectionIsClosedAfterSwitchingProtocols),
+            ("testWeDontCrashAfterEarlyHintsAndConnectionClose", testWeDontCrashAfterEarlyHintsAndConnectionClose),
         ]
     }
 }

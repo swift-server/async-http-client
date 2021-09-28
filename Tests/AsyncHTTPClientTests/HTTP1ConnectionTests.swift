@@ -430,6 +430,66 @@ class HTTP1ConnectionTests: XCTestCase {
         XCTAssertEqual(response?.body, nil)
     }
 
+    func testConnectionDoesntCrashAfterConnectionCloseAndEarlyHints() {
+        let embedded = EmbeddedChannel()
+        let logger = Logger(label: "test.http1.connection")
+
+        XCTAssertNoThrow(try embedded.connect(to: SocketAddress(ipAddress: "127.0.0.1", port: 3000)).wait())
+
+        var maybeConnection: HTTP1Connection?
+        let connectionDelegate = MockConnectionDelegate()
+        XCTAssertNoThrow(maybeConnection = try HTTP1Connection.start(
+            channel: embedded,
+            connectionID: 0,
+            delegate: connectionDelegate,
+            configuration: .init(decompression: .enabled(limit: .ratio(4))),
+            logger: logger
+        ))
+        guard let connection = maybeConnection else { return XCTFail("Expected to have a connection at this point.") }
+
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://swift.org/"))
+        guard let request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
+
+        let delegate = ResponseAccumulator(request: request)
+        var maybeRequestBag: RequestBag<ResponseAccumulator>?
+        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embedded.eventLoop),
+            task: .init(eventLoop: embedded.eventLoop, logger: logger),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(),
+            delegate: delegate
+        ))
+        guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
+
+        connection.executeRequest(requestBag)
+
+        XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self)) // head
+        XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self)) // end
+
+        let responseString = """
+        HTTP/1.1 103 Early Hints\r\n\
+        date: Mon, 27 Sep 2021 17:53:14 GMT\r\n\
+        \r\n\
+        \r\n
+        """
+
+        XCTAssertTrue(embedded.isActive)
+        XCTAssertEqual(connectionDelegate.hitConnectionClosed, 0)
+        XCTAssertEqual(connectionDelegate.hitConnectionReleased, 0)
+        XCTAssertNoThrow(try embedded.writeInbound(ByteBuffer(string: responseString)))
+        XCTAssertFalse(embedded.isActive)
+        (embedded.eventLoop as! EmbeddedEventLoop).run() // tick once to run futures.
+        XCTAssertEqual(connectionDelegate.hitConnectionClosed, 1)
+        XCTAssertEqual(connectionDelegate.hitConnectionReleased, 0)
+
+        XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .httpEndReceivedAfterHeadWith1xx)
+        }
+    }
+
     // In order to test backpressure we need to make sure that reads will not happen
     // until the backpressure promise is succeeded. Since we cannot guarantee when
     // messages will be delivered to a client pipeline and we need this test to be

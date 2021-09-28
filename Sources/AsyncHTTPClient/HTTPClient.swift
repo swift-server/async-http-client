@@ -901,6 +901,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case requestStreamCancelled
         case getConnectionFromPoolTimeout
         case deadlineExceeded
+        case httpEndReceivedAfterHeadWith1xx
     }
 
     private var code: Code
@@ -983,4 +984,6 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     ///  - A connection could not be created within the timout period.
     ///  - Tasks are not processed fast enough on the existing connections, to process all waiters in time
     public static let getConnectionFromPoolTimeout = HTTPClientError(code: .getConnectionFromPoolTimeout)
+
+    public static let httpEndReceivedAfterHeadWith1xx = HTTPClientError(code: .httpEndReceivedAfterHeadWith1xx)
 }
