@@ -450,8 +450,10 @@ struct HTTPRequestStateMachine {
     }
 
     private mutating func receivedHTTPResponseHead(_ head: HTTPResponseHead) -> Action {
-        guard head.status.code >= 200 else {
-            // we ignore any leading 1xx headers... No state change needed.
+        guard head.status.code >= 200 || head.status == .switchingProtocols else {
+            // We ignore any leading 1xx headers except for 101 (switching protocols). The
+            // HTTP1ConnectionStateMachine ensures the connection close for 101 after the `.end` is
+            // received.
             return .wait
         }
 
@@ -527,7 +529,13 @@ struct HTTPRequestStateMachine {
             preconditionFailure("How can we receive a response head before sending a request head ourselves. Invalid state: \(self.state)")
 
         case .running(_, .waitingForHead):
-            preconditionFailure("How can we receive a response end, if we haven't a received a head. Invalid state: \(self.state)")
+            // If we receive a http response header with a status code of 1xx, we ignore the header
+            // except for 101, which we consume.
+            // If the remote closes the connection after sending a 1xx (not 101) response head, we
+            // will receive a response end from the parser. We need to protect against this case.
+            let error = HTTPClientError.httpEndReceivedAfterHeadWith1xx
+            self.state = .failed(error)
+            return .failRequest(error, .close)
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, let producerState), .receivingBody(let head, var responseStreamState))
             where head.status.code < 300:

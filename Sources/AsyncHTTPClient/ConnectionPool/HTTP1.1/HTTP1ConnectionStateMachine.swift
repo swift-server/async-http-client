@@ -261,7 +261,9 @@ struct HTTP1ConnectionStateMachine {
                 let action = requestStateMachine.channelRead(part)
 
                 if case .head(let head) = part, close == false {
-                    close = !head.isKeepAlive
+                    // since the HTTPClient does not support protocol switching, we must close any
+                    // connection that has received a status `.switchingProtocols`
+                    close = !head.isKeepAlive || head.status == .switchingProtocols
                 }
                 state = .inRequest(requestStateMachine, close: close)
                 return state.modify(with: action)
