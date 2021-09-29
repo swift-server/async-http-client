@@ -14,7 +14,7 @@
 
 @testable import AsyncHTTPClient
 import Logging
-import NIO
+import NIOCore
 import NIOHTTP1
 
 /// A mock request queue (not creating any timers) that is used to validate

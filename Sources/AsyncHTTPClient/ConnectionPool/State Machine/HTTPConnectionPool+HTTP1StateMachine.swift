@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-import NIO
+import NIOCore
 
 extension HTTPConnectionPool {
     struct HTTP1StateMachine {

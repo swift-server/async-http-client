@@ -14,7 +14,7 @@
 
 @testable import AsyncHTTPClient
 import Logging
-import NIO
+import NIOCore
 import NIOHTTP1
 import NIOSSL
 
