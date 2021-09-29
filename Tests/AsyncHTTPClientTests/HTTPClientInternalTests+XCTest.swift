@@ -25,9 +25,6 @@ import XCTest
 extension HTTPClientInternalTests {
     static var allTests: [(String, (HTTPClientInternalTests) -> () throws -> Void)] {
         return [
-            ("testHTTPPartsHandler", testHTTPPartsHandler),
-            ("testHTTPPartsHandlerMultiBody", testHTTPPartsHandlerMultiBody),
-            ("testRequestFinishesAfterRedirectIfServerRespondsBeforeClientFinishes", testRequestFinishesAfterRedirectIfServerRespondsBeforeClientFinishes),
             ("testProxyStreaming", testProxyStreaming),
             ("testProxyStreamingFailure", testProxyStreamingFailure),
             ("testRequestURITrailingSlash", testRequestURITrailingSlash),
@@ -38,9 +35,6 @@ extension HTTPClientInternalTests {
             ("testTaskPromiseBoundToEL", testTaskPromiseBoundToEL),
             ("testConnectErrorCalloutOnCorrectEL", testConnectErrorCalloutOnCorrectEL),
             ("testInternalRequestURI", testInternalRequestURI),
-            ("testBodyPartStreamStateChangedBeforeNotification", testBodyPartStreamStateChangedBeforeNotification),
-            ("testHandlerDoubleError", testHandlerDoubleError),
-            ("testTaskHandlerStateChangeAfterError", testTaskHandlerStateChangeAfterError),
         ]
     }
 }
