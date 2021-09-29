@@ -12,7 +12,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-import NIO
+import NIOCore
+#if canImport(Darwin)
+import func Darwin.pow
+#else
+import func Glibc.pow
+#endif
 
 extension HTTPConnectionPool {
     /// Calculates the delay for the next connection attempt after the given number of failed `attempts`.
