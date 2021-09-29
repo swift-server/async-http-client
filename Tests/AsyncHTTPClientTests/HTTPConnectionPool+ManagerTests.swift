@@ -13,8 +13,9 @@
 //===----------------------------------------------------------------------===//
 
 @testable import AsyncHTTPClient
-import NIO
+import NIOCore
 import NIOHTTP1
+import NIOPosix
 import XCTest
 
 class HTTPConnectionPool_ManagerTests: XCTestCase {

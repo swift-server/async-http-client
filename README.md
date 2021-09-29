@@ -106,7 +106,7 @@ httpClient.execute(request: request, deadline: .now() + .milliseconds(1))
 ### Streaming
 When dealing with larger amount of data, it's critical to stream the response body instead of aggregating in-memory. Handling a response stream is done using a delegate protocol. The following example demonstrates how to count the number of bytes in a streaming response body:
 ```swift
-import NIO
+import NIOCore
 import NIOHTTP1
 
 class CountingDelegate: HTTPClientResponseDelegate {
