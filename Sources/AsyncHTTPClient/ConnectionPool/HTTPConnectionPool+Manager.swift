@@ -13,8 +13,8 @@
 //===----------------------------------------------------------------------===//
 
 import Logging
-import NIOCore
 import NIOConcurrencyHelpers
+import NIOCore
 import NIOHTTP1
 
 extension HTTPConnectionPool {

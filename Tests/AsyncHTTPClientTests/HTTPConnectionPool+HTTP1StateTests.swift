@@ -14,9 +14,9 @@
 
 @testable import AsyncHTTPClient
 import NIOCore
-import NIOPosix
 import NIOEmbedded
 import NIOHTTP1
+import NIOPosix
 import XCTest
 
 class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
