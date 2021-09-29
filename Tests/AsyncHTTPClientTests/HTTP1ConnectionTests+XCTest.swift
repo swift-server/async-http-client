@@ -34,6 +34,8 @@ extension HTTP1ConnectionTests {
             ("testConnectionClosesAfterTheRequestWithoutHavingSentAnCloseHeader", testConnectionClosesAfterTheRequestWithoutHavingSentAnCloseHeader),
             ("testConnectionIsClosedAfterSwitchingProtocols", testConnectionIsClosedAfterSwitchingProtocols),
             ("testConnectionDoesntCrashAfterConnectionCloseAndEarlyHints", testConnectionDoesntCrashAfterConnectionCloseAndEarlyHints),
+            ("testConnectionIsClosedIfResponseIsReceivedBeforeRequest", testConnectionIsClosedIfResponseIsReceivedBeforeRequest),
+            ("testDoubleHTTPResponseLine", testDoubleHTTPResponseLine),
             ("testDownloadStreamingBackpressure", testDownloadStreamingBackpressure),
         ]
     }

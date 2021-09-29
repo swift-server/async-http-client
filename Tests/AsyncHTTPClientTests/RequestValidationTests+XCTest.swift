@@ -42,6 +42,7 @@ extension RequestValidationTests {
             ("testTransferEncodingHeaderHasBody", testTransferEncodingHeaderHasBody),
             ("testBothHeadersNoBody", testBothHeadersNoBody),
             ("testBothHeadersHasBody", testBothHeadersHasBody),
+            ("testHostHeaderIsSetCorrectlyInCreateRequestHead", testHostHeaderIsSetCorrectlyInCreateRequestHead),
         ]
     }
 }

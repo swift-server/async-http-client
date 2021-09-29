@@ -3103,4 +3103,23 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertEqual(httpBin.createdConnections, poolSize)
     }
+
+    func testRequestWithHeaderTransferEncodingIdentityFails() {
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { XCTAssertNoThrow(try group.syncShutdownGracefully()) }
+
+        let client = HTTPClient(eventLoopGroupProvider: .shared(group))
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        guard var request = try? Request(url: "http://localhost/get") else {
+            return XCTFail("Expected to have a request here.")
+        }
+        request.headers.add(name: "X-Test-Header", value: "X-Test-Value")
+        request.headers.add(name: "Transfer-Encoding", value: "identity")
+        request.body = .string("1234")
+
+        XCTAssertThrowsError(try client.execute(request: request).wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .identityCodingIncorrectlyPresent)
+        }
+    }
 }

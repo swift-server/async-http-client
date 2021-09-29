@@ -75,65 +75,6 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.end(nil)))
     }
 
-    func testBadHTTPRequest() throws {
-        let channel = EmbeddedChannel()
-        let recorder = RecordingHandler<HTTPClientResponsePart, HTTPClientRequestPart>()
-        let task = Task<Void>(eventLoop: channel.eventLoop, logger: HTTPClient.loggingDisabled)
-
-        XCTAssertNoThrow(try channel.pipeline.addHandler(recorder).wait())
-        XCTAssertNoThrow(try channel.pipeline.addHandler(TaskHandler(task: task,
-                                                                     kind: .host,
-                                                                     delegate: TestHTTPDelegate(),
-                                                                     redirectHandler: nil,
-                                                                     ignoreUncleanSSLShutdown: false,
-                                                                     logger: HTTPClient.loggingDisabled)).wait())
-
-        var request = try Request(url: "http://localhost/get")
-        request.headers.add(name: "X-Test-Header", value: "X-Test-Value")
-        request.headers.add(name: "Transfer-Encoding", value: "identity")
-        request.body = .string("1234")
-
-        XCTAssertThrowsError(try channel.writeOutbound(request)) { error in
-            XCTAssertEqual(HTTPClientError.identityCodingIncorrectlyPresent, error as? HTTPClientError)
-        }
-    }
-
-    func testHostPort() throws {
-        let channel = EmbeddedChannel()
-        let recorder = RecordingHandler<HTTPClientResponsePart, HTTPClientRequestPart>()
-        let task = Task<Void>(eventLoop: channel.eventLoop, logger: HTTPClient.loggingDisabled)
-
-        try channel.pipeline.addHandler(recorder).wait()
-        try channel.pipeline.addHandler(TaskHandler(task: task,
-                                                    kind: .host,
-                                                    delegate: TestHTTPDelegate(),
-                                                    redirectHandler: nil,
-                                                    ignoreUncleanSSLShutdown: false,
-                                                    logger: HTTPClient.loggingDisabled)).wait()
-
-        let request1 = try Request(url: "http://localhost:80/get")
-        XCTAssertNoThrow(try channel.writeOutbound(request1))
-        let request2 = try Request(url: "https://localhost/get")
-        XCTAssertNoThrow(try channel.writeOutbound(request2))
-        let request3 = try Request(url: "http://localhost:8080/get")
-        XCTAssertNoThrow(try channel.writeOutbound(request3))
-        let request4 = try Request(url: "http://localhost:443/get")
-        XCTAssertNoThrow(try channel.writeOutbound(request4))
-        let request5 = try Request(url: "https://localhost:80/get")
-        XCTAssertNoThrow(try channel.writeOutbound(request5))
-
-        let head1 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get", headers: ["host": "localhost"])
-        XCTAssertEqual(HTTPClientRequestPart.head(head1), recorder.writes[0])
-        let head2 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get", headers: ["host": "localhost"])
-        XCTAssertEqual(HTTPClientRequestPart.head(head2), recorder.writes[2])
-        let head3 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get", headers: ["host": "localhost:8080"])
-        XCTAssertEqual(HTTPClientRequestPart.head(head3), recorder.writes[4])
-        let head4 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get", headers: ["host": "localhost:443"])
-        XCTAssertEqual(HTTPClientRequestPart.head(head4), recorder.writes[6])
-        let head5 = HTTPRequestHead(version: HTTPVersion(major: 1, minor: 1), method: .GET, uri: "/get", headers: ["host": "localhost:80"])
-        XCTAssertEqual(HTTPClientRequestPart.head(head5), recorder.writes[8])
-    }
-
     func testHTTPPartsHandlerMultiBody() throws {
         let channel = EmbeddedChannel()
         let delegate = TestHTTPDelegate()
@@ -160,55 +101,6 @@ class HTTPClientInternalTests: XCTestCase {
             XCTAssertEqual(8, body.readableBytes)
         default:
             XCTFail("Expecting .body")
-        }
-    }
-
-    func testHTTPResponseHeadBeforeRequestHead() throws {
-        let channel = EmbeddedChannel()
-        XCTAssertNoThrow(try channel.connect(to: try SocketAddress(unixDomainSocketPath: "/fake")).wait())
-
-        let delegate = TestHTTPDelegate()
-        let task = Task<Void>(eventLoop: channel.eventLoop, logger: HTTPClient.loggingDisabled)
-        let handler = TaskHandler(task: task,
-                                  kind: .host,
-                                  delegate: delegate,
-                                  redirectHandler: nil,
-                                  ignoreUncleanSSLShutdown: false,
-                                  logger: HTTPClient.loggingDisabled)
-
-        XCTAssertNoThrow(try channel.pipeline.addHTTPClientHandlers().wait())
-        XCTAssertNoThrow(try channel.pipeline.addHandler(handler).wait())
-
-        XCTAssertNoThrow(try channel.writeInbound(ByteBuffer(string: "HTTP/1.0 200 OK\r\n\r\n")))
-
-        XCTAssertThrowsError(try task.futureResult.wait()) { error in
-            XCTAssertEqual(error as? NIOHTTPDecoderError, NIOHTTPDecoderError.unsolicitedResponse)
-        }
-    }
-
-    func testHTTPResponseDoubleHead() throws {
-        let channel = EmbeddedChannel()
-        XCTAssertNoThrow(try channel.connect(to: try SocketAddress(unixDomainSocketPath: "/fake")).wait())
-
-        let delegate = TestHTTPDelegate()
-        let task = Task<Void>(eventLoop: channel.eventLoop, logger: HTTPClient.loggingDisabled)
-        let handler = TaskHandler(task: task,
-                                  kind: .host,
-                                  delegate: delegate,
-                                  redirectHandler: nil,
-                                  ignoreUncleanSSLShutdown: false,
-                                  logger: HTTPClient.loggingDisabled)
-
-        XCTAssertNoThrow(try channel.pipeline.addHTTPClientHandlers().wait())
-        XCTAssertNoThrow(try channel.pipeline.addHandler(handler).wait())
-
-        let request = try HTTPClient.Request(url: "http://localhost/get")
-        XCTAssertNoThrow(try channel.writeOutbound(request))
-
-        XCTAssertNoThrow(try channel.writeInbound(ByteBuffer(string: "HTTP/1.0 200 OK\r\nHTTP/1.0 200 OK\r\n\r\n")))
-
-        XCTAssertThrowsError(try task.futureResult.wait()) { error in
-            XCTAssertEqual((error as? HTTPParserError)?.debugDescription, "invalid character in header")
         }
     }
 
