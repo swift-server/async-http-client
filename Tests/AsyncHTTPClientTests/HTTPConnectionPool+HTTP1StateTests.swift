@@ -13,7 +13,9 @@
 //===----------------------------------------------------------------------===//
 
 @testable import AsyncHTTPClient
-import NIO
+import NIOCore
+import NIOPosix
+import NIOEmbedded
 import NIOHTTP1
 import XCTest
 
