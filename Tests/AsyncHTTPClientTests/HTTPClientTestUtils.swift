@@ -158,19 +158,6 @@ class DelayOnHeadDelegate: HTTPClientResponseDelegate {
     }
 }
 
-internal final class RecordingHandler<Input, Output>: ChannelDuplexHandler {
-    typealias InboundIn = Input
-    typealias OutboundIn = Output
-
-    public var writes: [Output] = []
-
-    func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
-        let object = unwrapOutboundIn(data)
-        self.writes.append(object)
-        context.write(NIOAny(IOData.byteBuffer(context.channel.allocator.buffer(capacity: 0))), promise: promise)
-    }
-}
-
 enum TemporaryFileHelpers {
     private static var temporaryDirectory: String {
         #if targetEnvironment(simulator)
