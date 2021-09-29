@@ -154,7 +154,7 @@ extension HTTPConnectionPool {
                 // decision about the retry will be made in `connectionCreationBackoffDone(_:)`
                 let eventLoop = self.connections.backoffNextConnectionAttempt(connectionID)
 
-                let backoff = self.calculateBackoff(failedAttempt: self.failedConsecutiveConnectionAttempts)
+                let backoff = calculateBackoff(failedAttempt: self.failedConsecutiveConnectionAttempts)
                 return .init(
                     request: .none,
                     connection: .scheduleBackoffTimer(connectionID, backoff: backoff, on: eventLoop)
@@ -443,30 +443,6 @@ extension HTTPConnectionPool {
             }
             self.connections.removeConnection(at: index)
             return .none
-        }
-
-        private func calculateBackoff(failedAttempt attempts: Int) -> TimeAmount {
-            // Our backoff formula is: 100ms * 1.25^(attempts - 1) that is capped of at 1minute
-            // This means for:
-            //   -  1 failed attempt :  100ms
-            //   -  5 failed attempts: ~300ms
-            //   - 10 failed attempts: ~930ms
-            //   - 15 failed attempts: ~2.84s
-            //   - 20 failed attempts: ~8.67s
-            //   - 25 failed attempts: ~26s
-            //   - 29 failed attempts: ~60s (max out)
-
-            let start = Double(TimeAmount.milliseconds(100).nanoseconds)
-            let backoffNanoseconds = Int64(start * pow(1.25, Double(attempts - 1)))
-
-            let backoff: TimeAmount = min(.nanoseconds(backoffNanoseconds), .seconds(60))
-
-            // Calculate a 3% jitter range
-            let jitterRange = (backoff.nanoseconds / 100) * 3
-            // Pick a random element from the range +/- jitter range.
-            let jitter: TimeAmount = .nanoseconds((-jitterRange...jitterRange).randomElement()!)
-            let jitteredBackoff = backoff + jitter
-            return jitteredBackoff
         }
     }
 }
