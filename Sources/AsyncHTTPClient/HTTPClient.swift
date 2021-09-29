@@ -19,7 +19,6 @@ import NIOCore
 import NIOHTTP1
 import NIOHTTPCompression
 import NIOPosix
-import NIOSOCKS
 import NIOSSL
 import NIOTLS
 import NIOTransportServices
@@ -578,28 +577,6 @@ public class HTTPClient {
         return task
     }
 
-    private func resolve(timeout: TimeAmount?, deadline: NIODeadline?) -> TimeAmount? {
-        switch (timeout, deadline) {
-        case (.some(let timeout), .some(let deadline)):
-            return min(timeout, deadline - .now())
-        case (.some(let timeout), .none):
-            return timeout
-        case (.none, .some(let deadline)):
-            return deadline - .now()
-        case (.none, .none):
-            return nil
-        }
-    }
-
-    static func resolveAddress(host: String, port: Int, proxy: Configuration.Proxy?) -> (host: String, port: Int) {
-        switch proxy {
-        case .none:
-            return (host, port)
-        case .some(let proxy):
-            return (proxy.host, proxy.port)
-        }
-    }
-
     /// `HTTPClient` configuration.
     public struct Configuration {
         /// TLS configuration, defaults to `TLSConfiguration.makeClientConfiguration()`.
@@ -759,19 +736,6 @@ public class HTTPClient {
         /// connection that might be on a different `EventLoop`.
         public static func delegateAndChannel(on eventLoop: EventLoop) -> EventLoopPreference {
             return EventLoopPreference(.delegateAndChannel(on: eventLoop))
-        }
-
-        var bestEventLoop: EventLoop? {
-            switch self.preference {
-            case .delegate(on: let el):
-                return el
-            case .delegateAndChannel(on: let el):
-                return el
-            case .testOnly_exact(channelOn: let el, delegateOn: _):
-                return el
-            case .indifferent:
-                return nil
-            }
         }
     }
 

@@ -2,7 +2,7 @@
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2020 Apple Inc. and the AsyncHTTPClient project authors
+// Copyright (c) 2020-2021 Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -11,12 +11,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //===----------------------------------------------------------------------===//
-
-extension HTTP1ConnectionProvider.Waiter: CustomStringConvertible {
-    var description: String {
-        return "HTTP1ConnectionProvider.Waiter(\(self.preference))"
-    }
-}
 
 extension HTTPClient.EventLoopPreference: CustomStringConvertible {
     public var description: String {
