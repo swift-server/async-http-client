@@ -162,6 +162,14 @@ struct MockConnectionPool {
             self.state = .http1(.idle(parked: false, idleSince: .now()))
         }
 
+        mutating func http2Started(maxConcurrentStreams: Int) throws {
+            guard case .starting = self.state else {
+                throw Errors.connectionIsNotStarting
+            }
+
+            self.state = .http2(.idle(maxConcurrentStreams: maxConcurrentStreams, parked: false, lastIdle: .now()))
+        }
+
         mutating func park() throws {
             switch self.state {
             case .starting, .closed, .http1(.inUse), .http2(.inUse):
@@ -329,6 +337,19 @@ struct MockConnectionPool {
         }
 
         try connection.http1Started()
+        self.connections[connection.id] = connection
+        return .__testOnly_connection(id: connection.id, eventLoop: connection.eventLoop)
+    }
+
+    mutating func succeedConnectionCreationHTTP2(
+        _ connectionID: Connection.ID,
+        maxConcurrentStreams: Int
+    ) throws -> Connection {
+        guard var connection = self.connections[connectionID] else {
+            throw Errors.connectionNotFound
+        }
+
+        try connection.http2Started(maxConcurrentStreams: maxConcurrentStreams)
         self.connections[connection.id] = connection
         return .__testOnly_connection(id: connection.id, eventLoop: connection.eventLoop)
     }
