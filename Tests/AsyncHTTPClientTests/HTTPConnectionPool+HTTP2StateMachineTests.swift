@@ -114,4 +114,60 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             isShutdown: .yes(unclean: false)
         ))
     }
+    
+    func testConnectionFailureBackoff() {
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
+
+        var state = HTTPConnectionPool.HTTP2StateMaschine(
+            idGenerator: .init()
+        )
+
+        let mockRequest = MockHTTPRequest(eventLoop: elg.next())
+        let request = HTTPConnectionPool.Request(mockRequest)
+
+        let action = state.executeRequest(request)
+        XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), action.request)
+
+        // 1. connection attempt
+        guard case .createConnection(let connectionID, on: let connectionEL) = action.connection else {
+            return XCTFail("Unexpected connection action: \(action.connection)")
+        }
+        XCTAssert(connectionEL === mockRequest.eventLoop) // XCTAssertIdentical not available on Linux
+
+        let failedConnect1 = state.failedToCreateNewConnection(HTTPClientError.connectTimeout, connectionID: connectionID)
+        XCTAssertEqual(failedConnect1.request, .none)
+        guard case .scheduleBackoffTimer(connectionID, let backoffTimeAmount1, _) = failedConnect1.connection else {
+            return XCTFail("Unexpected connection action: \(failedConnect1.connection)")
+        }
+
+        // 2. connection attempt
+        let backoffDoneAction = state.connectionCreationBackoffDone(connectionID)
+        XCTAssertEqual(backoffDoneAction.request, .none)
+        guard case .createConnection(let newConnectionID, on: let newEventLoop) = backoffDoneAction.connection else {
+            return XCTFail("Unexpected connection action: \(backoffDoneAction.connection)")
+        }
+        XCTAssertGreaterThan(newConnectionID, connectionID)
+        XCTAssert(connectionEL === newEventLoop) // XCTAssertIdentical not available on Linux
+
+        let failedConnect2 = state.failedToCreateNewConnection(HTTPClientError.connectTimeout, connectionID: newConnectionID)
+        XCTAssertEqual(failedConnect2.request, .none)
+        guard case .scheduleBackoffTimer(newConnectionID, let backoffTimeAmount2, _) = failedConnect2.connection else {
+            return XCTFail("Unexpected connection action: \(failedConnect2.connection)")
+        }
+
+        XCTAssertNotEqual(backoffTimeAmount2, backoffTimeAmount1)
+
+        // 3. request times out
+        let failRequest = state.timeoutRequest(request.id)
+        guard case .failRequest(let requestToFail, let requestError, cancelTimeout: false) = failRequest.request else {
+            return XCTFail("Unexpected request action: \(action.request)")
+        }
+        XCTAssert(requestToFail.__testOnly_wrapped_request() === mockRequest) // XCTAssertIdentical not available on Linux
+        XCTAssertEqual(requestError as? HTTPClientError, .connectTimeout)
+        XCTAssertEqual(failRequest.connection, .none)
+
+        // 4. retry connection, but no more queued requests.
+        XCTAssertEqual(state.connectionCreationBackoffDone(newConnectionID), .none)
+    }
 }

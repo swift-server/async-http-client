@@ -245,11 +245,10 @@ extension HTTPConnectionPool {
             // The naming of `failConnection` is a little confusing here. All it does is moving the
             // connection state from `.backingOff` to `.closed` here. It also returns the
             // connection's index.
-            guard let (index, _) = self.connections.failConnection(connectionID) else {
+            guard let (index, context) = self.connections.failConnection(connectionID) else {
                 preconditionFailure("Backing off a connection that is unknown to us?")
             }
-            let (newConnectionID, eventLoop) = self.connections.createNewConnectionByReplacingClosedConnection(at: index)
-            return .init(request: .none, connection: .createConnection(newConnectionID, on: eventLoop))
+            return nextActionForFailedConnection(at: index, on: context.eventLoop)
         }
 
         mutating func timeoutRequest(_ requestID: Request.ID) -> Action {
