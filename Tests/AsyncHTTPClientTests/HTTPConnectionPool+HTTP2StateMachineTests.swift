@@ -170,4 +170,41 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         // 4. retry connection, but no more queued requests.
         XCTAssertEqual(state.connectionCreationBackoffDone(newConnectionID), .none)
     }
+    
+    func testCancelRequestWorks() {
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
+
+        var state = HTTPConnectionPool.HTTP2StateMaschine(
+            idGenerator: .init()
+        )
+
+        let mockRequest = MockHTTPRequest(eventLoop: elg.next())
+        let request = HTTPConnectionPool.Request(mockRequest)
+
+        let executeAction = state.executeRequest(request)
+        XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), executeAction.request)
+
+        // 1. connection attempt
+        guard case .createConnection(let connectionID, on: let connectionEL) = executeAction.connection else {
+            return XCTFail("Unexpected connection action: \(executeAction.connection)")
+        }
+        XCTAssert(connectionEL === mockRequest.eventLoop) // XCTAssertIdentical not available on Linux
+
+        // 2. cancel request
+        let cancelAction = state.cancelRequest(request.id)
+        XCTAssertEqual(cancelAction.request, .cancelRequestTimeout(request.id))
+        XCTAssertEqual(cancelAction.connection, .none)
+
+        // 3. request timeout triggers to late
+        XCTAssertEqual(state.timeoutRequest(request.id), .none, "To late timeout is ignored")
+
+        // 4. succeed connection attempt
+        let connectedAction = state.newHTTP2ConnectionEstablished(
+            .__testOnly_connection(id: connectionID, eventLoop: connectionEL),
+            maxConcurrentStreams: 100
+        )
+        XCTAssertEqual(connectedAction.request, .none, "Request must not be executed")
+        XCTAssertEqual(connectedAction.connection, .scheduleTimeoutTimer(connectionID, on: connectionEL))
+    }
 }
