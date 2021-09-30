@@ -114,7 +114,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             isShutdown: .yes(unclean: false)
         ))
     }
-    
+
     func testConnectionFailureBackoff() {
         let elg = EmbeddedEventLoopGroup(loops: 4)
         defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
@@ -170,7 +170,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         // 4. retry connection, but no more queued requests.
         XCTAssertEqual(state.connectionCreationBackoffDone(newConnectionID), .none)
     }
-    
+
     func testCancelRequestWorks() {
         let elg = EmbeddedEventLoopGroup(loops: 4)
         defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
@@ -206,5 +206,59 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         )
         XCTAssertEqual(connectedAction.request, .none, "Request must not be executed")
         XCTAssertEqual(connectedAction.connection, .scheduleTimeoutTimer(connectionID, on: connectionEL))
+    }
+
+    func testExecuteOnShuttingDownPool() {
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
+
+        var state = HTTPConnectionPool.HTTP2StateMaschine(
+            idGenerator: .init()
+        )
+
+        let mockRequest = MockHTTPRequest(eventLoop: elg.next())
+        let request = HTTPConnectionPool.Request(mockRequest)
+
+        let executeAction = state.executeRequest(request)
+        XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), executeAction.request)
+
+        // 1. connection attempt
+        guard case .createConnection(let connectionID, on: let connectionEL) = executeAction.connection else {
+            return XCTFail("Unexpected connection action: \(executeAction.connection)")
+        }
+        XCTAssert(connectionEL === mockRequest.eventLoop) // XCTAssertIdentical not available on Linux
+
+        // 2. connection succeeds
+        let connection: HTTPConnectionPool.Connection = .__testOnly_connection(id: connectionID, eventLoop: connectionEL)
+        let connectedAction = state.newHTTP2ConnectionEstablished(connection, maxConcurrentStreams: 100)
+        guard case .executeRequestsAndCancelTimeouts([request], connection) = connectedAction.request else {
+            return XCTFail("Unexpected request action: \(connectedAction.request)")
+        }
+        XCTAssert(request.__testOnly_wrapped_request() === mockRequest) // XCTAssertIdentical not available on Linux
+        XCTAssertEqual(connectedAction.connection, .none)
+
+        // 3. shutdown
+        let shutdownAction = state.shutdown()
+        XCTAssertEqual(.none, shutdownAction.request)
+        guard case .cleanupConnections(let cleanupContext, isShutdown: .no) = shutdownAction.connection else {
+            return XCTFail("Unexpected connection action: \(shutdownAction.connection)")
+        }
+
+        XCTAssertEqual(cleanupContext.cancel.count, 1)
+        XCTAssertEqual(cleanupContext.cancel.first?.id, connectionID)
+        XCTAssertEqual(cleanupContext.close, [])
+        XCTAssertEqual(cleanupContext.connectBackoff, [])
+
+        // 4. execute another request
+        let finalMockRequest = MockHTTPRequest(eventLoop: elg.next())
+        let finalRequest = HTTPConnectionPool.Request(finalMockRequest)
+        let failAction = state.executeRequest(finalRequest)
+        XCTAssertEqual(failAction.connection, .none)
+        XCTAssertEqual(failAction.request, .failRequest(finalRequest, HTTPClientError.alreadyShutdown, cancelTimeout: false))
+
+        // 5. close open connection
+        let closeAction = state.connectionClosed(connectionID)
+        XCTAssertEqual(closeAction.connection, .cleanupConnections(.init(), isShutdown: .yes(unclean: true)))
+        XCTAssertEqual(closeAction.request, .none)
     }
 }

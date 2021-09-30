@@ -21,6 +21,12 @@ extension HTTPConnectionPool {
         typealias RequestAction = HTTPConnectionPool.StateMachine.RequestAction
         typealias ConnectionAction = HTTPConnectionPool.StateMachine.ConnectionAction
 
+        private enum State: Equatable {
+            case running
+            case shuttingDown(unclean: Bool)
+            case shutDown
+        }
+
         private var lastConnectFailure: Error?
         private var failedConsecutiveConnectionAttempts = 0
 
@@ -30,6 +36,8 @@ extension HTTPConnectionPool {
         private var requests: RequestQueue
 
         private let idGenerator: Connection.ID.Generator
+
+        private var state: State = .running
 
         init(
             idGenerator: Connection.ID.Generator
@@ -68,10 +76,24 @@ extension HTTPConnectionPool {
         }
 
         mutating func executeRequest(_ request: Request) -> Action {
-            if let eventLoop = request.requiredEventLoop {
-                return self.executeRequest(request, onRequired: eventLoop)
-            } else {
-                return self.executeRequest(request, onPreferred: request.preferredEventLoop)
+            switch self.state {
+            case .running:
+                if let eventLoop = request.requiredEventLoop {
+                    return self.executeRequest(request, onRequired: eventLoop)
+                } else {
+                    return self.executeRequest(request, onPreferred: request.preferredEventLoop)
+                }
+            case .shutDown, .shuttingDown:
+                // it is fairly unlikely that this condition is met, since the ConnectionPoolManager
+                // also fails new requests immediately, if it is shutting down. However there might
+                // be race conditions in which a request passes through a running connection pool
+                // manager, but hits a connection pool that is already shutting down.
+                //
+                // (Order in one lock does not guarantee order in the next lock!)
+                return .init(
+                    request: .failRequest(request, HTTPClientError.alreadyShutdown, cancelTimeout: false),
+                    connection: .none
+                )
             }
         }
 
@@ -149,36 +171,57 @@ extension HTTPConnectionPool {
             at index: Int,
             context: HTTP2Connections.AvailableConnectionContext
         ) -> Action {
-            // We prioritise requests with a required event loop over those without a requirement.
-            // This can cause starvation for request without a required event loop.
-            // We should come up with a better algorithm in the future.
+            switch self.state {
+            case .running:
+                // We prioritise requests with a required event loop over those without a requirement.
+                // This can cause starvation for request without a required event loop.
+                // We should come up with a better algorithm in the future.
 
-            var requestsToExecute = self.requests.popFirst(max: context.availableStreams, for: context.eventLoop)
-            let remainingAvailableStreams = context.availableStreams - requestsToExecute.count
-            // use the remaining available streams for requests without a required event loop
-            requestsToExecute += self.requests.popFirst(max: remainingAvailableStreams, for: nil)
-            let connection = self.connections.leaseStreams(at: index, count: requestsToExecute.count)
+                var requestsToExecute = self.requests.popFirst(max: context.availableStreams, for: context.eventLoop)
+                let remainingAvailableStreams = context.availableStreams - requestsToExecute.count
+                // use the remaining available streams for requests without a required event loop
+                requestsToExecute += self.requests.popFirst(max: remainingAvailableStreams, for: nil)
+                let connection = self.connections.leaseStreams(at: index, count: requestsToExecute.count)
 
-            let requestAction = { () -> RequestAction in
-                if requestsToExecute.isEmpty {
+                let requestAction = { () -> RequestAction in
+                    if requestsToExecute.isEmpty {
+                        return .none
+                    } else {
+                        return .executeRequestsAndCancelTimeouts(requestsToExecute, connection)
+                    }
+                }()
+
+                let connectionAction = { () -> ConnectionAction in
+                    if context.isIdle, requestsToExecute.isEmpty {
+                        return .scheduleTimeoutTimer(connection.id, on: context.eventLoop)
+                    } else {
+                        return .none
+                    }
+                }()
+
+                return .init(
+                    request: requestAction,
+                    connection: connectionAction
+                )
+            case .shuttingDown(let unclean):
+                guard context.isIdle else {
                     return .none
-                } else {
-                    return .executeRequestsAndCancelTimeouts(requestsToExecute, connection)
                 }
-            }()
 
-            let connectionAction = { () -> ConnectionAction in
-                if context.isIdle, requestsToExecute.isEmpty {
-                    return .scheduleTimeoutTimer(connection.id, on: context.eventLoop)
-                } else {
-                    return .none
+                let connection = self.connections.closeConnection(at: index)
+                if self.connections.isEmpty {
+                    return .init(
+                        request: .none,
+                        connection: .closeConnection(connection, isShutdown: .yes(unclean: unclean))
+                    )
                 }
-            }()
-
-            return .init(
-                request: requestAction,
-                connection: connectionAction
-            )
+                return .init(
+                    request: .none,
+                    connection: .closeConnection(connection, isShutdown: .no)
+                )
+            case .shutDown:
+                preconditionFailure("It the pool is already shutdown, all connections must have been torn down.")
+            }
         }
 
         mutating func newHTTP2MaxConcurrentStreamsReceived(_ connectionID: Connection.ID, newMaxStreams: Int) -> Action {
@@ -199,32 +242,53 @@ extension HTTPConnectionPool {
         }
 
         private mutating func nextActionForFailedConnection(at index: Int, on eventLoop: EventLoop) -> Action {
-            let hasPendingRequest = !self.requests.isEmpty(for: eventLoop) || !self.requests.isEmpty(for: nil)
-            guard hasPendingRequest else {
+            switch self.state {
+            case .running:
+                let hasPendingRequest = !self.requests.isEmpty(for: eventLoop) || !self.requests.isEmpty(for: nil)
+                guard hasPendingRequest else {
+                    return .none
+                }
+
+                let (newConnectionID, previousEventLoop) = self.connections.createNewConnectionByReplacingClosedConnection(at: index)
+                precondition(previousEventLoop === eventLoop)
+
+                return .init(
+                    request: .none,
+                    connection: .createConnection(newConnectionID, on: eventLoop)
+                )
+            case .shuttingDown(let unclean):
+                assert(self.requests.isEmpty)
+                self.connections.removeConnection(at: index)
+                if self.connections.isEmpty {
+                    return .init(
+                        request: .none,
+                        connection: .cleanupConnections(.init(), isShutdown: .yes(unclean: unclean))
+                    )
+                }
                 return .none
+
+            case .shutDown:
+                preconditionFailure("If the pool is already shutdown, all connections must have been torn down.")
             }
-
-            let (newConnectionID, previousEventLoop) = self.connections.createNewConnectionByReplacingClosedConnection(at: index)
-            precondition(previousEventLoop === eventLoop)
-
-            return .init(
-                request: .none,
-                connection: .createConnection(newConnectionID, on: eventLoop)
-            )
         }
 
         private mutating func nextActionForClosingConnection(on eventLoop: EventLoop) -> Action {
-            let hasPendingRequest = !self.requests.isEmpty(for: eventLoop) || !self.requests.isEmpty(for: nil)
-            guard hasPendingRequest else {
+            switch self.state {
+            case .running:
+                let hasPendingRequest = !self.requests.isEmpty(for: eventLoop) || !self.requests.isEmpty(for: nil)
+                guard hasPendingRequest else {
+                    return .none
+                }
+
+                let newConnectionID = self.connections.createNewConnection(on: eventLoop)
+
+                return .init(
+                    request: .none,
+                    connection: .createConnection(newConnectionID, on: eventLoop)
+                )
+            case .shutDown, .shuttingDown:
                 return .none
             }
-
-            let newConnectionID = self.connections.createNewConnection(on: eventLoop)
-
-            return .init(
-                request: .none,
-                connection: .createConnection(newConnectionID, on: eventLoop)
-            )
         }
 
         mutating func http2ConnectionStreamClosed(_ connectionID: Connection.ID) -> Action {
@@ -248,7 +312,7 @@ extension HTTPConnectionPool {
             guard let (index, context) = self.connections.failConnection(connectionID) else {
                 preconditionFailure("Backing off a connection that is unknown to us?")
             }
-            return nextActionForFailedConnection(at: index, on: context.eventLoop)
+            return self.nextActionForFailedConnection(at: index, on: context.eventLoop)
         }
 
         mutating func timeoutRequest(_ requestID: Request.ID) -> Action {
@@ -289,8 +353,13 @@ extension HTTPConnectionPool {
 
         mutating func connectionIdleTimeout(_ connectionID: Connection.ID) -> Action {
             guard let connection = connections.closeConnectionIfIdle(connectionID) else {
+                // because of a race this connection (connection close runs against trigger of timeout)
+                // was already removed from the state machine.
                 return .none
             }
+
+            precondition(self.state == .running, "If we are shutting down, we must not have any idle connections")
+
             return .init(
                 request: .none,
                 connection: .closeConnection(connection, isShutdown: .no)
@@ -329,8 +398,10 @@ extension HTTPConnectionPool {
             let unclean = !(cleanupContext.cancel.isEmpty && waitingRequests.isEmpty)
             if self.connections.isEmpty {
                 isShutdown = .yes(unclean: unclean)
+                self.state = .shutDown
             } else {
                 isShutdown = .no
+                self.state = .shuttingDown(unclean: unclean)
             }
             return .init(
                 request: requestAction,
