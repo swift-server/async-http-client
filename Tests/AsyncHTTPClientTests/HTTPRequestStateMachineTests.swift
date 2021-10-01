@@ -619,6 +619,39 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelReadComplete(), .wait)
         XCTAssertEqual(state.channelInactive(), .failRequest(HTTPClientError.remoteConnectionClosed, .none))
     }
+
+    func testFailHTTPRequestWithContentLengthBecauseOfChannelInactiveWaitingForReadAndDemandMultipleTimes() {
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
+
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["Content-Length": "50"])
+        let body = ByteBuffer(string: "foo bar")
+        XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
+        XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+        XCTAssertEqual(state.read(), .read)
+        XCTAssertEqual(state.channelRead(.body(body)), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .forwardResponseBodyParts([body]))
+
+        let part1 = ByteBuffer(string: "baz lightyear")
+        XCTAssertEqual(state.channelRead(.body(part1)), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+
+        let part2 = ByteBuffer(string: "nearly last")
+        XCTAssertEqual(state.channelRead(.body(part2)), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+
+        let part3 = ByteBuffer(string: "final message")
+        XCTAssertEqual(state.channelRead(.body(part3)), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+
+        XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.close, [part1, part2, part3]))
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+
+        XCTAssertEqual(state.channelInactive(), .wait)
+    }
 }
 
 extension HTTPRequestStateMachine.Action: Equatable {

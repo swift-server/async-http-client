@@ -99,9 +99,9 @@ extension HTTPRequestStateMachine {
             // If the connection to a server is closed, NIO will forward all outstanding
             // `channelRead`s without waiting for a next `context.read` call. After all
             // `channelRead`s are delivered, we will also see a `channelReadComplete` call. After
-            // this has happened, we know that we will get a channelInactive, which will fail the
-            // request. Since the request is doomed anyway, we can just drop the already buffered
-            // bytes here.
+            // this has happened, we know that we will get a channelInactive or further
+            // `channelReads`. If the request ever gets to an `.end` all buffered data will be
+            // forwarded to the user.
 
             case .waitingForRead,
                  .waitingForDemand,
