@@ -236,6 +236,9 @@ extension HTTPConnectionPool {
 
         mutating func http2ConnectionClosed(_ connectionID: Connection.ID) -> Action {
             guard let (index, context) = self.connections.failConnection(connectionID) else {
+                // When a connection close is initiated by the connection pool, the connection will
+                // still report its close to the state machine. In those cases we must ignore the
+                // event.
                 return .none
             }
             return self.nextActionForFailedConnection(at: index, on: context.eventLoop)
@@ -367,17 +370,52 @@ extension HTTPConnectionPool {
         }
 
         mutating func connectionClosed(_ connectionID: Connection.ID) -> Action {
-            guard let (index, context) = self.connections.failConnection(connectionID) else {
-                // When a connection close is initiated by the connection pool, the connection will
-                // still report its close to the state machine. In those cases we must ignore the
-                // event.
+            guard let index = self.http1Connections?.failConnection(connectionID)?.0 else {
                 return .none
             }
-            return self.nextActionForFailedConnection(at: index, on: context.eventLoop)
+            self.http1Connections!.removeConnection(at: index)
+            if self.http1Connections!.isEmpty {
+                self.http1Connections = nil
+            }
+            switch state {
+            case .running:
+                return .none
+            case .shuttingDown(let unclean):
+                if self.http1Connections == nil && self.connections.isEmpty {
+                    return .init(
+                        request: .none,
+                        connection: .cleanupConnections(.init(), isShutdown: .yes(unclean: unclean))
+                    )
+                } else {
+                    return .none
+                }
+            case .shutDown:
+                preconditionFailure("If the pool is already shutdown, all connections must have been torn down.")
+            }
         }
 
-        mutating func http1ConnectionReleased(_: Connection.ID) -> Action {
-            fatalError("TODO: implement \(#function)")
+        mutating func http1ConnectionReleased(_ connectionID: Connection.ID) -> Action {
+            // It is save to bang the http1Connections here. If we get this callback but we don't have
+            // http1 connections something has gone terribly wrong.
+            let (index, _) = self.http1Connections!.releaseConnection(connectionID)
+            // Any http1 connection that becomes idle should be closed right away after the transition
+            // to http2.
+            let connection = self.http1Connections!.closeConnection(at: index)
+            if self.http1Connections!.isEmpty {
+                self.http1Connections = nil
+            }
+            switch state {
+            case .running:
+                return .init(request: .none, connection: .closeConnection(connection, isShutdown: .no))
+            case .shuttingDown(let unclean):
+                if self.http1Connections == nil && self.connections.isEmpty {
+                    return .init(request: .none, connection: .closeConnection(connection, isShutdown: .yes(unclean: unclean)))
+                } else {
+                    return .init(request: .none, connection: .closeConnection(connection, isShutdown: .no))
+                }
+            case .shutDown:
+                preconditionFailure("If the pool is already shutdown, all connections must have been torn down.")
+            }
         }
 
         mutating func shutdown() -> Action {
