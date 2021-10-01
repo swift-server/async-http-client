@@ -16,7 +16,7 @@ import NIOCore
 import NIOHTTP2
 
 extension HTTPConnectionPool {
-    struct HTTP2StateMaschine {
+    struct HTTP2StateMachine {
         typealias Action = HTTPConnectionPool.StateMachine.Action
         typealias RequestAction = HTTPConnectionPool.StateMachine.RequestAction
         typealias ConnectionAction = HTTPConnectionPool.StateMachine.ConnectionAction
@@ -70,6 +70,7 @@ extension HTTPConnectionPool {
             self.requests = requests
 
             // TODO: Close all idle connections from context.close
+            // TODO: Start new http2 connections for
             // TODO: Potentially cancel unneeded bootstraps (Needs cancellable ClientBootstrap)
 
             return .none
@@ -401,14 +402,19 @@ extension HTTPConnectionPool {
             // Any http1 connection that becomes idle should be closed right away after the transition
             // to http2.
             let connection = self.http1Connections!.closeConnection(at: index)
-            if self.http1Connections!.isEmpty {
-                self.http1Connections = nil
+            guard self.http1Connections!.isEmpty else {
+                return .init(request: .none, connection: .closeConnection(connection, isShutdown: .no))
             }
+            // if there are no more http1Connections, we can remove the struct.
+            self.http1Connections = nil
+            
+            // we must also check, if we are shutting down. Was this maybe out last connection?
             switch state {
             case .running:
                 return .init(request: .none, connection: .closeConnection(connection, isShutdown: .no))
             case .shuttingDown(let unclean):
-                if self.http1Connections == nil && self.connections.isEmpty {
+                if self.connections.isEmpty {
+                    // if the http2connections are empty as well, there are no more connections. Shutdown completed.
                     return .init(request: .none, connection: .closeConnection(connection, isShutdown: .yes(unclean: unclean)))
                 } else {
                     return .init(request: .none, connection: .closeConnection(connection, isShutdown: .no))

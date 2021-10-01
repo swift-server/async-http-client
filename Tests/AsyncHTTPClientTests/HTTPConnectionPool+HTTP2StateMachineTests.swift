@@ -29,7 +29,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let el1 = elg.next()
         var connections = MockConnectionPool()
         var queuer = MockRequestQueuer()
-        var state = HTTPConnectionPool.HTTP2StateMaschine(idGenerator: .init())
+        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: .init())
 
         /// first request should create a new connection
         let mockRequest = MockHTTPRequest(eventLoop: el1)
@@ -119,7 +119,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let elg = EmbeddedEventLoopGroup(loops: 4)
         defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
 
-        var state = HTTPConnectionPool.HTTP2StateMaschine(
+        var state = HTTPConnectionPool.HTTP2StateMachine(
             idGenerator: .init()
         )
 
@@ -175,7 +175,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let elg = EmbeddedEventLoopGroup(loops: 4)
         defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
 
-        var state = HTTPConnectionPool.HTTP2StateMaschine(
+        var state = HTTPConnectionPool.HTTP2StateMachine(
             idGenerator: .init()
         )
 
@@ -212,7 +212,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let elg = EmbeddedEventLoopGroup(loops: 4)
         defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
 
-        var state = HTTPConnectionPool.HTTP2StateMaschine(
+        var state = HTTPConnectionPool.HTTP2StateMachine(
             idGenerator: .init()
         )
 
@@ -294,7 +294,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         
         // second connection is a HTTP2 connection and we need to migrate
         let conn2: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn2ID, eventLoop: el1)
-        var http2State = HTTPConnectionPool.HTTP2StateMaschine(idGenerator: idGenerator)
+        var http2State = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator)
         
         let migrationAction = http2State.migrateConnectionsFromHTTP1(
             connections: http1State.connections,

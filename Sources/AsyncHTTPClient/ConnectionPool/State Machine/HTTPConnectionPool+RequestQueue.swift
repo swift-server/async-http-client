@@ -147,7 +147,7 @@ extension CircularBuffer {
     ///
     /// - Complexity: O(*k*), where *k* is the number of elements removed.
     fileprivate mutating func popFirst(max: Int) -> [Element] {
-        precondition(max >= 0, "")
+        precondition(max >= 0)
         let elementCountToRemove = Swift.min(max, self.count)
         let array = Array(self[self.startIndex..<self.index(self.startIndex, offsetBy: elementCountToRemove)])
         self.removeFirst(elementCountToRemove)

@@ -195,7 +195,7 @@ extension HTTPConnectionPool {
             case keepConnection
         }
 
-        func migrateToHTTP2(_ context: inout HTTP1Connections.HTTP2ToHTTP1MigrationContext) -> MigrateAction {
+        func migrateToHTTP2(_ context: inout HTTP1Connections.HTTP1ToHTTP2MigrationContext) -> MigrateAction {
             switch self.state {
             case .starting:
                 context.starting.append((self.connectionID, self.eventLoop))
@@ -322,7 +322,7 @@ extension HTTPConnectionPool {
             var connectionsStartingForUseCase: Int
         }
 
-        struct HTTP2ToHTTP1MigrationContext {
+        struct HTTP1ToHTTP2MigrationContext {
             var backingOff: [(Connection.ID, EventLoop)] = []
             var starting: [(Connection.ID, EventLoop)] = []
             var close: [Connection] = []
@@ -517,8 +517,8 @@ extension HTTPConnectionPool {
 
         // MARK: Migration
 
-        mutating func migrateToHTTP2() -> HTTP2ToHTTP1MigrationContext {
-            var migrationContext = HTTP2ToHTTP1MigrationContext()
+        mutating func migrateToHTTP2() -> HTTP1ToHTTP2MigrationContext {
+            var migrationContext = HTTP1ToHTTP2MigrationContext()
             self.connections.removeAll { connection in
                 switch connection.migrateToHTTP2(&migrationContext) {
                 case .removeConnection:
