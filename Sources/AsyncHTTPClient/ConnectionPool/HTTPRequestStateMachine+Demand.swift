@@ -92,10 +92,21 @@ extension HTTPRequestStateMachine {
                     return buffer
                 }
 
+            // For all the following cases, please note:
+            // Normally these code paths should never be hit. However there is one way to trigger
+            // this:
+            //
+            // If the connection to a server is closed, NIO will forward all outstanding
+            // `channelRead`s without waiting for a next `context.read` call. After all
+            // `channelRead`s are delivered, we will also see a `channelReadComplete` call. After
+            // this has happened, we know that we will get a channelInactive, which will fail the
+            // request. Since the request is doomed anyway, we can just drop the already buffered
+            // bytes here.
+
             case .waitingForRead,
                  .waitingForDemand,
                  .waitingForReadOrDemand:
-                preconditionFailure("How can we receive a body part, after a channelReadComplete, but no read has been forwarded yet. Invalid state: \(self.state)")
+                return nil
 
             case .modifying:
                 preconditionFailure("Invalid state: \(self.state)")

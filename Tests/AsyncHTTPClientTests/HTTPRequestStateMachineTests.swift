@@ -557,6 +557,68 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.errorHappened(HTTPParserError.invalidEOFState), .failRequest(HTTPParserError.invalidEOFState, .close))
         XCTAssertEqual(state.channelInactive(), .wait)
     }
+
+    func testFailHTTPRequestWithContentLengthBecauseOfChannelInactiveWaitingForDemand() {
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
+
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["Content-Length": "50"])
+        let body = ByteBuffer(string: "foo bar")
+        XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
+        XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+        XCTAssertEqual(state.read(), .read)
+        XCTAssertEqual(state.channelRead(.body(body)), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .forwardResponseBodyParts([body]))
+        XCTAssertEqual(state.read(), .wait)
+
+        XCTAssertEqual(state.channelRead(.body(ByteBuffer(string: " baz lightyear"))), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+        XCTAssertEqual(state.channelInactive(), .failRequest(HTTPClientError.remoteConnectionClosed, .none))
+    }
+
+    func testFailHTTPRequestWithContentLengthBecauseOfChannelInactiveWaitingForRead() {
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
+
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["Content-Length": "50"])
+        let body = ByteBuffer(string: "foo bar")
+        XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
+        XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+        XCTAssertEqual(state.read(), .read)
+        XCTAssertEqual(state.channelRead(.body(body)), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .forwardResponseBodyParts([body]))
+        XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
+
+        XCTAssertEqual(state.channelRead(.body(ByteBuffer(string: " baz lightyear"))), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+        XCTAssertEqual(state.channelInactive(), .failRequest(HTTPClientError.remoteConnectionClosed, .none))
+    }
+
+    func testFailHTTPRequestWithContentLengthBecauseOfChannelInactiveWaitingForReadAndDemand() {
+        var state = HTTPRequestStateMachine(isChannelWritable: true, ignoreUncleanSSLShutdown: false)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
+
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["Content-Length": "50"])
+        let body = ByteBuffer(string: "foo bar")
+        XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
+        XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+        XCTAssertEqual(state.read(), .read)
+        XCTAssertEqual(state.channelRead(.body(body)), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .forwardResponseBodyParts([body]))
+
+        XCTAssertEqual(state.channelRead(.body(ByteBuffer(string: " baz lightyear"))), .wait)
+        XCTAssertEqual(state.channelReadComplete(), .wait)
+        XCTAssertEqual(state.channelInactive(), .failRequest(HTTPClientError.remoteConnectionClosed, .none))
+    }
 }
 
 extension HTTPRequestStateMachine.Action: Equatable {

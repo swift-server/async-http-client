@@ -29,6 +29,7 @@ extension HTTP1ClientChannelHandlerTests {
             ("testWriteBackpressure", testWriteBackpressure),
             ("testClientHandlerCancelsRequestIfWeWantToShutdown", testClientHandlerCancelsRequestIfWeWantToShutdown),
             ("testIdleReadTimeout", testIdleReadTimeout),
+            ("testFailHTTPRequestWithContentLengthBecauseOfChannelInactiveWaitingForDemand", testFailHTTPRequestWithContentLengthBecauseOfChannelInactiveWaitingForDemand),
         ]
     }
 }
