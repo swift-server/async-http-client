@@ -369,7 +369,7 @@ extension HTTPConnectionPool {
             )
         }
 
-        mutating func connectionClosed(_ connectionID: Connection.ID) -> Action {
+        mutating func http1ConnectionClose(_ connectionID: Connection.ID) -> Action {
             guard let index = self.http1Connections?.failConnection(connectionID)?.0 else {
                 return .none
             }

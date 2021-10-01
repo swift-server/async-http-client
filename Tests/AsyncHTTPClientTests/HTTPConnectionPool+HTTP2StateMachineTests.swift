@@ -257,7 +257,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         XCTAssertEqual(failAction.request, .failRequest(finalRequest, HTTPClientError.alreadyShutdown, cancelTimeout: false))
 
         // 5. close open connection
-        let closeAction = state.connectionClosed(connectionID)
+        let closeAction = state.http2ConnectionClosed(connectionID)
         XCTAssertEqual(closeAction.connection, .cleanupConnections(.init(), isShutdown: .yes(unclean: true)))
         XCTAssertEqual(closeAction.request, .none)
     }
