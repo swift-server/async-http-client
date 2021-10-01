@@ -29,6 +29,7 @@ extension HTTPConnectionPool_HTTP2StateMachineTests {
             ("testConnectionFailureBackoff", testConnectionFailureBackoff),
             ("testCancelRequestWorks", testCancelRequestWorks),
             ("testExecuteOnShuttingDownPool", testExecuteOnShuttingDownPool),
+            ("testHTTP1ToHTTP2MigrationAndShutdownIfFirstConnectionIsHTTP1", testHTTP1ToHTTP2MigrationAndShutdownIfFirstConnectionIsHTTP1),
         ]
     }
 }

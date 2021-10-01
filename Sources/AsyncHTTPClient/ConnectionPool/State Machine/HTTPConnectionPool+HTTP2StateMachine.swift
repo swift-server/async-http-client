@@ -378,11 +378,11 @@ extension HTTPConnectionPool {
             if self.http1Connections!.isEmpty {
                 self.http1Connections = nil
             }
-            switch state {
+            switch self.state {
             case .running:
                 return .none
             case .shuttingDown(let unclean):
-                if self.http1Connections == nil && self.connections.isEmpty {
+                if self.http1Connections == nil, self.connections.isEmpty {
                     return .init(
                         request: .none,
                         connection: .cleanupConnections(.init(), isShutdown: .yes(unclean: unclean))
@@ -407,9 +407,9 @@ extension HTTPConnectionPool {
             }
             // if there are no more http1Connections, we can remove the struct.
             self.http1Connections = nil
-            
+
             // we must also check, if we are shutting down. Was this maybe out last connection?
-            switch state {
+            switch self.state {
             case .running:
                 return .init(request: .none, connection: .closeConnection(connection, isShutdown: .no))
             case .shuttingDown(let unclean):
@@ -440,7 +440,7 @@ extension HTTPConnectionPool {
             // If there aren't any more connections, everything is shutdown
             let isShutdown: StateMachine.ConnectionAction.IsShutdown
             let unclean = !(cleanupContext.cancel.isEmpty && waitingRequests.isEmpty && self.http1Connections == nil)
-            if self.connections.isEmpty && self.http1Connections == nil {
+            if self.connections.isEmpty, self.http1Connections == nil {
                 isShutdown = .yes(unclean: unclean)
                 self.state = .shutDown
             } else {
