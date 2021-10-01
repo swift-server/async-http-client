@@ -456,7 +456,7 @@ extension HTTPConnectionPool: HTTP1ConnectionDelegate {
             "ahc-http-version": "http/1.1",
         ])
         self.modifyStateAndRunActions {
-            $0.connectionClosed(connection.id)
+            $0.http1ConnectionClosed(connection.id)
         }
     }
 

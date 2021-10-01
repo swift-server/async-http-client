@@ -214,7 +214,7 @@ extension HTTPConnectionPool {
         }
 
         /// A connection has been unexpectedly closed
-        mutating func connectionClosed(_ connectionID: Connection.ID) -> Action {
+        mutating func http1ConnectionClosed(_ connectionID: Connection.ID) -> Action {
             guard let (index, context) = self.connections.failConnection(connectionID) else {
                 // When a connection close is initiated by the connection pool, the connection will
                 // still report its close to the state machine. In those cases we must ignore the

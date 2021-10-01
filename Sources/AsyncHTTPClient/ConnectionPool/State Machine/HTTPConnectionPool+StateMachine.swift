@@ -157,10 +157,10 @@ extension HTTPConnectionPool {
         }
 
         /// A connection has been closed
-        mutating func connectionClosed(_ connectionID: Connection.ID) -> Action {
+        mutating func http1ConnectionClosed(_ connectionID: Connection.ID) -> Action {
             switch self.state {
             case .http1(var http1StateMachine):
-                let action = http1StateMachine.connectionClosed(connectionID)
+                let action = http1StateMachine.http1ConnectionClosed(connectionID)
                 self.state = .http1(http1StateMachine)
                 return action
             }
