@@ -250,7 +250,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         XCTAssertEqual(failAction.request, .failRequest(finalRequest, HTTPClientError.alreadyShutdown, cancelTimeout: false))
 
         // 5. close open connection
-        let closeAction = state.connectionClosed(connectionID)
+        let closeAction = state.http1ConnectionClosed(connectionID)
         XCTAssertEqual(closeAction.connection, .cleanupConnections(.init(), isShutdown: .yes(unclean: true)))
         XCTAssertEqual(closeAction.request, .none)
     }
@@ -371,7 +371,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
                 let doneAction = state.http1ConnectionReleased(connectionID)
                 XCTAssertEqual(doneAction.request, .none)
                 XCTAssertEqual(doneAction.connection, .closeConnection(connection, isShutdown: .no))
-                XCTAssertEqual(state.connectionClosed(connectionID), .none)
+                XCTAssertEqual(state.http1ConnectionClosed(connectionID), .none)
 
             case .cancelTimeoutTimer(let connectionID):
                 guard let expectedConnection = connections.newestParkedConnection(for: reqEventLoop) ?? connections.newestParkedConnection else {
@@ -428,7 +428,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         XCTAssertEqual(connections.parked, 7)
         XCTAssertEqual(connections.used, 1)
         XCTAssertNoThrow(try connections.abortConnection(connectionToAbort.id))
-        XCTAssertEqual(state.connectionClosed(connectionToAbort.id), .none)
+        XCTAssertEqual(state.http1ConnectionClosed(connectionToAbort.id), .none)
         XCTAssertEqual(connections.parked, 7)
         XCTAssertEqual(connections.used, 0)
     }
@@ -448,7 +448,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             return XCTFail("Expected to have a parked connection")
         }
         XCTAssertNoThrow(try connections.closeConnection(connectionToClose))
-        XCTAssertEqual(state.connectionClosed(connectionToClose.id), .none)
+        XCTAssertEqual(state.http1ConnectionClosed(connectionToClose.id), .none)
         XCTAssertEqual(connections.parked, 7)
     }
 
@@ -499,7 +499,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         while let closedConnection = connections.randomLeasedConnection() {
             XCTAssertNoThrow(try connections.abortConnection(closedConnection.id))
             XCTAssertEqual(connections.parked, 0)
-            let action = state.connectionClosed(closedConnection.id)
+            let action = state.http1ConnectionClosed(closedConnection.id)
 
             switch action.connection {
             case .createConnection(let newConnectionID, on: let eventLoop):
@@ -584,7 +584,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
 
         // triggered by remote peer
         XCTAssertNoThrow(try connections.abortConnection(connection.id))
-        XCTAssertEqual(state.connectionClosed(connection.id), .none)
+        XCTAssertEqual(state.http1ConnectionClosed(connection.id), .none)
 
         // triggered by timer
         XCTAssertEqual(state.connectionIdleTimeout(connection.id), .none)
