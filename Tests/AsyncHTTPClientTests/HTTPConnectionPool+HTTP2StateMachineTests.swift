@@ -261,4 +261,69 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         XCTAssertEqual(closeAction.connection, .cleanupConnections(.init(), isShutdown: .yes(unclean: true)))
         XCTAssertEqual(closeAction.request, .none)
     }
+    
+    func testHTTP1ToHTTP2MigrationAndShutdownIfFirstConnectionIsHTTP1() {
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        let el1 = elg.next()
+        
+        let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
+        var http1State = HTTPConnectionPool.HTTP1StateMachine(idGenerator: idGenerator, maximumConcurrentConnections: 8)
+        
+        let mockRequest1 = MockHTTPRequest(eventLoop: el1)
+        let request1 = HTTPConnectionPool.Request(mockRequest1)
+        let mockRequest2 = MockHTTPRequest(eventLoop: el1)
+        let request2 = HTTPConnectionPool.Request(mockRequest2)
+        
+        let executeAction1 = http1State.executeRequest(request1)
+        XCTAssertEqual(executeAction1.request, .scheduleRequestTimeout(for: request1, on: el1))
+        guard case .createConnection(let conn1ID, _) = executeAction1.connection else {
+            return XCTFail("unexpected connection action \(executeAction1.connection)")
+        }
+        let executeAction2 = http1State.executeRequest(request2)
+        XCTAssertEqual(executeAction2.request, .scheduleRequestTimeout(for: request2, on: el1))
+        guard case .createConnection(let conn2ID, _) = executeAction2.connection else {
+            return XCTFail("unexpected connection action \(executeAction2.connection)")
+        }
+        
+        // first connection is a HTTP1 connection
+        let conn1: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn1ID, eventLoop: el1)
+        let conn1Action = http1State.newHTTP1ConnectionEstablished(conn1)
+        XCTAssertEqual(conn1Action.connection, .none)
+        XCTAssertEqual(conn1Action.request, .executeRequest(request1, conn1, cancelTimeout: true))
+
+        
+        // second connection is a HTTP2 connection and we need to migrate
+        let conn2: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn2ID, eventLoop: el1)
+        var http2State = HTTPConnectionPool.HTTP2StateMaschine(idGenerator: idGenerator)
+        
+        let migrationAction = http2State.migrateConnectionsFromHTTP1(
+            connections: http1State.connections,
+            requests: http1State.requests
+        )
+        XCTAssertEqual(migrationAction, .none)
+        
+        let http2ConnectAction = http2State.newHTTP2ConnectionEstablished(conn2, maxConcurrentStreams: 100)
+        XCTAssertEqual(http2ConnectAction.connection, .none)
+        guard case .executeRequestsAndCancelTimeouts([request2], conn2) = http2ConnectAction.request else {
+            return XCTFail("Unexpected request action \(http2ConnectAction.request)")
+        }
+        
+        // second request is done first
+        let closeAction = http2State.http2ConnectionStreamClosed(conn2ID)
+        XCTAssertEqual(closeAction.request, .none)
+        XCTAssertEqual(closeAction.connection, .scheduleTimeoutTimer(conn2ID, on: el1))
+        
+        
+        let shutdownAction = http2State.shutdown()
+        XCTAssertEqual(shutdownAction.request, .none)
+        XCTAssertEqual(shutdownAction.connection, .cleanupConnections(.init(
+            close: [conn2],
+            cancel: [],
+            connectBackoff: []
+        ), isShutdown: .no))
+        
+        let releaseAction = http2State.http1ConnectionReleased(conn1ID)
+        XCTAssertEqual(releaseAction.request, .none)
+        XCTAssertEqual(releaseAction.connection, .closeConnection(conn1, isShutdown: .yes(unclean: true)))
+    }
 }

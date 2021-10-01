@@ -369,7 +369,7 @@ extension HTTPConnectionPool {
             )
         }
 
-        mutating func http1ConnectionClose(_ connectionID: Connection.ID) -> Action {
+        mutating func http1ConnectionClosed(_ connectionID: Connection.ID) -> Action {
             guard let index = self.http1Connections?.failConnection(connectionID)?.0 else {
                 return .none
             }
@@ -433,8 +433,8 @@ extension HTTPConnectionPool {
 
             // If there aren't any more connections, everything is shutdown
             let isShutdown: StateMachine.ConnectionAction.IsShutdown
-            let unclean = !(cleanupContext.cancel.isEmpty && waitingRequests.isEmpty)
-            if self.connections.isEmpty {
+            let unclean = !(cleanupContext.cancel.isEmpty && waitingRequests.isEmpty && self.http1Connections == nil)
+            if self.connections.isEmpty && self.http1Connections == nil {
                 isShutdown = .yes(unclean: unclean)
                 self.state = .shutDown
             } else {
