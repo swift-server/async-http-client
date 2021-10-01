@@ -286,6 +286,64 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
             XCTAssertEqual($0 as? HTTPClientError, .readTimeout)
         }
     }
+
+    func testFailHTTPRequestWithContentLengthBecauseOfChannelInactiveWaitingForDemand() {
+        let embedded = EmbeddedChannel()
+        var maybeTestUtils: HTTP1TestTools?
+        XCTAssertNoThrow(maybeTestUtils = try embedded.setupHTTP1Connection())
+        guard let testUtils = maybeTestUtils else { return XCTFail("Expected connection setup works") }
+
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/"))
+        guard let request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
+
+        let delegate = ResponseBackpressureDelegate(eventLoop: embedded.eventLoop)
+        var maybeRequestBag: RequestBag<ResponseBackpressureDelegate>?
+        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embedded.eventLoop),
+            task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(),
+            delegate: delegate
+        ))
+        guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
+
+        testUtils.connection.executeRequest(requestBag)
+
+        XCTAssertNoThrow(try embedded.receiveHeadAndVerify {
+            XCTAssertEqual($0.method, .GET)
+            XCTAssertEqual($0.uri, "/")
+            XCTAssertEqual($0.headers.first(name: "host"), "localhost")
+        })
+        XCTAssertNoThrow(try embedded.receiveEnd())
+
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: HTTPHeaders([("content-length", "50")]))
+
+        XCTAssertEqual(testUtils.readEventHandler.readHitCounter, 0)
+        embedded.read()
+        XCTAssertEqual(testUtils.readEventHandler.readHitCounter, 1)
+        XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.head(responseHead)))
+
+        // not sending anything after the head should lead to request fail and connection close
+        embedded.pipeline.fireChannelReadComplete()
+        embedded.pipeline.read()
+        XCTAssertEqual(testUtils.readEventHandler.readHitCounter, 2)
+
+        XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.body(ByteBuffer(string: "foo bar"))))
+        embedded.pipeline.fireChannelReadComplete()
+        // We miss a `embedded.pipeline.read()` here by purpose.
+        XCTAssertEqual(testUtils.readEventHandler.readHitCounter, 2)
+
+        XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.body(ByteBuffer(string: "last bytes"))))
+        embedded.pipeline.fireChannelReadComplete()
+        embedded.pipeline.fireChannelInactive()
+
+        XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .remoteConnectionClosed)
+        }
+    }
 }
 
 class TestBackpressureWriter {
