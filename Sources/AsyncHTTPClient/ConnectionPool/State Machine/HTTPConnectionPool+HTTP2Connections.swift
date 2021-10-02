@@ -424,7 +424,7 @@ extension HTTPConnectionPool {
 
         // MARK: Leasing and releasing
 
-        mutating func leaseStream(onPreferred eventLoop: EventLoop) -> Connection? {
+        mutating func leaseStream(onPreferred eventLoop: EventLoop) -> (Connection, LeasedStreamContext)? {
             guard let index = self.findAvailableConnection(onPreferred: eventLoop) else { return nil }
             return self.leaseStreams(at: index, count: 1)
         }
@@ -443,7 +443,7 @@ extension HTTPConnectionPool {
             return availableConnectionIndex
         }
 
-        mutating func leaseStream(onRequired eventLoop: EventLoop) -> Connection? {
+        mutating func leaseStream(onRequired eventLoop: EventLoop) -> (Connection, LeasedStreamContext)? {
             guard let index = self.findAvailableConnection(onRequired: eventLoop) else { return nil }
             return self.leaseStreams(at: index, count: 1)
         }
@@ -459,8 +459,11 @@ extension HTTPConnectionPool {
         ///   - count: number of streams you want to lease. You get the current available streams from the `AvailableConnectionContext` which `newHTTP2ConnectionEstablished(_:maxConcurrentStreams:)` returns
         /// - Returns: connection to execute `count` requests on
         /// - precondition: `index` needs to be valid. `count` must be greater than or equal to *0* and not execeed the number of available streams.
-        mutating func leaseStreams(at index: Int, count: Int) -> Connection {
-            self.connections[index].lease(count)
+        mutating func leaseStreams(at index: Int, count: Int) -> (Connection, LeasedStreamContext) {
+            let isIdle = self.connections[index].isIdle
+            let connection = self.connections[index].lease(count)
+            let context = LeasedStreamContext(wasIdle: isIdle)
+            return (connection, context)
         }
 
         mutating func releaseStream(_ connectionID: Connection.ID) -> (Int, AvailableConnectionContext) {
@@ -557,6 +560,11 @@ extension HTTPConnectionPool {
             var eventLoop: EventLoop
             /// true if no stream is leased
             var isIdle: Bool
+        }
+
+        struct LeasedStreamContext {
+            /// true if the connection was idle before leasing the stream
+            var wasIdle: Bool
         }
 
         struct GoAwayContext {

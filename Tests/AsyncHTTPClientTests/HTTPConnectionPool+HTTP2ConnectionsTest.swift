@@ -36,7 +36,9 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         XCTAssertEqual(conn1CreatedContext.availableStreams, 100)
         XCTAssertEqual(conn1CreatedContext.isIdle, true)
         XCTAssert(conn1CreatedContext.eventLoop === el1)
-        XCTAssertEqual(connections.leaseStreams(at: conn1Index, count: 1), conn1)
+        let (leasedConn1, leasdConnContext1) = connections.leaseStreams(at: conn1Index, count: 1)
+        XCTAssertEqual(leasedConn1, conn1)
+        XCTAssertEqual(leasdConnContext1.wasIdle, true)
 
         // eventLoop connection
         XCTAssertTrue(connections.hasConnectionThatCanOrWillBeAbleToExecuteRequests)
@@ -48,7 +50,10 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         XCTAssertEqual(conn1CreatedContext.availableStreams, 100)
         XCTAssertTrue(conn1CreatedContext.isIdle)
         XCTAssert(conn2CreatedContext.eventLoop === el2)
-        XCTAssertEqual(connections.leaseStreams(at: conn2Index, count: 1), conn2)
+
+        let (leasedConn2, leasdConnContext2) = connections.leaseStreams(at: conn2Index, count: 1)
+        XCTAssertEqual(leasedConn2, conn2)
+        XCTAssertEqual(leasdConnContext2.wasIdle, true)
         XCTAssertTrue(connections.hasConnectionThatCanOrWillBeAbleToExecuteRequests(for: el2))
     }
 
@@ -184,7 +189,10 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         let conn2ID = connections.createNewConnection(on: el1)
         let conn2: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn2ID, eventLoop: el1)
         let (conn2Index, _) = connections.newHTTP2ConnectionEstablished(conn2, maxConcurrentStreams: 100)
-        XCTAssertEqual(connections.leaseStreams(at: conn2Index, count: 1), conn2)
+
+        let (leasedConn1, leasdConnContext1) = connections.leaseStreams(at: conn2Index, count: 1)
+        XCTAssertEqual(leasedConn1, conn2)
+        XCTAssertEqual(leasdConnContext1.wasIdle, true)
         XCTAssertNil(connections.closeConnectionIfIdle(conn2ID))
     }
 
@@ -201,8 +209,11 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         _ = connections.newHTTP2ConnectionEstablished(conn1, maxConcurrentStreams: 100)
 
         // connection is leased
-        let lease = connections.leaseStream(onPreferred: el1)
-        XCTAssertEqual(lease, conn1)
+        guard let (leasedConn, leaseContext) = connections.leaseStream(onPreferred: el1) else {
+            return XCTFail("lease unexpectedly failed")
+        }
+        XCTAssertEqual(leasedConn, conn1)
+        XCTAssertEqual(leaseContext.wasIdle, true)
 
         // timeout arrives minimal to late
         XCTAssertEqual(connections.closeConnectionIfIdle(conn1ID), nil)
@@ -238,7 +249,11 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         _ = connections.newHTTP2ConnectionEstablished(conn1, maxConcurrentStreams: 100)
 
         // we lease it just before timeout
-        XCTAssertEqual(connections.leaseStream(onRequired: el1), conn1)
+        guard let (leasedConn, leaseContext) = connections.leaseStream(onRequired: el1) else {
+            return XCTFail("lease unexpectedly failed")
+        }
+        XCTAssertEqual(leasedConn, conn1)
+        XCTAssertEqual(leaseContext.wasIdle, true)
 
         // timeout arrives minimal to late
         XCTAssertEqual(connections.closeConnectionIfIdle(conn1ID), nil)
@@ -273,10 +288,11 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         XCTAssertEqual(connections.stats.idleConnections, 4)
 
         // connection is leased
-        guard let lease = connections.leaseStream(onPreferred: el1) else {
+        guard let (leasedConn, leaseContext) = connections.leaseStream(onPreferred: el1) else {
             return XCTFail("Expected to be able to lease a connection")
         }
-        XCTAssertEqual(lease, .__testOnly_connection(id: 0, eventLoop: el1))
+        XCTAssertEqual(leasedConn, .__testOnly_connection(id: 0, eventLoop: el1))
+        XCTAssertEqual(leaseContext.wasIdle, true)
 
         XCTAssertEqual(connections.stats.backingOffConnections, 0)
         XCTAssertEqual(connections.stats.leasedStreams, 1)
@@ -292,7 +308,7 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
 
         let context = connections.shutdown()
         XCTAssertEqual(context.close.count, 3)
-        XCTAssertEqual(context.cancel, [lease])
+        XCTAssertEqual(context.cancel, [leasedConn])
         XCTAssertEqual(context.connectBackoff, [backingOffID])
 
         XCTAssertEqual(connections.stats.idleConnections, 0)
@@ -302,8 +318,8 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         XCTAssertEqual(connections.stats.startingConnections, 1)
         XCTAssertFalse(connections.isEmpty)
 
-        let (releaseIndex, _) = connections.releaseStream(lease.id)
-        XCTAssertEqual(connections.closeConnection(at: releaseIndex), lease)
+        let (releaseIndex, _) = connections.releaseStream(leasedConn.id)
+        XCTAssertEqual(connections.closeConnection(at: releaseIndex), leasedConn)
         XCTAssertFalse(connections.isEmpty)
 
         guard let (failIndex, _) = connections.failConnection(startingID) else {
@@ -322,7 +338,9 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         let conn1: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn1ID, eventLoop: el1)
         let (conn1Index, conn1CreatedContext) = connections.newHTTP2ConnectionEstablished(conn1, maxConcurrentStreams: 100)
         XCTAssertEqual(conn1CreatedContext.availableStreams, 100)
-        XCTAssertEqual(connections.leaseStreams(at: conn1Index, count: 100), conn1)
+        let (leasedConn1, leasdConnContext1) = connections.leaseStreams(at: conn1Index, count: 100)
+        XCTAssertEqual(leasedConn1, conn1)
+        XCTAssertEqual(leasdConnContext1.wasIdle, true)
 
         XCTAssertNil(connections.leaseStream(onRequired: el1), "should not be able to lease stream because they are all already leased")
 
@@ -330,7 +348,12 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         XCTAssertFalse(releaseContext.isIdle)
         XCTAssertEqual(releaseContext.availableStreams, 1)
 
-        XCTAssertEqual(connections.leaseStream(onRequired: el1), conn1)
+        guard let (leasedConn, leaseContext) = connections.leaseStream(onRequired: el1) else {
+            return XCTFail("lease unexpectedly failed")
+        }
+        XCTAssertEqual(leasedConn, conn1)
+        XCTAssertEqual(leaseContext.wasIdle, false)
+
         XCTAssertNil(connections.leaseStream(onRequired: el1), "should not be able to lease stream because they are all already leased")
     }
 
@@ -343,7 +366,10 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         let conn1: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn1ID, eventLoop: el1)
         let (conn1Index, conn1CreatedContext) = connections.newHTTP2ConnectionEstablished(conn1, maxConcurrentStreams: 10)
         XCTAssertEqual(conn1CreatedContext.availableStreams, 10)
-        XCTAssertEqual(connections.leaseStreams(at: conn1Index, count: 2), conn1)
+
+        let (leasedConn1, leasdConnContext1) = connections.leaseStreams(at: conn1Index, count: 2)
+        XCTAssertEqual(leasedConn1, conn1)
+        XCTAssertEqual(leasdConnContext1.wasIdle, true)
 
         XCTAssertTrue(connections.goAwayReceived(conn1ID).eventLoop === el1)
 
@@ -421,7 +447,10 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         let conn1: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn1ID, eventLoop: el1)
         let (conn1Index, conn1CreatedContext) = connections.newHTTP2ConnectionEstablished(conn1, maxConcurrentStreams: 1)
         XCTAssertEqual(conn1CreatedContext.availableStreams, 1)
-        XCTAssertEqual(connections.leaseStreams(at: conn1Index, count: 1), conn1)
+
+        let (leasedConn1, leasdConnContext1) = connections.leaseStreams(at: conn1Index, count: 1)
+        XCTAssertEqual(leasedConn1, conn1)
+        XCTAssertEqual(leasdConnContext1.wasIdle, true)
 
         XCTAssertNil(connections.leaseStream(onRequired: el1), "all streams are in use")
 
@@ -430,7 +459,11 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         XCTAssertTrue(newSettingsContext1.eventLoop === el1)
         XCTAssertFalse(newSettingsContext1.isIdle)
 
-        XCTAssertEqual(connections.leaseStream(onRequired: el1), conn1)
+        guard let (leasedConn2, leaseContext2) = connections.leaseStream(onRequired: el1) else {
+            return XCTFail("lease unexpectedly failed")
+        }
+        XCTAssertEqual(leasedConn2, conn1)
+        XCTAssertEqual(leaseContext2.wasIdle, false)
 
         let (_, newSettingsContext2) = connections.newHTTP2MaxConcurrentStreamsReceived(conn1ID, newMaxStreams: 1)
         XCTAssertEqual(newSettingsContext2.availableStreams, 0)
@@ -449,7 +482,11 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         XCTAssertTrue(release2Context.isIdle)
         XCTAssertEqual(release2Context.availableStreams, 1)
 
-        XCTAssertEqual(connections.leaseStream(onRequired: el1), conn1)
+        guard let (leasedConn3, leaseContext3) = connections.leaseStream(onRequired: el1) else {
+            return XCTFail("lease unexpectedly failed")
+        }
+        XCTAssertEqual(leasedConn3, conn1)
+        XCTAssertEqual(leaseContext3.wasIdle, true)
     }
 
     func testLeaseOnPreferredEventLoopWithoutAnyAvailable() {
@@ -461,7 +498,9 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         let conn1: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn1ID, eventLoop: el1)
         let (conn1Index, conn1CreatedContext) = connections.newHTTP2ConnectionEstablished(conn1, maxConcurrentStreams: 1)
         XCTAssertEqual(conn1CreatedContext.availableStreams, 1)
-        XCTAssertEqual(connections.leaseStreams(at: conn1Index, count: 1), conn1)
+        let (leasedConn1, leasdConnContext1) = connections.leaseStreams(at: conn1Index, count: 1)
+        XCTAssertEqual(leasedConn1, conn1)
+        XCTAssertEqual(leasdConnContext1.wasIdle, true)
 
         XCTAssertNil(connections.leaseStream(onPreferred: el1), "all streams are in use")
     }
@@ -494,7 +533,11 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         let conn1: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn1ID, eventLoop: el1)
         let (conn1Index, conn1CreatedContext) = connections.newHTTP2ConnectionEstablished(conn1, maxConcurrentStreams: 100)
         XCTAssertEqual(conn1CreatedContext.availableStreams, 100)
-        XCTAssertEqual(connections.leaseStreams(at: conn1Index, count: 2), conn1)
+
+        let (leasedConn1, leasdConnContext1) = connections.leaseStreams(at: conn1Index, count: 2)
+        XCTAssertEqual(leasedConn1, conn1)
+        XCTAssertEqual(leasdConnContext1.wasIdle, true)
+
         XCTAssertEqual(
             connections.stats,
             .init(
