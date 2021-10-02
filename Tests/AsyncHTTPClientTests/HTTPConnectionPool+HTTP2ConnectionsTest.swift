@@ -482,11 +482,11 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         XCTAssertTrue(release2Context.isIdle)
         XCTAssertEqual(release2Context.availableStreams, 1)
 
-        guard let (leasedConn2, leaseContext2) = connections.leaseStream(onRequired: el1) else {
+        guard let (leasedConn3, leaseContext3) = connections.leaseStream(onRequired: el1) else {
             return XCTFail("lease unexpectedly failed")
         }
-        XCTAssertEqual(leasedConn2, conn1)
-        XCTAssertEqual(leaseContext2.wasIdle, true)
+        XCTAssertEqual(leasedConn3, conn1)
+        XCTAssertEqual(leaseContext3.wasIdle, true)
     }
 
     func testLeaseOnPreferredEventLoopWithoutAnyAvailable() {
