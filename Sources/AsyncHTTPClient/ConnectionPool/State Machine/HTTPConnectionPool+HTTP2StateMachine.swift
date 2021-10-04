@@ -102,12 +102,19 @@ extension HTTPConnectionPool {
             _ request: Request,
             onRequired eventLoop: EventLoop
         ) -> Action {
-            if let connection = self.connections.leaseStream(onRequired: eventLoop) {
+            if let (connection, context) = self.connections.leaseStream(onRequired: eventLoop) {
                 /// 1. we have a stream available and can execute the request immediately
-                return .init(
-                    request: .executeRequest(request, connection, cancelTimeout: false),
-                    connection: .cancelTimeoutTimer(connection.id)
-                )
+                if context.wasIdle {
+                    return .init(
+                        request: .executeRequest(request, connection, cancelTimeout: false),
+                        connection: .cancelTimeoutTimer(connection.id)
+                    )
+                } else {
+                    return .init(
+                        request: .executeRequest(request, connection, cancelTimeout: false),
+                        connection: .none
+                    )
+                }
             }
             /// 2. No available stream so we definitely need to wait until we have one
             self.requests.push(request)
@@ -132,12 +139,19 @@ extension HTTPConnectionPool {
             _ request: Request,
             onPreferred eventLoop: EventLoop
         ) -> Action {
-            if let connection = self.connections.leaseStream(onPreferred: eventLoop) {
+            if let (connection, context) = self.connections.leaseStream(onPreferred: eventLoop) {
                 /// 1. we have a stream available and can execute the request immediately
-                return .init(
-                    request: .executeRequest(request, connection, cancelTimeout: false),
-                    connection: .cancelTimeoutTimer(connection.id)
-                )
+                if context.wasIdle {
+                    return .init(
+                        request: .executeRequest(request, connection, cancelTimeout: false),
+                        connection: .cancelTimeoutTimer(connection.id)
+                    )
+                } else {
+                    return .init(
+                        request: .executeRequest(request, connection, cancelTimeout: false),
+                        connection: .none
+                    )
+                }
             }
             /// 2. No available stream so we definitely need to wait until we have one
             self.requests.push(request)
@@ -182,7 +196,7 @@ extension HTTPConnectionPool {
                 let remainingAvailableStreams = context.availableStreams - requestsToExecute.count
                 // use the remaining available streams for requests without a required event loop
                 requestsToExecute += self.requests.popFirst(max: remainingAvailableStreams, for: nil)
-                let connection = self.connections.leaseStreams(at: index, count: requestsToExecute.count)
+                let (connection, _) = self.connections.leaseStreams(at: index, count: requestsToExecute.count)
 
                 let requestAction = { () -> RequestAction in
                     if requestsToExecute.isEmpty {

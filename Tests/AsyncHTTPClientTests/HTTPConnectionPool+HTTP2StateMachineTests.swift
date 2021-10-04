@@ -96,6 +96,23 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             XCTAssertEqual(action.request, .none)
             XCTAssertEqual(action.connection, .none)
         }
+        
+        /// 4 streams are available and therefore request should be executed immediately
+        for _ in 0..<4 {
+            let mockRequest = MockHTTPRequest(eventLoop: el1, requiresEventLoopForChannel: true)
+            let request = HTTPConnectionPool.Request(mockRequest)
+            let action = state.executeRequest(request)
+
+            XCTAssertEqual(action.connection, .none)
+            XCTAssertEqual(action.request, .executeRequest(request, conn, cancelTimeout: false))
+        }
+        
+        /// closing streams without any queued requests shouldn't do anything if it's *not* the last stream
+        for _ in 0..<4 {
+            let action = state.http2ConnectionStreamClosed(connID)
+            XCTAssertEqual(action.request, .none)
+            XCTAssertEqual(action.connection, .none)
+        }
 
         /// closing the last stream should schedule a idle timeout
         let streamCloseAction = state.http2ConnectionStreamClosed(connID)
