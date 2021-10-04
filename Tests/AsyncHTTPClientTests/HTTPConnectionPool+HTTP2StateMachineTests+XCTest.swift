@@ -30,6 +30,10 @@ extension HTTPConnectionPool_HTTP2StateMachineTests {
             ("testCancelRequestWorks", testCancelRequestWorks),
             ("testExecuteOnShuttingDownPool", testExecuteOnShuttingDownPool),
             ("testHTTP1ToHTTP2MigrationAndShutdownIfFirstConnectionIsHTTP1", testHTTP1ToHTTP2MigrationAndShutdownIfFirstConnectionIsHTTP1),
+            ("testSchedulingAndCancelingOfIdleTimeout", testSchedulingAndCancelingOfIdleTimeout),
+            ("testConnectionTimeout", testConnectionTimeout),
+            ("testConnectionEstablishmentFailure", testConnectionEstablishmentFailure),
+            ("testGoAway", testGoAway),
         ]
     }
 }
