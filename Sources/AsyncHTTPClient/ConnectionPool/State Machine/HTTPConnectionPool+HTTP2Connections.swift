@@ -576,11 +576,6 @@ extension HTTPConnectionPool {
             /// true if no stream is leased
             var isIdle: Bool
         }
-        
-        struct LeasedStreamContext {
-            /// true if the connection was idle before leasing the stream
-            var wasIdle: Bool
-        }
 
         struct LeasedStreamContext {
             /// true if the connection was idle before leasing the stream
