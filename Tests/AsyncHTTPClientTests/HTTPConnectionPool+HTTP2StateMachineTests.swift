@@ -435,4 +435,122 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         }
         XCTAssertEqual(eventLoop.id, el1.id)
     }
+
+    func testGoAwayOnIdleConnection() {
+        let elg = EmbeddedEventLoopGroup(loops: 1)
+        let el1 = elg.next()
+
+        // establish one idle http2 connection
+        let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
+        var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator)
+        let conn1ID = http1Conns.createNewConnection(on: el1)
+        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator)
+        let migrationAction = state.migrateConnectionsFromHTTP1(
+            connections: http1Conns,
+            requests: HTTPConnectionPool.RequestQueue()
+        )
+        XCTAssertEqual(migrationAction, .none)
+        let conn1 = HTTPConnectionPool.Connection.__testOnly_connection(id: conn1ID, eventLoop: el1)
+        let connectAction = state.newHTTP2ConnectionEstablished(conn1, maxConcurrentStreams: 100)
+        XCTAssertEqual(connectAction.request, .none)
+        XCTAssertEqual(connectAction.connection, .scheduleTimeoutTimer(conn1ID, on: el1))
+
+        let goAwayAction = state.http2ConnectionGoAwayReceived(conn1ID)
+        XCTAssertEqual(goAwayAction.request, .none)
+        XCTAssertEqual(goAwayAction.connection, .none, "Connection is automatically closed by HTTP2IdleHandler")
+    }
+
+    func testGoAwayWithLeasedStream() {
+        let elg = EmbeddedEventLoopGroup(loops: 1)
+        let el1 = elg.next()
+
+        // establish one idle http2 connection
+        let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
+        var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator)
+        let conn1ID = http1Conns.createNewConnection(on: el1)
+        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator)
+        let migrationAction = state.migrateConnectionsFromHTTP1(
+            connections: http1Conns,
+            requests: HTTPConnectionPool.RequestQueue()
+        )
+        XCTAssertEqual(migrationAction, .none)
+        let conn1 = HTTPConnectionPool.Connection.__testOnly_connection(id: conn1ID, eventLoop: el1)
+        let connectAction = state.newHTTP2ConnectionEstablished(conn1, maxConcurrentStreams: 100)
+        XCTAssertEqual(connectAction.request, .none)
+        XCTAssertEqual(connectAction.connection, .scheduleTimeoutTimer(conn1ID, on: el1))
+
+        // execute request on idle connection
+        let mockRequest1 = MockHTTPRequest(eventLoop: el1)
+        let request1 = HTTPConnectionPool.Request(mockRequest1)
+        let request1Action = state.executeRequest(request1)
+        XCTAssertEqual(request1Action.request, .executeRequest(request1, conn1, cancelTimeout: false))
+        XCTAssertEqual(request1Action.connection, .cancelTimeoutTimer(conn1ID))
+
+        let goAwayAction = state.http2ConnectionGoAwayReceived(conn1ID)
+        XCTAssertEqual(goAwayAction.request, .none)
+        XCTAssertEqual(goAwayAction.connection, .none)
+
+        // close stream
+        let closeStream1Action = state.http2ConnectionStreamClosed(conn1ID)
+        XCTAssertEqual(closeStream1Action.request, .none)
+        XCTAssertEqual(closeStream1Action.connection, .none, "Connection is automatically closed by HTTP2IdleHandler")
+    }
+
+    func testGoAwayWithPendingRequestsStartsNewConnection() {
+        let elg = EmbeddedEventLoopGroup(loops: 1)
+        let el1 = elg.next()
+
+        // establish one idle http2 connection
+        let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
+        var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator)
+        let conn1ID = http1Conns.createNewConnection(on: el1)
+        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator)
+        let migrationAction = state.migrateConnectionsFromHTTP1(
+            connections: http1Conns,
+            requests: HTTPConnectionPool.RequestQueue()
+        )
+        XCTAssertEqual(migrationAction, .none)
+        let conn1 = HTTPConnectionPool.Connection.__testOnly_connection(id: conn1ID, eventLoop: el1)
+        let connectAction1 = state.newHTTP2ConnectionEstablished(conn1, maxConcurrentStreams: 1)
+        XCTAssertEqual(connectAction1.request, .none)
+        XCTAssertEqual(connectAction1.connection, .scheduleTimeoutTimer(conn1ID, on: el1))
+
+        // execute request
+        let mockRequest1 = MockHTTPRequest(eventLoop: el1)
+        let request1 = HTTPConnectionPool.Request(mockRequest1)
+        let request1Action = state.executeRequest(request1)
+        XCTAssertEqual(request1Action.request, .executeRequest(request1, conn1, cancelTimeout: false))
+        XCTAssertEqual(request1Action.connection, .cancelTimeoutTimer(conn1ID))
+
+        // queue request
+        let mockRequest2 = MockHTTPRequest(eventLoop: el1)
+        let request2 = HTTPConnectionPool.Request(mockRequest2)
+        let request2Action = state.executeRequest(request2)
+        XCTAssertEqual(request2Action.request, .scheduleRequestTimeout(for: request2, on: el1))
+        XCTAssertEqual(request2Action.connection, .none)
+
+        // go away should create a new connection
+        let goAwayAction = state.http2ConnectionGoAwayReceived(conn1ID)
+        XCTAssertEqual(goAwayAction.request, .none)
+        guard case .createConnection(let conn2ID, let eventLoop) = goAwayAction.connection else {
+            return XCTFail("unexpected connection action \(goAwayAction.connection)")
+        }
+        XCTAssertEqual(el1.id, eventLoop.id)
+
+        // new connection should execute pending request
+        let conn2 = HTTPConnectionPool.Connection.__testOnly_connection(id: conn2ID, eventLoop: el1)
+        let connectAction2 = state.newHTTP2ConnectionEstablished(conn2, maxConcurrentStreams: 1)
+        XCTAssertEqual(connectAction2.request, .executeRequestsAndCancelTimeouts([request2], conn2))
+        XCTAssertEqual(connectAction2.connection, .none)
+
+        // close stream from conn1
+        let closeStream1Action = state.http2ConnectionStreamClosed(conn1ID)
+        XCTAssertEqual(closeStream1Action.request, .none)
+        XCTAssertEqual(closeStream1Action.connection, .none, "Connection is automatically closed by HTTP2IdleHandler")
+
+        // close stream from conn2
+        let closeStream2Action = state.http2ConnectionStreamClosed(conn2ID)
+        XCTAssertEqual(closeStream2Action.request, .none)
+        XCTAssertEqual(closeStream2Action.connection, .scheduleTimeoutTimer(conn2ID, on: el1))
+    }
 }

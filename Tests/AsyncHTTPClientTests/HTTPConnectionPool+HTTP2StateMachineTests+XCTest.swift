@@ -33,6 +33,9 @@ extension HTTPConnectionPool_HTTP2StateMachineTests {
             ("testSchedulingAndCancelingOfIdleTimeout", testSchedulingAndCancelingOfIdleTimeout),
             ("testConnectionTimeout", testConnectionTimeout),
             ("testConnectionEstablishmentFailure", testConnectionEstablishmentFailure),
+            ("testGoAwayOnIdleConnection", testGoAwayOnIdleConnection),
+            ("testGoAwayWithLeasedStream", testGoAwayWithLeasedStream),
+            ("testGoAwayWithPendingRequestsStartsNewConnection", testGoAwayWithPendingRequestsStartsNewConnection),
         ]
     }
 }

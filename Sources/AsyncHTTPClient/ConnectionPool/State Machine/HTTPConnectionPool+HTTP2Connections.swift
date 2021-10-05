@@ -371,19 +371,20 @@ extension HTTPConnectionPool {
         /// This will put the connection into the idle state.
         ///
         /// - Parameter connection: The new established connection.
-        /// - Returns: An index and an ``AvailableConnectionContext`` to determine the next action for the now idle connection.
+        /// - Returns: An index and an ``EstablishedConnectionContext`` to determine the next action for the now idle connection.
         ///            Call ``leaseStreams(at:count:)`` or ``closeConnection(at:)`` with the supplied index after
         ///            this.
-        mutating func newHTTP2ConnectionEstablished(_ connection: Connection, maxConcurrentStreams: Int) -> (Int, AvailableConnectionContext) {
+        mutating func newHTTP2ConnectionEstablished(_ connection: Connection, maxConcurrentStreams: Int) -> (Int, EstablishedConnectionContext) {
             guard let index = self.connections.firstIndex(where: { $0.connectionID == connection.id }) else {
                 preconditionFailure("There is a new connection that we didn't request!")
             }
             precondition(connection.eventLoop === self.connections[index].eventLoop, "Expected the new connection to be on EL")
             let availableStreams = self.connections[index].connected(connection, maxStreams: maxConcurrentStreams)
-            let context = AvailableConnectionContext(
+            let context = EstablishedConnectionContext(
                 availableStreams: availableStreams,
                 eventLoop: connection.eventLoop,
-                isIdle: self.connections[index].isIdle
+                isIdle: self.connections[index].isIdle,
+                connectionID: connection.id
             )
             return (index, context)
         }
@@ -419,20 +420,21 @@ extension HTTPConnectionPool {
         /// - Parameters:
         ///   - connectionID: The connectionID for which we received new settings
         ///   - newMaxStreams: new maximum concurrent streams
-        /// - Returns: index of the connection and new number of available streams in the `AvailableConnectionContext`
+        /// - Returns: index of the connection and new number of available streams in the `EstablishedConnectionContext`
         /// - Precondition: Connections must be in the `.active` or `.draining` state.
         mutating func newHTTP2MaxConcurrentStreamsReceived(
             _ connectionID: Connection.ID,
             newMaxStreams: Int
-        ) -> (Int, AvailableConnectionContext) {
+        ) -> (Int, EstablishedConnectionContext) {
             guard let index = self.connections.firstIndex(where: { $0.connectionID == connectionID }) else {
                 preconditionFailure("We tried to update the maximum number of concurrent streams for a connection that does not exists")
             }
             let availableStreams = self.connections[index].newMaxConcurrentStreams(newMaxStreams)
-            let context = AvailableConnectionContext(
+            let context = EstablishedConnectionContext(
                 availableStreams: availableStreams,
                 eventLoop: self.connections[index].eventLoop,
-                isIdle: self.connections[index].isIdle
+                isIdle: self.connections[index].isIdle,
+                connectionID: connectionID
             )
             return (index, context)
         }
@@ -471,25 +473,27 @@ extension HTTPConnectionPool {
         /// lease `count` streams after connections establishment
         /// - Parameters:
         ///   - index: index of the connection you got by calling `newHTTP2ConnectionEstablished(_:maxConcurrentStreams:)`
-        ///   - count: number of streams you want to lease. You get the current available streams from the `AvailableConnectionContext` which `newHTTP2ConnectionEstablished(_:maxConcurrentStreams:)` returns
+        ///   - count: number of streams you want to lease. You get the current available streams from the `EstablishedConnectionContext` which `newHTTP2ConnectionEstablished(_:maxConcurrentStreams:)` returns
         /// - Returns: connection to execute `count` requests on
-        /// - precondition: `index` needs to be valid. `count` must be greater than or equal to *0* and not execeed the number of available streams.
+        /// - precondition: `index` needs to be valid. `count` must be greater than or equal to *1* and not exceed the number of available streams.
         mutating func leaseStreams(at index: Int, count: Int) -> (Connection, LeasedStreamContext) {
+            precondition(count >= 1, "stream lease count must be greater than or equal to 1")
             let isIdle = self.connections[index].isIdle
             let connection = self.connections[index].lease(count)
             let context = LeasedStreamContext(wasIdle: isIdle)
             return (connection, context)
         }
 
-        mutating func releaseStream(_ connectionID: Connection.ID) -> (Int, AvailableConnectionContext) {
+        mutating func releaseStream(_ connectionID: Connection.ID) -> (Int, EstablishedConnectionContext) {
             guard let index = self.connections.firstIndex(where: { $0.connectionID == connectionID }) else {
                 preconditionFailure("We tried to release a connection we do not know anything about")
             }
             let availableStreams = self.connections[index].release()
-            let context = AvailableConnectionContext(
+            let context = EstablishedConnectionContext(
                 availableStreams: availableStreams,
                 eventLoop: self.connections[index].eventLoop,
-                isIdle: self.connections[index].isIdle
+                isIdle: self.connections[index].isIdle,
+                connectionID: connectionID
             )
             return (index, context)
         }
@@ -567,14 +571,16 @@ extension HTTPConnectionPool {
 
         // MARK: Result structs
 
-        /// Information around an available connection
-        struct AvailableConnectionContext {
+        /// Information around a connection which is either in the .active or .draining state.
+        struct EstablishedConnectionContext {
             /// number of streams which can be leased
             var availableStreams: Int
             /// The eventLoop the connection is running on.
             var eventLoop: EventLoop
             /// true if no stream is leased
             var isIdle: Bool
+            /// id of the connection
+            var connectionID: Connection.ID
         }
 
         struct LeasedStreamContext {

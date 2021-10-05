@@ -184,7 +184,7 @@ extension HTTPConnectionPool {
 
         private mutating func nextActionForAvailableConnection(
             at index: Int,
-            context: HTTP2Connections.AvailableConnectionContext
+            context: HTTP2Connections.EstablishedConnectionContext
         ) -> Action {
             switch self.state {
             case .running:
@@ -196,19 +196,22 @@ extension HTTPConnectionPool {
                 let remainingAvailableStreams = context.availableStreams - requestsToExecute.count
                 // use the remaining available streams for requests without a required event loop
                 requestsToExecute += self.requests.popFirst(max: remainingAvailableStreams, for: nil)
-                let (connection, _) = self.connections.leaseStreams(at: index, count: requestsToExecute.count)
 
                 let requestAction = { () -> RequestAction in
                     if requestsToExecute.isEmpty {
                         return .none
                     } else {
+                        // we can only lease streams if the connection has available streams.
+                        // Otherwise we might crash even if we try to lease zero streams,
+                        // because the connection might already be in the draining state.
+                        let (connection, _) = self.connections.leaseStreams(at: index, count: requestsToExecute.count)
                         return .executeRequestsAndCancelTimeouts(requestsToExecute, connection)
                     }
                 }()
 
                 let connectionAction = { () -> ConnectionAction in
                     if context.isIdle, requestsToExecute.isEmpty {
-                        return .scheduleTimeoutTimer(connection.id, on: context.eventLoop)
+                        return .scheduleTimeoutTimer(context.connectionID, on: context.eventLoop)
                     } else {
                         return .none
                     }
