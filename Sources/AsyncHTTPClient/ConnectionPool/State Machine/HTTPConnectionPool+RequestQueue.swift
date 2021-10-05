@@ -70,6 +70,21 @@ extension HTTPConnectionPool {
             }
         }
 
+        /// removes up to `max` requests from the queue for the given `eventLoop` and returns them.
+        /// - Parameters:
+        ///   - max: maximum number of requests to pop
+        ///   - eventLoop: required event loop of the request
+        /// - Returns: requests for the given `eventLoop`
+        mutating func popFirst(max: Int, for eventLoop: EventLoop? = nil) -> [Request] {
+            if let eventLoop = eventLoop {
+                return self.withEventLoopQueue(for: eventLoop.id) { queue in
+                    queue.popFirst(max: max)
+                }
+            } else {
+                return self.generalPurposeQueue.popFirst(max: max)
+            }
+        }
+
         mutating func remove(_ requestID: Request.ID) -> Request? {
             if let eventLoopID = requestID.eventLoopID {
                 return self.withEventLoopQueue(for: eventLoopID) { queue in
@@ -116,5 +131,26 @@ extension HTTPConnectionPool {
             }
             return nil
         }
+    }
+}
+
+extension CircularBuffer {
+    /// Removes up to `max` elements from the beginning of the
+    /// `CircularBuffer` and returns them.
+    ///
+    /// Calling this method may invalidate any existing indices for use with this
+    /// `CircularBuffer`.
+    ///
+    /// - Parameter max: The number of elements to remove.
+    ///   `max` must be greater than or equal to zero.
+    /// - Returns: removed elements
+    ///
+    /// - Complexity: O(*k*), where *k* is the number of elements removed.
+    fileprivate mutating func popFirst(max: Int) -> [Element] {
+        precondition(max >= 0)
+        let elementCountToRemove = Swift.min(max, self.count)
+        let array = Array(self[self.startIndex..<self.index(self.startIndex, offsetBy: elementCountToRemove)])
+        self.removeFirst(elementCountToRemove)
+        return array
     }
 }

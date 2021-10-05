@@ -24,12 +24,12 @@ extension HTTPConnectionPool {
 
         typealias Action = HTTPConnectionPool.StateMachine.Action
 
-        private var connections: HTTP1Connections
+        private(set) var connections: HTTP1Connections
         private var failedConsecutiveConnectionAttempts: Int = 0
         /// the error from the last connection creation
         private var lastConnectFailure: Error?
 
-        private var requests: RequestQueue
+        private(set) var requests: RequestQueue
         private var state: State = .running
 
         init(idGenerator: Connection.ID.Generator, maximumConcurrentConnections: Int) {
@@ -41,7 +41,7 @@ extension HTTPConnectionPool {
             self.requests = RequestQueue()
         }
 
-        // MARK: - Events -
+        // MARK: - Events
 
         mutating func executeRequest(_ request: Request) -> Action {
             switch self.state {

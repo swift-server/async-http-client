@@ -49,6 +49,16 @@ extension HTTPConnectionPool {
             }
         }
 
+        /// A connection is established and can potentially execute requests if not all streams are leased
+        var isActive: Bool {
+            switch self.state {
+            case .active:
+                return true
+            case .starting, .backingOff, .draining, .closed:
+                return false
+            }
+        }
+
         /// A request can be scheduled on the connection
         var isAvailable: Bool {
             switch self.state {
@@ -325,6 +335,11 @@ extension HTTPConnectionPool {
         }
 
         // MARK: Connection creation
+
+        /// true if one ore more connections are active
+        var hasActiveConnections: Bool {
+            self.connections.contains { $0.isActive }
+        }
 
         /// used in general purpose connection scenarios to check if at least one connection exist, or if should we create a new one
         var hasConnectionThatCanOrWillBeAbleToExecuteRequests: Bool {
