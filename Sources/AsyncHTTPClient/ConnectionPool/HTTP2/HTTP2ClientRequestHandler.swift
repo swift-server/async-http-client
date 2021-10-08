@@ -38,7 +38,6 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             if let newRequest = self.request, let idleReadTimeout = newRequest.requestOptions.idleReadTimeout {
                 self.idleReadTimeoutStateMachine = .init(timeAmount: idleReadTimeout)
             } else {
-                self.clearIdleReadTimeoutTimer()
                 self.idleReadTimeoutStateMachine = nil
             }
         }
@@ -197,11 +196,13 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         case .failRequest(let error, let finalAction):
             self.request!.fail(error)
             self.request = nil
+            self.runTimeoutAction(.clearIdleReadTimeoutTimer, context: context)
             self.runFinalAction(finalAction, context: context)
 
         case .succeedRequest(let finalAction, let finalParts):
             self.request!.succeedRequest(finalParts)
             self.request = nil
+            self.runTimeoutAction(.clearIdleReadTimeoutTimer, context: context)
             self.runFinalAction(finalAction, context: context)
         }
     }
@@ -225,6 +226,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             assert(self.idleReadTimeoutTimer == nil, "Expected there is no timeout timer so far.")
 
             self.idleReadTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
+                guard self.idleReadTimeoutTimer != nil else { return }
                 let action = self.state.idleReadTimeoutTriggered()
                 self.run(action, context: context)
             }
@@ -235,19 +237,18 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             }
 
             self.idleReadTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
+                guard self.idleReadTimeoutTimer != nil else { return }
                 let action = self.state.idleReadTimeoutTriggered()
                 self.run(action, context: context)
+            }
+        case .clearIdleReadTimeoutTimer:
+            if let oldTimer = self.idleReadTimeoutTimer {
+                self.idleReadTimeoutTimer = nil
+                oldTimer.cancel()
             }
 
         case .none:
             break
-        }
-    }
-
-    private func clearIdleReadTimeoutTimer() {
-        if let oldTimer = self.idleReadTimeoutTimer {
-            self.idleReadTimeoutTimer = nil
-            oldTimer.cancel()
         }
     }
 

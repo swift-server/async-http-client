@@ -44,7 +44,6 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                 }
             } else {
                 self.logger = self.backgroundLogger
-                self.clearIdleReadTimeoutTimer()
                 self.idleReadTimeoutStateMachine = nil
             }
         }
@@ -52,6 +51,11 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
     private var idleReadTimeoutStateMachine: IdleReadStateMachine?
     private var idleReadTimeoutTimer: Scheduled<Void>?
+
+    /// Cancelling a task in NIO does *not* guarantee that the task will not execute under certain race conditions.
+    /// We therefore give each timer an ID and increase the ID every time we reset or cancel it.
+    /// We check in the task if the timer ID has changed in the meantime and do not execute any action if has changed.
+    private var currentIdleReadTimeoutTimerID: Int = 0
 
     private let backgroundLogger: Logger
     private var logger: Logger
@@ -254,6 +258,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
             let oldRequest = self.request!
             self.request = nil
+            self.runTimeoutAction(.clearIdleReadTimeoutTimer, context: context)
 
             switch finalAction {
             case .close:
@@ -272,6 +277,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             // see comment in the `succeedRequest` case.
             let oldRequest = self.request!
             self.request = nil
+            self.runTimeoutAction(.clearIdleReadTimeoutTimer, context: context)
 
             switch finalAction {
             case .close:
@@ -293,7 +299,9 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         case .startIdleReadTimeoutTimer(let timeAmount):
             assert(self.idleReadTimeoutTimer == nil, "Expected there is no timeout timer so far.")
 
+            let timerID = self.currentIdleReadTimeoutTimerID
             self.idleReadTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
+                guard self.currentIdleReadTimeoutTimerID == timerID else { return }
                 let action = self.state.idleReadTimeoutTriggered()
                 self.run(action, context: context)
             }
@@ -303,20 +311,21 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                 oldTimer.cancel()
             }
 
+            self.currentIdleReadTimeoutTimerID &+= 1
+            let timerID = self.currentIdleReadTimeoutTimerID
             self.idleReadTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
+                guard self.currentIdleReadTimeoutTimerID == timerID else { return }
                 let action = self.state.idleReadTimeoutTriggered()
                 self.run(action, context: context)
             }
-
+        case .clearIdleReadTimeoutTimer:
+            if let oldTimer = self.idleReadTimeoutTimer {
+                self.idleReadTimeoutTimer = nil
+                self.currentIdleReadTimeoutTimerID &+= 1
+                oldTimer.cancel()
+            }
         case .none:
             break
-        }
-    }
-
-    private func clearIdleReadTimeoutTimer() {
-        if let oldTimer = self.idleReadTimeoutTimer {
-            self.idleReadTimeoutTimer = nil
-            oldTimer.cancel()
         }
     }
 
@@ -417,6 +426,7 @@ struct IdleReadStateMachine {
     enum Action {
         case startIdleReadTimeoutTimer(TimeAmount)
         case resetIdleReadTimeoutTimer(TimeAmount)
+        case clearIdleReadTimeoutTimer
         case none
     }
 
