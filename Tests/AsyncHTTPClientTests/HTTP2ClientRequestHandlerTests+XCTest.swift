@@ -28,6 +28,7 @@ extension HTTP2ClientRequestHandlerTests {
             ("testResponseBackpressure", testResponseBackpressure),
             ("testWriteBackpressure", testWriteBackpressure),
             ("testIdleReadTimeout", testIdleReadTimeout),
+            ("testIdleReadTimeoutIsCanceledIfRequestIsCanceled", testIdleReadTimeoutIsCanceledIfRequestIsCanceled),
         ]
     }
 }

@@ -38,6 +38,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             if let newRequest = self.request, let idleReadTimeout = newRequest.requestOptions.idleReadTimeout {
                 self.idleReadTimeoutStateMachine = .init(timeAmount: idleReadTimeout)
             } else {
+                self.clearIdleReadTimeoutTimer()
                 self.idleReadTimeoutStateMachine = nil
             }
         }
@@ -238,14 +239,15 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
                 self.run(action, context: context)
             }
 
-        case .clearIdleReadTimeoutTimer:
-            if let oldTimer = self.idleReadTimeoutTimer {
-                self.idleReadTimeoutTimer = nil
-                oldTimer.cancel()
-            }
-
         case .none:
             break
+        }
+    }
+
+    private func clearIdleReadTimeoutTimer() {
+        if let oldTimer = self.idleReadTimeoutTimer {
+            self.idleReadTimeoutTimer = nil
+            oldTimer.cancel()
         }
     }
 

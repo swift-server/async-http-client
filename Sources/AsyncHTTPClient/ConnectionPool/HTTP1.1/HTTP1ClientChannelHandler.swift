@@ -44,6 +44,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                 }
             } else {
                 self.logger = self.backgroundLogger
+                self.clearIdleReadTimeoutTimer()
                 self.idleReadTimeoutStateMachine = nil
             }
         }
@@ -307,14 +308,15 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                 self.run(action, context: context)
             }
 
-        case .clearIdleReadTimeoutTimer:
-            if let oldTimer = self.idleReadTimeoutTimer {
-                self.idleReadTimeoutTimer = nil
-                oldTimer.cancel()
-            }
-
         case .none:
             break
+        }
+    }
+
+    private func clearIdleReadTimeoutTimer() {
+        if let oldTimer = self.idleReadTimeoutTimer {
+            self.idleReadTimeoutTimer = nil
+            oldTimer.cancel()
         }
     }
 
@@ -415,7 +417,6 @@ struct IdleReadStateMachine {
     enum Action {
         case startIdleReadTimeoutTimer(TimeAmount)
         case resetIdleReadTimeoutTimer(TimeAmount)
-        case clearIdleReadTimeoutTimer
         case none
     }
 
@@ -465,7 +466,7 @@ struct IdleReadStateMachine {
                 return .resetIdleReadTimeoutTimer(self.timeAmount)
             case .end:
                 self.state = .responseEndReceived
-                return .clearIdleReadTimeoutTimer
+                return .none
             }
 
         case .responseEndReceived:

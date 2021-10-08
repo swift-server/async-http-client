@@ -233,4 +233,56 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
             XCTAssertEqual($0 as? HTTPClientError, .readTimeout)
         }
     }
+
+    func testIdleReadTimeoutIsCanceledIfRequestIsCanceled() {
+        let embedded = EmbeddedChannel()
+        let readEventHandler = ReadEventHitHandler()
+        let requestHandler = HTTP2ClientRequestHandler(eventLoop: embedded.eventLoop)
+        XCTAssertNoThrow(try embedded.pipeline.syncOperations.addHandlers([readEventHandler, requestHandler]))
+        XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
+        let logger = Logger(label: "test")
+
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/"))
+        guard let request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
+
+        let delegate = ResponseBackpressureDelegate(eventLoop: embedded.eventLoop)
+        var maybeRequestBag: RequestBag<ResponseBackpressureDelegate>?
+        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embedded.eventLoop),
+            task: .init(eventLoop: embedded.eventLoop, logger: logger),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(idleReadTimeout: .milliseconds(200)),
+            delegate: delegate
+        ))
+        guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
+
+        embedded.write(requestBag, promise: nil)
+
+        XCTAssertNoThrow(try embedded.receiveHeadAndVerify {
+            XCTAssertEqual($0.method, .GET)
+            XCTAssertEqual($0.uri, "/")
+            XCTAssertEqual($0.headers.first(name: "host"), "localhost")
+        })
+        XCTAssertNoThrow(try embedded.receiveEnd())
+
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: HTTPHeaders([("content-length", "12")]))
+
+        XCTAssertEqual(readEventHandler.readHitCounter, 0)
+        embedded.read()
+        XCTAssertEqual(readEventHandler.readHitCounter, 1)
+        XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.head(responseHead)))
+
+        // canceling the request
+        requestBag.cancel()
+        XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .cancelled)
+        }
+
+        // the idle read timeout should be cleared because we canceled the request
+        // therefore advancing the time should not trigger a crash
+        embedded.embeddedEventLoop.advanceTime(by: .milliseconds(250))
+    }
 }
