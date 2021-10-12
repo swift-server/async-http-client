@@ -91,14 +91,12 @@ extension HTTPConnectionPool.StateMachine.ConnectionAction: Equatable {
             .migration(
                 let lhsCreateConnections,
                 let lhsCloseConnections,
-                let lhsScheduleTimeout,
-                let lhsIsShutdown
+                let lhsScheduleTimeout
             ),
             .migration(
                 let rhsCreateConnections,
                 let rhsCloseConnections,
-                let rhsScheduleTimeout,
-                let rhsIsShutdown
+                let rhsScheduleTimeout
             )
         ):
             return lhsCreateConnections.elementsEqual(rhsCreateConnections, by: {
@@ -106,9 +104,7 @@ extension HTTPConnectionPool.StateMachine.ConnectionAction: Equatable {
             }) &&
                 lhsCloseConnections == rhsCloseConnections &&
                 lhsScheduleTimeout?.0 == rhsScheduleTimeout?.0 &&
-                lhsScheduleTimeout?.1 === rhsScheduleTimeout?.1 &&
-                lhsIsShutdown == rhsIsShutdown
-
+                lhsScheduleTimeout?.1 === rhsScheduleTimeout?.1
         case (.none, .none):
             return true
         default:

@@ -47,8 +47,7 @@ extension HTTPConnectionPool {
             case migration(
                 createConnections: [(Connection.ID, EventLoop)],
                 closeConnections: [Connection],
-                scheduleTimeout: (Connection.ID, EventLoop)?,
-                isShutdown: IsShutdown
+                scheduleTimeout: (Connection.ID, EventLoop)?
             )
 
             case none
@@ -69,23 +68,6 @@ extension HTTPConnectionPool {
 
         enum HTTPVersionState {
             case http1(HTTP1StateMachine)
-            case http2(HTTP2StateMachine)
-
-            mutating func modify<ReturnValue>(
-                http1: (inout HTTP1StateMachine) -> ReturnValue,
-                http2: (inout HTTP2StateMachine) -> ReturnValue
-            ) -> ReturnValue {
-                let returnValue: ReturnValue
-                switch self {
-                case .http1(var http1State):
-                    returnValue = http1(&http1State)
-                    self = .http1(http1State)
-                case .http2(var http2State):
-                    returnValue = http2(&http2State)
-                    self = .http2(http2State)
-                }
-                return returnValue
-            }
         }
 
         var state: HTTPVersionState
@@ -239,6 +221,10 @@ extension HTTPConnectionPool.StateMachine: CustomStringConvertible {
         switch self.state {
         case .http1(let http1):
             return ".http1(\(http1))"
+        }
+    }
+}
+
 extension HTTPConnectionPool.StateMachine {
     struct ConnectionMigrationAction {
         var closeConnections: [HTTPConnectionPool.Connection]
@@ -294,22 +280,29 @@ extension HTTPConnectionPool.StateMachine.ConnectionAction {
             return .migration(
                 createConnections: migrationAction.createConnections,
                 closeConnections: migrationAction.closeConnections,
-                scheduleTimeout: nil,
-                isShutdown: .no
+                scheduleTimeout: nil
             )
         case .closeConnection(let connection, let isShutdown):
+            guard isShutdown == .no else {
+                precondition(
+                    migrationAction.closeConnections.isEmpty &&
+                        migrationAction.createConnections.isEmpty,
+                    "migration actions are not supported during shutdown"
+                )
+                return .closeConnection(connection, isShutdown: isShutdown)
+            }
+            var closeConnections = migrationAction.closeConnections
+            closeConnections.append(connection)
             return .migration(
                 createConnections: migrationAction.createConnections,
-                closeConnections: migrationAction.closeConnections + CollectionOfOne(connection),
-                scheduleTimeout: nil,
-                isShutdown: isShutdown
+                closeConnections: closeConnections,
+                scheduleTimeout: nil
             )
         case .scheduleTimeoutTimer(let connectionID, let eventLoop):
             return .migration(
                 createConnections: migrationAction.createConnections,
                 closeConnections: migrationAction.closeConnections,
-                scheduleTimeout: (connectionID, eventLoop),
-                isShutdown: .no
+                scheduleTimeout: (connectionID, eventLoop)
             )
         }
     }

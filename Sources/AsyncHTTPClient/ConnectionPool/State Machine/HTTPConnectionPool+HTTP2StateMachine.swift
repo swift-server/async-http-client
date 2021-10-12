@@ -102,7 +102,7 @@ extension HTTPConnectionPool {
 
             var http1Connections = http1Connections // make http1Connections mutable
             let context = http1Connections.migrateToHTTP2()
-            self.connections.migrateFromHTTP2(
+            self.connections.migrateFromHTTP1(
                 starting: context.starting,
                 backingOff: context.backingOff
             )
@@ -275,7 +275,7 @@ extension HTTPConnectionPool {
                 }
 
                 let connection = self.connections.closeConnection(at: index)
-                if self.connections.isEmpty {
+                if self.http1Connections == nil, self.connections.isEmpty {
                     return .init(
                         request: .none,
                         connection: .closeConnection(connection, isShutdown: .yes(unclean: unclean))

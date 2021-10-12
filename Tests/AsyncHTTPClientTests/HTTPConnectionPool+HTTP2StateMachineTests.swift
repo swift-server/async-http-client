@@ -313,7 +313,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         var http2State = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator)
 
         let http2ConnectAction = http2State.migrateFromHTTP1(http1State: http1State, newHTTP2Connection: conn2, maxConcurrentStreams: 100)
-        XCTAssertEqual(http2ConnectAction.connection, .migration(createConnections: [], closeConnections: [], scheduleTimeout: nil, isShutdown: .no))
+        XCTAssertEqual(http2ConnectAction.connection, .migration(createConnections: [], closeConnections: [], scheduleTimeout: nil))
         guard case .executeRequestsAndCancelTimeouts([request2], conn2) = http2ConnectAction.request else {
             return XCTFail("Unexpected request action \(http2ConnectAction.request)")
         }
@@ -353,8 +353,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         XCTAssertEqual(connectAction.connection, .migration(
             createConnections: [],
             closeConnections: [],
-            scheduleTimeout: (conn1ID, el1),
-            isShutdown: .no
+            scheduleTimeout: (conn1ID, el1)
         ))
 
         // execute request on idle connection
@@ -398,8 +397,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         XCTAssertEqual(connectAction.connection, .migration(
             createConnections: [],
             closeConnections: [],
-            scheduleTimeout: (conn1ID, el1),
-            isShutdown: .no
+            scheduleTimeout: (conn1ID, el1)
         ))
 
         // let the connection timeout
@@ -426,8 +424,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         XCTAssertEqual(connectAction.connection, .migration(
             createConnections: [],
             closeConnections: [],
-            scheduleTimeout: (conn1ID, el1),
-            isShutdown: .no
+            scheduleTimeout: (conn1ID, el1)
         ))
 
         // create new http2 connection
@@ -469,8 +466,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         XCTAssertEqual(connectAction.connection, .migration(
             createConnections: [],
             closeConnections: [],
-            scheduleTimeout: (conn1ID, el1),
-            isShutdown: .no
+            scheduleTimeout: (conn1ID, el1)
         ))
 
         let goAwayAction = state.http2ConnectionGoAwayReceived(conn1ID)
@@ -499,8 +495,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         XCTAssertEqual(connectAction.connection, .migration(
             createConnections: [],
             closeConnections: [],
-            scheduleTimeout: (conn1ID, el1),
-            isShutdown: .no
+            scheduleTimeout: (conn1ID, el1)
         ))
 
         // execute request on idle connection
@@ -541,8 +536,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         XCTAssertEqual(connectAction1.connection, .migration(
             createConnections: [],
             closeConnections: [],
-            scheduleTimeout: (conn1ID, el1),
-            isShutdown: .no
+            scheduleTimeout: (conn1ID, el1)
         ))
 
         // execute request

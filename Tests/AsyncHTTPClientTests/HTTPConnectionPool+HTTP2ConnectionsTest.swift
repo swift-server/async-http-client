@@ -513,7 +513,7 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         let conn1ID: HTTPConnectionPool.Connection.ID = 1
         let conn2ID: HTTPConnectionPool.Connection.ID = 2
 
-        connections.migrateFromHTTP2(
+        connections.migrateFromHTTP1(
             starting: [(conn1ID, el1)],
             backingOff: [(conn2ID, el2)]
         )

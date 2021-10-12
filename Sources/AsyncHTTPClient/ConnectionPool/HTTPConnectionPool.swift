@@ -98,8 +98,7 @@ final class HTTPConnectionPool {
                 case cleanupConnections(CleanupContext, isShutdown: StateMachine.ConnectionAction.IsShutdown)
                 case migration(
                     createConnections: [(Connection.ID, EventLoop)],
-                    closeConnections: [Connection],
-                    isShutdown: StateMachine.ConnectionAction.IsShutdown
+                    closeConnections: [Connection]
                 )
                 case none
             }
@@ -191,16 +190,14 @@ final class HTTPConnectionPool {
             case .migration(
                 let createConnections,
                 let closeConnections,
-                let scheduleTimeout,
-                let isShutdown
+                let scheduleTimeout
             ):
                 if let (connectionID, eventLoop) = scheduleTimeout {
                     self.locked.connection = .scheduleTimeoutTimer(connectionID, on: eventLoop)
                 }
                 self.unlocked.connection = .migration(
                     createConnections: createConnections,
-                    closeConnections: closeConnections,
-                    isShutdown: isShutdown
+                    closeConnections: closeConnections
                 )
             case .none:
                 break
@@ -297,21 +294,13 @@ final class HTTPConnectionPool {
                 self.delegate.connectionPoolDidShutdown(self, unclean: unclean)
             }
 
-        case .migration(
-            createConnections: let createConnections,
-            closeConnections: let closeConnections,
-            isShutdown: let isShutdown
-        ):
+        case .migration(let createConnections, let closeConnections):
             for connection in closeConnections {
                 connection.close(promise: nil)
             }
 
             for (connectionID, eventLoop) in createConnections {
                 self.createConnection(connectionID, on: eventLoop)
-            }
-
-            if case .yes(let unclean) = isShutdown {
-                self.delegate.connectionPoolDidShutdown(self, unclean: unclean)
             }
 
         case .none:

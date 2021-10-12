@@ -351,7 +351,7 @@ extension HTTPConnectionPool {
         /// - Parameters:
         ///   - starting: starting HTTP connections from previous state machine
         ///   - backingOff: backing off HTTP connections from previous state machine
-        mutating func migrateFromHTTP2(
+        mutating func migrateFromHTTP1(
             starting: [(Connection.ID, EventLoop)],
             backingOff: [(Connection.ID, EventLoop)]
         ) {

@@ -49,7 +49,7 @@ extension HTTPConnectionPool {
             http2State: HTTP2StateMachine,
             newHTTP1Connection: Connection
         ) -> Action {
-            self.migrateFromHTTP1(
+            self.migrateFromHTTP2(
                 http1Connections: http2State.http1Connections,
                 http2Connections: http2State.connections,
                 requests: http2State.requests,
@@ -57,7 +57,7 @@ extension HTTPConnectionPool {
             )
         }
 
-        mutating func migrateFromHTTP1(
+        mutating func migrateFromHTTP2(
             http1Connections: HTTP1Connections? = nil,
             http2Connections: HTTP2Connections,
             requests: RequestQueue,
