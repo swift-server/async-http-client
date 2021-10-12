@@ -87,6 +87,28 @@ extension HTTPConnectionPool.StateMachine.ConnectionAction: Equatable {
             return lhsConn == rhsConn && lhsShut == rhsShut
         case (.cleanupConnections(let lhsContext, isShutdown: let lhsShut), .cleanupConnections(let rhsContext, isShutdown: let rhsShut)):
             return lhsContext == rhsContext && lhsShut == rhsShut
+        case (
+            .migration(
+                let lhsCreateConnections,
+                let lhsCloseConnections,
+                let lhsScheduleTimeout,
+                let lhsIsShutdown
+            ),
+            .migration(
+                let rhsCreateConnections,
+                let rhsCloseConnections,
+                let rhsScheduleTimeout,
+                let rhsIsShutdown
+            )
+        ):
+            return lhsCreateConnections.elementsEqual(rhsCreateConnections, by: {
+                $0.0 == $1.0 && $0.1 === $1.1
+            }) &&
+                lhsCloseConnections == rhsCloseConnections &&
+                lhsScheduleTimeout?.0 == rhsScheduleTimeout?.0 &&
+                lhsScheduleTimeout?.1 === rhsScheduleTimeout?.1 &&
+                lhsIsShutdown == rhsIsShutdown
+
         case (.none, .none):
             return true
         default:
@@ -119,6 +141,27 @@ extension HTTPConnectionPool.StateMachine.RequestAction: Equatable {
 }
 
 extension HTTPConnectionPool.StateMachine.Action: Equatable {
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.connection == rhs.connection && lhs.request == rhs.request
+    }
+}
+
+extension HTTPConnectionPool.HTTP2StateMachine.EstablishedConnectionAction: Equatable {
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        switch (lhs, rhs) {
+        case (.scheduleTimeoutTimer(let lhsConnID, on: let lhsEL), .scheduleTimeoutTimer(let rhsConnID, on: let rhsEL)):
+            return lhsConnID == rhsConnID && lhsEL === rhsEL
+        case (.closeConnection(let lhsConn, isShutdown: let lhsShut), .closeConnection(let rhsConn, isShutdown: let rhsShut)):
+            return lhsConn == rhsConn && lhsShut == rhsShut
+        case (.none, .none):
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+extension HTTPConnectionPool.HTTP2StateMachine.EstablishedAction: Equatable {
     public static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.connection == rhs.connection && lhs.request == rhs.request
     }

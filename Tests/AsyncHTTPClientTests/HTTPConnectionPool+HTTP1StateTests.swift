@@ -25,7 +25,6 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
 
         var state = HTTPConnectionPool.StateMachine(
-            eventLoopGroup: elg,
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 8
         )
@@ -109,7 +108,6 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
 
         var state = HTTPConnectionPool.StateMachine(
-            eventLoopGroup: elg,
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 2
         )
@@ -167,7 +165,6 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
 
         var state = HTTPConnectionPool.StateMachine(
-            eventLoopGroup: elg,
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 2
         )
@@ -204,7 +201,6 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
 
         var state = HTTPConnectionPool.StateMachine(
-            eventLoopGroup: elg,
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 2
         )
@@ -595,7 +591,6 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
 
         var state = HTTPConnectionPool.StateMachine(
-            eventLoopGroup: elg,
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6
         )
@@ -634,7 +629,6 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
 
         var state = HTTPConnectionPool.StateMachine(
-            eventLoopGroup: elg,
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6
         )
@@ -666,7 +660,6 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         defer { XCTAssertNoThrow(try eventLoop.syncShutdownGracefully()) }
 
         var state = HTTPConnectionPool.StateMachine(
-            eventLoopGroup: eventLoop,
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6
         )
@@ -690,7 +683,6 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
 
         var state = HTTPConnectionPool.StateMachine(
-            eventLoopGroup: elg,
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6
         )

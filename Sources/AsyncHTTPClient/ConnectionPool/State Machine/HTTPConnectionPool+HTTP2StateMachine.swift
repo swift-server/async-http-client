@@ -18,8 +18,9 @@ import NIOHTTP2
 extension HTTPConnectionPool {
     struct HTTP2StateMachine {
         typealias Action = HTTPConnectionPool.StateMachine.Action
-        typealias RequestAction = HTTPConnectionPool.StateMachine.RequestAction
-        typealias ConnectionAction = HTTPConnectionPool.StateMachine.ConnectionAction
+        typealias ConnectionMigrationAction = HTTPConnectionPool.StateMachine.ConnectionMigrationAction
+        typealias EstablishedAction = HTTPConnectionPool.StateMachine.EstablishedAction
+        typealias EstablishedConnectionAction = HTTPConnectionPool.StateMachine.EstablishedConnectionAction
 
         private enum State: Equatable {
             case running
@@ -30,10 +31,10 @@ extension HTTPConnectionPool {
         private var lastConnectFailure: Error?
         private var failedConsecutiveConnectionAttempts = 0
 
-        private var connections: HTTP2Connections
-        private var http1Connections: HTTP1Connections?
+        private(set) var connections: HTTP2Connections
+        private(set) var http1Connections: HTTP1Connections?
 
-        private var requests: RequestQueue
+        private(set) var requests: RequestQueue
 
         private let idGenerator: Connection.ID.Generator
 
@@ -48,17 +49,60 @@ extension HTTPConnectionPool {
             self.connections = HTTP2Connections(generator: idGenerator)
         }
 
-        mutating func migrateConnectionsFromHTTP1(
-            connections http1Connections: HTTP1Connections,
-            requests: RequestQueue
+        mutating func migrateFromHTTP1(
+            http1State: HTTP1StateMachine,
+            newHTTP2Connection: Connection,
+            maxConcurrentStreams: Int
         ) -> Action {
+            self.migrateFromHTTP1(
+                http1Connections: http1State.connections,
+                http2Connections: http1State.http2Connections,
+                requests: http1State.requests,
+                newHTTP2Connection: newHTTP2Connection,
+                maxConcurrentStreams: maxConcurrentStreams
+            )
+        }
+
+        mutating func migrateFromHTTP1(
+            http1Connections: HTTP1Connections,
+            http2Connections: HTTP2Connections? = nil,
+            requests: RequestQueue,
+            newHTTP2Connection: Connection,
+            maxConcurrentStreams: Int
+        ) -> Action {
+            let migrationAction = self.migrateConnectionsAndRequestsFromHTTP1(
+                http1Connections: http1Connections,
+                http2Connections: http2Connections,
+                requests: requests
+            )
+
+            let newConnectionAction = self._newHTTP2ConnectionEstablished(
+                newHTTP2Connection,
+                maxConcurrentStreams: maxConcurrentStreams
+            )
+
+            return .init(
+                request: newConnectionAction.request,
+                connection: .combined(migrationAction, newConnectionAction.connection)
+            )
+        }
+
+        private mutating func migrateConnectionsAndRequestsFromHTTP1(
+            http1Connections: HTTP1Connections,
+            http2Connections: HTTP2Connections?,
+            requests: RequestQueue
+        ) -> ConnectionMigrationAction {
             precondition(self.http1Connections == nil)
             precondition(self.connections.isEmpty)
             precondition(self.requests.isEmpty)
 
+            if let http2Connections = http2Connections {
+                self.connections = http2Connections
+            }
+
             var http1Connections = http1Connections // make http1Connections mutable
             let context = http1Connections.migrateToHTTP2()
-            self.connections.migrateConnections(
+            self.connections.migrateFromHTTP2(
                 starting: context.starting,
                 backingOff: context.backingOff
             )
@@ -70,10 +114,10 @@ extension HTTPConnectionPool {
             self.requests = requests
 
             // TODO: Close all idle connections from context.close
-            // TODO: Start new http2 connections for
+            // TODO: Start new http2 connections for pending requests
             // TODO: Potentially cancel unneeded bootstraps (Needs cancellable ClientBootstrap)
 
-            return .none
+            return .init(closeConnections: [], createConnections: [])
         }
 
         mutating func executeRequest(_ request: Request) -> Action {
@@ -173,6 +217,10 @@ extension HTTPConnectionPool {
         }
 
         mutating func newHTTP2ConnectionEstablished(_ connection: Connection, maxConcurrentStreams: Int) -> Action {
+            self._newHTTP2ConnectionEstablished(connection, maxConcurrentStreams: maxConcurrentStreams).asStateMachineAction
+        }
+
+        private mutating func _newHTTP2ConnectionEstablished(_ connection: Connection, maxConcurrentStreams: Int) -> EstablishedAction {
             self.failedConsecutiveConnectionAttempts = 0
             self.lastConnectFailure = nil
             let (index, context) = self.connections.newHTTP2ConnectionEstablished(
@@ -185,7 +233,7 @@ extension HTTPConnectionPool {
         private mutating func nextActionForAvailableConnection(
             at index: Int,
             context: HTTP2Connections.EstablishedConnectionContext
-        ) -> Action {
+        ) -> EstablishedAction {
             switch self.state {
             case .running:
                 // We prioritise requests with a required event loop over those without a requirement.
@@ -197,7 +245,7 @@ extension HTTPConnectionPool {
                 // use the remaining available streams for requests without a required event loop
                 requestsToExecute += self.requests.popFirst(max: remainingAvailableStreams, for: nil)
 
-                let requestAction = { () -> RequestAction in
+                let requestAction = { () -> HTTPConnectionPool.StateMachine.RequestAction in
                     if requestsToExecute.isEmpty {
                         return .none
                     } else {
@@ -209,7 +257,7 @@ extension HTTPConnectionPool {
                     }
                 }()
 
-                let connectionAction = { () -> ConnectionAction in
+                let connectionAction = { () -> EstablishedConnectionAction in
                     if context.isIdle, requestsToExecute.isEmpty {
                         return .scheduleTimeoutTimer(context.connectionID, on: context.eventLoop)
                     } else {
@@ -244,7 +292,7 @@ extension HTTPConnectionPool {
 
         mutating func newHTTP2MaxConcurrentStreamsReceived(_ connectionID: Connection.ID, newMaxStreams: Int) -> Action {
             let (index, context) = self.connections.newHTTP2MaxConcurrentStreamsReceived(connectionID, newMaxStreams: newMaxStreams)
-            return self.nextActionForAvailableConnection(at: index, context: context)
+            return self.nextActionForAvailableConnection(at: index, context: context).asStateMachineAction
         }
 
         mutating func http2ConnectionGoAwayReceived(_ connectionID: Connection.ID) -> Action {
@@ -314,7 +362,7 @@ extension HTTPConnectionPool {
 
         mutating func http2ConnectionStreamClosed(_ connectionID: Connection.ID) -> Action {
             let (index, context) = self.connections.releaseStream(connectionID)
-            return self.nextActionForAvailableConnection(at: index, context: context)
+            return self.nextActionForAvailableConnection(at: index, context: context).asStateMachineAction
         }
 
         mutating func failedToCreateNewConnection(_ error: Error, connectionID: Connection.ID) -> Action {

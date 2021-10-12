@@ -44,6 +44,13 @@ extension HTTPConnectionPool {
             case closeConnection(Connection, isShutdown: IsShutdown)
             case cleanupConnections(CleanupContext, isShutdown: IsShutdown)
 
+            case migration(
+                createConnections: [(Connection.ID, EventLoop)],
+                closeConnections: [Connection],
+                scheduleTimeout: (Connection.ID, EventLoop)?,
+                isShutdown: IsShutdown
+            )
+
             case none
         }
 
@@ -62,22 +69,39 @@ extension HTTPConnectionPool {
 
         enum HTTPVersionState {
             case http1(HTTP1StateMachine)
+            case http2(HTTP2StateMachine)
+
+            mutating func modify<ReturnValue>(
+                http1: (inout HTTP1StateMachine) -> ReturnValue,
+                http2: (inout HTTP2StateMachine) -> ReturnValue
+            ) -> ReturnValue {
+                let returnValue: ReturnValue
+                switch self {
+                case .http1(var http1State):
+                    returnValue = http1(&http1State)
+                    self = .http1(http1State)
+                case .http2(var http2State):
+                    returnValue = http2(&http2State)
+                    self = .http2(http2State)
+                }
+                return returnValue
+            }
         }
 
         var state: HTTPVersionState
         var isShuttingDown: Bool = false
 
-        let eventLoopGroup: EventLoopGroup
+        let idGenerator: Connection.ID.Generator
         let maximumConcurrentHTTP1Connections: Int
 
-        init(eventLoopGroup: EventLoopGroup, idGenerator: Connection.ID.Generator, maximumConcurrentHTTP1Connections: Int) {
+        init(idGenerator: Connection.ID.Generator, maximumConcurrentHTTP1Connections: Int) {
             self.maximumConcurrentHTTP1Connections = maximumConcurrentHTTP1Connections
+            self.idGenerator = idGenerator
             let http1State = HTTP1StateMachine(
                 idGenerator: idGenerator,
                 maximumConcurrentConnections: maximumConcurrentHTTP1Connections
             )
             self.state = .http1(http1State)
-            self.eventLoopGroup = eventLoopGroup
         }
 
         mutating func executeRequest(_ request: Request) -> Action {
@@ -215,6 +239,78 @@ extension HTTPConnectionPool.StateMachine: CustomStringConvertible {
         switch self.state {
         case .http1(let http1):
             return ".http1(\(http1))"
+extension HTTPConnectionPool.StateMachine {
+    struct ConnectionMigrationAction {
+        var closeConnections: [HTTPConnectionPool.Connection]
+        var createConnections: [(HTTPConnectionPool.Connection.ID, EventLoop)]
+    }
+
+    struct EstablishedAction {
+        static let none: Self = .init(request: .none, connection: .none)
+        let request: HTTPConnectionPool.StateMachine.RequestAction
+        let connection: EstablishedConnectionAction
+
+        var asStateMachineAction: HTTPConnectionPool.StateMachine.Action {
+            return .init(self)
+        }
+    }
+
+    enum EstablishedConnectionAction {
+        case none
+        case scheduleTimeoutTimer(HTTPConnectionPool.Connection.ID, on: EventLoop)
+        case closeConnection(HTTPConnectionPool.Connection, isShutdown: HTTPConnectionPool.StateMachine.ConnectionAction.IsShutdown)
+    }
+}
+
+extension HTTPConnectionPool.StateMachine.Action {
+    init(_ action: HTTPConnectionPool.StateMachine.EstablishedAction) {
+        self.init(
+            request: action.request,
+            connection: .init(action.connection)
+        )
+    }
+}
+
+extension HTTPConnectionPool.StateMachine.ConnectionAction {
+    init(_ action: HTTPConnectionPool.StateMachine.EstablishedConnectionAction) {
+        switch action {
+        case .none:
+            self = .none
+        case .scheduleTimeoutTimer(let connectionID, let eventLoop):
+            self = .scheduleTimeoutTimer(connectionID, on: eventLoop)
+        case .closeConnection(let connection, let isShutdown):
+            self = .closeConnection(connection, isShutdown: isShutdown)
+        }
+    }
+}
+
+extension HTTPConnectionPool.StateMachine.ConnectionAction {
+    static func combined(
+        _ migrationAction: HTTPConnectionPool.StateMachine.ConnectionMigrationAction,
+        _ establishedAction: HTTPConnectionPool.StateMachine.EstablishedConnectionAction
+    ) -> Self {
+        switch establishedAction {
+        case .none:
+            return .migration(
+                createConnections: migrationAction.createConnections,
+                closeConnections: migrationAction.closeConnections,
+                scheduleTimeout: nil,
+                isShutdown: .no
+            )
+        case .closeConnection(let connection, let isShutdown):
+            return .migration(
+                createConnections: migrationAction.createConnections,
+                closeConnections: migrationAction.closeConnections + CollectionOfOne(connection),
+                scheduleTimeout: nil,
+                isShutdown: isShutdown
+            )
+        case .scheduleTimeoutTimer(let connectionID, let eventLoop):
+            return .migration(
+                createConnections: migrationAction.createConnections,
+                closeConnections: migrationAction.closeConnections,
+                scheduleTimeout: (connectionID, eventLoop),
+                isShutdown: .no
+            )
         }
     }
 }
