@@ -217,7 +217,7 @@ extension HTTPConnectionPool {
         }
 
         mutating func newHTTP2ConnectionEstablished(_ connection: Connection, maxConcurrentStreams: Int) -> Action {
-            self._newHTTP2ConnectionEstablished(connection, maxConcurrentStreams: maxConcurrentStreams).asStateMachineAction
+            .init(self._newHTTP2ConnectionEstablished(connection, maxConcurrentStreams: maxConcurrentStreams))
         }
 
         private mutating func _newHTTP2ConnectionEstablished(_ connection: Connection, maxConcurrentStreams: Int) -> EstablishedAction {
@@ -292,7 +292,7 @@ extension HTTPConnectionPool {
 
         mutating func newHTTP2MaxConcurrentStreamsReceived(_ connectionID: Connection.ID, newMaxStreams: Int) -> Action {
             let (index, context) = self.connections.newHTTP2MaxConcurrentStreamsReceived(connectionID, newMaxStreams: newMaxStreams)
-            return self.nextActionForAvailableConnection(at: index, context: context).asStateMachineAction
+            return .init(self.nextActionForAvailableConnection(at: index, context: context))
         }
 
         mutating func http2ConnectionGoAwayReceived(_ connectionID: Connection.ID) -> Action {
@@ -362,7 +362,7 @@ extension HTTPConnectionPool {
 
         mutating func http2ConnectionStreamClosed(_ connectionID: Connection.ID) -> Action {
             let (index, context) = self.connections.releaseStream(connectionID)
-            return self.nextActionForAvailableConnection(at: index, context: context).asStateMachineAction
+            return .init(self.nextActionForAvailableConnection(at: index, context: context))
         }
 
         mutating func failedToCreateNewConnection(_ error: Error, connectionID: Connection.ID) -> Action {

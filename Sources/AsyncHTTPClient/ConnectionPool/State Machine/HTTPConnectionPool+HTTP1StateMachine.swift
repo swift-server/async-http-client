@@ -208,7 +208,7 @@ extension HTTPConnectionPool {
         }
 
         mutating func newHTTP1ConnectionEstablished(_ connection: Connection) -> Action {
-            self._newHTTP1ConnectionEstablished(connection).asStateMachineAction
+            .init(self._newHTTP1ConnectionEstablished(connection))
         }
 
         private mutating func _newHTTP1ConnectionEstablished(_ connection: Connection) -> EstablishedAction {
@@ -285,7 +285,7 @@ extension HTTPConnectionPool {
 
         mutating func http1ConnectionReleased(_ connectionID: Connection.ID) -> Action {
             let (index, context) = self.connections.releaseConnection(connectionID)
-            return self.nextActionForIdleConnection(at: index, context: context).asStateMachineAction
+            return .init(self.nextActionForIdleConnection(at: index, context: context))
         }
 
         /// A connection has been unexpectedly closed

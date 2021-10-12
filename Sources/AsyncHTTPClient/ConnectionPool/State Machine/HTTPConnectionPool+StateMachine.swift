@@ -235,10 +235,6 @@ extension HTTPConnectionPool.StateMachine {
         static let none: Self = .init(request: .none, connection: .none)
         let request: HTTPConnectionPool.StateMachine.RequestAction
         let connection: EstablishedConnectionAction
-
-        var asStateMachineAction: HTTPConnectionPool.StateMachine.Action {
-            return .init(self)
-        }
     }
 
     enum EstablishedConnectionAction {
