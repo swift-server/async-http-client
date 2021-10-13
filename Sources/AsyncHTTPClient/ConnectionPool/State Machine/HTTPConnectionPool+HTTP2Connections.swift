@@ -404,9 +404,9 @@ extension HTTPConnectionPool {
             self.connections.removeAll { connection in
                 switch connection.migrateToHTTP1(context: &context) {
                 case .removeConnection:
-                    return false
-                case .keepConnection:
                     return true
+                case .keepConnection:
+                    return false
                 }
             }
             return context
@@ -419,7 +419,7 @@ extension HTTPConnectionPool {
             self.connections.contains { $0.isActive }
         }
 
-        /// used in general purpose connection scenarios to check if at least one connection exist, or if should we create a new one
+        /// used in general purpose connection scenarios to check if at least one connection is starting or active for the given `eventLoop`
         var hasConnectionThatCanOrWillBeAbleToExecuteRequests: Bool {
             self.connections.contains { $0.canOrWillBeAbleToExecuteRequests }
         }
@@ -430,6 +430,32 @@ extension HTTPConnectionPool {
         func hasConnectionThatCanOrWillBeAbleToExecuteRequests(for eventLoop: EventLoop) -> Bool {
             self.connections.contains {
                 $0.eventLoop === eventLoop && $0.canOrWillBeAbleToExecuteRequests
+            }
+        }
+
+        func hasActiveConnection(for eventLoop: EventLoop) -> Bool {
+            self.connections.contains {
+                $0.eventLoop === eventLoop && $0.isActive
+            }
+        }
+
+        /// used after backoff is done to determine if we need to create a new connection
+        func hasStartingOrActiveConnection() -> Bool {
+            self.connections.contains { connection in
+                connection.canOrWillBeAbleToExecuteRequests
+            }
+        }
+
+        /// used after backoff is done to determine if we need to create a new connection
+        /// - Parameters:
+        ///   - eventLoop: connection `EventLoop` to search for
+        /// - Returns: true if at least one connection is starting or active for the given `eventLoop`
+        func hasStartingOrActiveConnection(
+            for eventLoop: EventLoop
+        ) -> Bool {
+            self.connections.contains { connection in
+                connection.eventLoop === eventLoop &&
+                    connection.canOrWillBeAbleToExecuteRequests
             }
         }
 
