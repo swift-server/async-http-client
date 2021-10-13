@@ -253,9 +253,9 @@ class TestConnectionCreator {
         let factory = HTTPConnectionPool.ConnectionFactory(
             key: .init(request),
             tlsConfiguration: tlsConfiguration,
-            clientConfiguration: .init(),
-            sslContextCache: .init(),
-            allowHTTP2Connections: true
+            // TODO: use default client configuration once http/2 is enabled by default
+            clientConfiguration: .init(http2: .automatic),
+            sslContextCache: .init()
         )
 
         let promise = try self.lock.withLock { () -> EventLoopPromise<HTTP1Connection> in
@@ -295,9 +295,9 @@ class TestConnectionCreator {
         let factory = HTTPConnectionPool.ConnectionFactory(
             key: .init(request),
             tlsConfiguration: tlsConfiguration,
-            clientConfiguration: .init(),
-            sslContextCache: .init(),
-            allowHTTP2Connections: true
+            // TODO: use default client configuration once http/2 is enabled by default
+            clientConfiguration: .init(http2: .automatic),
+            sslContextCache: .init()
         )
 
         let promise = try self.lock.withLock { () -> EventLoopPromise<HTTP2Connection> in

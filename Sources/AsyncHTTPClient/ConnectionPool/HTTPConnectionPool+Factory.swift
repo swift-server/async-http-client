@@ -31,19 +31,14 @@ extension HTTPConnectionPool {
         let tlsConfiguration: TLSConfiguration
         let sslContextCache: SSLContextCache
 
-        // This property can be removed once we enable true http/2 support
-        let allowHTTP2Connections: Bool
-
         init(key: ConnectionPool.Key,
              tlsConfiguration: TLSConfiguration?,
              clientConfiguration: HTTPClient.Configuration,
-             sslContextCache: SSLContextCache,
-             allowHTTP2Connections: Bool = false) {
+             sslContextCache: SSLContextCache) {
             self.key = key
             self.clientConfiguration = clientConfiguration
             self.sslContextCache = sslContextCache
             self.tlsConfiguration = tlsConfiguration ?? clientConfiguration.tlsConfiguration ?? .makeClientConfiguration()
-            self.allowHTTP2Connections = allowHTTP2Connections
         }
     }
 }
@@ -303,13 +298,14 @@ extension HTTPConnectionPool.ConnectionFactory {
             return channel.eventLoop.makeSucceededFuture(.http1_1(channel))
         case .https:
             var tlsConfig = self.tlsConfiguration
-            // since we can support h2, we need to advertise this in alpn
-            if self.allowHTTP2Connections {
+            switch self.clientConfiguration.http2.configuration {
+            case .automatic:
+                // since we can support h2, we need to advertise this in alpn
                 // "ProtocolNameList" contains the list of protocols advertised by the
                 // client, in descending order of preference.
                 // https://datatracker.ietf.org/doc/html/rfc7301#section-3.1
                 tlsConfig.applicationProtocols = ["h2", "http/1.1"]
-            } else {
+            case .disabled:
                 tlsConfig.applicationProtocols = ["http/1.1"]
             }
             let tlsEventHandler = TLSEventsHandler(deadline: deadline)
@@ -407,14 +403,15 @@ extension HTTPConnectionPool.ConnectionFactory {
 
     private func makeTLSBootstrap(deadline: NIODeadline, eventLoop: EventLoop, logger: Logger)
         -> EventLoopFuture<NIOClientTCPBootstrapProtocol> {
-        // since we can support h2, we need to advertise this in alpn
         var tlsConfig = self.tlsConfiguration
-        if self.allowHTTP2Connections {
+        switch self.clientConfiguration.http2.configuration {
+        case .automatic:
+            // since we can support h2, we need to advertise this in alpn
             // "ProtocolNameList" contains the list of protocols advertised by the
             // client, in descending order of preference.
             // https://datatracker.ietf.org/doc/html/rfc7301#section-3.1
             tlsConfig.applicationProtocols = ["h2", "http/1.1"]
-        } else {
+        case .disabled:
             tlsConfig.applicationProtocols = ["http/1.1"]
         }
 

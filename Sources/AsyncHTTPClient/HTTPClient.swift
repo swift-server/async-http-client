@@ -603,13 +603,66 @@ public class HTTPClient {
         /// Ignore TLS unclean shutdown error, defaults to `false`.
         public var ignoreUncleanSSLShutdown: Bool
 
-        public init(tlsConfiguration: TLSConfiguration? = nil,
-                    redirectConfiguration: RedirectConfiguration? = nil,
-                    timeout: Timeout = Timeout(),
-                    connectionPool: ConnectionPool = ConnectionPool(),
-                    proxy: Proxy? = nil,
-                    ignoreUncleanSSLShutdown: Bool = false,
-                    decompression: Decompression = .disabled) {
+        // TODO: make public
+        // TODO: set to automatic by default
+        /// HTTP/2 is by default disabled
+        internal var http2: HTTP2
+
+        // TODO: make public
+        internal init(
+            certificateVerification: CertificateVerification,
+            redirectConfiguration: RedirectConfiguration? = nil,
+            timeout: Timeout = Timeout(),
+            connectionPool: TimeAmount = .seconds(60),
+            proxy: Proxy? = nil,
+            ignoreUncleanSSLShutdown: Bool = false,
+            decompression: Decompression = .disabled,
+            backgroundActivityLogger: Logger? = nil,
+            http2: HTTP2
+        ) {
+            self.init(
+                certificateVerification: certificateVerification,
+                redirectConfiguration: redirectConfiguration,
+                timeout: timeout,
+                connectionPool: connectionPool,
+                proxy: proxy,
+                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
+                decompression: decompression,
+                backgroundActivityLogger: backgroundActivityLogger
+            )
+        }
+
+        public init(
+            tlsConfiguration: TLSConfiguration? = nil,
+            redirectConfiguration: RedirectConfiguration? = nil,
+            timeout: Timeout = Timeout(),
+            connectionPool: ConnectionPool = ConnectionPool(),
+            proxy: Proxy? = nil,
+            ignoreUncleanSSLShutdown: Bool = false,
+            decompression: Decompression = .disabled
+        ) {
+            self.init(
+                tlsConfiguration: tlsConfiguration,
+                redirectConfiguration: redirectConfiguration,
+                timeout: timeout, connectionPool: connectionPool,
+                proxy: proxy,
+                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
+                decompression: decompression,
+                // TODO: set to automatic by default
+                http2: .disabled
+            )
+        }
+
+        internal init(
+            tlsConfiguration: TLSConfiguration? = nil,
+            redirectConfiguration: RedirectConfiguration? = nil,
+            timeout: Timeout = Timeout(),
+            connectionPool: ConnectionPool = ConnectionPool(),
+            proxy: Proxy? = nil,
+            ignoreUncleanSSLShutdown: Bool = false,
+            decompression: Decompression = .disabled,
+            http2: HTTP2
+        ) {
             self.tlsConfiguration = tlsConfiguration
             self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
             self.timeout = timeout
@@ -617,6 +670,7 @@ public class HTTPClient {
             self.proxy = proxy
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
             self.decompression = decompression
+            self.http2 = http2
         }
 
         public init(tlsConfiguration: TLSConfiguration? = nil,
@@ -829,6 +883,22 @@ extension HTTPClient.Configuration {
             self.idleTimeout = idleTimeout
             self.concurrentHTTP1ConnectionsPerHostSoftLimit = concurrentHTTP1ConnectionsPerHostSoftLimit
         }
+    }
+
+    // TODO: make this struct and its static properties public
+    internal struct HTTP2 {
+        internal enum Configuration {
+            case disabled
+            case automatic
+        }
+
+        /// HTTP/2 is completely disabled
+        internal static let disabled: Self = .init(configuration: .disabled)
+
+        /// HTTP/2 is used if we connect to a server with HTTPS and the server supports HTTP/2
+        internal static let automatic: Self = .init(configuration: .automatic)
+
+        internal var configuration: Configuration
     }
 }
 
