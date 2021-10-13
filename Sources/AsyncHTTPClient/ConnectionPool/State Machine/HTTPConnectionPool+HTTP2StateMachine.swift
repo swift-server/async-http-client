@@ -505,7 +505,7 @@ extension HTTPConnectionPool {
             // If there aren't any more connections, everything is shutdown
             let isShutdown: StateMachine.ConnectionAction.IsShutdown
             let unclean = !(cleanupContext.cancel.isEmpty && waitingRequests.isEmpty && self.http1Connections == nil)
-            if self.connections.isEmpty, self.http1Connections == nil {
+            if self.connections.isEmpty && self.http1Connections == nil {
                 isShutdown = .yes(unclean: unclean)
                 self.state = .shutDown
             } else {

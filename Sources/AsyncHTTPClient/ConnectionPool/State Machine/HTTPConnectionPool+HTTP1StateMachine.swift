@@ -353,7 +353,7 @@ extension HTTPConnectionPool {
             // If there aren't any more connections, everything is shutdown
             let isShutdown: StateMachine.ConnectionAction.IsShutdown
             let unclean = !(cleanupContext.cancel.isEmpty && waitingRequests.isEmpty)
-            if self.connections.isEmpty, self.http2Connections == nil {
+            if self.connections.isEmpty && self.http2Connections == nil {
                 self.state = .shutDown
                 isShutdown = .yes(unclean: unclean)
             } else {
@@ -386,7 +386,7 @@ extension HTTPConnectionPool {
             case .shuttingDown(let unclean):
                 assert(self.requests.isEmpty)
                 let connection = self.connections.closeConnection(at: index)
-                if self.connections.isEmpty, self.http2Connections == nil {
+                if self.connections.isEmpty && self.http2Connections == nil {
                     return .init(
                         request: .none,
                         connection: .closeConnection(connection, isShutdown: .yes(unclean: unclean))
@@ -473,7 +473,7 @@ extension HTTPConnectionPool {
             case .shuttingDown(let unclean):
                 assert(self.requests.isEmpty)
                 self.connections.removeConnection(at: index)
-                if self.connections.isEmpty, self.http2Connections == nil {
+                if self.connections.isEmpty && self.http2Connections == nil {
                     return .init(
                         request: .none,
                         connection: .cleanupConnections(.init(), isShutdown: .yes(unclean: unclean))
@@ -551,7 +551,7 @@ extension HTTPConnectionPool {
                 if self.http2Connections?.isEmpty == true {
                     self.http2Connections = nil
                 }
-                if self.connections.isEmpty, self.http2Connections == nil {
+                if self.connections.isEmpty && self.http2Connections == nil {
                     return .init(
                         request: .none,
                         connection: .cleanupConnections(.init(), isShutdown: .yes(unclean: unclean))
@@ -597,7 +597,7 @@ extension HTTPConnectionPool {
                 if self.http2Connections!.isEmpty {
                     self.http2Connections = nil
                 }
-                if self.connections.isEmpty, self.http2Connections == nil {
+                if self.connections.isEmpty && self.http2Connections == nil {
                     return .init(
                         request: .none,
                         connection: .closeConnection(connection, isShutdown: .yes(unclean: unclean))
