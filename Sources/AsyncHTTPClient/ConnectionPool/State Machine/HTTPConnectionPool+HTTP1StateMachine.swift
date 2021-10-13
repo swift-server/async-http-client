@@ -88,28 +88,33 @@ extension HTTPConnectionPool {
             precondition(self.http2Connections == nil)
             precondition(self.requests.isEmpty)
 
+            self.requests = requests
+
             if let http1Connections = http1Connections {
                 self.connections = http1Connections
             }
 
             var http2Connections = http2Connections
             let migration = http2Connections.migrateToHTTP1()
-            self.connections.migrateFromHTTP2(
+            let createConnections = self.connections.migrateFromHTTP2(
                 starting: migration.starting,
-                backingOff: migration.backingOff
+                backingOff: migration.backingOff,
+                requiredEventLoopsOfPendingRequests: requests.eventLoopsWithPendingRequests(),
+                preferredEventLoopsOfPendingGeneralPurposeRequests: requests.generalPurposeQueue.lazy.map {
+                    $0.preferredEventLoop
+                }
             )
 
             if !http2Connections.isEmpty {
                 self.http2Connections = http2Connections
             }
 
-            // TODO: Close all idle connections from context.close
-            // TODO: Start new http1 connections for pending requests
             // TODO: Potentially cancel unneeded bootstraps (Needs cancellable ClientBootstrap)
 
-            self.requests = requests
-
-            return .init(closeConnections: [], createConnections: [])
+            return .init(
+                closeConnections: migration.close,
+                createConnections: createConnections
+            )
         }
 
         // MARK: - Events

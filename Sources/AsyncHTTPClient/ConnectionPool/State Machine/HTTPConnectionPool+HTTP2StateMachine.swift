@@ -96,28 +96,29 @@ extension HTTPConnectionPool {
             precondition(self.connections.isEmpty)
             precondition(self.requests.isEmpty)
 
+            self.requests = requests
+
             if let http2Connections = http2Connections {
                 self.connections = http2Connections
             }
 
             var http1Connections = http1Connections // make http1Connections mutable
             let context = http1Connections.migrateToHTTP2()
-            self.connections.migrateFromHTTP1(
+            let createConnections = self.connections.migrateFromHTTP1(
                 starting: context.starting,
-                backingOff: context.backingOff
+                backingOff: context.backingOff,
+                requiredEventLoopsOfPendingRequests: requests.eventLoopsWithPendingRequests()
             )
 
             if !http1Connections.isEmpty {
                 self.http1Connections = http1Connections
             }
 
-            self.requests = requests
-
-            // TODO: Close all idle connections from context.close
-            // TODO: Start new http2 connections for pending requests
             // TODO: Potentially cancel unneeded bootstraps (Needs cancellable ClientBootstrap)
-
-            return .init(closeConnections: [], createConnections: [])
+            return .init(
+                closeConnections: context.close,
+                createConnections: createConnections
+            )
         }
 
         mutating func executeRequest(_ request: Request) -> Action {

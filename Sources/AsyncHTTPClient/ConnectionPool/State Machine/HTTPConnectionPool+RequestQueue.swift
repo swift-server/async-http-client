@@ -17,7 +17,7 @@ import NIOCore
 extension HTTPConnectionPool {
     /// A struct to store all queued requests.
     struct RequestQueue {
-        private var generalPurposeQueue: CircularBuffer<Request>
+        private(set) var generalPurposeQueue: CircularBuffer<Request>
         private var eventLoopQueues: [EventLoopID: CircularBuffer<Request>]
 
         init() {
@@ -130,6 +130,10 @@ extension HTTPConnectionPool {
                 return closure(queue)
             }
             return nil
+        }
+
+        func eventLoopsWithPendingRequests() -> [EventLoop] {
+            self.eventLoopQueues.compactMap { $0.value.first?.requiredEventLoop }
         }
     }
 }
