@@ -46,9 +46,12 @@ extension HTTPConnectionPool {
         //   - 29 failed attempts: ~60s (max out)
 
         let start = Double(TimeAmount.milliseconds(100).nanoseconds)
-        let backoffNanoseconds = Int64(start * pow(1.25, Double(attempts - 1)))
+        let backoffNanosecondsDouble = start * pow(1.25, Double(attempts - 1))
 
-        let backoff: TimeAmount = min(.nanoseconds(backoffNanoseconds), .seconds(60))
+        // Cap to 60s _before_ we convert to Int64, to avoid trapping in the Int64 initializer.
+        let backoffNanoseconds = Int64(min(backoffNanosecondsDouble, Double(TimeAmount.seconds(60).nanoseconds)))
+
+        let backoff = TimeAmount.nanoseconds(backoffNanoseconds)
 
         // Calculate a 3% jitter range
         let jitterRange = (backoff.nanoseconds / 100) * 3

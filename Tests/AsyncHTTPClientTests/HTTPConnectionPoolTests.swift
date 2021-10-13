@@ -453,6 +453,32 @@ class HTTPConnectionPoolTests: XCTestCase {
         pool.shutdown()
         XCTAssertNoThrow(try poolDelegate.future.wait())
     }
+
+    func testBackoffBehavesSensibly() throws {
+        var backoff = HTTPConnectionPool.calculateBackoff(failedAttempt: 1)
+
+        // The value should be 100ms±3ms
+        XCTAssertLessThanOrEqual((backoff - .milliseconds(100)).nanoseconds.magnitude, TimeAmount.milliseconds(3).nanoseconds.magnitude)
+
+        // Should always increase
+        // We stop when we get within the jitter of 60s, which is 1.8s
+        var attempt = 1
+        while backoff < (.seconds(60) - .milliseconds(1800)) {
+            attempt += 1
+            let newBackoff = HTTPConnectionPool.calculateBackoff(failedAttempt: attempt)
+
+            XCTAssertGreaterThan(newBackoff, backoff)
+            backoff = newBackoff
+        }
+
+        // Ok, now we should be able to do a hundred increments, and always hit 60s, plus or minus 1.8s of jitter.
+        for offset in 0..<100 {
+            XCTAssertLessThanOrEqual(
+                (HTTPConnectionPool.calculateBackoff(failedAttempt: attempt + offset) - .seconds(60)).nanoseconds.magnitude,
+                TimeAmount.milliseconds(1800).nanoseconds.magnitude
+            )
+        }
+    }
 }
 
 class TestDelegate: HTTPConnectionPoolDelegate {
