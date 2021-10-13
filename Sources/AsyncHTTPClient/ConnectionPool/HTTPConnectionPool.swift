@@ -69,7 +69,6 @@ final class HTTPConnectionPool {
         self.idleConnectionTimeout = clientConfiguration.connectionPool.idleTimeout
 
         self._state = StateMachine(
-            eventLoopGroup: eventLoopGroup,
             idGenerator: idGenerator,
             maximumConcurrentHTTP1Connections: clientConfiguration.connectionPool.concurrentHTTP1ConnectionsPerHostSoftLimit
         )
@@ -97,6 +96,10 @@ final class HTTPConnectionPool {
                 case createConnection(Connection.ID, on: EventLoop)
                 case closeConnection(Connection, isShutdown: StateMachine.ConnectionAction.IsShutdown)
                 case cleanupConnections(CleanupContext, isShutdown: StateMachine.ConnectionAction.IsShutdown)
+                case migration(
+                    createConnections: [(Connection.ID, EventLoop)],
+                    closeConnections: [Connection]
+                )
                 case none
             }
 
@@ -184,6 +187,18 @@ final class HTTPConnectionPool {
                 self.locked.connection = .cancelBackoffTimers(cleanupContext.connectBackoff)
                 cleanupContext.connectBackoff = []
                 self.unlocked.connection = .cleanupConnections(cleanupContext, isShutdown: isShutdown)
+            case .migration(
+                let createConnections,
+                let closeConnections,
+                let scheduleTimeout
+            ):
+                if let (connectionID, eventLoop) = scheduleTimeout {
+                    self.locked.connection = .scheduleTimeoutTimer(connectionID, on: eventLoop)
+                }
+                self.unlocked.connection = .migration(
+                    createConnections: createConnections,
+                    closeConnections: closeConnections
+                )
             case .none:
                 break
             }
@@ -277,6 +292,15 @@ final class HTTPConnectionPool {
 
             if case .yes(let unclean) = isShutdown {
                 self.delegate.connectionPoolDidShutdown(self, unclean: unclean)
+            }
+
+        case .migration(let createConnections, let closeConnections):
+            for connection in closeConnections {
+                connection.close(promise: nil)
+            }
+
+            for (connectionID, eventLoop) in createConnections {
+                self.createConnection(connectionID, on: eventLoop)
             }
 
         case .none:

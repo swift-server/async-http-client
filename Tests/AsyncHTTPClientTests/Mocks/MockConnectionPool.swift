@@ -506,7 +506,6 @@ extension MockConnectionPool {
         maxNumberOfConnections: Int = 8
     ) throws -> (Self, HTTPConnectionPool.StateMachine) {
         var state = HTTPConnectionPool.StateMachine(
-            eventLoopGroup: elg,
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: maxNumberOfConnections
         )

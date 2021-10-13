@@ -23,8 +23,12 @@ extension HTTPConnectionPool {
         }
 
         typealias Action = HTTPConnectionPool.StateMachine.Action
+        typealias ConnectionMigrationAction = HTTPConnectionPool.StateMachine.ConnectionMigrationAction
+        typealias EstablishedAction = HTTPConnectionPool.StateMachine.EstablishedAction
+        typealias EstablishedConnectionAction = HTTPConnectionPool.StateMachine.EstablishedConnectionAction
 
         private(set) var connections: HTTP1Connections
+        private(set) var http2Connections: HTTP2Connections?
         private var failedConsecutiveConnectionAttempts: Int = 0
         /// the error from the last connection creation
         private var lastConnectFailure: Error?
@@ -39,6 +43,73 @@ extension HTTPConnectionPool {
             )
 
             self.requests = RequestQueue()
+        }
+
+        mutating func migrateFromHTTP2(
+            http2State: HTTP2StateMachine,
+            newHTTP1Connection: Connection
+        ) -> Action {
+            self.migrateFromHTTP2(
+                http1Connections: http2State.http1Connections,
+                http2Connections: http2State.connections,
+                requests: http2State.requests,
+                newHTTP1Connection: newHTTP1Connection
+            )
+        }
+
+        mutating func migrateFromHTTP2(
+            http1Connections: HTTP1Connections? = nil,
+            http2Connections: HTTP2Connections,
+            requests: RequestQueue,
+            newHTTP1Connection: Connection
+        ) -> Action {
+            let migrationAction = self.migrateConnectionsAndRequestsFromHTTP2(
+                http1Connections: http1Connections,
+                http2Connections: http2Connections,
+                requests: requests
+            )
+
+            let newConnectionAction = self._newHTTP1ConnectionEstablished(
+                newHTTP1Connection
+            )
+
+            return .init(
+                request: newConnectionAction.request,
+                connection: .combined(migrationAction, newConnectionAction.connection)
+            )
+        }
+
+        private mutating func migrateConnectionsAndRequestsFromHTTP2(
+            http1Connections: HTTP1Connections?,
+            http2Connections: HTTP2Connections,
+            requests: RequestQueue
+        ) -> ConnectionMigrationAction {
+            precondition(self.connections.isEmpty)
+            precondition(self.http2Connections == nil)
+            precondition(self.requests.isEmpty)
+
+            if let http1Connections = http1Connections {
+                self.connections = http1Connections
+            }
+
+            var http2Connections = http2Connections
+            let migration = http2Connections.migrateToHTTP1()
+            self.connections.migrateFromHTTP2(
+                starting: migration.starting,
+                backingOff: migration.backingOff
+            )
+
+            if !http2Connections.isEmpty {
+                self.http2Connections = http2Connections
+            }
+
+            // TODO: Close all idle connections from context.close
+            // TODO: Start new http1 connections for pending requests
+            // TODO: Potentially cancel unneeded bootstraps (Needs cancellable ClientBootstrap)
+
+            self.requests = requests
+
+            return .init(closeConnections: [], createConnections: [])
         }
 
         // MARK: - Events
@@ -137,6 +208,10 @@ extension HTTPConnectionPool {
         }
 
         mutating func newHTTP1ConnectionEstablished(_ connection: Connection) -> Action {
+            .init(self._newHTTP1ConnectionEstablished(connection))
+        }
+
+        private mutating func _newHTTP1ConnectionEstablished(_ connection: Connection) -> EstablishedAction {
             self.failedConsecutiveConnectionAttempts = 0
             self.lastConnectFailure = nil
             let (index, context) = self.connections.newHTTP1ConnectionEstablished(connection)
@@ -210,7 +285,7 @@ extension HTTPConnectionPool {
 
         mutating func http1ConnectionReleased(_ connectionID: Connection.ID) -> Action {
             let (index, context) = self.connections.releaseConnection(connectionID)
-            return self.nextActionForIdleConnection(at: index, context: context)
+            return .init(self.nextActionForIdleConnection(at: index, context: context))
         }
 
         /// A connection has been unexpectedly closed
@@ -278,7 +353,7 @@ extension HTTPConnectionPool {
             // If there aren't any more connections, everything is shutdown
             let isShutdown: StateMachine.ConnectionAction.IsShutdown
             let unclean = !(cleanupContext.cancel.isEmpty && waitingRequests.isEmpty)
-            if self.connections.isEmpty {
+            if self.connections.isEmpty && self.http2Connections == nil {
                 self.state = .shutDown
                 isShutdown = .yes(unclean: unclean)
             } else {
@@ -299,7 +374,7 @@ extension HTTPConnectionPool {
         private mutating func nextActionForIdleConnection(
             at index: Int,
             context: HTTP1Connections.IdleConnectionContext
-        ) -> Action {
+        ) -> EstablishedAction {
             switch self.state {
             case .running:
                 switch context.use {
@@ -311,7 +386,7 @@ extension HTTPConnectionPool {
             case .shuttingDown(let unclean):
                 assert(self.requests.isEmpty)
                 let connection = self.connections.closeConnection(at: index)
-                if self.connections.isEmpty {
+                if self.connections.isEmpty && self.http2Connections == nil {
                     return .init(
                         request: .none,
                         connection: .closeConnection(connection, isShutdown: .yes(unclean: unclean))
@@ -330,7 +405,7 @@ extension HTTPConnectionPool {
         private mutating func nextActionForIdleGeneralPurposeConnection(
             at index: Int,
             context: HTTP1Connections.IdleConnectionContext
-        ) -> Action {
+        ) -> EstablishedAction {
             // 1. Check if there are waiting requests in the general purpose queue
             if let request = self.requests.popFirst(for: nil) {
                 return .init(
@@ -359,7 +434,7 @@ extension HTTPConnectionPool {
         private mutating func nextActionForIdleEventLoopConnection(
             at index: Int,
             context: HTTP1Connections.IdleConnectionContext
-        ) -> Action {
+        ) -> EstablishedAction {
             // Check if there are waiting requests in the matching eventLoop queue
             if let request = self.requests.popFirst(for: context.eventLoop) {
                 return .init(
@@ -398,7 +473,7 @@ extension HTTPConnectionPool {
             case .shuttingDown(let unclean):
                 assert(self.requests.isEmpty)
                 self.connections.removeConnection(at: index)
-                if self.connections.isEmpty {
+                if self.connections.isEmpty && self.http2Connections == nil {
                     return .init(
                         request: .none,
                         connection: .cleanupConnections(.init(), isShutdown: .yes(unclean: unclean))
@@ -443,6 +518,99 @@ extension HTTPConnectionPool {
             }
             self.connections.removeConnection(at: index)
             return .none
+        }
+
+        // MARK: HTTP2
+
+        mutating func newHTTP2MaxConcurrentStreamsReceived(_ connectionID: Connection.ID, newMaxStreams: Int) -> Action {
+            // It is save to bang the http2Connections here. If we get this callback but we don't have
+            // http2 connections something has gone terribly wrong.
+            _ = self.http2Connections!.newHTTP2MaxConcurrentStreamsReceived(connectionID, newMaxStreams: newMaxStreams)
+            return .none
+        }
+
+        mutating func http2ConnectionGoAwayReceived(_ connectionID: Connection.ID) -> Action {
+            // It is save to bang the http2Connections here. If we get this callback but we don't have
+            // http2 connections something has gone terribly wrong.
+            _ = self.http2Connections!.goAwayReceived(connectionID)
+            return .none
+        }
+
+        mutating func http2ConnectionClosed(_ connectionID: Connection.ID) -> Action {
+            switch self.state {
+            case .running:
+                _ = self.http2Connections?.failConnection(connectionID)
+                if self.http2Connections?.isEmpty == true {
+                    self.http2Connections = nil
+                }
+                return .none
+
+            case .shuttingDown(let unclean):
+                assert(self.requests.isEmpty)
+                _ = self.http2Connections?.failConnection(connectionID)
+                if self.http2Connections?.isEmpty == true {
+                    self.http2Connections = nil
+                }
+                if self.connections.isEmpty && self.http2Connections == nil {
+                    return .init(
+                        request: .none,
+                        connection: .cleanupConnections(.init(), isShutdown: .yes(unclean: unclean))
+                    )
+                }
+                return .init(
+                    request: .none,
+                    connection: .none
+                )
+
+            case .shutDown:
+                preconditionFailure("It the pool is already shutdown, all connections must have been torn down.")
+            }
+        }
+
+        mutating func http2ConnectionStreamClosed(_ connectionID: Connection.ID) -> Action {
+            // It is save to bang the http2Connections here. If we get this callback but we don't have
+            // http2 connections something has gone terribly wrong.
+            switch self.state {
+            case .running:
+                let (index, context) = self.http2Connections!.releaseStream(connectionID)
+                guard context.isIdle else {
+                    return .none
+                }
+
+                let connection = self.http2Connections!.closeConnection(at: index)
+                if self.http2Connections!.isEmpty {
+                    self.http2Connections = nil
+                }
+                return .init(
+                    request: .none,
+                    connection: .closeConnection(connection, isShutdown: .no)
+                )
+
+            case .shuttingDown(let unclean):
+                assert(self.requests.isEmpty)
+                let (index, context) = self.http2Connections!.releaseStream(connectionID)
+                guard context.isIdle else {
+                    return .none
+                }
+
+                let connection = self.http2Connections!.closeConnection(at: index)
+                if self.http2Connections!.isEmpty {
+                    self.http2Connections = nil
+                }
+                if self.connections.isEmpty && self.http2Connections == nil {
+                    return .init(
+                        request: .none,
+                        connection: .closeConnection(connection, isShutdown: .yes(unclean: unclean))
+                    )
+                }
+                return .init(
+                    request: .none,
+                    connection: .closeConnection(connection, isShutdown: .no)
+                )
+
+            case .shutDown:
+                preconditionFailure("It the pool is already shutdown, all connections must have been torn down.")
+            }
         }
     }
 }

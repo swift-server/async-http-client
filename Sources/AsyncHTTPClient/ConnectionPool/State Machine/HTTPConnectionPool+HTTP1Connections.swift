@@ -530,6 +530,28 @@ extension HTTPConnectionPool {
             return migrationContext
         }
 
+        /// we only handle starting and backing off connection here.
+        /// All running connections must be handled by the enclosing state machine
+        /// - Parameters:
+        ///   - starting: starting HTTP connections from previous state machine
+        ///   - backingOff: backing off HTTP connections from previous state machine
+        mutating func migrateFromHTTP2(
+            starting: [(Connection.ID, EventLoop)],
+            backingOff: [(Connection.ID, EventLoop)]
+        ) {
+            for (connectionID, eventLoop) in starting {
+                let newConnection = HTTP1ConnectionState(connectionID: connectionID, eventLoop: eventLoop)
+                self.connections.append(newConnection)
+            }
+
+            for (connectionID, eventLoop) in backingOff {
+                var backingOffConnection = HTTP1ConnectionState(connectionID: connectionID, eventLoop: eventLoop)
+                // TODO: Maybe we want to add a static init for backing off connections to HTTP1ConnectionState
+                backingOffConnection.failedToConnect()
+                self.connections.append(backingOffConnection)
+            }
+        }
+
         // MARK: Shutdown
 
         mutating func shutdown() -> CleanupContext {
