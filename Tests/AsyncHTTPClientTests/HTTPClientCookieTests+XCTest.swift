@@ -31,6 +31,7 @@ extension HTTPClientCookieTests {
             ("testCookieInit", testCookieInit),
             ("testMalformedCookies", testMalformedCookies),
             ("testCookieExpiresDateParsing", testCookieExpiresDateParsing),
+            ("testQuotedCookies", testQuotedCookies),
         ]
     }
 }
