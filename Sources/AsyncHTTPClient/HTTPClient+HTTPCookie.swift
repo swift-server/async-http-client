@@ -59,7 +59,7 @@ extension HTTPClient {
             }
 
             self.name = nameAndValue[0]
-            self.value = nameAndValue[1]
+            self.value = nameAndValue[1].omittingQuotes()
 
             guard !self.name.isEmpty else {
                 return nil
@@ -150,6 +150,19 @@ extension HTTPClient {
             }
             return (nil, nil)
         }
+    }
+}
+
+private extension String {
+    func omittingQuotes() -> String {
+        let dquote = "\""
+        if !hasPrefix(dquote) || !hasSuffix(dquote) {
+            return self
+        }
+
+        let begin = index(after: startIndex)
+        let end = index(before: endIndex)
+        return String(self[begin..<end])
     }
 }
 
