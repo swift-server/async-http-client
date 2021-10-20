@@ -159,7 +159,7 @@ private extension String {
         if !hasPrefix(dquote) || !hasSuffix(dquote) {
             return self
         }
-    
+
         let begin = index(after: startIndex)
         let end = index(before: endIndex)
         return String(self[begin..<end])
