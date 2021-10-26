@@ -278,10 +278,6 @@ extension HTTPConnectionPool {
             self.overflowIndex < self.maximumConcurrentConnections
         }
 
-        private var maximumAdditionalGeneralPurposeConnections: Int {
-            self.maximumConcurrentConnections - (self.overflowIndex - 1)
-        }
-
         var startingGeneralPurposeConnections: Int {
             var connecting = 0
             for connectionState in self.connections[0..<self.overflowIndex] {
@@ -545,27 +541,21 @@ extension HTTPConnectionPool {
 
         /// We only handle starting and backing off connection here.
         /// All already running connections must be handled by the enclosing state machine.
-        /// We will also create new connections for `requiredEventLoopsOfPendingRequests`
-        /// if we do not already have a connection that can or will be able to execute requests on the given event loop.
-        /// In addition, we also create more general purpose connections if we do not have enough to execute
-        /// all requests on the given `preferredEventLoopsOfPendingGeneralPurposeRequests`
-        /// until we reach `maximumConcurrentConnections`.
         /// - Parameters:
         ///   - starting: starting HTTP connections from previous state machine
         ///   - backingOff: backing off HTTP connections from previous state machine
-        ///   - requiredEventLoopsForPendingRequests: event loops for which we have requests with a required event loop. Duplicates are not allowed.
-        ///   - preferredEventLoopsOfPendingGeneralPurposeRequests: the preferred event loop of all pending requests without a required event loop
-        ///   - Returns: new connections that need to be created
-        mutating func migrateFromHTTP2<PreferredEventLoopSequence>(
+        mutating func migrateFromHTTP2(
             starting: [(Connection.ID, EventLoop)],
-            backingOff: [(Connection.ID, EventLoop)],
-            requiredEventLoopsOfPendingRequests: [EventLoop],
-            preferredEventLoopsOfPendingGeneralPurposeRequests: PreferredEventLoopSequence
-        ) -> [(Connection.ID, EventLoop)] where PreferredEventLoopSequence: Sequence, PreferredEventLoopSequence.Element == EventLoop {
+            backingOff: [(Connection.ID, EventLoop)]
+        ) {
             for (connectionID, eventLoop) in starting {
                 let newConnection = HTTP1ConnectionState(connectionID: connectionID, eventLoop: eventLoop)
                 self.connections.insert(newConnection, at: self.overflowIndex)
-                self.overflowIndex = self.connections.index(after: self.overflowIndex)
+                /// If we can grow, we mark the connection as a general purpose connection.
+                /// Otherwise, it will be an overflow connection which is only used once for requests with a required event loop
+                if self.canGrow {
+                    self.overflowIndex = self.connections.index(after: self.overflowIndex)
+                }
             }
 
             for (connectionID, eventLoop) in backingOff {
@@ -573,38 +563,62 @@ extension HTTPConnectionPool {
                 // TODO: Maybe we want to add a static init for backing off connections to HTTP1ConnectionState
                 backingOffConnection.failedToConnect()
                 self.connections.insert(backingOffConnection, at: self.overflowIndex)
-                self.overflowIndex = self.connections.index(after: self.overflowIndex)
+                /// If we can grow, we mark the connection as a general purpose connection.
+                /// Otherwise, it will be an overflow connection which is only used once for requests with a required event loop
+                if self.canGrow {
+                    self.overflowIndex = self.connections.index(after: self.overflowIndex)
+                }
+            }
+        }
+
+        /// We will create new connections for each `requiredEventLoopOfPendingRequests`
+        /// In addition, we also create more general purpose connections if we do not have enough to execute
+        /// all requests on the given `preferredEventLoopsOfPendingGeneralPurposeRequests`
+        /// until we reach `maximumConcurrentConnections
+        /// - Parameters:
+        ///   - requiredEventLoopsForPendingRequests: event loops for which we have requests with a required event loop. Duplicates are not allowed.
+        ///   - generalPurposeRequestCountPerPreferredEventLoop: request count with no required event loop, grouped by preferred event loop and ordered descending by number of requests
+        /// - Returns: new connections that need to be created
+        mutating func createConnectionsAfterMigrationIfNeeded(
+            requiredEventLoopOfPendingRequests: [(EventLoop, Int)],
+            generalPurposeRequestCountGroupedByPreferredEventLoop: [(EventLoop, Int)]
+        ) -> [(Connection.ID, EventLoop)] {
+            /// create new connections for requests with a required event loop
+
+            /// we may already start connections for those requests and do not want to start to many
+            let startingRequiredEventLoopConnectionCount = Dictionary(
+                self.connections[self.overflowIndex..<self.connections.endIndex].lazy.map {
+                    ($0.eventLoop.id, 1)
+                },
+                uniquingKeysWith: +
+            )
+
+            var connectionToCreate = requiredEventLoopOfPendingRequests
+                .flatMap { (eventLoop, requestCount) -> [(Connection.ID, EventLoop)] in
+                    let connectionsToStart = max(requestCount - startingRequiredEventLoopConnectionCount[eventLoop.id, default: 0], 0)
+                    return (0..<connectionsToStart).lazy.map { _ in
+                        (self.createNewOverflowConnection(on: eventLoop), eventLoop)
+                    }
+                }
+
+            /// create new connections for requests without a required event loop
+
+            /// we may already start connections for those requests and do not want to start to many
+            /// this integer keeps track of the number of connections which do not yet have any requests assigned
+            var unusedGeneralPurposeConnections = self.startingGeneralPurposeConnections
+
+            outerLoop: for (eventLoop, requestCount) in generalPurposeRequestCountGroupedByPreferredEventLoop {
+                let connectionsToStart = max(requestCount - unusedGeneralPurposeConnections, 0)
+                unusedGeneralPurposeConnections -= min(requestCount, unusedGeneralPurposeConnections)
+                for _ in 0..<connectionsToStart {
+                    guard self.canGrow else {
+                        break outerLoop
+                    }
+                    connectionToCreate.append((self.createNewConnection(on: eventLoop), eventLoop))
+                }
             }
 
-            // create new connections for requests with a required event loop
-            let eventLoopsWithConnectionThatCanOrWillBeAbleToExecuteRequests = Set(
-                self.connections.lazy
-                    .filter {
-                        $0.canOrWillBeAbleToExecuteRequests
-                    }.map {
-                        $0.eventLoop.id
-                    }
-            )
-            var createConnections = requiredEventLoopsOfPendingRequests.compactMap { eventLoop -> (Connection.ID, EventLoop)? in
-                guard !eventLoopsWithConnectionThatCanOrWillBeAbleToExecuteRequests.contains(eventLoop.id)
-                else { return nil }
-                let connectionID = self.createNewOverflowConnection(on: eventLoop)
-                return (connectionID, eventLoop)
-            }
-
-            // create new connections for requests without a required event loop
-            createConnections.append(
-                contentsOf: preferredEventLoopsOfPendingGeneralPurposeRequests.lazy
-                    /// we do not want to start additional connection for requests for which we already have starting or backing off connections
-                    .dropFirst(self.startingGeneralPurposeConnections)
-                    /// if we have additional requests, we will start more connections while respecting the user defined `maximumConcurrentConnections`
-                    .prefix(self.maximumAdditionalGeneralPurposeConnections)
-                    .map { eventLoop in
-                        (self.createNewConnection(on: eventLoop), eventLoop)
-                    }
-            )
-
-            return createConnections
+            return connectionToCreate
         }
 
         // MARK: Shutdown

@@ -351,12 +351,15 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         let conn1ID = generator.next()
         let conn2ID = generator.next()
 
-        let newConnections = connections.migrateFromHTTP2(
+        connections.migrateFromHTTP2(
             starting: [(conn1ID, el1)],
-            backingOff: [(conn2ID, el2)],
-            requiredEventLoopsOfPendingRequests: [el1, el2],
-            preferredEventLoopsOfPendingGeneralPurposeRequests: []
+            backingOff: [(conn2ID, el2)]
         )
+        let newConnections = connections.createConnectionsAfterMigrationIfNeeded(
+            requiredEventLoopOfPendingRequests: [],
+            generalPurposeRequestCountGroupedByPreferredEventLoop: [(el1, 1), (el2, 1)]
+        )
+
         XCTAssertTrue(newConnections.isEmpty)
 
         let stats = connections.stats
@@ -378,11 +381,13 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         let conn1ID = generator.next()
         let conn2ID = generator.next()
 
-        let newConnections = connections.migrateFromHTTP2(
+        connections.migrateFromHTTP2(
             starting: [(conn1ID, el1)],
-            backingOff: [(conn2ID, el2)],
-            requiredEventLoopsOfPendingRequests: [el1, el2, el3],
-            preferredEventLoopsOfPendingGeneralPurposeRequests: []
+            backingOff: [(conn2ID, el2)]
+        )
+        let newConnections = connections.createConnectionsAfterMigrationIfNeeded(
+            requiredEventLoopOfPendingRequests: [(el3, 1)],
+            generalPurposeRequestCountGroupedByPreferredEventLoop: []
         )
         XCTAssertEqual(newConnections.count, 1)
         XCTAssertEqual(newConnections.first?.1.id, el3.id)
@@ -415,11 +420,13 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         let conn1ID = generator.next()
         let conn2ID = generator.next()
 
-        let newConnections = connections.migrateFromHTTP2(
+        connections.migrateFromHTTP2(
             starting: [(conn1ID, el1)],
-            backingOff: [(conn2ID, el2)],
-            requiredEventLoopsOfPendingRequests: [el1, el2],
-            preferredEventLoopsOfPendingGeneralPurposeRequests: [el3, el3, el3]
+            backingOff: [(conn2ID, el2)]
+        )
+        let newConnections = connections.createConnectionsAfterMigrationIfNeeded(
+            requiredEventLoopOfPendingRequests: [],
+            generalPurposeRequestCountGroupedByPreferredEventLoop: [(el3, 3)]
         )
         XCTAssertEqual(newConnections.count, 1)
         XCTAssertEqual(newConnections.first?.1.id, el3.id)
@@ -456,18 +463,104 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         let conn2ID = generator.next()
         let conn3ID = generator.next()
 
-        let newConnections = connections.migrateFromHTTP2(
+        connections.migrateFromHTTP2(
             starting: [(conn2ID, el2)],
-            backingOff: [(conn3ID, el3)],
-            requiredEventLoopsOfPendingRequests: [el1, el2, el3],
-            preferredEventLoopsOfPendingGeneralPurposeRequests: [el1]
+            backingOff: [(conn3ID, el3)]
         )
-        XCTAssertTrue(newConnections.isEmpty, "we already have a leased connection on el1")
+        let newConnections = connections.createConnectionsAfterMigrationIfNeeded(
+            requiredEventLoopOfPendingRequests: [],
+            generalPurposeRequestCountGroupedByPreferredEventLoop: [(el3, 3)]
+        )
+
+        XCTAssertEqual(newConnections.count, 1)
+        XCTAssertEqual(newConnections.first?.1.id, el3.id)
+
+        guard let conn4ID = newConnections.first?.0 else {
+            return XCTFail("expected to start a new connection")
+        }
 
         let stats = connections.stats
         XCTAssertEqual(stats.idle, 0)
         XCTAssertEqual(stats.leased, 1)
-        XCTAssertEqual(stats.connecting, 1)
+        XCTAssertEqual(stats.connecting, 2)
         XCTAssertEqual(stats.backingOff, 1)
+
+        let conn3: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn4ID, eventLoop: el3)
+        let (_, context) = connections.newHTTP1ConnectionEstablished(conn3)
+        XCTAssertEqual(context.use, .generalPurpose)
+        XCTAssertTrue(context.eventLoop === el3)
+    }
+
+    func testMigrationFromHTTP2WithMoreStartingConnectionsThanMaximumAllowedConccurentConnections() {
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        let generator = HTTPConnectionPool.Connection.ID.Generator()
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 2, generator: generator)
+
+        let el1 = elg.next()
+        let el2 = elg.next()
+        let el3 = elg.next()
+
+        let conn1ID = generator.next()
+        let conn2ID = generator.next()
+        let conn3ID = generator.next()
+
+        connections.migrateFromHTTP2(
+            starting: [(conn1ID, el1), (conn2ID, el2), (conn3ID, el3)],
+            backingOff: []
+        )
+
+        // first two connections should be added as general purpose connections
+        let conn1: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn1ID, eventLoop: el1)
+        let (_, context1) = connections.newHTTP1ConnectionEstablished(conn1)
+        XCTAssertEqual(context1.use, .generalPurpose)
+        XCTAssertTrue(context1.eventLoop === el1)
+        let conn2: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn2ID, eventLoop: el2)
+        let (_, context2) = connections.newHTTP1ConnectionEstablished(conn2)
+        XCTAssertEqual(context2.use, .generalPurpose)
+        XCTAssertTrue(context2.eventLoop === el2)
+
+        // additional connection should be added as overflow connection
+        let conn3: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn3ID, eventLoop: el3)
+        let (_, context3) = connections.newHTTP1ConnectionEstablished(conn3)
+        XCTAssertEqual(context3.use, .eventLoop(el3))
+        XCTAssertTrue(context3.eventLoop === el3)
+    }
+
+    func testMigrationFromHTTP2StartsEnoghOverflowConnectionsForRequiredEventLoopRequests() {
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        let generator = HTTPConnectionPool.Connection.ID.Generator()
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 1, generator: generator)
+
+        let el1 = elg.next()
+        let el2 = elg.next()
+        let el3 = elg.next()
+        let el4 = elg.next()
+
+        let conn1ID = generator.next()
+        let conn2ID = generator.next()
+        let conn3ID = generator.next()
+
+        connections.migrateFromHTTP2(
+            starting: [(conn1ID, el1), (conn2ID, el2), (conn3ID, el3)],
+            backingOff: []
+        )
+
+        let connectionsToCreate = connections.createConnectionsAfterMigrationIfNeeded(
+            requiredEventLoopOfPendingRequests: [(el2, 2), (el3, 1), (el4, 2)],
+            generalPurposeRequestCountGroupedByPreferredEventLoop: []
+        )
+
+        XCTAssertEqual(
+            connectionsToCreate.map { $0.1.id },
+            [el2.id, el4.id, el4.id],
+            "should create one connection for el2 and two for el4"
+        )
+
+        for (connID, el) in connectionsToCreate {
+            let conn: HTTPConnectionPool.Connection = .__testOnly_connection(id: connID, eventLoop: el)
+            let (_, context) = connections.newHTTP1ConnectionEstablished(conn)
+            XCTAssertEqual(context.use, .eventLoop(el))
+            XCTAssertTrue(context.eventLoop === el)
+        }
     }
 }

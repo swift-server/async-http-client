@@ -348,18 +348,13 @@ extension HTTPConnectionPool {
 
         /// We only handle starting and backing off connection here.
         /// All already running connections must be handled by the enclosing state machine.
-        /// We will also create new connections for `requiredEventLoopsOfPendingRequests`
-        /// if we do not already have a connection that can or will be able to execute requests on the given event loop.
         /// - Parameters:
         ///   - starting: starting HTTP connections from previous state machine
         ///   - backingOff: backing off HTTP connections from previous state machine
-        ///   - requiredEventLoopsForPendingRequests: event loops for which we have requests with a required event loop. Duplicates are not allowed.
-        /// - Returns: new connections that need to be created
         mutating func migrateFromHTTP1(
             starting: [(Connection.ID, EventLoop)],
-            backingOff: [(Connection.ID, EventLoop)],
-            requiredEventLoopsOfPendingRequests: [EventLoop]
-        ) -> [(Connection.ID, EventLoop)] {
+            backingOff: [(Connection.ID, EventLoop)]
+        ) {
             for (connectionID, eventLoop) in starting {
                 let newConnection = HTTP2ConnectionState(connectionID: connectionID, eventLoop: eventLoop)
                 self.connections.append(newConnection)
@@ -371,7 +366,16 @@ extension HTTPConnectionPool {
                 backingOffConnection.failedToConnect()
                 self.connections.append(backingOffConnection)
             }
+        }
 
+        /// We will create new connections for `requiredEventLoopsOfPendingRequests`
+        /// if we do not already have a connection that can or will be able to execute requests on the given event loop.
+        /// - Parameters:
+        ///   - requiredEventLoopsForPendingRequests: event loops for which we have requests with a required event loop. Duplicates are not allowed.
+        /// - Returns: new connections that need to be created
+        mutating func createConnectionsAfterMigrationIfNeeded(
+            requiredEventLoopsOfPendingRequests: [EventLoop]
+        ) -> [(Connection.ID, EventLoop)] {
             // create new connections for requests with a required event loop
             let eventLoopsWithConnectionThatCanOrWillBeAbleToExecuteRequests = Set(
                 self.connections.lazy

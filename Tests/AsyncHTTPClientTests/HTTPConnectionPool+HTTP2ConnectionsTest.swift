@@ -513,11 +513,14 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         let conn1ID: HTTPConnectionPool.Connection.ID = 1
         let conn2ID: HTTPConnectionPool.Connection.ID = 2
 
-        XCTAssertTrue(connections.migrateFromHTTP1(
+        connections.migrateFromHTTP1(
             starting: [(conn1ID, el1)],
-            backingOff: [(conn2ID, el2)],
+            backingOff: [(conn2ID, el2)]
+        )
+        XCTAssertTrue(connections.createConnectionsAfterMigrationIfNeeded(
             requiredEventLoopsOfPendingRequests: [el1, el2]
         ).isEmpty)
+
         XCTAssertEqual(
             connections.stats,
             .init(
@@ -563,9 +566,11 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         let conn1ID = generator.next()
         let conn2ID = generator.next()
 
-        let newConnections = connections.migrateFromHTTP1(
+        connections.migrateFromHTTP1(
             starting: [(conn1ID, el1)],
-            backingOff: [(conn2ID, el2)],
+            backingOff: [(conn2ID, el2)]
+        )
+        let newConnections = connections.createConnectionsAfterMigrationIfNeeded(
             requiredEventLoopsOfPendingRequests: [el1, el2, el3]
         )
 
@@ -600,9 +605,12 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         let conn2ID = generator.next()
         let conn3ID = generator.next()
 
-        XCTAssertTrue(connections.migrateFromHTTP1(
+        connections.migrateFromHTTP1(
             starting: [(conn2ID, el2)],
-            backingOff: [(conn3ID, el3)],
+            backingOff: [(conn3ID, el3)]
+        )
+
+        XCTAssertTrue(connections.createConnectionsAfterMigrationIfNeeded(
             requiredEventLoopsOfPendingRequests: [el1, el2, el3]
         ).isEmpty, "we still have an active connection for el1 and should not create a new one")
 
