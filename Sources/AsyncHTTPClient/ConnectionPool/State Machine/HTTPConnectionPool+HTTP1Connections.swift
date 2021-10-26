@@ -582,7 +582,7 @@ extension HTTPConnectionPool {
         ///   - generalPurposeRequestCountPerPreferredEventLoop:
         ///   request count with no required event loop,
         ///   grouped by preferred event loop and ordered descending by number of requests
-        /// - Returns: new connections that need to be created
+        /// - Returns: new connections that must be created
         mutating func createConnectionsAfterMigrationIfNeeded(
             requiredEventLoopOfPendingRequests: [(EventLoop, Int)],
             generalPurposeRequestCountGroupedByPreferredEventLoop: [(EventLoop, Int)]

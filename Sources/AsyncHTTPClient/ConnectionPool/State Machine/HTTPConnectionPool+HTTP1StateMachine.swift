@@ -84,12 +84,13 @@ extension HTTPConnectionPool {
             http2Connections: HTTP2Connections,
             requests: RequestQueue
         ) -> ConnectionMigrationAction {
-            precondition(self.connections.isEmpty)
-            precondition(self.http2Connections == nil)
-            precondition(self.requests.isEmpty)
+            precondition(self.connections.isEmpty, "expected an empty state machine but connections are not empty")
+            precondition(self.http2Connections == nil, "expected an empty state machine but http2Connections are not nil")
+            precondition(self.requests.isEmpty, "expected an empty state machine but requests are not empty")
 
             self.requests = requests
-
+            
+            // we may have remaining open http1 connections from a pervious migration to http2
             if let http1Connections = http1Connections {
                 self.connections = http1Connections
             }
