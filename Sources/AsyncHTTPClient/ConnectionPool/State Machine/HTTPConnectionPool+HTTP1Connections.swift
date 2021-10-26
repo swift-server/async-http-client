@@ -574,10 +574,14 @@ extension HTTPConnectionPool {
         /// We will create new connections for each `requiredEventLoopOfPendingRequests`
         /// In addition, we also create more general purpose connections if we do not have enough to execute
         /// all requests on the given `preferredEventLoopsOfPendingGeneralPurposeRequests`
-        /// until we reach `maximumConcurrentConnections
+        /// until we reach `maximumConcurrentConnections`
         /// - Parameters:
-        ///   - requiredEventLoopsForPendingRequests: event loops for which we have requests with a required event loop. Duplicates are not allowed.
-        ///   - generalPurposeRequestCountPerPreferredEventLoop: request count with no required event loop, grouped by preferred event loop and ordered descending by number of requests
+        ///   - requiredEventLoopsForPendingRequests:
+        ///   event loops for which we have requests with a required event loop.
+        ///   Duplicates are not allowed.
+        ///   - generalPurposeRequestCountPerPreferredEventLoop:
+        ///   request count with no required event loop,
+        ///   grouped by preferred event loop and ordered descending by number of requests
         /// - Returns: new connections that need to be created
         mutating func createConnectionsAfterMigrationIfNeeded(
             requiredEventLoopOfPendingRequests: [(EventLoop, Int)],
@@ -592,11 +596,14 @@ extension HTTPConnectionPool {
                 },
                 uniquingKeysWith: +
             )
-
             var connectionToCreate = requiredEventLoopOfPendingRequests
                 .flatMap { (eventLoop, requestCount) -> [(Connection.ID, EventLoop)] in
-                    let connectionsToStart = max(requestCount - startingRequiredEventLoopConnectionCount[eventLoop.id, default: 0], 0)
-                    return (0..<connectionsToStart).lazy.map { _ in
+                    /// We need a connection for each queued request with a required event loop.
+                    /// Therefore, we look how many request we have queued for a given `eventLoop` and
+                    /// how many connections we are already starting on the given `eventLoop`.
+                    /// If we have not enough, we will create additional connections to have at least on connection per request.
+                    let connectionsToStart = requestCount - startingRequiredEventLoopConnectionCount[eventLoop.id, default: 0]
+                    return stride(from: 0, to: connectionsToStart, by: 1).lazy.map { _ in
                         (self.createNewOverflowConnection(on: eventLoop), eventLoop)
                     }
                 }
