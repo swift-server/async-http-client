@@ -84,32 +84,40 @@ extension HTTPConnectionPool {
             http2Connections: HTTP2Connections,
             requests: RequestQueue
         ) -> ConnectionMigrationAction {
-            precondition(self.connections.isEmpty)
-            precondition(self.http2Connections == nil)
-            precondition(self.requests.isEmpty)
+            precondition(self.connections.isEmpty, "expected an empty state machine but connections are not empty")
+            precondition(self.http2Connections == nil, "expected an empty state machine but http2Connections are not nil")
+            precondition(self.requests.isEmpty, "expected an empty state machine but requests are not empty")
 
+            self.requests = requests
+
+            // we may have remaining open http1 connections from a pervious migration to http2
             if let http1Connections = http1Connections {
                 self.connections = http1Connections
             }
 
             var http2Connections = http2Connections
             let migration = http2Connections.migrateToHTTP1()
+
             self.connections.migrateFromHTTP2(
                 starting: migration.starting,
                 backingOff: migration.backingOff
+            )
+
+            let createConnections = self.connections.createConnectionsAfterMigrationIfNeeded(
+                requiredEventLoopOfPendingRequests: requests.requestCountGroupedByRequiredEventLoop(),
+                generalPurposeRequestCountGroupedByPreferredEventLoop: requests.generalPurposeRequestCountGroupedByPreferredEventLoop()
             )
 
             if !http2Connections.isEmpty {
                 self.http2Connections = http2Connections
             }
 
-            // TODO: Close all idle connections from context.close
-            // TODO: Start new http1 connections for pending requests
             // TODO: Potentially cancel unneeded bootstraps (Needs cancellable ClientBootstrap)
 
-            self.requests = requests
-
-            return .init(closeConnections: [], createConnections: [])
+            return .init(
+                closeConnections: migration.close,
+                createConnections: createConnections
+            )
         }
 
         // MARK: - Events

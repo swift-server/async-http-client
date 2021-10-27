@@ -517,6 +517,10 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
             starting: [(conn1ID, el1)],
             backingOff: [(conn2ID, el2)]
         )
+        XCTAssertTrue(connections.createConnectionsAfterMigrationIfNeeded(
+            requiredEventLoopsOfPendingRequests: [el1, el2]
+        ).isEmpty)
+
         XCTAssertEqual(
             connections.stats,
             .init(
@@ -550,5 +554,69 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
                 availableStreams: 98
             )
         )
+    }
+
+    func testMigrationFromHTTP1WithPendingRequestsWithRequiredEventLoop() {
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        let generator = HTTPConnectionPool.Connection.ID.Generator()
+        var connections = HTTPConnectionPool.HTTP2Connections(generator: generator)
+        let el1 = elg.next()
+        let el2 = elg.next()
+        let el3 = elg.next()
+        let conn1ID = generator.next()
+        let conn2ID = generator.next()
+
+        connections.migrateFromHTTP1(
+            starting: [(conn1ID, el1)],
+            backingOff: [(conn2ID, el2)]
+        )
+        let newConnections = connections.createConnectionsAfterMigrationIfNeeded(
+            requiredEventLoopsOfPendingRequests: [el1, el2, el3]
+        )
+
+        XCTAssertEqual(newConnections.count, 1)
+
+        guard let (conn3ID, eventLoop) = newConnections.first else {
+            return XCTFail("expected to start a new connection")
+        }
+        XCTAssertTrue(eventLoop === el3)
+
+        let conn3: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn3ID, eventLoop: el3)
+        let (_, context) = connections.newHTTP2ConnectionEstablished(conn3, maxConcurrentStreams: 100)
+        XCTAssertEqual(context.availableStreams, 100)
+        XCTAssertEqual(context.eventLoop.id, el3.id)
+        XCTAssertEqual(context.isIdle, true)
+        XCTAssertEqual(context.connectionID, conn3ID)
+    }
+
+    func testMigrationFromHTTP1WithAlreadyEstablishedHTTP2Connection() {
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        let generator = HTTPConnectionPool.Connection.ID.Generator()
+        var connections = HTTPConnectionPool.HTTP2Connections(generator: generator)
+        let el1 = elg.next()
+        let el2 = elg.next()
+        let el3 = elg.next()
+
+        let conn1ID = connections.createNewConnection(on: el1)
+        let conn1: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn1ID, eventLoop: el1)
+        let (index, _) = connections.newHTTP2ConnectionEstablished(conn1, maxConcurrentStreams: 100)
+        _ = connections.leaseStreams(at: index, count: 1)
+
+        let conn2ID = generator.next()
+        let conn3ID = generator.next()
+
+        connections.migrateFromHTTP1(
+            starting: [(conn2ID, el2)],
+            backingOff: [(conn3ID, el3)]
+        )
+
+        XCTAssertTrue(connections.createConnectionsAfterMigrationIfNeeded(
+            requiredEventLoopsOfPendingRequests: [el1, el2, el3]
+        ).isEmpty, "we still have an active connection for el1 and should not create a new one")
+
+        guard let (leasedConn, _) = connections.leaseStream(onRequired: el1) else {
+            return XCTFail("could not lease stream on el1")
+        }
+        XCTAssertEqual(leasedConn, conn1)
     }
 }

@@ -92,10 +92,13 @@ extension HTTPConnectionPool {
             http2Connections: HTTP2Connections?,
             requests: RequestQueue
         ) -> ConnectionMigrationAction {
-            precondition(self.http1Connections == nil)
-            precondition(self.connections.isEmpty)
-            precondition(self.requests.isEmpty)
+            precondition(self.connections.isEmpty, "expected an empty state machine but connections are not empty")
+            precondition(self.http1Connections == nil, "expected an empty state machine but http1Connections are not nil")
+            precondition(self.requests.isEmpty, "expected an empty state machine but requests are not empty")
 
+            self.requests = requests
+
+            // we may have remaining open http2 connections from a pervious migration to http1
             if let http2Connections = http2Connections {
                 self.connections = http2Connections
             }
@@ -107,17 +110,19 @@ extension HTTPConnectionPool {
                 backingOff: context.backingOff
             )
 
+            let createConnections = self.connections.createConnectionsAfterMigrationIfNeeded(
+                requiredEventLoopsOfPendingRequests: requests.eventLoopsWithPendingRequests()
+            )
+
             if !http1Connections.isEmpty {
                 self.http1Connections = http1Connections
             }
 
-            self.requests = requests
-
-            // TODO: Close all idle connections from context.close
-            // TODO: Start new http2 connections for pending requests
             // TODO: Potentially cancel unneeded bootstraps (Needs cancellable ClientBootstrap)
-
-            return .init(closeConnections: [], createConnections: [])
+            return .init(
+                closeConnections: context.close,
+                createConnections: createConnections
+            )
         }
 
         mutating func executeRequest(_ request: Request) -> Action {

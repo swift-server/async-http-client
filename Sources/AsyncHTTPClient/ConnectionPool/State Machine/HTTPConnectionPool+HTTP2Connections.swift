@@ -346,8 +346,8 @@ extension HTTPConnectionPool {
 
         // MARK: Migration
 
-        /// we only handle starting and backing off connection here.
-        /// All running connections must be handled by the enclosing state machine
+        /// We only handle starting and backing off connection here.
+        /// All already running connections must be handled by the enclosing state machine.
         /// - Parameters:
         ///   - starting: starting HTTP connections from previous state machine
         ///   - backingOff: backing off HTTP connections from previous state machine
@@ -365,6 +365,31 @@ extension HTTPConnectionPool {
                 // TODO: Maybe we want to add a static init for backing off connections to HTTP2ConnectionState
                 backingOffConnection.failedToConnect()
                 self.connections.append(backingOffConnection)
+            }
+        }
+
+        /// We will create new connections for `requiredEventLoopsOfPendingRequests`
+        /// if we do not already have a connection that can or will be able to execute requests on the given event loop.
+        /// - Parameters:
+        ///   - requiredEventLoopsForPendingRequests: event loops for which we have requests with a required event loop. Duplicates are not allowed.
+        /// - Returns: new connections that need to be created
+        mutating func createConnectionsAfterMigrationIfNeeded(
+            requiredEventLoopsOfPendingRequests: [EventLoop]
+        ) -> [(Connection.ID, EventLoop)] {
+            // create new connections for requests with a required event loop
+            let eventLoopsWithConnectionThatCanOrWillBeAbleToExecuteRequests = Set(
+                self.connections.lazy
+                    .filter {
+                        $0.canOrWillBeAbleToExecuteRequests
+                    }.map {
+                        $0.eventLoop.id
+                    }
+            )
+            return requiredEventLoopsOfPendingRequests.compactMap { eventLoop -> (Connection.ID, EventLoop)? in
+                guard !eventLoopsWithConnectionThatCanOrWillBeAbleToExecuteRequests.contains(eventLoop.id)
+                else { return nil }
+                let connectionID = self.createNewConnection(on: eventLoop)
+                return (connectionID, eventLoop)
             }
         }
 

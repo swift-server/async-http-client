@@ -40,6 +40,8 @@ extension HTTPConnectionPool_HTTP2ConnectionsTests {
             ("testNewMaxConcurrentStreamsSetting", testNewMaxConcurrentStreamsSetting),
             ("testLeaseOnPreferredEventLoopWithoutAnyAvailable", testLeaseOnPreferredEventLoopWithoutAnyAvailable),
             ("testMigrationFromHTTP1", testMigrationFromHTTP1),
+            ("testMigrationFromHTTP1WithPendingRequestsWithRequiredEventLoop", testMigrationFromHTTP1WithPendingRequestsWithRequiredEventLoop),
+            ("testMigrationFromHTTP1WithAlreadyEstablishedHTTP2Connection", testMigrationFromHTTP1WithAlreadyEstablishedHTTP2Connection),
         ]
     }
 }

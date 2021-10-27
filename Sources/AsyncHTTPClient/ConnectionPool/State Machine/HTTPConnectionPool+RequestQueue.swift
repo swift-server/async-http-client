@@ -14,6 +14,21 @@
 
 import NIOCore
 
+private struct HashableEventLoop: Hashable {
+    static func == (lhs: HashableEventLoop, rhs: HashableEventLoop) -> Bool {
+        lhs.eventLoop === rhs.eventLoop
+    }
+
+    init(_ eventLoop: EventLoop) {
+        self.eventLoop = eventLoop
+    }
+
+    let eventLoop: EventLoop
+    func hash(into hasher: inout Hasher) {
+        self.eventLoop.id.hash(into: &hasher)
+    }
+}
+
 extension HTTPConnectionPool {
     /// A struct to store all queued requests.
     struct RequestQueue {
@@ -130,6 +145,42 @@ extension HTTPConnectionPool {
                 return closure(queue)
             }
             return nil
+        }
+
+        /// - Returns: event loops with at least one request with a required event loop
+        func eventLoopsWithPendingRequests() -> [EventLoop] {
+            self.eventLoopQueues.compactMap {
+                /// all requests in `eventLoopQueues` are guaranteed to have a `requiredEventLoop`
+                /// however, a queue can be empty
+                $0.value.first?.requiredEventLoop!
+            }
+        }
+
+        /// - Returns: request count for requests with required event loop, grouped by required event loop without any particular order
+        func requestCountGroupedByRequiredEventLoop() -> [(EventLoop, Int)] {
+            self.eventLoopQueues.values.compactMap { requests -> (EventLoop, Int)? in
+                /// all requests in `eventLoopQueues` are guaranteed to have a `requiredEventLoop`,
+                /// however, a queue can be empty
+                guard let requiredEventLoop = requests.first?.requiredEventLoop! else {
+                    return nil
+                }
+                return (requiredEventLoop, requests.count)
+            }
+        }
+
+        /// - Returns: request count with **no** required event loop, grouped by preferred event loop and ordered descending by number of requests
+        func generalPurposeRequestCountGroupedByPreferredEventLoop() -> [(EventLoop, Int)] {
+            let requestCountPerEventLoop = Dictionary(
+                self.generalPurposeQueue.lazy.map { request in
+                    (HashableEventLoop(request.preferredEventLoop), 1)
+                },
+                uniquingKeysWith: +
+            )
+            return requestCountPerEventLoop.lazy
+                .map { ($0.key.eventLoop, $0.value) }
+                .sorted { lhs, rhs in
+                    lhs.1 > rhs.1
+                }
         }
     }
 }
