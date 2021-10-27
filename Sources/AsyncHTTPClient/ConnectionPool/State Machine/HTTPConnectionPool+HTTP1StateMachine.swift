@@ -89,7 +89,7 @@ extension HTTPConnectionPool {
             precondition(self.requests.isEmpty, "expected an empty state machine but requests are not empty")
 
             self.requests = requests
-            
+
             // we may have remaining open http1 connections from a pervious migration to http2
             if let http1Connections = http1Connections {
                 self.connections = http1Connections

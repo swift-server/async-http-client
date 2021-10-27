@@ -290,6 +290,10 @@ extension HTTPConnectionPool {
             return connecting
         }
 
+        private var maximumAdditionalGeneralPurposeConnections: Int {
+            self.maximumConcurrentConnections - (self.overflowIndex - 1)
+        }
+
         /// Is there at least one connection that is able to run requests
         var hasActiveConnections: Bool {
             self.connections.contains(where: { $0.isIdle || $0.isLeased })
@@ -587,9 +591,9 @@ extension HTTPConnectionPool {
             requiredEventLoopOfPendingRequests: [(EventLoop, Int)],
             generalPurposeRequestCountGroupedByPreferredEventLoop: [(EventLoop, Int)]
         ) -> [(Connection.ID, EventLoop)] {
-            /// create new connections for requests with a required event loop
+            // create new connections for requests with a required event loop
 
-            /// we may already start connections for those requests and do not want to start to many
+            // we may already start connections for those requests and do not want to start to many
             let startingRequiredEventLoopConnectionCount = Dictionary(
                 self.connections[self.overflowIndex..<self.connections.endIndex].lazy.map {
                     ($0.eventLoop.id, 1)
@@ -598,31 +602,47 @@ extension HTTPConnectionPool {
             )
             var connectionToCreate = requiredEventLoopOfPendingRequests
                 .flatMap { (eventLoop, requestCount) -> [(Connection.ID, EventLoop)] in
-                    /// We need a connection for each queued request with a required event loop.
-                    /// Therefore, we look how many request we have queued for a given `eventLoop` and
-                    /// how many connections we are already starting on the given `eventLoop`.
-                    /// If we have not enough, we will create additional connections to have at least on connection per request.
+                    // We need a connection for each queued request with a required event loop.
+                    // Therefore, we look how many request we have queued for a given `eventLoop` and
+                    // how many connections we are already starting on the given `eventLoop`.
+                    // If we have not enough, we will create additional connections to have at least
+                    // on connection per request.
                     let connectionsToStart = requestCount - startingRequiredEventLoopConnectionCount[eventLoop.id, default: 0]
                     return stride(from: 0, to: connectionsToStart, by: 1).lazy.map { _ in
                         (self.createNewOverflowConnection(on: eventLoop), eventLoop)
                     }
                 }
 
-            /// create new connections for requests without a required event loop
+            // create new connections for requests without a required event loop
 
-            /// we may already start connections for those requests and do not want to start to many
-            /// this integer keeps track of the number of connections which do not yet have any requests assigned
-            var unusedGeneralPurposeConnections = self.startingGeneralPurposeConnections
+            // TODO: improve algorithm to create connections uniformly across all preferred event loops
+            // while paying attention to the number of queued request per event loop
 
-            outerLoop: for (eventLoop, requestCount) in generalPurposeRequestCountGroupedByPreferredEventLoop {
-                let connectionsToStart = max(requestCount - unusedGeneralPurposeConnections, 0)
-                unusedGeneralPurposeConnections -= min(requestCount, unusedGeneralPurposeConnections)
-                for _ in 0..<connectionsToStart {
-                    guard self.canGrow else {
-                        break outerLoop
+            // we do not want to allocate intermediate arrays and therefore use lazy algorithms.
+            // Some lazy algorithms use escaping closure because they are not executed
+            // immediately.
+            // However, we know that we will not escape and need to help the swift compiler
+            // by using `withoutActuallyEscaping` to understand that too.
+            withoutActuallyEscaping({ (eventLoop: EventLoop) -> (Connection.ID, EventLoop) in
+                (self.createNewConnection(on: eventLoop), eventLoop)
+            }) { createConnection in
+                let newGeneralPurposeConnections = generalPurposeRequestCountGroupedByPreferredEventLoop
+                    // we do not want to allocated intermediate arrays.
+                    .lazy
+                    // we flatten the grouped list of event loops by lazily repeating the event loop
+                    // for each request.
+                    // As a result we get one event loop per request (`[EventLoop]`).
+                    .flatMap { eventLoop, requestCount in
+                        repeatElement(eventLoop, count: requestCount)
                     }
-                    connectionToCreate.append((self.createNewConnection(on: eventLoop), eventLoop))
-                }
+                    // we may already start connections and do not want to start too many
+                    .dropLast(self.startingGeneralPurposeConnections)
+                    // we need to respect the used defined `maximumConcurrentConnections`
+                    .prefix(self.maximumAdditionalGeneralPurposeConnections)
+                    // we now create a connection for each remaining event loop
+                    .map(createConnection)
+
+                connectionToCreate.append(contentsOf: newGeneralPurposeConnections)
             }
 
             return connectionToCreate
