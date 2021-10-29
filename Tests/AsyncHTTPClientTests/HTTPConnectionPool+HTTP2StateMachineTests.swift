@@ -624,6 +624,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
 
         /// first new HTTP2 connection should migrate from HTTP1 to HTTP2 and execute requests
         let conn1: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn1ID, eventLoop: el1)
+        XCTAssertNoThrow(try connections.succeedConnectionCreationHTTP2(conn1ID, maxConcurrentStreams: 10))
         let migrationAction = state.newHTTP2ConnectionCreated(conn1, maxConcurrentStreams: 10)
         guard case .executeRequestsAndCancelTimeouts(let requests, let conn) = migrationAction.request else {
             return XCTFail("unexpected request action \(migrationAction.request)")
@@ -633,6 +634,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
 
         for request in requests {
             XCTAssertNoThrow(try queuer.get(request.id, request: request.__testOnly_wrapped_request()))
+            XCTAssertNoThrow(try connections.execute(request.__testOnly_wrapped_request(), on: conn1))
         }
 
         XCTAssertEqual(migrationAction.connection, .migration(
@@ -644,13 +646,16 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         /// remaining connections should be closed immediately without executing any request
         for connID in connectionIDs.dropFirst() {
             let conn: HTTPConnectionPool.Connection = .__testOnly_connection(id: connID, eventLoop: el1)
+            XCTAssertNoThrow(try connections.succeedConnectionCreationHTTP2(connID, maxConcurrentStreams: 10))
             let action = state.newHTTP2ConnectionCreated(conn, maxConcurrentStreams: 10)
             XCTAssertEqual(action.request, .none)
             XCTAssertEqual(action.connection, .closeConnection(conn, isShutdown: .no))
+            XCTAssertNoThrow(try connections.closeConnection(conn))
         }
 
         /// closing a stream while we have requests queued should result in one request execution action
         for _ in 0..<6 {
+            XCTAssertNoThrow(try connections.finishExecution(conn1ID))
             let action = state.http2ConnectionStreamClosed(conn1ID)
             XCTAssertEqual(action.connection, .none)
             guard case .executeRequestsAndCancelTimeouts(let requests, conn) = action.request else {
@@ -659,6 +664,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             XCTAssertEqual(requests.count, 1)
             for request in requests {
                 XCTAssertNoThrow(try queuer.cancel(request.id))
+                XCTAssertNoThrow(try connections.execute(request.__testOnly_wrapped_request(), on: conn1))
             }
         }
         XCTAssertTrue(queuer.isEmpty)
@@ -704,16 +710,19 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         /// new http1 connection should execute 1 request
         for connID in succesfullHTTP1ConnIDs {
             let conn: HTTPConnectionPool.Connection = .__testOnly_connection(id: connID, eventLoop: el1)
+            XCTAssertNoThrow(try connections.succeedConnectionCreationHTTP1(connID))
             let action = state.newHTTP1ConnectionCreated(conn)
             guard case .executeRequest(let request, conn, cancelTimeout: true) = action.request else {
                 return XCTFail("unexpected request action \(action.request)")
             }
             XCTAssertEqual(action.connection, .none)
             XCTAssertNoThrow(try queuer.get(request.id, request: request.__testOnly_wrapped_request()))
+            XCTAssertNoThrow(try connections.execute(request.__testOnly_wrapped_request(), on: conn))
         }
 
         /// failing connection should backoff connection
         for connID in failedHTTP1ConnIDs {
+            XCTAssertNoThrow(try connections.failConnectionCreation(connID))
             struct SomeError: Error {}
             let action = state.failedToCreateNewConnection(SomeError(), connectionID: connID)
             guard case .scheduleBackoffTimer(connID, backoff: _, let el) = action.connection else {
@@ -721,6 +730,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             }
             XCTAssertEqual(action.request, .none)
             XCTAssertTrue(el === el1)
+            XCTAssertNoThrow(try connections.startConnectionBackoffTimer(connID))
         }
 
         let http2ConnectionIDs = Array(connectionIDs.dropFirst(4))
@@ -731,6 +741,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
 
         /// first new HTTP2 connection should migrate from HTTP1 to HTTP2 and execute requests
         let http2Conn: HTTPConnectionPool.Connection = .__testOnly_connection(id: firstHTTP2ConnID, eventLoop: el1)
+        XCTAssertNoThrow(try connections.succeedConnectionCreationHTTP2(firstHTTP2ConnID, maxConcurrentStreams: 10))
         let migrationAction = state.newHTTP2ConnectionCreated(http2Conn, maxConcurrentStreams: 10)
         guard case .executeRequestsAndCancelTimeouts(let requests, let conn) = migrationAction.request else {
             return XCTFail("unexpected request action \(migrationAction.request)")
@@ -742,19 +753,23 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
 
         for request in requests {
             XCTAssertNoThrow(try queuer.get(request.id, request: request.__testOnly_wrapped_request()))
+            XCTAssertNoThrow(try connections.execute(request.__testOnly_wrapped_request(), on: http2Conn))
         }
 
         /// remaining connections should be closed immediately without executing any request
         for connID in http2ConnectionIDs.dropFirst() {
             let conn: HTTPConnectionPool.Connection = .__testOnly_connection(id: connID, eventLoop: el1)
+            XCTAssertNoThrow(try connections.succeedConnectionCreationHTTP2(connID, maxConcurrentStreams: 10))
             let action = state.newHTTP2ConnectionCreated(conn, maxConcurrentStreams: 10)
             XCTAssertEqual(action.request, .none)
             XCTAssertEqual(action.connection, .closeConnection(conn, isShutdown: .no))
+            XCTAssertNoThrow(try connections.closeConnection(conn))
         }
 
         /// after a request has finished on a http1 connection, the connection should be closed
         /// because we are now in http/2 mode
         for http1ConnectionID in succesfullHTTP1ConnIDs {
+            XCTAssertNoThrow(try connections.finishExecution(http1ConnectionID))
             let action = state.http1ConnectionReleased(http1ConnectionID)
             XCTAssertEqual(action.request, .none)
             guard case .closeConnection(let conn, isShutdown: .no) = action.connection else {
@@ -766,12 +781,14 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         /// if a backoff timer fires for an old http1 connection we should not start a new connection
         /// because we are already in http2 mode
         for http1ConnectionID in failedHTTP1ConnIDs {
+            XCTAssertNoThrow(try connections.connectionBackoffTimerDone(http1ConnectionID))
             let action = state.connectionCreationBackoffDone(http1ConnectionID)
             XCTAssertEqual(action, .none)
         }
 
         /// closing a stream while we have requests queued should result in one request execution action
         for _ in 0..<4 {
+            XCTAssertNoThrow(try connections.finishExecution(http2Conn.id))
             let action = state.http2ConnectionStreamClosed(http2Conn.id)
             XCTAssertEqual(action.connection, .none)
             guard case .executeRequestsAndCancelTimeouts(let requests, http2Conn) = action.request else {
@@ -779,7 +796,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             }
             XCTAssertEqual(requests.count, 1)
             for request in requests {
-                XCTAssertNoThrow(try queuer.cancel(request.id))
+                XCTAssertNoThrow(try queuer.get(request.id, request: request.__testOnly_wrapped_request()))
+                XCTAssertNoThrow(try connections.execute(request.__testOnly_wrapped_request(), on: http2Conn))
             }
         }
 
@@ -806,6 +824,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         XCTAssertNoThrow(try connections.createConnection(http2ConnID, on: el1))
         XCTAssertNoThrow(try queuer.queue(mockRequest, id: request1.id))
         let http2Conn: HTTPConnectionPool.Connection = .__testOnly_connection(id: http2ConnID, eventLoop: el1)
+        XCTAssertNoThrow(try connections.succeedConnectionCreationHTTP2(http2ConnID, maxConcurrentStreams: 10))
         let migrationAction1 = state.newHTTP2ConnectionCreated(http2Conn, maxConcurrentStreams: 10)
         guard case .executeRequestsAndCancelTimeouts(let requests, http2Conn) = migrationAction1.request else {
             return XCTFail("unexpected request action \(migrationAction1.request)")
@@ -814,6 +833,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         XCTAssertEqual(requests.count, 1)
         for request in requests {
             XCTAssertNoThrow(try queuer.get(request.id, request: request.__testOnly_wrapped_request()))
+            XCTAssertNoThrow(try connections.execute(request.__testOnly_wrapped_request(), on: http2Conn))
         }
 
         // a request with new required event loop should create a new connection
@@ -830,6 +850,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
 
         // if we established a new http/1 connection we should migrate back to http/1
         let http1Conn: HTTPConnectionPool.Connection = .__testOnly_connection(id: http1ConnId, eventLoop: el2)
+        XCTAssertNoThrow(try connections.succeedConnectionCreationHTTP1(http1ConnId))
         let migrationAction2 = state.newHTTP1ConnectionCreated(http1Conn)
         guard case .executeRequest(let request2, http1Conn, cancelTimeout: true) = migrationAction2.request else {
             return XCTFail("unexpected request action \(migrationAction2.request)")
@@ -839,10 +860,13 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         }
         XCTAssertEqual(createConnections.map { $0.1.id }, [el2.id])
         XCTAssertNoThrow(try queuer.get(request2.id, request: request2.__testOnly_wrapped_request()))
+        XCTAssertNoThrow(try connections.execute(request2.__testOnly_wrapped_request(), on: http1Conn))
 
         // in http/1 state, we should close idle http2 connections
+        XCTAssertNoThrow(try connections.finishExecution(http2Conn.id))
         let releaseAction = state.http2ConnectionStreamClosed(http2Conn.id)
         XCTAssertEqual(releaseAction.connection, .closeConnection(http2Conn, isShutdown: .no))
         XCTAssertEqual(releaseAction.request, .none)
+        XCTAssertNoThrow(try connections.closeConnection(http2Conn))
     }
 }
