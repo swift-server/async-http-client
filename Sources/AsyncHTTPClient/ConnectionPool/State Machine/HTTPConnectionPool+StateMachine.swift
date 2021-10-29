@@ -125,7 +125,9 @@ extension HTTPConnectionPool {
                 )
 
                 let newConnectionAction = http1StateMachine.migrateFromHTTP2(
-                    http2State: http2StateMachine,
+                    http1Connections: http2StateMachine.http1Connections,
+                    http2Connections: http2StateMachine.connections,
+                    requests: http2StateMachine.requests,
                     newHTTP1Connection: connection
                 )
                 self.state = .http1(http1StateMachine)
@@ -141,7 +143,9 @@ extension HTTPConnectionPool {
                     idGenerator: self.idGenerator
                 )
                 let migrationAction = http2StateMachine.migrateFromHTTP1(
-                    http1State: http1StateMachine,
+                    http1Connections: http1StateMachine.connections,
+                    http2Connections: http1StateMachine.http2Connections,
+                    requests: http1StateMachine.requests,
                     newHTTP2Connection: connection,
                     maxConcurrentStreams: maxConcurrentStreams
                 )
@@ -193,15 +197,9 @@ extension HTTPConnectionPool {
 
         mutating func failedToCreateNewConnection(_ error: Error, connectionID: Connection.ID) -> Action {
             self.state.modify(http1: { http1 in
-                http1.failedToCreateNewConnection(
-                    error,
-                    connectionID: connectionID
-                )
+                http1.failedToCreateNewConnection(error, connectionID: connectionID)
             }, http2: { http2 in
-                http2.failedToCreateNewConnection(
-                    error,
-                    connectionID: connectionID
-                )
+                http2.failedToCreateNewConnection(error, connectionID: connectionID)
             })
         }
 

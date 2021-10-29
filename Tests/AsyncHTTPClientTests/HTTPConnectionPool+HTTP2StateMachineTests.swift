@@ -312,7 +312,13 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let conn2: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn2ID, eventLoop: el1)
         var http2State = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator)
 
-        let http2ConnectAction = http2State.migrateFromHTTP1(http1State: http1State, newHTTP2Connection: conn2, maxConcurrentStreams: 100)
+        let http2ConnectAction = http2State.migrateFromHTTP1(
+            http1Connections: http1State.connections,
+            http2Connections: http1State.http2Connections,
+            requests: http1State.requests,
+            newHTTP2Connection: conn2,
+            maxConcurrentStreams: 100
+        )
         XCTAssertEqual(http2ConnectAction.connection, .migration(createConnections: [], closeConnections: [], scheduleTimeout: nil))
         guard case .executeRequestsAndCancelTimeouts([request2], conn2) = http2ConnectAction.request else {
             return XCTFail("Unexpected request action \(http2ConnectAction.request)")

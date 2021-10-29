@@ -50,20 +50,6 @@ extension HTTPConnectionPool {
         }
 
         mutating func migrateFromHTTP1(
-            http1State: HTTP1StateMachine,
-            newHTTP2Connection: Connection,
-            maxConcurrentStreams: Int
-        ) -> Action {
-            self.migrateFromHTTP1(
-                http1Connections: http1State.connections,
-                http2Connections: http1State.http2Connections,
-                requests: http1State.requests,
-                newHTTP2Connection: newHTTP2Connection,
-                maxConcurrentStreams: maxConcurrentStreams
-            )
-        }
-
-        mutating func migrateFromHTTP1(
             http1Connections: HTTP1Connections,
             http2Connections: HTTP2Connections? = nil,
             requests: RequestQueue,
