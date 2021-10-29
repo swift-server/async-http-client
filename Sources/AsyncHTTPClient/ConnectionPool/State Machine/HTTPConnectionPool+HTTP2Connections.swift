@@ -419,14 +419,14 @@ extension HTTPConnectionPool {
             self.connections.contains { $0.isActive }
         }
 
-        /// used in general purpose connection scenarios to check if at least one connection is starting or active for the given `eventLoop`
+        /// used in general purpose connection scenarios to check if at least one connection is starting, backing off or active
         var hasConnectionThatCanOrWillBeAbleToExecuteRequests: Bool {
             self.connections.contains { $0.canOrWillBeAbleToExecuteRequests }
         }
 
         /// used in eventLoop scenarios. does at least one connection exist for this eventLoop, or should we create a new one?
         /// - Parameter eventLoop: connection `EventLoop` to search for
-        /// - Returns: true if at least one connection is starting or active for the given `eventLoop`
+        /// - Returns: true if at least one connection is starting, backing off or active for the given `eventLoop`
         func hasConnectionThatCanOrWillBeAbleToExecuteRequests(for eventLoop: EventLoop) -> Bool {
             self.connections.contains {
                 $0.eventLoop === eventLoop && $0.canOrWillBeAbleToExecuteRequests
