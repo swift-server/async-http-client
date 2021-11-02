@@ -253,7 +253,6 @@ class TestConnectionCreator {
         let factory = HTTPConnectionPool.ConnectionFactory(
             key: .init(request),
             tlsConfiguration: tlsConfiguration,
-            // TODO: use default client configuration once http/2 is enabled by default
             clientConfiguration: .init(httpVersion: .automatic),
             sslContextCache: .init()
         )
@@ -295,7 +294,6 @@ class TestConnectionCreator {
         let factory = HTTPConnectionPool.ConnectionFactory(
             key: .init(request),
             tlsConfiguration: tlsConfiguration,
-            // TODO: use default client configuration once http/2 is enabled by default
             clientConfiguration: .init(httpVersion: .automatic),
             sslContextCache: .init()
         )
