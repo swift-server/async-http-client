@@ -603,13 +603,43 @@ public class HTTPClient {
         /// Ignore TLS unclean shutdown error, defaults to `false`.
         public var ignoreUncleanSSLShutdown: Bool
 
-        public init(tlsConfiguration: TLSConfiguration? = nil,
-                    redirectConfiguration: RedirectConfiguration? = nil,
-                    timeout: Timeout = Timeout(),
-                    connectionPool: ConnectionPool = ConnectionPool(),
-                    proxy: Proxy? = nil,
-                    ignoreUncleanSSLShutdown: Bool = false,
-                    decompression: Decompression = .disabled) {
+        // TODO: make public
+        // TODO: set to automatic by default
+        /// HTTP/2 is by default disabled
+        internal var httpVersion: HTTPVersion
+
+        public init(
+            tlsConfiguration: TLSConfiguration? = nil,
+            redirectConfiguration: RedirectConfiguration? = nil,
+            timeout: Timeout = Timeout(),
+            connectionPool: ConnectionPool = ConnectionPool(),
+            proxy: Proxy? = nil,
+            ignoreUncleanSSLShutdown: Bool = false,
+            decompression: Decompression = .disabled
+        ) {
+            self.init(
+                tlsConfiguration: tlsConfiguration,
+                redirectConfiguration: redirectConfiguration,
+                timeout: timeout, connectionPool: connectionPool,
+                proxy: proxy,
+                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
+                decompression: decompression,
+                // TODO: set to automatic by default
+                httpVersion: .http1Only
+            )
+        }
+
+        // TODO: make public
+        internal init(
+            tlsConfiguration: TLSConfiguration? = nil,
+            redirectConfiguration: RedirectConfiguration? = nil,
+            timeout: Timeout = Timeout(),
+            connectionPool: ConnectionPool = ConnectionPool(),
+            proxy: Proxy? = nil,
+            ignoreUncleanSSLShutdown: Bool = false,
+            decompression: Decompression = .disabled,
+            httpVersion: HTTPVersion
+        ) {
             self.tlsConfiguration = tlsConfiguration
             self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
             self.timeout = timeout
@@ -617,6 +647,7 @@ public class HTTPClient {
             self.proxy = proxy
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
             self.decompression = decompression
+            self.httpVersion = httpVersion
         }
 
         public init(tlsConfiguration: TLSConfiguration? = nil,
@@ -829,6 +860,22 @@ extension HTTPClient.Configuration {
             self.idleTimeout = idleTimeout
             self.concurrentHTTP1ConnectionsPerHostSoftLimit = concurrentHTTP1ConnectionsPerHostSoftLimit
         }
+    }
+
+    // TODO: make this struct and its static properties public
+    internal struct HTTPVersion {
+        internal enum Configuration {
+            case http1Only
+            case automatic
+        }
+
+        /// we only use HTTP/1, even if the server would supports HTTP/2
+        internal static let http1Only: Self = .init(configuration: .http1Only)
+
+        /// HTTP/2 is used if we connect to a server with HTTPS and the server supports HTTP/2, otherwise we use HTTP/1
+        internal static let automatic: Self = .init(configuration: .automatic)
+
+        internal var configuration: Configuration
     }
 }
 
