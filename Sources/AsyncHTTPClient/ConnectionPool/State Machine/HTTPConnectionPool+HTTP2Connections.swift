@@ -48,6 +48,15 @@ extension HTTPConnectionPool {
                 return false
             }
         }
+        
+        var isStartingOrActive: Bool {
+            switch self.state {
+            case .starting, .active:
+                return true
+            case .draining, .backingOff, .closed:
+                return false
+            }
+        }
 
         /// A connection is established and can potentially execute requests if not all streams are leased
         var isActive: Bool {
@@ -440,23 +449,27 @@ extension HTTPConnectionPool {
         }
 
         /// used after backoff is done to determine if we need to create a new connection
-        func hasStartingOrActiveConnection() -> Bool {
-            self.connections.contains { connection in
-                connection.canOrWillBeAbleToExecuteRequests
-            }
-        }
-
-        /// used after backoff is done to determine if we need to create a new connection
         /// - Parameters:
         ///   - eventLoop: connection `EventLoop` to search for
-        /// - Returns: true if at least one connection is starting or active for the given `eventLoop`
-        func hasStartingOrActiveConnection(
+        /// - Returns:
+        ///     `onAnyEventLoop`: true if at least one connection is starting or active regardless of the event loop.
+        ///     `onSpecifiedEventLoop`: true if at least one connection is starting or active for the given `eventLoop`.
+        func hasAnyStartingOrActiveConnectionAnd(
             for eventLoop: EventLoop
-        ) -> Bool {
-            self.connections.contains { connection in
-                connection.eventLoop === eventLoop &&
-                    connection.canOrWillBeAbleToExecuteRequests
+        ) -> (onAnyEventLoop: Bool, onSpecifiedEventLoop: Bool) {
+            var onAnyEventLoop: Bool = false
+            var onSpecifiedEventLoop: Bool = false
+            for connection in connections {
+                guard connection.isStartingOrActive else { continue }
+                onAnyEventLoop = true
+                guard connection.eventLoop === eventLoop else { continue }
+                onSpecifiedEventLoop = true
+                break
             }
+            return (
+                onAnyEventLoop,
+                onSpecifiedEventLoop
+            )
         }
 
         mutating func createNewConnection(on eventLoop: EventLoop) -> Connection.ID {
