@@ -254,7 +254,7 @@ class TestConnectionCreator {
             key: .init(request),
             tlsConfiguration: tlsConfiguration,
             // TODO: use default client configuration once http/2 is enabled by default
-            clientConfiguration: .init(http2: .automatic),
+            clientConfiguration: .init(httpVersion: .automatic),
             sslContextCache: .init()
         )
 
@@ -296,7 +296,7 @@ class TestConnectionCreator {
             key: .init(request),
             tlsConfiguration: tlsConfiguration,
             // TODO: use default client configuration once http/2 is enabled by default
-            clientConfiguration: .init(http2: .automatic),
+            clientConfiguration: .init(httpVersion: .automatic),
             sslContextCache: .init()
         )
 

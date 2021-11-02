@@ -606,31 +606,7 @@ public class HTTPClient {
         // TODO: make public
         // TODO: set to automatic by default
         /// HTTP/2 is by default disabled
-        internal var http2: HTTP2
-
-        // TODO: make public
-        internal init(
-            certificateVerification: CertificateVerification,
-            redirectConfiguration: RedirectConfiguration? = nil,
-            timeout: Timeout = Timeout(),
-            connectionPool: TimeAmount = .seconds(60),
-            proxy: Proxy? = nil,
-            ignoreUncleanSSLShutdown: Bool = false,
-            decompression: Decompression = .disabled,
-            backgroundActivityLogger: Logger? = nil,
-            http2: HTTP2
-        ) {
-            self.init(
-                certificateVerification: certificateVerification,
-                redirectConfiguration: redirectConfiguration,
-                timeout: timeout,
-                connectionPool: connectionPool,
-                proxy: proxy,
-                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
-                decompression: decompression,
-                backgroundActivityLogger: backgroundActivityLogger
-            )
-        }
+        internal var httpVersion: HTTPVersion
 
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
@@ -649,10 +625,11 @@ public class HTTPClient {
                 ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
                 decompression: decompression,
                 // TODO: set to automatic by default
-                http2: .disabled
+                httpVersion: .http1Only
             )
         }
-
+        
+        // TODO: make public
         internal init(
             tlsConfiguration: TLSConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
@@ -661,7 +638,7 @@ public class HTTPClient {
             proxy: Proxy? = nil,
             ignoreUncleanSSLShutdown: Bool = false,
             decompression: Decompression = .disabled,
-            http2: HTTP2
+            httpVersion: HTTPVersion
         ) {
             self.tlsConfiguration = tlsConfiguration
             self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
@@ -670,7 +647,7 @@ public class HTTPClient {
             self.proxy = proxy
             self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
             self.decompression = decompression
-            self.http2 = http2
+            self.httpVersion = httpVersion
         }
 
         public init(tlsConfiguration: TLSConfiguration? = nil,
@@ -886,16 +863,16 @@ extension HTTPClient.Configuration {
     }
 
     // TODO: make this struct and its static properties public
-    internal struct HTTP2 {
+    internal struct HTTPVersion {
         internal enum Configuration {
-            case disabled
+            case http1Only
             case automatic
         }
 
-        /// HTTP/2 is completely disabled
-        internal static let disabled: Self = .init(configuration: .disabled)
+        /// we only use HTTP/1, even if the server would supports HTTP/2
+        internal static let http1Only: Self = .init(configuration: .http1Only)
 
-        /// HTTP/2 is used if we connect to a server with HTTPS and the server supports HTTP/2
+        /// HTTP/2 is used if we connect to a server with HTTPS and the server supports HTTP/2, otherwise we use HTTP/1
         internal static let automatic: Self = .init(configuration: .automatic)
 
         internal var configuration: Configuration

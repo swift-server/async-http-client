@@ -298,14 +298,14 @@ extension HTTPConnectionPool.ConnectionFactory {
             return channel.eventLoop.makeSucceededFuture(.http1_1(channel))
         case .https:
             var tlsConfig = self.tlsConfiguration
-            switch self.clientConfiguration.http2.configuration {
+            switch self.clientConfiguration.httpVersion.configuration {
             case .automatic:
                 // since we can support h2, we need to advertise this in alpn
                 // "ProtocolNameList" contains the list of protocols advertised by the
                 // client, in descending order of preference.
                 // https://datatracker.ietf.org/doc/html/rfc7301#section-3.1
                 tlsConfig.applicationProtocols = ["h2", "http/1.1"]
-            case .disabled:
+            case .http1Only:
                 tlsConfig.applicationProtocols = ["http/1.1"]
             }
             let tlsEventHandler = TLSEventsHandler(deadline: deadline)
@@ -404,14 +404,14 @@ extension HTTPConnectionPool.ConnectionFactory {
     private func makeTLSBootstrap(deadline: NIODeadline, eventLoop: EventLoop, logger: Logger)
         -> EventLoopFuture<NIOClientTCPBootstrapProtocol> {
         var tlsConfig = self.tlsConfiguration
-        switch self.clientConfiguration.http2.configuration {
+        switch self.clientConfiguration.httpVersion.configuration {
         case .automatic:
             // since we can support h2, we need to advertise this in alpn
             // "ProtocolNameList" contains the list of protocols advertised by the
             // client, in descending order of preference.
             // https://datatracker.ietf.org/doc/html/rfc7301#section-3.1
             tlsConfig.applicationProtocols = ["h2", "http/1.1"]
-        case .disabled:
+        case .http1Only:
             tlsConfig.applicationProtocols = ["http/1.1"]
         }
 
