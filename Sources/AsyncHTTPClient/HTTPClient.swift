@@ -628,7 +628,7 @@ public class HTTPClient {
                 httpVersion: .http1Only
             )
         }
-        
+
         // TODO: make public
         internal init(
             tlsConfiguration: TLSConfiguration? = nil,
