@@ -618,9 +618,10 @@ extension HTTPConnectionPool {
             // TODO: improve algorithm to create connections uniformly across all preferred event loops
             // while paying attention to the number of queued request per event loop
             // Currently we start by creating new connections on the event loop with the most queued
-            // requests. If we have create a enough connections to cover all requests for the given
+            // requests. If we have created enough connections to cover all requests for the first
             // event loop we will continue with the event loop with the second most queued requests
-            // and so on and so forth. We do not need to sort the array because
+            // and so on and so forth. The `generalPurposeRequestCountGroupedByPreferredEventLoop`
+            // array is already ordered so we can just iterate over it without sorting by request count.
             let newGeneralPurposeConnections: [(Connection.ID, EventLoop)] = generalPurposeRequestCountGroupedByPreferredEventLoop
                 // we do not want to allocated intermediate arrays.
                 .lazy

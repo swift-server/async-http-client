@@ -36,6 +36,9 @@ extension HTTPConnectionPool_HTTP2StateMachineTests {
             ("testGoAwayOnIdleConnection", testGoAwayOnIdleConnection),
             ("testGoAwayWithLeasedStream", testGoAwayWithLeasedStream),
             ("testGoAwayWithPendingRequestsStartsNewConnection", testGoAwayWithPendingRequestsStartsNewConnection),
+            ("testMigrationFromHTTP1ToHTTP2", testMigrationFromHTTP1ToHTTP2),
+            ("testMigrationFromHTTP1ToHTTP2WithAlreadyStartedHTTP1Connections", testMigrationFromHTTP1ToHTTP2WithAlreadyStartedHTTP1Connections),
+            ("testHTTP2toHTTP1Migration", testHTTP2toHTTP1Migration),
         ]
     }
 }

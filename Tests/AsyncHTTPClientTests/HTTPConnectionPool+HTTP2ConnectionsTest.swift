@@ -556,6 +556,71 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         )
     }
 
+    func testMigrationToHTTP1() {
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        let generator = HTTPConnectionPool.Connection.ID.Generator()
+        var connections = HTTPConnectionPool.HTTP2Connections(generator: generator)
+        let el1 = elg.next()
+        let el2 = elg.next()
+        let el3 = elg.next()
+        let el4 = elg.next()
+
+        let conn1ID = generator.next()
+        let conn2ID = generator.next()
+        let conn3ID = generator.next()
+        let conn4ID = generator.next()
+
+        connections.migrateFromHTTP1(
+            starting: [(conn1ID, el1), (conn2ID, el2), (conn3ID, el3)],
+            backingOff: [(conn4ID, el4)]
+        )
+
+        let conn1: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn1ID, eventLoop: el1)
+        let (conn1Index, conn1CreatedContext) = connections.newHTTP2ConnectionEstablished(conn1, maxConcurrentStreams: 100)
+        XCTAssertEqual(conn1CreatedContext.availableStreams, 100)
+
+        let (leasedConn1, leasdConnContext1) = connections.leaseStreams(at: conn1Index, count: 2)
+        XCTAssertEqual(leasedConn1, conn1)
+        XCTAssertEqual(leasdConnContext1.wasIdle, true)
+
+        let conn2: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn2ID, eventLoop: el2)
+        let (_, conn2CreatedContext) = connections.newHTTP2ConnectionEstablished(conn2, maxConcurrentStreams: 100)
+        XCTAssertEqual(conn2CreatedContext.availableStreams, 100)
+
+        XCTAssertEqual(
+            connections.stats,
+            .init(
+                startingConnections: 1,
+                backingOffConnections: 1,
+                idleConnections: 1,
+                availableConnections: 2,
+                drainingConnections: 0,
+                leasedStreams: 2,
+                availableStreams: 198
+            )
+        )
+
+        let migrationContext = connections.migrateToHTTP1()
+        XCTAssertEqual(migrationContext.close, [conn2])
+        XCTAssertEqual(migrationContext.starting.map { $0.0 }, [conn3ID])
+        XCTAssertEqual(migrationContext.starting.map { $0.1.id }, [el3.id])
+        XCTAssertEqual(migrationContext.backingOff.map { $0.0 }, [conn4ID])
+        XCTAssertEqual(migrationContext.backingOff.map { $0.1.id }, [el4.id])
+
+        XCTAssertEqual(
+            connections.stats,
+            .init(
+                startingConnections: 0,
+                backingOffConnections: 0,
+                idleConnections: 0,
+                availableConnections: 1,
+                drainingConnections: 0,
+                leasedStreams: 2,
+                availableStreams: 98
+            )
+        )
+    }
+
     func testMigrationFromHTTP1WithPendingRequestsWithRequiredEventLoop() {
         let elg = EmbeddedEventLoopGroup(loops: 4)
         let generator = HTTPConnectionPool.Connection.ID.Generator()

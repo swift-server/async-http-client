@@ -50,20 +50,6 @@ extension HTTPConnectionPool {
         }
 
         mutating func migrateFromHTTP1(
-            http1State: HTTP1StateMachine,
-            newHTTP2Connection: Connection,
-            maxConcurrentStreams: Int
-        ) -> Action {
-            self.migrateFromHTTP1(
-                http1Connections: http1State.connections,
-                http2Connections: http1State.http2Connections,
-                requests: http1State.requests,
-                newHTTP2Connection: newHTTP2Connection,
-                maxConcurrentStreams: maxConcurrentStreams
-            )
-        }
-
-        mutating func migrateFromHTTP1(
             http1Connections: HTTP1Connections,
             http2Connections: HTTP2Connections? = nil,
             requests: RequestQueue,
@@ -228,11 +214,22 @@ extension HTTPConnectionPool {
         private mutating func _newHTTP2ConnectionEstablished(_ connection: Connection, maxConcurrentStreams: Int) -> EstablishedAction {
             self.failedConsecutiveConnectionAttempts = 0
             self.lastConnectFailure = nil
-            let (index, context) = self.connections.newHTTP2ConnectionEstablished(
-                connection,
-                maxConcurrentStreams: maxConcurrentStreams
-            )
-            return self.nextActionForAvailableConnection(at: index, context: context)
+            if self.connections.hasActiveConnection(for: connection.eventLoop) {
+                guard let (index, _) = self.connections.failConnection(connection.id) else {
+                    preconditionFailure("we have established a new connection that we know nothing about?")
+                }
+                self.connections.removeConnection(at: index)
+                return .init(
+                    request: .none,
+                    connection: .closeConnection(connection, isShutdown: .no)
+                )
+            } else {
+                let (index, context) = self.connections.newHTTP2ConnectionEstablished(
+                    connection,
+                    maxConcurrentStreams: maxConcurrentStreams
+                )
+                return self.nextActionForAvailableConnection(at: index, context: context)
+            }
         }
 
         private mutating func nextActionForAvailableConnection(
@@ -318,8 +315,28 @@ extension HTTPConnectionPool {
         private mutating func nextActionForFailedConnection(at index: Int, on eventLoop: EventLoop) -> Action {
             switch self.state {
             case .running:
-                let hasPendingRequest = !self.requests.isEmpty(for: eventLoop) || !self.requests.isEmpty(for: nil)
-                guard hasPendingRequest else {
+                // we do not know if we have created this connection for a request with a required
+                // event loop or not. However, we do not need this information and can infer
+                // if we need to create a new connection because we will only ever create one connection
+                // per event loop for required event loop requests and only need one connection for
+                // general purpose requests.
+
+                // we need to start a new on connection in two cases:
+                let needGeneralPurposeConnection =
+                    // 1. if we have general purpose requests
+                    !self.requests.isEmpty(for: nil) &&
+                    // and no connection starting or active
+                    !self.connections.hasStartingOrActiveConnection()
+
+                let needRequiredEventLoopConnection =
+                    // 2. or if we have requests for a required event loop
+                    !self.requests.isEmpty(for: eventLoop) &&
+                    // and no connection starting or active for the given event loop
+                    !self.connections.hasStartingOrActiveConnection(for: eventLoop)
+
+                guard needGeneralPurposeConnection || needRequiredEventLoopConnection else {
+                    // otherwise we can remove the connection
+                    self.connections.removeConnection(at: index)
                     return .none
                 }
 
@@ -330,6 +347,7 @@ extension HTTPConnectionPool {
                     request: .none,
                     connection: .createConnection(newConnectionID, on: eventLoop)
                 )
+
             case .shuttingDown(let unclean):
                 assert(self.requests.isEmpty)
                 self.connections.removeConnection(at: index)
