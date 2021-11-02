@@ -216,7 +216,7 @@ extension HTTPConnectionPool {
             self.lastConnectFailure = nil
             if self.connections.hasActiveConnection(for: connection.eventLoop) {
                 guard let (index, _) = self.connections.failConnection(connection.id) else {
-                    preconditionFailure("we connection to a connection which we no nothing about")
+                    preconditionFailure("we have established a new connection that we know nothing about?")
                 }
                 self.connections.removeConnection(at: index)
                 return .init(
