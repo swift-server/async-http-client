@@ -272,6 +272,22 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(.ok, response.status)
     }
 
+    func testGetHTTP2() throws {
+        let localHTTPBin = HTTPBin(.http2(compress: false))
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .createNew,
+            configuration: HTTPClient.Configuration(certificateVerification: .none),
+            backgroundActivityLogger: Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+        )
+        defer {
+            XCTAssertNoThrow(try localClient.syncShutdown())
+            XCTAssertNoThrow(try localHTTPBin.shutdown())
+        }
+
+        let response = try localClient.get(url: "https://localhost:\(localHTTPBin.port)/get").wait()
+        XCTAssertEqual(.ok, response.status)
+    }
+
     func testGetWithDifferentEventLoopBackpressure() throws {
         let request = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "events/10/1")
         let delegate = TestHTTPDelegate(backpressureEventLoop: self.serverGroup.next())

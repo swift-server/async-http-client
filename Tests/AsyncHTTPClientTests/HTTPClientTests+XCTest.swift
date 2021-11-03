@@ -33,6 +33,7 @@ extension HTTPClientTests {
             ("testConvenienceExecuteMethodsOverSocket", testConvenienceExecuteMethodsOverSocket),
             ("testConvenienceExecuteMethodsOverSecureSocket", testConvenienceExecuteMethodsOverSecureSocket),
             ("testGet", testGet),
+            ("testGetHTTP2", testGetHTTP2),
             ("testGetWithDifferentEventLoopBackpressure", testGetWithDifferentEventLoopBackpressure),
             ("testPost", testPost),
             ("testGetHttps", testGetHttps),
