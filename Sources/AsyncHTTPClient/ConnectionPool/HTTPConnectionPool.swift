@@ -448,18 +448,14 @@ extension HTTPConnectionPool: HTTPConnectionRequester {
     }
 
     func http2ConnectionCreated(_ connection: HTTP2Connection, maximumStreams: Int) {
-        preconditionFailure("Did not expect http/2 connections right now.")
-//        let action = self.stateLock.withLock { () -> StateMachine.Action in
-//            if let settings = connection.settings {
-//                return self._state.newHTTP2ConnectionCreated(.http2(connection), settings: settings)
-//            } else {
-//                // immidiate connection closure before we can register with state machine
-//                // is the only reason we don't have settings
-//                struct ImmidiateConnectionClose: Error {}
-//                return self._state.failedToCreateNewConnection(ImmidiateConnectionClose(), connectionID: connection.id)
-//            }
-//        }
-//        self.run(action: action)
+        self.logger.trace("successfully created connection", metadata: [
+            "ahc-connection-id": "\(connection.id)",
+            "ahc-http-version": "http/2",
+            "ahc-max-streams": "\(maximumStreams)",
+        ])
+        self.modifyStateAndRunActions {
+            $0.newHTTP2ConnectionCreated(.http2(connection), maxConcurrentStreams: maximumStreams)
+        }
     }
 
     func failedToCreateHTTPConnection(_ connectionID: HTTPConnectionPool.Connection.ID, error: Error) {
@@ -497,27 +493,44 @@ extension HTTPConnectionPool: HTTP1ConnectionDelegate {
 
 extension HTTPConnectionPool: HTTP2ConnectionDelegate {
     func http2Connection(_ connection: HTTP2Connection, newMaxStreamSetting: Int) {
-        // ignore for now
+        self.logger.debug("new max stream setting", metadata: [
+            "ahc-connection-id": "\(connection.id)",
+            "ahc-http-version": "http/2",
+            "ahc-max-streams": "\(newMaxStreamSetting)",
+        ])
+        self.modifyStateAndRunActions {
+            $0.newHTTP2MaxConcurrentStreamsReceived(connection.id, newMaxStreams: newMaxStreamSetting)
+        }
     }
 
-    func http2ConnectionGoAwayReceived(_: HTTP2Connection) {
-        // ignore for now
+    func http2ConnectionGoAwayReceived(_ connection: HTTP2Connection) {
+        self.logger.debug("connection go away received", metadata: [
+            "ahc-connection-id": "\(connection.id)",
+            "ahc-http-version": "http/2",
+        ])
+        self.modifyStateAndRunActions {
+            $0.http2ConnectionGoAwayReceived(connection.id)
+        }
     }
 
-    func http2ConnectionClosed(_: HTTP2Connection) {
-        // ignore for now
-//        let action = self.stateLock.withLock {
-//            self._state.connectionClosed(connection.id)
-//        }
-//        self.run(action: action)
+    func http2ConnectionClosed(_ connection: HTTP2Connection) {
+        self.logger.debug("connection closed", metadata: [
+            "ahc-connection-id": "\(connection.id)",
+            "ahc-http-version": "http/2",
+        ])
+        self.modifyStateAndRunActions {
+            $0.http2ConnectionClosed(connection.id)
+        }
     }
 
     func http2ConnectionStreamClosed(_ connection: HTTP2Connection, availableStreams: Int) {
-        // ignore for now
-//        let action = self.stateLock.withLock {
-//            self._state.http2ConnectionStreamClosed(connection.id, availableStreams: availableStreams)
-//        }
-//        self.run(action: action)
+        self.logger.trace("stream closed", metadata: [
+            "ahc-connection-id": "\(connection.id)",
+            "ahc-http-version": "http/2",
+        ])
+        self.modifyStateAndRunActions {
+            $0.http2ConnectionStreamClosed(connection.id)
+        }
     }
 }
 
