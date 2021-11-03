@@ -892,7 +892,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             XCTAssertNoThrow(try connections.createConnection(connID, on: el))
             XCTAssertNoThrow(try queuer.queue(mockRequest, id: request.id))
         }
-
+        
+        // fail the two connections for el2
         for connectionID in connectionIDs.dropFirst() {
             struct SomeError: Error {}
             XCTAssertNoThrow(try connections.failConnectionCreation(connectionID))
@@ -907,6 +908,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let http2ConnID2 = connectionIDs[1]
         let http2ConnID3 = connectionIDs[2]
 
+        // let the first connection on el1 succeed as a http2 connection
         let http2Conn1: HTTPConnectionPool.Connection = .__testOnly_connection(id: http2ConnID1, eventLoop: el1)
         XCTAssertNoThrow(try connections.succeedConnectionCreationHTTP2(http2ConnID1, maxConcurrentStreams: 10))
         let migrationAction1 = state.newHTTP2ConnectionCreated(http2Conn1, maxConcurrentStreams: 10)
@@ -923,7 +925,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         // we now have 1 active connection on el1 and 2 backing off connections on el2
         // with 2 queued requests with a requirement to be executed on el2
 
-        // if the backoff time fires for a connection on el2, we should immediately start a new connection
+        // if the backoff timer fires for a connection on el2, we should immediately start a new connection
         XCTAssertNoThrow(try connections.connectionBackoffTimerDone(http2ConnID2))
         let action2 = state.connectionCreationBackoffDone(http2ConnID2)
         XCTAssertEqual(action2.request, .none)
