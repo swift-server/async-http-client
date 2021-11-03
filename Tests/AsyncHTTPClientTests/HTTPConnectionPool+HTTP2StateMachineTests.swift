@@ -943,4 +943,149 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         XCTAssertEqual(action3.request, .none)
         XCTAssertEqual(action3.connection, .none)
     }
+
+    func testMaxConcurrentStreamsIsRespected() {
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
+
+        guard var (connections, state) = try? MockConnectionPool.http2(elg: elg, maxConcurrentStreams: 100) else {
+            return XCTFail("Test setup failed")
+        }
+
+        let generalPurposeConnection = connections.randomParkedConnection()!
+        var queuer = MockRequestQueuer()
+
+        // schedule 1000 requests on the pool. The first 100 will be executed right away. All others
+        // shall be queued.
+        for i in 0..<1000 {
+            let requestEL = elg.next()
+            let mockRequest = MockHTTPRequest(eventLoop: requestEL)
+            let request = HTTPConnectionPool.Request(mockRequest)
+
+            let executeAction = state.executeRequest(request)
+            switch i {
+            case 0:
+                XCTAssertEqual(executeAction.connection, .cancelTimeoutTimer(generalPurposeConnection.id))
+                XCTAssertNoThrow(try connections.activateConnection(generalPurposeConnection.id))
+                XCTAssertEqual(executeAction.request, .executeRequest(request, generalPurposeConnection, cancelTimeout: false))
+                XCTAssertNoThrow(try connections.execute(mockRequest, on: generalPurposeConnection))
+            case 1..<100:
+                XCTAssertEqual(executeAction.request, .executeRequest(request, generalPurposeConnection, cancelTimeout: false))
+                XCTAssertEqual(executeAction.connection, .none)
+                XCTAssertNoThrow(try connections.execute(mockRequest, on: generalPurposeConnection))
+            case 100..<1000:
+                XCTAssertEqual(executeAction.request, .scheduleRequestTimeout(for: request, on: requestEL))
+                XCTAssertEqual(executeAction.connection, .none)
+                XCTAssertNoThrow(try queuer.queue(mockRequest, id: request.id))
+            default:
+                XCTFail("Unexpected")
+            }
+        }
+
+        // let's end processing 500 requests. For every finished request, we will execute another one
+        // right away
+        while queuer.count > 500 {
+            XCTAssertNoThrow(try connections.finishExecution(generalPurposeConnection.id))
+            let finishAction = state.http2ConnectionStreamClosed(generalPurposeConnection.id)
+            XCTAssertEqual(finishAction.connection, .none)
+            guard case .executeRequestsAndCancelTimeouts(let requests, generalPurposeConnection) = finishAction.request else {
+                return XCTFail("Unexpected request action: \(finishAction.request)")
+            }
+            guard requests.count == 1, let request = requests.first else {
+                return XCTFail("Expected to get exactly one request!")
+            }
+            let mockRequest = request.__testOnly_wrapped_request()
+            XCTAssertNoThrow(try queuer.get(request.id, request: mockRequest))
+            XCTAssertNoThrow(try connections.execute(mockRequest, on: generalPurposeConnection))
+        }
+
+        XCTAssertEqual(queuer.count, 500)
+
+        // Next the server allows for more concurrent streams
+        let newMaxStreams = 200
+        XCTAssertNoThrow(try connections.newHTTP2ConnectionSettingsReceived(generalPurposeConnection.id, maxConcurrentStreams: newMaxStreams))
+        let newMaxStreamsAction = state.newHTTP2MaxConcurrentStreamsReceived(generalPurposeConnection.id, newMaxStreams: newMaxStreams)
+        XCTAssertEqual(newMaxStreamsAction.connection, .none)
+        guard case .executeRequestsAndCancelTimeouts(let requests, generalPurposeConnection) = newMaxStreamsAction.request else {
+            return XCTFail("Unexpected request action after new max concurrent stream setting: \(newMaxStreamsAction.request)")
+        }
+        XCTAssertEqual(requests.count, 100, "Expected to execute 100 more requests")
+        for request in requests {
+            let mockRequest = request.__testOnly_wrapped_request()
+            XCTAssertNoThrow(try connections.execute(mockRequest, on: generalPurposeConnection))
+            XCTAssertNoThrow(try queuer.get(request.id, request: mockRequest))
+        }
+
+        XCTAssertEqual(queuer.count, 400)
+
+        // let's end processing 100 requests. For every finished request, we will execute another one
+        // right away
+        while queuer.count > 300 {
+            XCTAssertNoThrow(try connections.finishExecution(generalPurposeConnection.id))
+            let finishAction = state.http2ConnectionStreamClosed(generalPurposeConnection.id)
+            XCTAssertEqual(finishAction.connection, .none)
+            guard case .executeRequestsAndCancelTimeouts(let requests, generalPurposeConnection) = finishAction.request else {
+                return XCTFail("Unexpected request action: \(finishAction.request)")
+            }
+            guard requests.count == 1, let request = requests.first else {
+                return XCTFail("Expected to get exactly one request!")
+            }
+            let mockRequest = request.__testOnly_wrapped_request()
+            XCTAssertNoThrow(try queuer.get(request.id, request: mockRequest))
+            XCTAssertNoThrow(try connections.execute(mockRequest, on: generalPurposeConnection))
+        }
+
+        // Next the server allows for fewer concurrent streams
+        let fewerMaxStreams = 50
+        XCTAssertNoThrow(try connections.newHTTP2ConnectionSettingsReceived(generalPurposeConnection.id, maxConcurrentStreams: fewerMaxStreams))
+        let fewerMaxStreamsAction = state.newHTTP2MaxConcurrentStreamsReceived(generalPurposeConnection.id, newMaxStreams: fewerMaxStreams)
+        XCTAssertEqual(fewerMaxStreamsAction.connection, .none)
+        XCTAssertEqual(fewerMaxStreamsAction.request, .none)
+
+        // for the next 150 requests that are finished, no new request must be executed.
+        for _ in 0..<150 {
+            XCTAssertNoThrow(try connections.finishExecution(generalPurposeConnection.id))
+            XCTAssertEqual(state.http2ConnectionStreamClosed(generalPurposeConnection.id), .none)
+        }
+
+        XCTAssertEqual(queuer.count, 300)
+
+        // let's end all remaining requests. For every finished request, we will execute another one
+        // right away
+        while queuer.count > 0 {
+            XCTAssertNoThrow(try connections.finishExecution(generalPurposeConnection.id))
+            let finishAction = state.http2ConnectionStreamClosed(generalPurposeConnection.id)
+            XCTAssertEqual(finishAction.connection, .none)
+            guard case .executeRequestsAndCancelTimeouts(let requests, generalPurposeConnection) = finishAction.request else {
+                return XCTFail("Unexpected request action: \(finishAction.request)")
+            }
+            guard requests.count == 1, let request = requests.first else {
+                return XCTFail("Expected to get exactly one request!")
+            }
+            let mockRequest = request.__testOnly_wrapped_request()
+            XCTAssertNoThrow(try queuer.get(request.id, request: mockRequest))
+            XCTAssertNoThrow(try connections.execute(mockRequest, on: generalPurposeConnection))
+        }
+
+        // Now we only need to drain the remaining 50 requests on the connection
+        var timeoutTimerScheduled = false
+        for remaining in stride(from: 50, through: 1, by: -1) {
+            XCTAssertNoThrow(try connections.finishExecution(generalPurposeConnection.id))
+            let finishAction = state.http2ConnectionStreamClosed(generalPurposeConnection.id)
+            XCTAssertEqual(finishAction.request, .none)
+            switch remaining {
+            case 1:
+                timeoutTimerScheduled = true
+                XCTAssertEqual(finishAction.connection, .scheduleTimeoutTimer(generalPurposeConnection.id, on: generalPurposeConnection.eventLoop))
+                XCTAssertNoThrow(try connections.parkConnection(generalPurposeConnection.id))
+            case 2...50:
+                XCTAssertEqual(finishAction.connection, .none)
+            default:
+                XCTFail("Unexpected value: \(remaining)")
+            }
+        }
+        XCTAssertTrue(timeoutTimerScheduled)
+        XCTAssertNotNil(connections.randomParkedConnection())
+        XCTAssertEqual(connections.count, 1)
+    }
 }

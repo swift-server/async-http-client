@@ -34,6 +34,8 @@ struct MockConnectionPool {
         case connectionIsNotStarting
         case connectionIsNotExecuting
         case connectionDoesNotFulfillEventLoopRequirement
+        case connectionIsNotActive
+        case connectionIsNotHTTP2Connection
         case connectionDoesNotHaveHTTP2StreamAvailable
         case connectionBackoffTimerExists
         case connectionBackoffTimerNotFound
@@ -256,6 +258,25 @@ struct MockConnectionPool {
             }
         }
 
+        mutating func newHTTP2SettingsReceived(maxConcurrentStreams newMaxStream: Int) throws {
+            switch self.state {
+            case .starting:
+                throw Errors.connectionIsNotActive
+
+            case .http1:
+                throw Errors.connectionIsNotHTTP2Connection
+
+            case .http2(.inUse(_, let used)):
+                self.state = .http2(.inUse(maxConcurrentStreams: newMaxStream, used: used))
+
+            case .http2(.idle(_, let parked, let lastIdle)):
+                self.state = .http2(.idle(maxConcurrentStreams: newMaxStream, parked: parked, lastIdle: lastIdle))
+
+            case .closed:
+                throw Errors.connectionIsClosed
+            }
+        }
+
         mutating func close() throws {
             switch self.state {
             case .starting:
@@ -376,6 +397,19 @@ struct MockConnectionPool {
         }
 
         self.backoff.insert(connectionID)
+    }
+
+    mutating func newHTTP2ConnectionSettingsReceived(
+        _ connectionID: Connection.ID,
+        maxConcurrentStreams: Int
+    ) throws -> Connection {
+        guard var connection = self.connections[connectionID] else {
+            throw Errors.connectionNotFound
+        }
+
+        try connection.newHTTP2SettingsReceived(maxConcurrentStreams: maxConcurrentStreams)
+        self.connections[connection.id] = connection
+        return .__testOnly_connection(id: connection.id, eventLoop: connection.eventLoop)
     }
 
     mutating func connectionBackoffTimerDone(_ connectionID: Connection.ID) throws {
@@ -558,6 +592,71 @@ extension MockConnectionPool {
 
             try connections.parkConnection(connection.id)
         }
+
+        return (connections, state)
+    }
+
+    /// Sets up a MockConnectionPool with one established http2 connection
+    static func http2(
+        elg: EventLoopGroup,
+        on eventLoop: EventLoop? = nil,
+        maxConcurrentStreams: Int = 100
+    ) throws -> (Self, HTTPConnectionPool.StateMachine) {
+        var state = HTTPConnectionPool.StateMachine(
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 8
+        )
+        var connections = MockConnectionPool()
+        var queuer = MockRequestQueuer()
+
+        // 1. Schedule one request to create a connection
+
+        let mockRequest = MockHTTPRequest(eventLoop: eventLoop ?? elg.next())
+        let request = HTTPConnectionPool.Request(mockRequest)
+        let executeAction = state.executeRequest(request)
+
+        guard case .scheduleRequestTimeout(request, on: let waitEL) = executeAction.request, mockRequest.eventLoop === waitEL else {
+            throw SetupError.expectedRequestToBeAddedToQueue
+        }
+
+        guard case .createConnection(let connectionID, on: let eventLoop) = executeAction.connection else {
+            throw SetupError.expectedConnectionToBeCreated
+        }
+
+        try connections.createConnection(connectionID, on: eventLoop)
+        try queuer.queue(mockRequest, id: request.id)
+
+        // 2. the connection becomes available
+
+        let newConnection = try connections.succeedConnectionCreationHTTP2(connectionID, maxConcurrentStreams: maxConcurrentStreams)
+        let action = state.newHTTP2ConnectionCreated(newConnection, maxConcurrentStreams: maxConcurrentStreams)
+
+        guard case .executeRequestsAndCancelTimeouts([request], newConnection) = action.request else {
+            throw SetupError.expectedPreviouslyQueuedRequestToBeRunNow
+        }
+
+        guard case .migration(createConnections: let create, closeConnections: [], scheduleTimeout: nil) = action.connection, create.isEmpty else {
+            throw SetupError.expectedNoConnectionAction
+        }
+
+        guard try queuer.get(request.id, request: request.__testOnly_wrapped_request()) === mockRequest else {
+            throw SetupError.expectedPreviouslyQueuedRequestToBeRunNow
+        }
+        try connections.execute(mockRequest, on: newConnection)
+
+        // 3. park connection
+
+        try connections.finishExecution(newConnection.id)
+
+        let expected: HTTPConnectionPool.StateMachine.ConnectionAction = .scheduleTimeoutTimer(
+            newConnection.id,
+            on: newConnection.eventLoop
+        )
+        guard state.http2ConnectionStreamClosed(newConnection.id) == .init(request: .none, connection: expected) else {
+            throw SetupError.expectedConnectionToBeParked
+        }
+
+        try connections.parkConnection(newConnection.id)
 
         return (connections, state)
     }
