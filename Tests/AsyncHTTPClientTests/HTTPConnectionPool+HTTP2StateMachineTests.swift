@@ -892,7 +892,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             XCTAssertNoThrow(try connections.createConnection(connID, on: el))
             XCTAssertNoThrow(try queuer.queue(mockRequest, id: request.id))
         }
-        
+
         // fail the two connections for el2
         for connectionID in connectionIDs.dropFirst() {
             struct SomeError: Error {}
