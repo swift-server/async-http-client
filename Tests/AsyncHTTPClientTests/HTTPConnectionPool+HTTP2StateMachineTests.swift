@@ -869,4 +869,76 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         XCTAssertEqual(releaseAction.request, .none)
         XCTAssertNoThrow(try connections.closeConnection(http2Conn))
     }
+
+    func testConnectionIsImmediatelyCreatedAfterBackoffTimerFires() {
+        let elg = EmbeddedEventLoopGroup(loops: 2)
+        let el1 = elg.next()
+        let el2 = elg.next()
+        var connections = MockConnectionPool()
+        var queuer = MockRequestQueuer()
+        var state = HTTPConnectionPool.StateMachine(idGenerator: .init(), maximumConcurrentHTTP1Connections: 8)
+
+        var connectionIDs: [HTTPConnectionPool.Connection.ID] = []
+        for el in [el1, el2, el2] {
+            let mockRequest = MockHTTPRequest(eventLoop: el, requiresEventLoopForChannel: true)
+            let request = HTTPConnectionPool.Request(mockRequest)
+            let action = state.executeRequest(request)
+            guard case .createConnection(let connID, let eventLoop) = action.connection else {
+                return XCTFail("Unexpected connection action \(action.connection)")
+            }
+            connectionIDs.append(connID)
+            XCTAssertTrue(eventLoop === el)
+            XCTAssertEqual(action.request, .scheduleRequestTimeout(for: request, on: mockRequest.eventLoop))
+            XCTAssertNoThrow(try connections.createConnection(connID, on: el))
+            XCTAssertNoThrow(try queuer.queue(mockRequest, id: request.id))
+        }
+
+        for connectionID in connectionIDs.dropFirst() {
+            struct SomeError: Error {}
+            XCTAssertNoThrow(try connections.failConnectionCreation(connectionID))
+            let action = state.failedToCreateNewConnection(SomeError(), connectionID: connectionID)
+            XCTAssertEqual(action.request, .none)
+            guard case .scheduleBackoffTimer(connectionID, backoff: _, on: _) = action.connection else {
+                return XCTFail("unexpected connection action \(connectionID)")
+            }
+            XCTAssertNoThrow(try connections.startConnectionBackoffTimer(connectionID))
+        }
+        let http2ConnID1 = connectionIDs[0]
+        let http2ConnID2 = connectionIDs[1]
+        let http2ConnID3 = connectionIDs[2]
+
+        let http2Conn1: HTTPConnectionPool.Connection = .__testOnly_connection(id: http2ConnID1, eventLoop: el1)
+        XCTAssertNoThrow(try connections.succeedConnectionCreationHTTP2(http2ConnID1, maxConcurrentStreams: 10))
+        let migrationAction1 = state.newHTTP2ConnectionCreated(http2Conn1, maxConcurrentStreams: 10)
+        guard case .executeRequestsAndCancelTimeouts(let requests, http2Conn1) = migrationAction1.request else {
+            return XCTFail("unexpected request action \(migrationAction1.request)")
+        }
+        XCTAssertEqual(migrationAction1.connection, .migration(createConnections: [], closeConnections: [], scheduleTimeout: nil))
+        XCTAssertEqual(requests.count, 1)
+        for request in requests {
+            XCTAssertNoThrow(try queuer.get(request.id, request: request.__testOnly_wrapped_request()))
+            XCTAssertNoThrow(try connections.execute(request.__testOnly_wrapped_request(), on: http2Conn1))
+        }
+
+        // we now have 1 active connection on el1 and 2 backing off connections on el2
+        // with 2 queued requests with a requirement to be executed on el2
+
+        // if the backoff time fires for a connection on el2, we should immediately start a new connection
+        XCTAssertNoThrow(try connections.connectionBackoffTimerDone(http2ConnID2))
+        let action2 = state.connectionCreationBackoffDone(http2ConnID2)
+        XCTAssertEqual(action2.request, .none)
+        guard case .createConnection(let newHttp2ConnID2, let eventLoop2) = action2.connection else {
+            return XCTFail("Unexpected connection action \(action2.connection)")
+        }
+        XCTAssertTrue(eventLoop2 === el2)
+        XCTAssertNoThrow(try connections.createConnection(newHttp2ConnID2, on: el2))
+
+        // we now have a starting connection for el2 and another one backing off
+
+        // if the backoff timer fires now for a connection on el2, we should *not* start a new connection
+        XCTAssertNoThrow(try connections.connectionBackoffTimerDone(http2ConnID3))
+        let action3 = state.connectionCreationBackoffDone(http2ConnID3)
+        XCTAssertEqual(action3.request, .none)
+        XCTAssertEqual(action3.connection, .none)
+    }
 }

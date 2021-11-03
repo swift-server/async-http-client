@@ -320,7 +320,7 @@ extension HTTPConnectionPool {
                 // if we need to create a new connection because we will only ever create one connection
                 // per event loop for required event loop requests and only need one connection for
                 // general purpose requests.
-                
+
                 // precompute if we have starting or active connections to only iterate once over `self.connections`
                 let startingOrActiveConnection = self.connections.hasAnyStartingOrActiveConnectionAnd(for: eventLoop)
 

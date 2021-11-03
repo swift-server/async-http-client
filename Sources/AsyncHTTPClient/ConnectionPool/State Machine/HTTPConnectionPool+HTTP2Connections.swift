@@ -48,7 +48,7 @@ extension HTTPConnectionPool {
                 return false
             }
         }
-        
+
         var isStartingOrActive: Bool {
             switch self.state {
             case .starting, .active:
@@ -459,7 +459,7 @@ extension HTTPConnectionPool {
         ) -> (onAnyEventLoop: Bool, onSpecifiedEventLoop: Bool) {
             var onAnyEventLoop: Bool = false
             var onSpecifiedEventLoop: Bool = false
-            for connection in connections {
+            for connection in self.connections {
                 guard connection.isStartingOrActive else { continue }
                 onAnyEventLoop = true
                 guard connection.eventLoop === eventLoop else { continue }
