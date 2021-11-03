@@ -49,6 +49,15 @@ extension HTTPConnectionPool {
             }
         }
 
+        var isStartingOrActive: Bool {
+            switch self.state {
+            case .starting, .active:
+                return true
+            case .draining, .backingOff, .closed:
+                return false
+            }
+        }
+
         /// A connection is established and can potentially execute requests if not all streams are leased
         var isActive: Bool {
             switch self.state {
@@ -440,23 +449,25 @@ extension HTTPConnectionPool {
         }
 
         /// used after backoff is done to determine if we need to create a new connection
-        func hasStartingOrActiveConnection() -> Bool {
-            self.connections.contains { connection in
-                connection.canOrWillBeAbleToExecuteRequests
-            }
-        }
-
-        /// used after backoff is done to determine if we need to create a new connection
         /// - Parameters:
         ///   - eventLoop: connection `EventLoop` to search for
-        /// - Returns: true if at least one connection is starting or active for the given `eventLoop`
-        func hasStartingOrActiveConnection(
+        /// - Returns: if we have a starting or active general purpose connection and if we have also one for the given `eventLoop`
+        func backingOffTimerDone(
             for eventLoop: EventLoop
-        ) -> Bool {
-            self.connections.contains { connection in
-                connection.eventLoop === eventLoop &&
-                    connection.canOrWillBeAbleToExecuteRequests
+        ) -> RetryConnectionCreationContext {
+            var hasGeneralPurposeConnection: Bool = false
+            var hasConnectionOnSpecifiedEventLoop: Bool = false
+            for connection in self.connections {
+                guard connection.isStartingOrActive else { continue }
+                hasGeneralPurposeConnection = true
+                guard connection.eventLoop === eventLoop else { continue }
+                hasConnectionOnSpecifiedEventLoop = true
+                break
             }
+            return RetryConnectionCreationContext(
+                hasGeneralPurposeConnection: hasGeneralPurposeConnection,
+                hasConnectionOnSpecifiedEventLoop: hasConnectionOnSpecifiedEventLoop
+            )
         }
 
         mutating func createNewConnection(on eventLoop: EventLoop) -> Connection.ID {
@@ -674,6 +685,14 @@ extension HTTPConnectionPool {
         }
 
         // MARK: Result structs
+
+        struct RetryConnectionCreationContext {
+            /// true if at least one connection is starting or active regardless of the event loop.
+            let hasGeneralPurposeConnection: Bool
+
+            ///  true if at least one connection is starting or active for the given `eventLoop`
+            let hasConnectionOnSpecifiedEventLoop: Bool
+        }
 
         /// Information around a connection which is either in the .active or .draining state.
         struct EstablishedConnectionContext {
