@@ -37,7 +37,7 @@ final class HTTP2Connection {
 
     enum State {
         case initialized
-        case starting(EventLoopPromise<Void>)
+        case starting(EventLoopPromise<Int>)
         case active(maxStreams: Int)
         case closing
         case closed
@@ -117,9 +117,9 @@ final class HTTP2Connection {
         delegate: HTTP2ConnectionDelegate,
         configuration: HTTPClient.Configuration,
         logger: Logger
-    ) -> EventLoopFuture<HTTP2Connection> {
+    ) -> EventLoopFuture<(HTTP2Connection, Int)> {
         let connection = HTTP2Connection(channel: channel, connectionID: connectionID, delegate: delegate, logger: logger)
-        return connection.start().map { _ in connection }
+        return connection.start().map { maxStreams in (connection, maxStreams) }
     }
 
     func executeRequest(_ request: HTTPExecutableRequest) {
@@ -154,10 +154,10 @@ final class HTTP2Connection {
         return promise.futureResult
     }
 
-    private func start() -> EventLoopFuture<Void> {
+    private func start() -> EventLoopFuture<Int> {
         self.channel.eventLoop.assertInEventLoop()
 
-        let readyToAcceptConnectionsPromise = self.channel.eventLoop.makePromise(of: Void.self)
+        let readyToAcceptConnectionsPromise = self.channel.eventLoop.makePromise(of: Int.self)
 
         self.state = .starting(readyToAcceptConnectionsPromise)
         self.channel.closeFuture.whenComplete { _ in
@@ -266,7 +266,7 @@ extension HTTP2Connection: HTTP2IdleHandlerDelegate {
 
         case .starting(let promise):
             self.state = .active(maxStreams: maxStreams)
-            promise.succeed(())
+            promise.succeed(maxStreams)
 
         case .active:
             self.state = .active(maxStreams: maxStreams)

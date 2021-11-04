@@ -86,8 +86,8 @@ extension HTTPConnectionPool.ConnectionFactory {
                     logger: logger
                 ).whenComplete { result in
                     switch result {
-                    case .success(let connection):
-                        requester.http2ConnectionCreated(connection, maximumStreams: 0)
+                    case .success((let connection, let maximumStreams)):
+                        requester.http2ConnectionCreated(connection, maximumStreams: maximumStreams)
                     case .failure(let error):
                         requester.failedToCreateHTTPConnection(connectionID, error: error)
                     }
