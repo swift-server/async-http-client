@@ -116,7 +116,16 @@ final class HTTP1Connection {
 
         do {
             let sync = self.channel.pipeline.syncOperations
-            try sync.addHTTPClientHandlers()
+
+            // We can not use `sync.addHTTPClientHandlers()`, as we want to explicitly set the
+            // `.informationalResponseStrategy` for the decoder.
+            let requestEncoder = HTTPRequestEncoder()
+            let responseDecoder = HTTPResponseDecoder(
+                leftOverBytesStrategy: .dropBytes,
+                informationalResponseStrategy: .forward
+            )
+            try sync.addHandler(requestEncoder)
+            try sync.addHandler(ByteToMessageHandler(responseDecoder))
 
             if case .enabled(let limit) = configuration.decompression {
                 let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
