@@ -430,7 +430,7 @@ class HTTP1ConnectionTests: XCTestCase {
         XCTAssertEqual(response?.body, nil)
     }
 
-    func testConnectionDoesntCrashAfterConnectionCloseAndEarlyHints() {
+    func testConnectionDropAfterEarlyHints() {
         let embedded = EmbeddedChannel()
         let logger = Logger(label: "test.http1.connection")
 
@@ -481,25 +481,15 @@ class HTTP1ConnectionTests: XCTestCase {
         XCTAssertEqual(connectionDelegate.hitConnectionReleased, 0)
         XCTAssertNoThrow(try embedded.writeInbound(ByteBuffer(string: responseString)))
 
-        if !embedded.isActive {
-            // behavior before https://github.com/apple/swift-nio/pull/1984
-            embedded.embeddedEventLoop.run() // tick once to run futures.
-            XCTAssertEqual(connectionDelegate.hitConnectionClosed, 1)
-            XCTAssertEqual(connectionDelegate.hitConnectionReleased, 0)
+        XCTAssertTrue(embedded.isActive, "The connection remains active after the informational response head")
+        XCTAssertNoThrow(try embedded.close().wait(), "the connection was closed")
 
-            XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
-                XCTAssertEqual($0 as? HTTPClientError, .httpEndReceivedAfterHeadWith1xx)
-            }
-        } else {
-            // behavior after https://github.com/apple/swift-nio/pull/1984
-            XCTAssertNoThrow(try embedded.close().wait())
-            embedded.embeddedEventLoop.run() // tick once to run futures.
-            XCTAssertEqual(connectionDelegate.hitConnectionClosed, 1)
-            XCTAssertEqual(connectionDelegate.hitConnectionReleased, 0)
+        embedded.embeddedEventLoop.run() // tick once to run futures.
+        XCTAssertEqual(connectionDelegate.hitConnectionClosed, 1)
+        XCTAssertEqual(connectionDelegate.hitConnectionReleased, 0)
 
-            XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
-                XCTAssertEqual($0 as? HTTPClientError, .remoteConnectionClosed)
-            }
+        XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .remoteConnectionClosed)
         }
     }
 

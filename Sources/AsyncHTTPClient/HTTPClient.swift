@@ -996,5 +996,6 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     ///  - Tasks are not processed fast enough on the existing connections, to process all waiters in time
     public static let getConnectionFromPoolTimeout = HTTPClientError(code: .getConnectionFromPoolTimeout)
 
+    @available(*, deprecated, message: "AsyncHTTPClient now correctly supports informational headers. For this reason `httpEndReceivedAfterHeadWith1xx` will not be thrown anymore.")
     public static let httpEndReceivedAfterHeadWith1xx = HTTPClientError(code: .httpEndReceivedAfterHeadWith1xx)
 }

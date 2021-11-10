@@ -529,13 +529,7 @@ struct HTTPRequestStateMachine {
             preconditionFailure("How can we receive a response head before sending a request head ourselves. Invalid state: \(self.state)")
 
         case .running(_, .waitingForHead):
-            // If we receive a http response header with a status code of 1xx, we ignore the header
-            // except for 101, which we consume.
-            // If the remote closes the connection after sending a 1xx (not 101) response head, we
-            // will receive a response end from the parser. We need to protect against this case.
-            let error = HTTPClientError.httpEndReceivedAfterHeadWith1xx
-            self.state = .failed(error)
-            return .failRequest(error, .close)
+            preconditionFailure("How can we receive a response end, if we haven't a received a head. Invalid state: \(self.state)")
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, let producerState), .receivingBody(let head, var responseStreamState))
             where head.status.code < 300:
