@@ -12,8 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// TODO: remove @testable once we officially support HTTP/2
-@testable import AsyncHTTPClient // Tests that really need @testable go into HTTP2ClientInternalTests.swift
+/* NOT @testable */ import AsyncHTTPClient // Tests that really need @testable go into HTTP2ClientInternalTests.swift
 #if canImport(Network)
     import Network
 #endif
