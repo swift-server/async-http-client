@@ -49,11 +49,16 @@ func getDefaultEventLoopGroup(numberOfThreads: Int) -> EventLoopGroup {
 class TestHTTPDelegate: HTTPClientResponseDelegate {
     typealias Response = Void
 
-    init(backpressureEventLoop: EventLoop? = nil) {
+    init(
+        backpressureEventLoop: EventLoop? = nil,
+        stateDidChangeCallback: ((State) -> Void)? = nil
+    ) {
         self.backpressureEventLoop = backpressureEventLoop
+        self.stateDidChangeCallback = stateDidChangeCallback
     }
 
     var backpressureEventLoop: EventLoop?
+    var stateDidChangeCallback: ((State) -> Void)?
 
     enum State {
         case idle
@@ -63,7 +68,11 @@ class TestHTTPDelegate: HTTPClientResponseDelegate {
         case error(Error)
     }
 
-    var state = State.idle
+    var state = State.idle {
+        didSet {
+            self.stateDidChangeCallback?(self.state)
+        }
+    }
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         self.state = .head(head)
@@ -803,6 +812,10 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                 let buff = context.channel.allocator.buffer(string: hostValue)
                 builder.add(buff)
                 self.resps.append(builder)
+                return
+            case "/sendheaderandwait":
+                // sends some headers and waits indefinitely afterwards
+                context.writeAndFlush(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
                 return
             case "/wait":
                 return
