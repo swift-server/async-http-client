@@ -813,10 +813,6 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                 builder.add(buff)
                 self.resps.append(builder)
                 return
-            case "/sendheaderandwait":
-                // sends some headers and waits indefinitely afterwards
-                context.writeAndFlush(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
-                return
             case "/wait":
                 return
             case "/close":

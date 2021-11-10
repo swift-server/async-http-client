@@ -19,6 +19,7 @@
 #endif
 import Logging
 import NIOCore
+import NIOHTTP1
 import NIOPosix
 import NIOSSL
 import XCTest
@@ -229,29 +230,23 @@ class HTTP2ClientTests: XCTestCase {
             case .success:
                 XCTFail("Shouldn't succeed")
             case .failure(let error):
-                if let clientError = error as? HTTPClientError, clientError == .cancelled {
-                    continue
-                } else {
-                    XCTFail("Unexpected error: \(error)")
-                }
+                XCTAssertEqual(error as? HTTPClientError, .cancelled)
             }
         }
     }
 
     func testCancelingRunningRequest() {
-        let bin = HTTPBin(.http2(compress: false))
+        let bin = HTTPBin(.http2(compress: false)) { _ in SendHeaderAndWaitChannelHandler() }
         defer { XCTAssertNoThrow(try bin.shutdown()) }
-        let client = self.makeClientWithActiveHTTP2Connection(to: bin)
+        let client = self.makeDefaultHTTPClient()
         defer { XCTAssertNoThrow(try client.syncShutdown()) }
 
         var maybeRequest: HTTPClient.Request?
-        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://localhost:\(bin.port)/sendheaderandwait"))
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://localhost:\(bin.port)"))
         guard let request = maybeRequest else { return }
 
-        var task: HTTPClient.Task<TestHTTPDelegate.Response>!
-        let delegate = TestHTTPDelegate()
-        delegate.stateDidChangeCallback = { state in
-            guard case .head = state else { return }
+        var task: HTTPClient.Task<Void>!
+        let delegate = HeadReceivedCallback { _ in
             // request is definitely running because we just received a head from the server
             task.cancel()
         }
@@ -260,30 +255,26 @@ class HTTP2ClientTests: XCTestCase {
             delegate: delegate
         )
 
-        XCTAssertThrowsError(try task.futureResult.timeout(after: .seconds(2)).wait(), "Should fail") { error in
-            guard case let error = error as? HTTPClientError, error == .cancelled else {
-                return XCTFail("Should fail with cancelled")
-            }
+        XCTAssertThrowsError(try task.futureResult.timeout(after: .seconds(2)).wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .cancelled)
         }
     }
 
     func testStressCancelingRunningRequestFromDifferentThreads() {
-        let bin = HTTPBin(.http2(compress: false))
+        let bin = HTTPBin(.http2(compress: false)) { _ in SendHeaderAndWaitChannelHandler() }
         defer { XCTAssertNoThrow(try bin.shutdown()) }
-        let client = self.makeClientWithActiveHTTP2Connection(to: bin)
+        let client = self.makeDefaultHTTPClient()
         defer { XCTAssertNoThrow(try client.syncShutdown()) }
         let cancelPool = MultiThreadedEventLoopGroup(numberOfThreads: 10)
         defer { XCTAssertNoThrow(try cancelPool.syncShutdownGracefully()) }
 
         var maybeRequest: HTTPClient.Request?
-        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://localhost:\(bin.port)/sendheaderandwait"))
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://localhost:\(bin.port)"))
         guard let request = maybeRequest else { return }
 
         let tasks = (0..<100).map { _ -> HTTPClient.Task<TestHTTPDelegate.Response> in
-            var task: HTTPClient.Task<TestHTTPDelegate.Response>!
-            let delegate = TestHTTPDelegate()
-            delegate.stateDidChangeCallback = { state in
-                guard case .head = state else { return }
+            var task: HTTPClient.Task<Void>!
+            let delegate = HeadReceivedCallback { _ in
                 // request is definitely running because we just received a head from the server
                 cancelPool.next().execute {
                     // canceling from a different thread
@@ -298,17 +289,14 @@ class HTTP2ClientTests: XCTestCase {
         }
 
         for task in tasks {
-            XCTAssertThrowsError(try task.futureResult.timeout(after: .seconds(2)).wait(), "Should fail") { error in
-                guard case let error = error as? HTTPClientError, error == .cancelled else {
-                    return XCTFail("Should fail with cancelled")
-                }
+            XCTAssertThrowsError(try task.futureResult.timeout(after: .seconds(2)).wait()) {
+                XCTAssertEqual($0 as? HTTPClientError, .cancelled)
             }
         }
     }
 
     func testPlatformConnectErrorIsForwardedOnTimeout() {
         let bin = HTTPBin(.http2(compress: false))
-
         let clientGroup = MultiThreadedEventLoopGroup(numberOfThreads: 2)
         let el1 = clientGroup.next()
         let el2 = clientGroup.next()
@@ -365,5 +353,34 @@ class HTTP2ClientTests: XCTestCase {
                 "error should be some platform specific error that the connection is closed/reset by the other side"
             )
         }
+    }
+}
+
+private final class HeadReceivedCallback: HTTPClientResponseDelegate {
+    typealias Response = Void
+    private let didReceiveHeadCallback: (HTTPResponseHead) -> Void
+    init(didReceiveHead: @escaping (HTTPResponseHead) -> Void) {
+        self.didReceiveHeadCallback = didReceiveHead
+    }
+
+    func didReceiveHead(task: HTTPClient.Task<Void>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
+        self.didReceiveHeadCallback(head)
+        return task.eventLoop.makeSucceededVoidFuture()
+    }
+
+    func didFinishRequest(task: HTTPClient.Task<Void>) throws {}
+}
+
+/// sends some headers and waits indefinitely afterwards
+private final class SendHeaderAndWaitChannelHandler: ChannelInboundHandler {
+    typealias InboundIn = HTTPServerRequestPart
+    typealias OutboundOut = HTTPServerResponsePart
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        context.writeAndFlush(wrapOutboundOut(.head(HTTPResponseHead(
+            version: HTTPVersion(major: 1, minor: 1),
+            status: .ok
+        ))
+        ), promise: nil)
     }
 }
