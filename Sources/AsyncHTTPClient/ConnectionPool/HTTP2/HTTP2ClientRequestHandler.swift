@@ -24,7 +24,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
     private let eventLoop: EventLoop
 
-    private var state: HTTPRequestStateMachine = .init(isChannelWritable: false, ignoreUncleanSSLShutdown: false) {
+    private var state: HTTPRequestStateMachine = .init(isChannelWritable: false) {
         willSet {
             self.eventLoop.assertInEventLoop()
         }

@@ -153,8 +153,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
         let action = self.state.runNewRequest(
             head: req.requestHead,
-            metadata: req.requestFramingMetadata,
-            ignoreUncleanSSLShutdown: req.requestOptions.ignoreUncleanSSLShutdown
+            metadata: req.requestFramingMetadata
         )
         self.run(action, context: context)
     }

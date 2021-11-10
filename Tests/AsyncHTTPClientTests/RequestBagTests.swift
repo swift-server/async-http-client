@@ -588,10 +588,9 @@ class MockTaskQueuer: HTTPRequestScheduler {
 }
 
 extension RequestOptions {
-    static func forTests(idleReadTimeout: TimeAmount? = nil, ignoreUncleanSSLShutdown: Bool = false) -> Self {
+    static func forTests(idleReadTimeout: TimeAmount? = nil) -> Self {
         RequestOptions(
-            idleReadTimeout: idleReadTimeout,
-            ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown
+            idleReadTimeout: idleReadTimeout
         )
     }
 }

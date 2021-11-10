@@ -103,11 +103,8 @@ struct HTTPRequestStateMachine {
 
     private var isChannelWritable: Bool
 
-    private let ignoreUncleanSSLShutdown: Bool
-
-    init(isChannelWritable: Bool, ignoreUncleanSSLShutdown: Bool) {
+    init(isChannelWritable: Bool) {
         self.isChannelWritable = isChannelWritable
-        self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
     }
 
     mutating func startRequest(head: HTTPRequestHead, metadata: RequestFramingMetadata) -> Action {
@@ -201,17 +198,37 @@ struct HTTPRequestStateMachine {
             self.state = .failed(error)
             return .failRequest(error, .none)
 
-        case .running(.streaming, .receivingBody),
-             .running(.endSent, .receivingBody)
-                 where error as? NIOSSLError == .uncleanShutdown && self.ignoreUncleanSSLShutdown == true:
+        case .running(.streaming, .waitingForHead),
+             .running(.endSent, .waitingForHead) where error as? NIOSSLError == .uncleanShutdown:
+            // if we received a NIOSSL.uncleanShutdown before we got an answer we should handle
+            // this like a normal connection close. We will receive a call to channelInactive after
+            // this error.
             return .wait
+
+        case .running(.streaming, .receivingBody(let responseHead, _)),
+             .running(.endSent, .receivingBody(let responseHead, _)) where error as? NIOSSLError == .uncleanShutdown:
+
+            // if we have already received the response head, the parser will ensure that we receive
+            // the complete response. we can ignore this error. we might see a HTTPParserError very
+            // soon.
+            if responseHead.headers.contains(name: "content-length") || responseHead.headers.contains(name: "transfer-encoding") {
+                return .wait
+            }
+
+            // if the response is EOF terminated, we need to rely on a clean tls shutdown to be sure
+            // we have received all necessary bytes. For this reason we forward the uncleanShutdown
+            // error to the user.
+            self.state = .failed(error)
+            return .failRequest(error, .close)
 
         case .running:
             self.state = .failed(error)
             return .failRequest(error, .close)
+
         case .finished, .failed:
             // ignore error
             return .wait
+
         case .modifying:
             preconditionFailure("Invalid state: \(self.state)")
         }

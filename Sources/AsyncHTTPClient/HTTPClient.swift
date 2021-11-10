@@ -601,7 +601,11 @@ public class HTTPClient {
         /// Enables automatic body decompression. Supported algorithms are gzip and deflate.
         public var decompression: Decompression
         /// Ignore TLS unclean shutdown error, defaults to `false`.
-        public var ignoreUncleanSSLShutdown: Bool
+        @available(*, deprecated, message: "AsyncHTTPClient now correctly supports handling unexpected SSL connection drops. This property is ignored")
+        public var ignoreUncleanSSLShutdown: Bool {
+            get { false }
+            set {}
+        }
 
         // TODO: make public
         // TODO: set to automatic by default
@@ -645,7 +649,6 @@ public class HTTPClient {
             self.timeout = timeout
             self.connectionPool = connectionPool
             self.proxy = proxy
-            self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
             self.decompression = decompression
             self.httpVersion = httpVersion
         }

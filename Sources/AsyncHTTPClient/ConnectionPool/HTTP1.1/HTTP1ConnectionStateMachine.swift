@@ -156,17 +156,13 @@ struct HTTP1ConnectionStateMachine {
 
     mutating func runNewRequest(
         head: HTTPRequestHead,
-        metadata: RequestFramingMetadata,
-        ignoreUncleanSSLShutdown: Bool
+        metadata: RequestFramingMetadata
     ) -> Action {
         guard case .idle = self.state else {
             preconditionFailure("Invalid state")
         }
 
-        var requestStateMachine = HTTPRequestStateMachine(
-            isChannelWritable: self.isChannelWritable,
-            ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown
-        )
+        var requestStateMachine = HTTPRequestStateMachine(isChannelWritable: self.isChannelWritable)
         let action = requestStateMachine.startRequest(head: head, metadata: metadata)
 
         // by default we assume a persistent connection. however in `requestVerified`, we read the
