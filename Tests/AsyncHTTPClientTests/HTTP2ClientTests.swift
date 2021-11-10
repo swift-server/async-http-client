@@ -24,11 +24,13 @@ import NIOSSL
 import XCTest
 
 class HTTP2ClientTests: XCTestCase {
-    func makeDefaultHTTPClient() -> HTTPClient {
+    func makeDefaultHTTPClient(
+        eventLoopGroupProvider: HTTPClient.EventLoopGroupProvider = .createNew
+    ) -> HTTPClient {
         var tlsConfig = TLSConfiguration.makeClientConfiguration()
         tlsConfig.certificateVerification = .none
         return HTTPClient(
-            eventLoopGroupProvider: .createNew,
+            eventLoopGroupProvider: eventLoopGroupProvider,
             configuration: HTTPClient.Configuration(
                 tlsConfiguration: tlsConfig,
                 httpVersion: .automatic
@@ -38,9 +40,10 @@ class HTTP2ClientTests: XCTestCase {
     }
 
     func makeClientWithActiveHTTP2Connection<RequestHandler>(
-        to bin: HTTPBin<RequestHandler>
+        to bin: HTTPBin<RequestHandler>,
+        eventLoopGroupProvider: HTTPClient.EventLoopGroupProvider = .createNew
     ) -> HTTPClient {
-        let client = self.makeDefaultHTTPClient()
+        let client = self.makeDefaultHTTPClient(eventLoopGroupProvider: eventLoopGroupProvider)
         var response: HTTPClient.Response?
         XCTAssertNoThrow(response = try client.get(url: "https://localhost:\(bin.port)/get").wait())
         XCTAssertEqual(.ok, response?.status)
@@ -202,7 +205,9 @@ class HTTP2ClientTests: XCTestCase {
     func testUncleanShutdownCancelsExecutingAndQueuedTasks() {
         let bin = HTTPBin(.http2(compress: false))
         defer { XCTAssertNoThrow(try bin.shutdown()) }
-        let client = self.makeClientWithActiveHTTP2Connection(to: bin)
+        let clientGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { XCTAssertNoThrow(try clientGroup.syncShutdownGracefully()) }
+        let client = self.makeClientWithActiveHTTP2Connection(to: bin, eventLoopGroupProvider: .shared(clientGroup))
 
         // start 20 requests which are guaranteed to never get any response
         // 10 of them will executed and the other 10 will be queued
@@ -215,7 +220,7 @@ class HTTP2ClientTests: XCTestCase {
 
         var results: [Result<HTTPClient.Response, Error>] = []
         XCTAssertNoThrow(results = try EventLoopFuture
-            .whenAllComplete(responses, on: client.eventLoopGroup.next())
+            .whenAllComplete(responses, on: clientGroup.next())
             .timeout(after: .seconds(2))
             .wait())
 
