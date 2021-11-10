@@ -17,6 +17,7 @@ import Foundation
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
+import NIOHPACK
 import NIOHTTP1
 import NIOHTTP2
 import NIOHTTPCompression
@@ -484,7 +485,11 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
                     // Successful upgrade to HTTP/2. Let the user configure the pipeline.
                     let http2Handler = NIOHTTP2Handler(
                         mode: .server,
-                        initialSettings: NIOHTTP2.nioDefaultSettings
+                        initialSettings: [
+                            // TODO: make max concurrent streams configurable
+                            HTTP2Setting(parameter: .maxConcurrentStreams, value: 10),
+                            HTTP2Setting(parameter: .maxHeaderListSize, value: HPACKDecoder.defaultMaxHeaderListSize),
+                        ]
                     )
                     let multiplexer = HTTP2StreamMultiplexer(
                         mode: .server,

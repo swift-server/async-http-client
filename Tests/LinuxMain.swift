@@ -31,6 +31,7 @@ import XCTest
         testCase(HTTP1ConnectionTests.allTests),
         testCase(HTTP1ProxyConnectHandlerTests.allTests),
         testCase(HTTP2ClientRequestHandlerTests.allTests),
+        testCase(HTTP2ClientTests.allTests),
         testCase(HTTP2ConnectionTests.allTests),
         testCase(HTTP2IdleHandlerTests.allTests),
         testCase(HTTPClientCookieTests.allTests),
