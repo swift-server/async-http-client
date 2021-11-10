@@ -37,6 +37,7 @@ import XCTest
         testCase(HTTPClientCookieTests.allTests),
         testCase(HTTPClientInternalTests.allTests),
         testCase(HTTPClientNIOTSTests.allTests),
+        testCase(HTTPClientReproTests.allTests),
         testCase(HTTPClientSOCKSTests.allTests),
         testCase(HTTPClientTests.allTests),
         testCase(HTTPConnectionPoolTests.allTests),

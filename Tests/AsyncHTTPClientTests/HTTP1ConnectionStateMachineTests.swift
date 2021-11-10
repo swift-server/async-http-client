@@ -265,7 +265,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         XCTAssertEqual(newRequestAction, .sendRequestHead(requestHead, startBody: false))
         let responseHead = HTTPResponseHead(version: .http1_1, status: .init(statusCode: 103, reasonPhrase: "Early Hints"))
         XCTAssertEqual(state.channelRead(.head(responseHead)), .wait)
-        XCTAssertEqual(state.channelRead(.end(nil)), .failRequest(HTTPClientError.httpEndReceivedAfterHeadWith1xx, .close))
+        XCTAssertEqual(state.channelInactive(), .failRequest(HTTPClientError.remoteConnectionClosed, .none))
     }
 }
 

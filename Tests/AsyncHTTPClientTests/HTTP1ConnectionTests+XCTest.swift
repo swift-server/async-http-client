@@ -33,7 +33,7 @@ extension HTTP1ConnectionTests {
             ("testConnectionClosesOnRandomlyAppearingCloseHeader", testConnectionClosesOnRandomlyAppearingCloseHeader),
             ("testConnectionClosesAfterTheRequestWithoutHavingSentAnCloseHeader", testConnectionClosesAfterTheRequestWithoutHavingSentAnCloseHeader),
             ("testConnectionIsClosedAfterSwitchingProtocols", testConnectionIsClosedAfterSwitchingProtocols),
-            ("testConnectionDoesntCrashAfterConnectionCloseAndEarlyHints", testConnectionDoesntCrashAfterConnectionCloseAndEarlyHints),
+            ("testConnectionDropAfterEarlyHints", testConnectionDropAfterEarlyHints),
             ("testConnectionIsClosedIfResponseIsReceivedBeforeRequest", testConnectionIsClosedIfResponseIsReceivedBeforeRequest),
             ("testDoubleHTTPResponseLine", testDoubleHTTPResponseLine),
             ("testDownloadStreamingBackpressure", testDownloadStreamingBackpressure),
