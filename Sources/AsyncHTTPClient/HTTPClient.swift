@@ -619,34 +619,13 @@ public class HTTPClient {
             ignoreUncleanSSLShutdown: Bool = false,
             decompression: Decompression = .disabled
         ) {
-            self.init(
-                tlsConfiguration: tlsConfiguration,
-                redirectConfiguration: redirectConfiguration,
-                timeout: timeout, connectionPool: connectionPool,
-                proxy: proxy,
-                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
-                decompression: decompression,
-                httpVersion: .automatic
-            )
-        }
-
-        internal init(
-            tlsConfiguration: TLSConfiguration? = nil,
-            redirectConfiguration: RedirectConfiguration? = nil,
-            timeout: Timeout = Timeout(),
-            connectionPool: ConnectionPool = ConnectionPool(),
-            proxy: Proxy? = nil,
-            ignoreUncleanSSLShutdown: Bool = false,
-            decompression: Decompression = .disabled,
-            httpVersion: HTTPVersion
-        ) {
             self.tlsConfiguration = tlsConfiguration
             self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
             self.timeout = timeout
             self.connectionPool = connectionPool
             self.proxy = proxy
             self.decompression = decompression
-            self.httpVersion = httpVersion
+            self.httpVersion = .automatic
         }
 
         public init(tlsConfiguration: TLSConfiguration? = nil,

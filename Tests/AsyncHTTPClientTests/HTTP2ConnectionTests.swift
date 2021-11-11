@@ -250,10 +250,12 @@ class TestConnectionCreator {
 
         var tlsConfiguration = TLSConfiguration.makeClientConfiguration()
         tlsConfiguration.certificateVerification = .none
+        var config = HTTPClient.Configuration()
+        config.httpVersion = .automatic
         let factory = HTTPConnectionPool.ConnectionFactory(
             key: .init(request),
             tlsConfiguration: tlsConfiguration,
-            clientConfiguration: .init(httpVersion: .automatic),
+            clientConfiguration: config,
             sslContextCache: .init()
         )
 
@@ -291,10 +293,12 @@ class TestConnectionCreator {
 
         var tlsConfiguration = TLSConfiguration.makeClientConfiguration()
         tlsConfiguration.certificateVerification = .none
+        var config = HTTPClient.Configuration()
+        config.httpVersion = .automatic
         let factory = HTTPConnectionPool.ConnectionFactory(
             key: .init(request),
             tlsConfiguration: tlsConfiguration,
-            clientConfiguration: .init(httpVersion: .automatic),
+            clientConfiguration: config,
             sslContextCache: .init()
         )
 
