@@ -357,7 +357,7 @@ class HTTP2ClientTests: XCTestCase {
                 channel.close()
             }
             .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-            .bind(host: "0.0.0.0", port: serverPort)
+            .bind(host: "127.0.0.1", port: serverPort)
             .wait())
         guard let server = maybeServer else { return }
         defer { XCTAssertNoThrow(try server.close().wait()) }
