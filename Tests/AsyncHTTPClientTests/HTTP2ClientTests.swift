@@ -82,7 +82,7 @@ class HTTP2ClientTests: XCTestCase {
     func testConcurrentRequestsFromDifferentThreads() {
         let bin = HTTPBin(.http2(compress: false))
         defer { XCTAssertNoThrow(try bin.shutdown()) }
-        let client = self.makeClientWithActiveHTTP2Connection(to: bin)
+        let client = self.makeDefaultHTTPClient()
         defer { XCTAssertNoThrow(try client.syncShutdown()) }
         let numberOfWorkers = 20
         let numberOfRequestsPerWorkers = 20
