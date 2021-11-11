@@ -208,6 +208,8 @@ class HTTP2ClientTests: XCTestCase {
         defer { XCTAssertNoThrow(try bin.shutdown()) }
         let clientGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { XCTAssertNoThrow(try clientGroup.syncShutdownGracefully()) }
+        // we need an active connection to guarantee that requests are executed immediately
+        // without waiting for connection establishment
         let client = self.makeClientWithActiveHTTP2Connection(to: bin, eventLoopGroupProvider: .shared(clientGroup))
 
         // start 20 requests which are guaranteed to never get any response
