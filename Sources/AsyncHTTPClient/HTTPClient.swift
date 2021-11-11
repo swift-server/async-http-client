@@ -630,7 +630,7 @@ public class HTTPClient {
             )
         }
 
-        public init(
+        internal init(
             tlsConfiguration: TLSConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
             timeout: Timeout = Timeout(),
