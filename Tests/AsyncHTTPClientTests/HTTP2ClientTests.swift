@@ -27,14 +27,13 @@ class HTTP2ClientTests: XCTestCase {
     func makeDefaultHTTPClient(
         eventLoopGroupProvider: HTTPClient.EventLoopGroupProvider = .createNew
     ) -> HTTPClient {
-        var tlsConfig = TLSConfiguration.makeClientConfiguration()
-        tlsConfig.certificateVerification = .none
+        var config = HTTPClient.Configuration()
+        config.tlsConfiguration = .clientDefault
+        config.tlsConfiguration?.certificateVerification = .none
+        config.httpVersion = .automatic
         return HTTPClient(
             eventLoopGroupProvider: eventLoopGroupProvider,
-            configuration: HTTPClient.Configuration(
-                tlsConfiguration: tlsConfig,
-                httpVersion: .automatic
-            ),
+            configuration: config,
             backgroundActivityLogger: Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
         )
     }
@@ -137,14 +136,13 @@ class HTTP2ClientTests: XCTestCase {
 
         let localHTTPBin = HTTPBin(.http2(compress: false))
         let elg = MultiThreadedEventLoopGroup(numberOfThreads: numberOfWorkers)
-        var tlsConfig = TLSConfiguration.makeClientConfiguration()
-        tlsConfig.certificateVerification = .none
+        var config = HTTPClient.Configuration()
+        config.tlsConfiguration = .clientDefault
+        config.tlsConfiguration?.certificateVerification = .none
+        config.httpVersion = .automatic
         let localClient = HTTPClient(
             eventLoopGroupProvider: .shared(elg),
-            configuration: HTTPClient.Configuration(
-                tlsConfiguration: tlsConfig,
-                httpVersion: .automatic
-            ),
+            configuration: config,
             backgroundActivityLogger: Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
         )
         defer {
@@ -302,15 +300,14 @@ class HTTP2ClientTests: XCTestCase {
         let el1 = clientGroup.next()
         let el2 = clientGroup.next()
         defer { XCTAssertNoThrow(try clientGroup.syncShutdownGracefully()) }
-        var tlsConfig = TLSConfiguration.makeClientConfiguration()
-        tlsConfig.certificateVerification = .none
+        var config = HTTPClient.Configuration()
+        config.tlsConfiguration = .clientDefault
+        config.tlsConfiguration?.certificateVerification = .none
+        config.httpVersion = .automatic
+        config.timeout.connect = .milliseconds(1000)
         let client = HTTPClient(
             eventLoopGroupProvider: .shared(clientGroup),
-            configuration: HTTPClient.Configuration(
-                tlsConfiguration: tlsConfig,
-                timeout: .init(connect: .milliseconds(1000)),
-                httpVersion: .automatic
-            ),
+            configuration: config,
             backgroundActivityLogger: Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
         )
         defer { XCTAssertNoThrow(try client.syncShutdown()) }
