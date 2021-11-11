@@ -49,16 +49,11 @@ func getDefaultEventLoopGroup(numberOfThreads: Int) -> EventLoopGroup {
 class TestHTTPDelegate: HTTPClientResponseDelegate {
     typealias Response = Void
 
-    init(
-        backpressureEventLoop: EventLoop? = nil,
-        stateDidChangeCallback: ((State) -> Void)? = nil
-    ) {
+    init(backpressureEventLoop: EventLoop? = nil) {
         self.backpressureEventLoop = backpressureEventLoop
-        self.stateDidChangeCallback = stateDidChangeCallback
     }
 
     var backpressureEventLoop: EventLoop?
-    var stateDidChangeCallback: ((State) -> Void)?
 
     enum State {
         case idle
@@ -68,11 +63,7 @@ class TestHTTPDelegate: HTTPClientResponseDelegate {
         case error(Error)
     }
 
-    var state = State.idle {
-        didSet {
-            self.stateDidChangeCallback?(self.state)
-        }
-    }
+    var state = State.idle
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         self.state = .head(head)
