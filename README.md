@@ -2,12 +2,12 @@
 This package provides simple HTTP Client library built on top of SwiftNIO.
 
 This library provides the following:
-1. Asynchronous and non-blocking request methods
-2. Simple follow-redirects (cookie headers are dropped)
-3. Streaming body download
-4. TLS support
-5. Cookie parsing (but not storage)
-6. Automatic HTTP/2 over HTTPS (since version 1.7.0)
+- Asynchronous and non-blocking request methods
+- Simple follow-redirects (cookie headers are dropped)
+- Streaming body download
+- TLS support
+- Automatic HTTP/2 over HTTPS (since version 1.7.0)
+- Cookie parsing (but not storage)
 
 ---
 
