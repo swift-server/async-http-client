@@ -18,20 +18,15 @@ struct RequestOptions {
     /// The maximal `TimeAmount` that is allowed to pass between `channelRead`s from the Channel.
     var idleReadTimeout: TimeAmount?
 
-    /// Should `NIOSSLError.uncleanShutdown` be forwarded to the user in HTTP/1 mode.
-    var ignoreUncleanSSLShutdown: Bool
-
-    init(idleReadTimeout: TimeAmount?, ignoreUncleanSSLShutdown: Bool) {
+    init(idleReadTimeout: TimeAmount?) {
         self.idleReadTimeout = idleReadTimeout
-        self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
     }
 }
 
 extension RequestOptions {
     static func fromClientConfiguration(_ configuration: HTTPClient.Configuration) -> Self {
         RequestOptions(
-            idleReadTimeout: configuration.timeout.read,
-            ignoreUncleanSSLShutdown: configuration.ignoreUncleanSSLShutdown
+            idleReadTimeout: configuration.timeout.read
         )
     }
 }

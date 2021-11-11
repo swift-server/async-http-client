@@ -103,11 +103,8 @@ struct HTTPRequestStateMachine {
 
     private var isChannelWritable: Bool
 
-    private let ignoreUncleanSSLShutdown: Bool
-
-    init(isChannelWritable: Bool, ignoreUncleanSSLShutdown: Bool) {
+    init(isChannelWritable: Bool) {
         self.isChannelWritable = isChannelWritable
-        self.ignoreUncleanSSLShutdown = ignoreUncleanSSLShutdown
     }
 
     mutating func startRequest(head: HTTPRequestHead, metadata: RequestFramingMetadata) -> Action {
@@ -201,17 +198,45 @@ struct HTTPRequestStateMachine {
             self.state = .failed(error)
             return .failRequest(error, .none)
 
-        case .running(.streaming, .receivingBody),
-             .running(.endSent, .receivingBody)
-                 where error as? NIOSSLError == .uncleanShutdown && self.ignoreUncleanSSLShutdown == true:
+        case .running(.streaming, .waitingForHead),
+             .running(.endSent, .waitingForHead) where error as? NIOSSLError == .uncleanShutdown:
+            // if we received a NIOSSL.uncleanShutdown before we got an answer we should handle
+            // this like a normal connection close. We will receive a call to channelInactive after
+            // this error.
             return .wait
+
+        case .running(.streaming, .receivingBody(let responseHead, _)),
+             .running(.endSent, .receivingBody(let responseHead, _)) where error as? NIOSSLError == .uncleanShutdown:
+            // This code is only reachable for request and responses, which we expect to have a body.
+            // We depend on logic from the HTTPResponseDecoder here. The decoder will emit an
+            // HTTPResponsePart.end right after the HTTPResponsePart.head, for every request with a
+            // CONNECT or HEAD method and every response with a 1xx, 204 or 304 response status.
+            //
+            // For this reason we only need to check the "content-length" or "transfer-encoding"
+            // headers here to determine if we are potentially in an EOF terminated response.
+
+            if responseHead.headers.contains(name: "content-length") || responseHead.headers.contains(name: "transfer-encoding") {
+                // If we have already received the response head, the parser will ensure that we
+                // receive a complete response, if the content-length or transfer-encoding header
+                // was set. In this case we can ignore the NIOSSLError.uncleanShutdown. We will see
+                // a HTTPParserError very soon.
+                return .wait
+            }
+
+            // If the response is EOF terminated, we need to rely on a clean tls shutdown to be sure
+            // we have received all necessary bytes. For this reason we forward the uncleanShutdown
+            // error to the user.
+            self.state = .failed(error)
+            return .failRequest(error, .close)
 
         case .running:
             self.state = .failed(error)
             return .failRequest(error, .close)
+
         case .finished, .failed:
             // ignore error
             return .wait
+
         case .modifying:
             preconditionFailure("Invalid state: \(self.state)")
         }
