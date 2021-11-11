@@ -379,7 +379,10 @@ private final class SendHeaderAndWaitChannelHandler: ChannelInboundHandler {
     typealias OutboundOut = HTTPServerResponsePart
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-        context.writeAndFlush(wrapOutboundOut(.head(HTTPResponseHead(
+        let requestPart = self.unwrapInboundIn(data)
+        guard case .end = requestPart else { return }
+
+        context.writeAndFlush(self.wrapOutboundOut(.head(HTTPResponseHead(
             version: HTTPVersion(major: 1, minor: 1),
             status: .ok
         ))
