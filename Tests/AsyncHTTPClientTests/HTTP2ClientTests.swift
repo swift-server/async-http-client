@@ -266,6 +266,7 @@ class HTTP2ClientTests: XCTestCase {
         var tlsConfig = TLSConfiguration.makeClientConfiguration()
         tlsConfig.certificateVerification = .none
         config.tlsConfiguration = tlsConfig
+        config.httpVersion = .automatic
         config.timeout.read = .milliseconds(100)
         let client = HTTPClient(
             eventLoopGroupProvider: .createNew,
