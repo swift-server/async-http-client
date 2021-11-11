@@ -31,6 +31,7 @@ extension HTTP2ClientTests {
             ("testConcurrentRequestsWorkWithRequiredEventLoop", testConcurrentRequestsWorkWithRequiredEventLoop),
             ("testUncleanShutdownCancelsExecutingAndQueuedTasks", testUncleanShutdownCancelsExecutingAndQueuedTasks),
             ("testCancelingRunningRequest", testCancelingRunningRequest),
+            ("testReadTimeout", testReadTimeout),
             ("testStressCancelingRunningRequestFromDifferentThreads", testStressCancelingRunningRequestFromDifferentThreads),
             ("testPlatformConnectErrorIsForwardedOnTimeout", testPlatformConnectErrorIsForwardedOnTimeout),
         ]

@@ -259,6 +259,28 @@ class HTTP2ClientTests: XCTestCase {
         }
     }
 
+    func testReadTimeout() {
+        let bin = HTTPBin(.http2(compress: false)) { _ in SendHeaderAndWaitChannelHandler() }
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+        var config = HTTPClient.Configuration()
+        var tlsConfig = TLSConfiguration.makeClientConfiguration()
+        tlsConfig.certificateVerification = .none
+        config.tlsConfiguration = tlsConfig
+        config.httpVersion = .automatic
+        config.timeout.read = .milliseconds(100)
+        let client = HTTPClient(
+            eventLoopGroupProvider: .createNew,
+            configuration: config,
+            backgroundActivityLogger: Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+        )
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        let response = client.get(url: "https://localhost:\(bin.port)")
+        XCTAssertThrowsError(try response.timeout(after: .seconds(2)).wait()) { error in
+            XCTAssertEqual(error as? HTTPClientError, .readTimeout)
+        }
+    }
+
     func testStressCancelingRunningRequestFromDifferentThreads() {
         let bin = HTTPBin(.http2(compress: false)) { _ in SendHeaderAndWaitChannelHandler() }
         defer { XCTAssertNoThrow(try bin.shutdown()) }
