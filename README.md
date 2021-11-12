@@ -2,11 +2,12 @@
 This package provides simple HTTP Client library built on top of SwiftNIO.
 
 This library provides the following:
-1. Asynchronous and non-blocking request methods
-2. Simple follow-redirects (cookie headers are dropped)
-3. Streaming body download
-4. TLS support
-5. Cookie parsing (but not storage)
+- Asynchronous and non-blocking request methods
+- Simple follow-redirects (cookie headers are dropped)
+- Streaming body download
+- TLS support
+- Automatic HTTP/2 over HTTPS (since version 1.7.0)
+- Cookie parsing (but not storage)
 
 ---
 
@@ -216,7 +217,7 @@ httpClient.execute(
 ).whenComplete (...)
 ```
 
-Direct URLs can easily be contructed to be executed in other scenarios:
+Direct URLs can easily be constructed to be executed in other scenarios:
 ```swift
 let socketPathBasedURL = URL(
     httpURLWithSocketPath: "/tmp/myServer.socket", 
@@ -225,6 +226,17 @@ let socketPathBasedURL = URL(
 let secureSocketPathBasedURL = URL(
     httpsURLWithSocketPath: "/tmp/myServer.socket", 
     uri: "/path/to/resource"
+)
+```
+
+### Disabling HTTP/2
+The exclusive use of HTTP/1 is possible by setting `httpVersion` to `.http1Only` on `HTTPClient.Configuration`:
+```swift
+var configuration = HTTPClient.Configuration()
+configuration.httpVersion = .http1Only
+let client = HTTPClient(
+    eventLoopGroupProvider: .createNew,
+    configuration: configuration
 )
 ```
 
