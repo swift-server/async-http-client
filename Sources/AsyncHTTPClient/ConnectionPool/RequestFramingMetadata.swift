@@ -14,7 +14,6 @@
 
 struct RequestFramingMetadata: Hashable {
     enum Body: Hashable {
-        case none
         case stream
         case fixedSize(Int)
     }

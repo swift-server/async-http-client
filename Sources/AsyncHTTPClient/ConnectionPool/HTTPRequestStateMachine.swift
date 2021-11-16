@@ -665,13 +665,15 @@ struct HTTPRequestStateMachine {
         case .stream:
             self.state = .running(.streaming(expectedBodyLength: nil, sentBodyBytes: 0, producer: .producing), .waitingForHead)
             return .sendRequestHead(head, startBody: true)
-        case .fixedSize(let length) where length > 0:
-            self.state = .running(.streaming(expectedBodyLength: length, sentBodyBytes: 0, producer: .producing), .waitingForHead)
-            return .sendRequestHead(head, startBody: true)
-        case .none, .fixedSize:
-            // fallback if fixed size is 0
+        case .fixedSize(0):
+            // no body
             self.state = .running(.endSent, .waitingForHead)
             return .sendRequestHead(head, startBody: false)
+        case .fixedSize(let length):
+            // length is greater than zero and we therefore have a body to send
+            self.state = .running(.streaming(expectedBodyLength: length, sentBodyBytes: 0, producer: .producing), .waitingForHead)
+            return .sendRequestHead(head, startBody: true)
+        
         }
     }
 }
