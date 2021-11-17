@@ -68,7 +68,7 @@ public class HTTPClient {
     let eventLoopGroupProvider: EventLoopGroupProvider
     let configuration: Configuration
     let poolManager: HTTPConnectionPool.Manager
-    var state: State
+    private var state: State
     private let stateLock = Lock()
 
     internal static let loggingDisabled = Logger(label: "AHC-do-not-log", factory: { _ in SwiftLogNoOpLogHandler() })
@@ -118,8 +118,22 @@ public class HTTPClient {
     }
 
     deinit {
-        guard case .shutDown = self.state else {
-            preconditionFailure("Client not shut down before the deinit. Please call client.syncShutdown() when no longer needed.")
+        debugOnly {
+            // We want to crash only in debug mode.
+            switch self.state {
+            case .shutDown:
+                break
+            case .shuttingDown:
+                preconditionFailure("""
+                This state should be totally unreachable. While the HTTPClient is shutting down a \
+                reference cycle should exist, that prevents it from deinit.
+                """)
+            case .upAndRunning:
+                preconditionFailure("""
+                Client not shut down before the deinit. Please call client.syncShutdown() when no \
+                longer needed. Otherwise memory will leak.
+                """)
+            }
         }
     }
 
