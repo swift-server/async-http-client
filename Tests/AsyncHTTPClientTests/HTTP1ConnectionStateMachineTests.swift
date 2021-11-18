@@ -62,7 +62,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelActive(isWritable: true), .fireChannelActive)
 
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
-        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         let newRequestAction = state.runNewRequest(head: requestHead, metadata: metadata)
         XCTAssertEqual(newRequestAction, .sendRequestHead(requestHead, startBody: false))
 
@@ -90,7 +90,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         var state = HTTP1ConnectionStateMachine()
         XCTAssertEqual(state.channelActive(isWritable: true), .fireChannelActive)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/", headers: ["connection": "close"])
-        let metadata = RequestFramingMetadata(connectionClose: true, body: .none)
+        let metadata = RequestFramingMetadata(connectionClose: true, body: .fixedSize(0))
         let newRequestAction = state.runNewRequest(head: requestHead, metadata: metadata)
         XCTAssertEqual(newRequestAction, .sendRequestHead(requestHead, startBody: false))
 
@@ -106,7 +106,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         var state = HTTP1ConnectionStateMachine()
         XCTAssertEqual(state.channelActive(isWritable: true), .fireChannelActive)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
-        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         let newRequestAction = state.runNewRequest(head: requestHead, metadata: metadata)
         XCTAssertEqual(newRequestAction, .sendRequestHead(requestHead, startBody: false))
 
@@ -122,7 +122,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         var state = HTTP1ConnectionStateMachine()
         XCTAssertEqual(state.channelActive(isWritable: true), .fireChannelActive)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
-        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         let newRequestAction = state.runNewRequest(head: requestHead, metadata: metadata)
         XCTAssertEqual(newRequestAction, .sendRequestHead(requestHead, startBody: false))
 
@@ -139,7 +139,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelActive(isWritable: false), .fireChannelActive)
         XCTAssertEqual(state.writabilityChanged(writable: true), .wait)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
-        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         let newRequestAction = state.runNewRequest(head: requestHead, metadata: metadata)
         XCTAssertEqual(newRequestAction, .sendRequestHead(requestHead, startBody: false))
 
@@ -168,7 +168,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelActive(isWritable: true), .fireChannelActive)
 
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
-        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         let newRequestAction = state.runNewRequest(head: requestHead, metadata: metadata)
         XCTAssertEqual(newRequestAction, .sendRequestHead(requestHead, startBody: false))
 
@@ -233,7 +233,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         var state = HTTP1ConnectionStateMachine()
         XCTAssertEqual(state.channelActive(isWritable: true), .fireChannelActive)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
-        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         let newRequestAction = state.runNewRequest(head: requestHead, metadata: metadata)
         XCTAssertEqual(newRequestAction, .sendRequestHead(requestHead, startBody: false))
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
@@ -248,7 +248,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         var state = HTTP1ConnectionStateMachine()
         XCTAssertEqual(state.channelActive(isWritable: true), .fireChannelActive)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
-        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         let newRequestAction = state.runNewRequest(head: requestHead, metadata: metadata)
         XCTAssertEqual(newRequestAction, .sendRequestHead(requestHead, startBody: false))
         let responseHead = HTTPResponseHead(version: .http1_1, status: .switchingProtocols)
@@ -260,7 +260,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         var state = HTTP1ConnectionStateMachine()
         XCTAssertEqual(state.channelActive(isWritable: true), .fireChannelActive)
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
-        let metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         let newRequestAction = state.runNewRequest(head: requestHead, metadata: metadata)
         XCTAssertEqual(newRequestAction, .sendRequestHead(requestHead, startBody: false))
         let responseHead = HTTPResponseHead(version: .http1_1, status: .init(statusCode: 103, reasonPhrase: "Early Hints"))

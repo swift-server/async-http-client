@@ -17,7 +17,7 @@ import NIOHTTP1
 
 extension HTTPHeaders {
     mutating func validate(method: HTTPMethod, body: HTTPClient.Body?) throws -> RequestFramingMetadata {
-        var metadata = RequestFramingMetadata(connectionClose: false, body: .none)
+        var metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
 
         if self[canonicalForm: "connection"].lazy.map({ $0.lowercased() }).contains("close") {
             metadata.connectionClose = true
