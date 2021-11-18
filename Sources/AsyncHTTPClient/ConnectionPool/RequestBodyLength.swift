@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 enum RequestBodyLength: Equatable {
-    /// size of the reuqest body is not known before starting the request
+    /// size of the request body is not known before starting the request
     case dynamic
     /// size of the request body is fixed and exactly `length` bytes
     case fixed(length: Int)
