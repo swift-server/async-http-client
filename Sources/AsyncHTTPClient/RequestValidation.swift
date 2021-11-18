@@ -16,32 +16,32 @@ import NIOCore
 import NIOHTTP1
 
 extension HTTPHeaders {
-    mutating func validate(method: HTTPMethod, body: HTTPClient.Body?) throws -> RequestFramingMetadata {
-        var metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
+    mutating func validateAndFixTransportFraming(
+        method: HTTPMethod,
+        bodyLength: RequestBodyLength
+    ) throws -> RequestFramingMetadata {
+        let contentLength = self.first(name: "Content-Length")
+        let encodings = self[canonicalForm: "Transfer-Encoding"]
 
-        if self[canonicalForm: "connection"].lazy.map({ $0.lowercased() }).contains("close") {
-            metadata.connectionClose = true
-        }
-
-        // validate transfer encoding and content length (https://tools.ietf.org/html/rfc7230#section-3.3.1)
-        if self.contains(name: "Transfer-Encoding"), self.contains(name: "Content-Length") {
+        // "Transfer-Encoding" and "Content-Length" are not allowed to present at the same time (https://tools.ietf.org/html/rfc7230#section-3.3.1)
+        guard encodings.isEmpty || contentLength == nil else {
             throw HTTPClientError.incompatibleHeaders
         }
 
-        var transferEncoding: String?
-        var contentLength: Int?
-        let encodings = self[canonicalForm: "Transfer-Encoding"].map { $0.lowercased() }
+        try self.validateFieldNames()
+        try Self.validateTransferEncoding(encodings)
 
-        guard !encodings.contains("identity") else {
-            throw HTTPClientError.identityCodingIncorrectlyPresent
+        if contentLength != nil {
+            self.remove(name: "Content-Length")
+        }
+        if !encodings.isEmpty {
+            self.remove(name: "Transfer-Encoding")
         }
 
-        self.remove(name: "Transfer-Encoding")
+        let connectionClose = self[canonicalForm: "connection"].lazy.map { $0.lowercased() }.contains("close")
 
-        try self.validateFieldNames()
-
-        guard let body = body else {
-            self.remove(name: "Content-Length")
+        switch bodyLength {
+        case .fixed(0):
             // if we don't have a body we might not need to send the Content-Length field
             // https://tools.ietf.org/html/rfc7230#section-3.3.2
             switch method {
@@ -49,60 +49,46 @@ extension HTTPHeaders {
                 // A user agent SHOULD NOT send a Content-Length header field when the request
                 // message does not contain a payload body and the method semantics do not
                 // anticipate such a body.
-                return metadata
+                break
             default:
                 // A user agent SHOULD send a Content-Length in a request message when
                 // no Transfer-Encoding is sent and the request method defines a meaning
                 // for an enclosed payload body.
                 self.add(name: "Content-Length", value: "0")
-                return metadata
             }
-        }
-
-        if case .TRACE = method {
-            // A client MUST NOT send a message body in a TRACE request.
-            // https://tools.ietf.org/html/rfc7230#section-4.3.8
-            throw HTTPClientError.traceRequestWithBody
-        }
-
-        guard (encodings.lazy.filter { $0 == "chunked" }.count <= 1) else {
-            throw HTTPClientError.chunkedSpecifiedMultipleTimes
-        }
-
-        if encodings.isEmpty {
-            if let length = body.length {
-                self.remove(name: "Content-Length")
-                contentLength = length
-            } else if !self.contains(name: "Content-Length") {
-                transferEncoding = "chunked"
+            return .init(connectionClose: connectionClose, body: .fixedSize(0))
+        case .fixed(let length):
+            if case .TRACE = method {
+                // A client MUST NOT send a message body in a TRACE request.
+                // https://tools.ietf.org/html/rfc7230#section-4.3.8
+                throw HTTPClientError.traceRequestWithBody
             }
-        } else {
-            self.remove(name: "Content-Length")
-
-            transferEncoding = encodings.joined(separator: ", ")
-            if !encodings.contains("chunked") {
-                guard let length = body.length else {
-                    throw HTTPClientError.contentLengthMissing
-                }
-                contentLength = length
+            if encodings.isEmpty {
+                self.add(name: "Content-Length", value: String(length))
+                return .init(connectionClose: connectionClose, body: .fixedSize(length))
+            } else {
+                self.add(name: "Transfer-Encoding", value: encodings.joined(separator: ", "))
+                return .init(connectionClose: connectionClose, body: .stream)
             }
-        }
+        case .dynamic:
+            if case .TRACE = method {
+                // A client MUST NOT send a message body in a TRACE request.
+                // https://tools.ietf.org/html/rfc7230#section-4.3.8
+                throw HTTPClientError.traceRequestWithBody
+            }
 
-        // add headers if required
-        if let enc = transferEncoding {
-            self.add(name: "Transfer-Encoding", value: enc)
-            metadata.body = .stream
-        } else if let length = contentLength {
-            // A sender MUST NOT send a Content-Length header field in any message
-            // that contains a Transfer-Encoding header field.
-            self.add(name: "Content-Length", value: String(length))
-            metadata.body = .fixedSize(length)
-        }
+            if encodings.isEmpty && contentLength == nil {
+                // if a user forgot to specify a Content-Length and Transfer-Encoding, we will set it for them
+                self.add(name: "Transfer-Encoding", value: "chunked")
+            } else {
+                self.add(name: "Transfer-Encoding", value: encodings.joined(separator: ", "))
+            }
 
-        return metadata
+            return .init(connectionClose: connectionClose, body: .stream)
+        }
     }
 
-    private func validateFieldNames() throws {
+    func validateFieldNames() throws {
         let invalidFieldNames = self.compactMap { (name, _) -> String? in
             let satisfy = name.utf8.allSatisfy { (char) -> Bool in
                 switch char {
@@ -135,6 +121,35 @@ extension HTTPHeaders {
 
         guard invalidFieldNames.count == 0 else {
             throw HTTPClientError.invalidHeaderFieldNames(invalidFieldNames)
+        }
+    }
+
+    static func validateTransferEncoding<Encodings>(
+        _ encodings: Encodings
+    ) throws where Encodings: Sequence, Encodings.Element: StringProtocol {
+        let encodings = encodings.map { $0.lowercased() }
+
+        guard !encodings.contains("identity") else {
+            throw HTTPClientError.identityCodingIncorrectlyPresent
+        }
+
+        // If `Transfer-Encoding` is specified, `chunked` needs to be the last encoding and should not be specified multiple times
+        // https://datatracker.ietf.org/doc/html/rfc7230#section-3.3.1
+        let chunkedEncodingCount = encodings.lazy.filter { $0 == "chunked" }.count
+        switch chunkedEncodingCount {
+        case 0:
+            if !encodings.isEmpty {
+                throw HTTPClientError.transferEncodingSpecifiedButChunkedIsNotTheFinalEncoding
+            }
+        case 1:
+            guard encodings.last == "chunked" else {
+                throw HTTPClientError.transferEncodingSpecifiedButChunkedIsNotTheFinalEncoding
+            }
+        case 2...:
+            throw HTTPClientError.chunkedSpecifiedMultipleTimes
+        default:
+            // unreachable because `chunkedEncodingCount` is guaranteed to be positive
+            preconditionFailure()
         }
     }
 }

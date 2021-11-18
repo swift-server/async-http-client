@@ -884,6 +884,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case cancelled
         case identityCodingIncorrectlyPresent
         case chunkedSpecifiedMultipleTimes
+        case transferEncodingSpecifiedButChunkedIsNotTheFinalEncoding
         case invalidProxyResponse
         case contentLengthMissing
         case proxyAuthenticationRequired
@@ -938,6 +939,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let identityCodingIncorrectlyPresent = HTTPClientError(code: .identityCodingIncorrectlyPresent)
     /// Request contains multiple chunks definitions.
     public static let chunkedSpecifiedMultipleTimes = HTTPClientError(code: .chunkedSpecifiedMultipleTimes)
+    /// Request specifies `Transfer-Encoding` but `chunked` is not the final encoding
+    public static let transferEncodingSpecifiedButChunkedIsNotTheFinalEncoding = HTTPClientError(code: .transferEncodingSpecifiedButChunkedIsNotTheFinalEncoding)
     /// Proxy response was invalid.
     public static let invalidProxyResponse = HTTPClientError(code: .invalidProxyResponse)
     /// Request does not contain `Content-Length` header.

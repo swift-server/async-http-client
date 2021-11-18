@@ -43,6 +43,11 @@ extension RequestValidationTests {
             ("testBothHeadersNoBody", testBothHeadersNoBody),
             ("testBothHeadersHasBody", testBothHeadersHasBody),
             ("testHostHeaderIsSetCorrectlyInCreateRequestHead", testHostHeaderIsSetCorrectlyInCreateRequestHead),
+            ("testTraceMethodIsNotAllowedToHaveAFixedLengthBody", testTraceMethodIsNotAllowedToHaveAFixedLengthBody),
+            ("testTraceMethodIsNotAllowedToHaveADynamicLengthBody", testTraceMethodIsNotAllowedToHaveADynamicLengthBody),
+            ("testTransferEncodingsArePreservedIfBodyLengthIsFixed", testTransferEncodingsArePreservedIfBodyLengthIsFixed),
+            ("testTransferEncodingsArePreservedIfBodyLengthIsDynamic", testTransferEncodingsArePreservedIfBodyLengthIsDynamic),
+            ("testTransferEncodingValidation", testTransferEncodingValidation),
         ]
     }
 }
