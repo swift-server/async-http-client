@@ -673,7 +673,6 @@ struct HTTPRequestStateMachine {
             // length is greater than zero and we therefore have a body to send
             self.state = .running(.streaming(expectedBodyLength: length, sentBodyBytes: 0, producer: .producing), .waitingForHead)
             return .sendRequestHead(head, startBody: true)
-        
         }
     }
 }
