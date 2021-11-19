@@ -215,6 +215,14 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNil(url10)
     }
 
+    func testBadUnixWithBaseURL() {
+        let badUnixBaseURL = URL(string: "/foo", relativeTo: URL(string: "unix:")!)!
+        XCTAssertEqual(badUnixBaseURL.baseURL?.path, "")
+        XCTAssertThrowsError(try Request(url: badUnixBaseURL), "should throw") { error in
+            XCTAssertEqual(error as! HTTPClientError, HTTPClientError.missingSocketPath)
+        }
+    }
+
     func testConvenienceExecuteMethods() throws {
         XCTAssertNoThrow(XCTAssertEqual(["GET"[...]],
                                         try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))

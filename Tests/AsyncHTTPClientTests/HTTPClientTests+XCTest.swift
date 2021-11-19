@@ -29,6 +29,7 @@ extension HTTPClientTests {
             ("testBadRequestURI", testBadRequestURI),
             ("testSchemaCasing", testSchemaCasing),
             ("testURLSocketPathInitializers", testURLSocketPathInitializers),
+            ("testBadUnixWithBaseURL", testBadUnixWithBaseURL),
             ("testConvenienceExecuteMethods", testConvenienceExecuteMethods),
             ("testConvenienceExecuteMethodsOverSocket", testConvenienceExecuteMethodsOverSocket),
             ("testConvenienceExecuteMethodsOverSecureSocket", testConvenienceExecuteMethodsOverSecureSocket),
