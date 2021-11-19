@@ -28,6 +28,31 @@ extension HTTPConnectionPool {
             case shutDown
         }
 
+        static func migrateFromHTTP1(
+            idGenerator: Connection.ID.Generator,
+            http1Connections: HTTP1Connections,
+            http2Connections: HTTP2Connections,
+            requests: RequestQueue,
+            newHTTP2Connection: Connection,
+            maxConcurrentStreams: Int
+        ) -> (Self, Action) {
+            var http2StateMachine = HTTP2StateMachine(
+                idGenerator: idGenerator,
+                // To reduce allocations we set `maximumConcurrentHTTP1Connections` to `0`, because
+                // `.migrateFromHTTP1(...)` will replace the `http1Connections` struct anyway
+                maximumConcurrentHTTP1Connections: 0
+            )
+            let migrationAction = http2StateMachine.migrateFromHTTP1(
+                http1Connections: http1Connections,
+                http2Connections: http2Connections,
+                requests: requests,
+                newHTTP2Connection: newHTTP2Connection,
+                maxConcurrentStreams: maxConcurrentStreams
+            )
+
+            return (http2StateMachine, migrationAction)
+        }
+
         private var lastConnectFailure: Error?
         private var failedConsecutiveConnectionAttempts = 0
 
