@@ -523,9 +523,14 @@ extension HTTPConnectionPool {
         /// Sets the connection with the given `connectionId` to the draining state.
         /// - Returns: the `EventLoop` to create a new connection on if applicable
         /// - Precondition: connection with given `connectionId` must be either `.active` or already in the `.draining` state
-        mutating func goAwayReceived(_ connectionID: Connection.ID) -> GoAwayContext {
+        mutating func goAwayReceived(_ connectionID: Connection.ID) -> GoAwayContext? {
             guard let index = self.connections.firstIndex(where: { $0.connectionID == connectionID }) else {
-                preconditionFailure("go away recieved for a connection that does not exists")
+                // When a connection close is initiated by the connection pool (e.g. because the
+                // connection was idle for too long), the connection will still report further
+                // events to the state machine even though we don't care about its state anymore.
+                //
+                // This is because the HTTP2Connection has a strong let reference to its delegate.
+                return nil
             }
             let eventLoop = self.connections[index].goAwayReceived()
             return GoAwayContext(eventLoop: eventLoop)
@@ -540,9 +545,13 @@ extension HTTPConnectionPool {
         mutating func newHTTP2MaxConcurrentStreamsReceived(
             _ connectionID: Connection.ID,
             newMaxStreams: Int
-        ) -> (Int, EstablishedConnectionContext) {
+        ) -> (Int, EstablishedConnectionContext)? {
             guard let index = self.connections.firstIndex(where: { $0.connectionID == connectionID }) else {
-                preconditionFailure("We tried to update the maximum number of concurrent streams for a connection that does not exists")
+                // When a connection close is initiated by the connection pool (e.g. because the
+                // connection was idle for too long), the connection will still report its events to
+                // the state machine and hence to this `HTTP2Connections` struct. In those cases we
+                // must ignore the event.
+                return nil
             }
             let availableStreams = self.connections[index].newMaxConcurrentStreams(newMaxStreams)
             let context = EstablishedConnectionContext(
@@ -661,8 +670,10 @@ extension HTTPConnectionPool {
 
         mutating func failConnection(_ connectionID: Connection.ID) -> (Int, FailedConnectionContext)? {
             guard let index = self.connections.firstIndex(where: { $0.connectionID == connectionID }) else {
-                /// When a connection close is initiated by the connection pool (e.g. because the connection was idle for too long), the connection will
-                /// still report its close to the state machine and then to us. In those cases we must ignore the event.
+                // When a connection close is initiated by the connection pool (e.g. because the
+                // connection was idle for too long), the connection will still report its close to
+                // the state machine and then to this `HTTP2Connections` struct. In those cases we
+                // must ignore the event.
                 return nil
             }
             self.connections[index].fail()

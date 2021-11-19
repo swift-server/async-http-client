@@ -293,12 +293,22 @@ extension HTTPConnectionPool {
         }
 
         mutating func newHTTP2MaxConcurrentStreamsReceived(_ connectionID: Connection.ID, newMaxStreams: Int) -> Action {
-            let (index, context) = self.connections.newHTTP2MaxConcurrentStreamsReceived(connectionID, newMaxStreams: newMaxStreams)
+            guard let (index, context) = self.connections.newHTTP2MaxConcurrentStreamsReceived(connectionID, newMaxStreams: newMaxStreams) else {
+                // When a connection close is initiated by the connection pool, the connection will
+                // still report further events (like newMaxConcurrentStreamsReceived) to the state
+                // machine. In those cases we must ignore the event.
+                return .none
+            }
             return .init(self.nextActionForAvailableConnection(at: index, context: context))
         }
 
         mutating func http2ConnectionGoAwayReceived(_ connectionID: Connection.ID) -> Action {
-            let context = self.connections.goAwayReceived(connectionID)
+            guard let context = self.connections.goAwayReceived(connectionID) else {
+                // When a connection close is initiated by the connection pool, the connection will
+                // still report further events (like GOAWAY received) to the state machine. In those
+                // cases we must ignore the event.
+                return .none
+            }
             return self.nextActionForClosingConnection(on: context.eventLoop)
         }
 
