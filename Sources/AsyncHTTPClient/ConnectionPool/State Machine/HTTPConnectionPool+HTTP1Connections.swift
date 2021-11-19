@@ -537,6 +537,9 @@ extension HTTPConnectionPool {
             self.connections = self.connections.enumerated().compactMap { index, connectionState in
                 switch connectionState.migrateToHTTP2(&migrationContext) {
                 case .removeConnection:
+                    // If the connection has an index smaller than the previous overflow index,
+                    // we deal with a general purpose connection.
+                    // For this reason we need to decrement the overflow index.
                     if index < initialOverflowIndex {
                         self.overflowIndex = self.connections.index(before: self.overflowIndex)
                     }
@@ -660,6 +663,9 @@ extension HTTPConnectionPool {
             self.connections = self.connections.enumerated().compactMap { index, connectionState in
                 switch connectionState.cleanup(&cleanupContext) {
                 case .removeConnection:
+                    // If the connection has an index smaller than the previous overflow index,
+                    // we deal with a general purpose connection.
+                    // For this reason we need to decrement the overflow index.
                     if index < initialOverflowIndex {
                         self.overflowIndex = self.connections.index(before: self.overflowIndex)
                     }

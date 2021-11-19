@@ -511,19 +511,11 @@ extension HTTPConnectionPool {
         // MARK: HTTP2
 
         mutating func newHTTP2MaxConcurrentStreamsReceived(_ connectionID: Connection.ID, newMaxStreams: Int) -> Action {
-            // The `http2Connections` are optional here:
-            // Connections report events back to us, if they are in a shutdown that was
-            // initiated by the state machine. For this reason this callback might be invoked
-            // even though all references to HTTP2Connections have already been cleared.
             _ = self.http2Connections.newHTTP2MaxConcurrentStreamsReceived(connectionID, newMaxStreams: newMaxStreams)
             return .none
         }
 
         mutating func http2ConnectionGoAwayReceived(_ connectionID: Connection.ID) -> Action {
-            // The `http2Connections` are optional here:
-            // Connections report events back to us, if they are in a shutdown that was
-            // initiated by the state machine. For this reason this callback might be invoked
-            // even though all references to HTTP2Connections have already been cleared.
             _ = self.http2Connections.goAwayReceived(connectionID)
             return .none
         }
