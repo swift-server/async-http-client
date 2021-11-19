@@ -546,8 +546,6 @@ extension HTTPConnectionPool {
         }
 
         mutating func http2ConnectionStreamClosed(_ connectionID: Connection.ID) -> Action {
-            // It is save to bang the http2Connections here. If we get this callback but we don't have
-            // http2 connections something has gone terribly wrong.
             switch self.state {
             case .running:
                 let (index, context) = self.http2Connections.releaseStream(connectionID)

@@ -521,8 +521,6 @@ extension HTTPConnectionPool {
         }
 
         mutating func http1ConnectionReleased(_ connectionID: Connection.ID) -> Action {
-            // It is save to bang the http1Connections here. If we get this callback but we don't have
-            // http1 connections something has gone terribly wrong.
             let (index, _) = self.http1Connections.releaseConnection(connectionID)
             // Any http1 connection that becomes idle should be closed right away after the transition
             // to http2.
