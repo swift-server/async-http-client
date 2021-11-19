@@ -563,4 +563,47 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
             XCTAssertTrue(context.eventLoop === el)
         }
     }
+
+    func testMigrationFromHTTP1ToHTTP2AndBackToHTTP1() throws {
+        let elg = EmbeddedEventLoopGroup(loops: 2)
+        defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
+        let el1 = elg.next()
+        let el2 = elg.next()
+
+        let generator = HTTPConnectionPool.Connection.ID.Generator()
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: generator)
+
+        let connID1 = connections.createNewConnection(on: el1)
+
+        let context = connections.migrateToHTTP2()
+        XCTAssertEqual(context, .init(
+            backingOff: [],
+            starting: [(connID1, el1)],
+            close: []
+        ))
+
+        let connID2 = generator.next()
+
+        connections.migrateFromHTTP2(
+            starting: [(connID2, el2)],
+            backingOff: []
+        )
+
+        let conn2: HTTPConnectionPool.Connection = .__testOnly_connection(id: connID2, eventLoop: el2)
+        let (_, idleContext) = connections.newHTTP1ConnectionEstablished(conn2)
+        XCTAssertEqual(idleContext.use, .generalPurpose)
+        XCTAssertEqual(idleContext.eventLoop.id, el2.id)
+    }
+}
+
+extension HTTPConnectionPool.HTTP1Connections.HTTP1ToHTTP2MigrationContext: Equatable {
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        return lhs.close == rhs.close &&
+            lhs.starting.elementsEqual(rhs.starting, by: {
+                $0.0 == $1.0 && $0.1 === $1.1
+        }) &&
+            lhs.backingOff.elementsEqual(rhs.backingOff, by: {
+                $0.0 == $1.0 && $0.1 === $1.1
+        })
+    }
 }
