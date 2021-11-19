@@ -108,7 +108,7 @@ extension HTTPConnectionPool {
             )
         }
 
-        // MARK: - Events
+        // MARK: - Events -
 
         mutating func executeRequest(_ request: Request) -> Action {
             switch self.state {
@@ -519,16 +519,20 @@ extension HTTPConnectionPool {
         // MARK: HTTP2
 
         mutating func newHTTP2MaxConcurrentStreamsReceived(_ connectionID: Connection.ID, newMaxStreams: Int) -> Action {
-            // It is save to bang the http2Connections here. If we get this callback but we don't have
-            // http2 connections something has gone terribly wrong.
-            _ = self.http2Connections!.newHTTP2MaxConcurrentStreamsReceived(connectionID, newMaxStreams: newMaxStreams)
+            // The `http2Connections` are optional here:
+            // Connections report events back to us, if they are in a shutdown that was
+            // initiated by the state machine. For this reason this callback might be invoked
+            // even though all references to HTTP2Connections have already been cleared.
+            _ = self.http2Connections?.newHTTP2MaxConcurrentStreamsReceived(connectionID, newMaxStreams: newMaxStreams)
             return .none
         }
 
         mutating func http2ConnectionGoAwayReceived(_ connectionID: Connection.ID) -> Action {
-            // It is save to bang the http2Connections here. If we get this callback but we don't have
-            // http2 connections something has gone terribly wrong.
-            _ = self.http2Connections!.goAwayReceived(connectionID)
+            // The `http2Connections` are optional here:
+            // Connections report events back to us, if they are in a shutdown that was
+            // initiated by the state machine. For this reason this callback might be invoked
+            // even though all references to HTTP2Connections have already been cleared.
+            _ = self.http2Connections?.goAwayReceived(connectionID)
             return .none
         }
 

@@ -41,6 +41,7 @@ extension HTTPConnectionPool_HTTP2StateMachineTests {
             ("testHTTP2toHTTP1Migration", testHTTP2toHTTP1Migration),
             ("testConnectionIsImmediatelyCreatedAfterBackoffTimerFires", testConnectionIsImmediatelyCreatedAfterBackoffTimerFires),
             ("testMaxConcurrentStreamsIsRespected", testMaxConcurrentStreamsIsRespected),
+            ("testEventsAfterConnectionIsClosed", testEventsAfterConnectionIsClosed),
         ]
     }
 }

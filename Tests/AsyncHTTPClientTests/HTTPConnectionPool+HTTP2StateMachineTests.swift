@@ -1088,4 +1088,23 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         XCTAssertNotNil(connections.randomParkedConnection())
         XCTAssertEqual(connections.count, 1)
     }
+
+    func testEventsAfterConnectionIsClosed() {
+        let elg = EmbeddedEventLoopGroup(loops: 2)
+        guard var (connections, state) = try? MockConnectionPool.http2(elg: elg, maxConcurrentStreams: 100) else {
+            return XCTFail("Test setup failed")
+        }
+
+        let connection = connections.randomParkedConnection()!
+        XCTAssertNoThrow(try connections.closeConnection(connection))
+
+        let idleTimeoutAction = state.connectionIdleTimeout(connection.id)
+        XCTAssertEqual(idleTimeoutAction.connection, .closeConnection(connection, isShutdown: .no))
+        XCTAssertEqual(idleTimeoutAction.request, .none)
+
+        XCTAssertEqual(state.newHTTP2MaxConcurrentStreamsReceived(connection.id, newMaxStreams: 50), .none)
+        XCTAssertEqual(state.http2ConnectionGoAwayReceived(connection.id), .none)
+
+        XCTAssertEqual(state.http2ConnectionClosed(connection.id), .none)
+    }
 }

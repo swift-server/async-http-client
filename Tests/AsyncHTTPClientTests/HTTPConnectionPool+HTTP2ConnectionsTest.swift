@@ -371,7 +371,7 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         XCTAssertEqual(leasedConn1, conn1)
         XCTAssertEqual(leasdConnContext1.wasIdle, true)
 
-        XCTAssertTrue(connections.goAwayReceived(conn1ID).eventLoop === el1)
+        XCTAssertTrue(connections.goAwayReceived(conn1ID)?.eventLoop === el1)
 
         XCTAssertEqual(
             connections.stats,
@@ -389,7 +389,7 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         XCTAssertNil(connections.leaseStream(onRequired: el1), "we should not be able to lease a stream because the connection is draining")
 
         // a server can potentially send more than one connection go away and we should not crash
-        XCTAssertTrue(connections.goAwayReceived(conn1ID).eventLoop === el1)
+        XCTAssertTrue(connections.goAwayReceived(conn1ID)?.eventLoop === el1)
         XCTAssertEqual(
             connections.stats,
             .init(
@@ -454,7 +454,9 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
 
         XCTAssertNil(connections.leaseStream(onRequired: el1), "all streams are in use")
 
-        let (_, newSettingsContext1) = connections.newHTTP2MaxConcurrentStreamsReceived(conn1ID, newMaxStreams: 2)
+        guard let (_, newSettingsContext1) = connections.newHTTP2MaxConcurrentStreamsReceived(conn1ID, newMaxStreams: 2) else {
+            return XCTFail("Expected to get a new settings context")
+        }
         XCTAssertEqual(newSettingsContext1.availableStreams, 1)
         XCTAssertTrue(newSettingsContext1.eventLoop === el1)
         XCTAssertFalse(newSettingsContext1.isIdle)
@@ -465,7 +467,9 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         XCTAssertEqual(leasedConn2, conn1)
         XCTAssertEqual(leaseContext2.wasIdle, false)
 
-        let (_, newSettingsContext2) = connections.newHTTP2MaxConcurrentStreamsReceived(conn1ID, newMaxStreams: 1)
+        guard let (_, newSettingsContext2) = connections.newHTTP2MaxConcurrentStreamsReceived(conn1ID, newMaxStreams: 1) else {
+            return XCTFail("Expected to get a new settings context")
+        }
         XCTAssertEqual(newSettingsContext2.availableStreams, 0)
         XCTAssertTrue(newSettingsContext2.eventLoop === el1)
         XCTAssertFalse(newSettingsContext2.isIdle)
@@ -487,6 +491,41 @@ class HTTPConnectionPool_HTTP2ConnectionsTests: XCTestCase {
         }
         XCTAssertEqual(leasedConn3, conn1)
         XCTAssertEqual(leaseContext3.wasIdle, true)
+    }
+
+    func testEventsAfterConnectionIsClosed() {
+        let elg = EmbeddedEventLoopGroup(loops: 2)
+        var connections = HTTPConnectionPool.HTTP2Connections(generator: .init())
+        let el1 = elg.next()
+
+        let conn1ID = connections.createNewConnection(on: el1)
+        let conn1: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn1ID, eventLoop: el1)
+        let (conn1Index, conn1CreatedContext) = connections.newHTTP2ConnectionEstablished(conn1, maxConcurrentStreams: 1)
+        XCTAssertEqual(conn1CreatedContext.availableStreams, 1)
+
+        let (leasedConn1, leasdConnContext1) = connections.leaseStreams(at: conn1Index, count: 1)
+        XCTAssertEqual(leasedConn1, conn1)
+        XCTAssertEqual(leasdConnContext1.wasIdle, true)
+
+        XCTAssertNil(connections.leaseStream(onRequired: el1), "all streams are in use")
+
+        let (_, releaseContext) = connections.releaseStream(conn1ID)
+        XCTAssertTrue(releaseContext.eventLoop === el1)
+        XCTAssertEqual(releaseContext.availableStreams, 1)
+        XCTAssertEqual(releaseContext.connectionID, conn1ID)
+        XCTAssertEqual(releaseContext.isIdle, true)
+
+        // schedule timeout... this should remove the connection from http2Connections
+
+        XCTAssertEqual(connections.closeConnectionIfIdle(conn1ID), conn1)
+
+        // events race with the complete shutdown
+
+        XCTAssertNil(connections.newHTTP2MaxConcurrentStreamsReceived(conn1ID, newMaxStreams: 2))
+        XCTAssertNil(connections.goAwayReceived(conn1ID))
+
+        // finally close event
+        XCTAssertNil(connections.failConnection(conn1ID))
     }
 
     func testLeaseOnPreferredEventLoopWithoutAnyAvailable() {
