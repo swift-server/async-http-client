@@ -140,7 +140,8 @@ extension HTTPConnectionPool {
             case .http1(let http1StateMachine):
 
                 var http2StateMachine = HTTP2StateMachine(
-                    idGenerator: self.idGenerator
+                    idGenerator: self.idGenerator,
+                    maximumConcurrentHTTP1Connections: self.maximumConcurrentHTTP1Connections
                 )
                 let migrationAction = http2StateMachine.migrateFromHTTP1(
                     http1Connections: http1StateMachine.connections,

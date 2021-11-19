@@ -532,12 +532,18 @@ extension HTTPConnectionPool {
 
         mutating func migrateToHTTP2() -> HTTP1ToHTTP2MigrationContext {
             var migrationContext = HTTP1ToHTTP2MigrationContext()
-            self.connections.removeAll { connection in
-                switch connection.migrateToHTTP2(&migrationContext) {
+            let initialOverflowIndex = self.overflowIndex
+
+            self.connections = self.connections.enumerated().compactMap { index, connectionState in
+                switch connectionState.migrateToHTTP2(&migrationContext) {
                 case .removeConnection:
-                    return true
+                    if index < initialOverflowIndex {
+                        self.overflowIndex = self.connections.index(before: self.overflowIndex)
+                    }
+                    return nil
+
                 case .keepConnection:
-                    return false
+                    return connectionState
                 }
             }
             return migrationContext

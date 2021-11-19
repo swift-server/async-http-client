@@ -29,7 +29,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let el1 = elg.next()
         var connections = MockConnectionPool()
         var queuer = MockRequestQueuer()
-        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: .init())
+        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: .init(), maximumConcurrentHTTP1Connections: 8)
 
         /// first request should create a new connection
         let mockRequest = MockHTTPRequest(eventLoop: el1)
@@ -137,7 +137,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
 
         var state = HTTPConnectionPool.HTTP2StateMachine(
-            idGenerator: .init()
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 8
         )
 
         let mockRequest = MockHTTPRequest(eventLoop: elg.next())
@@ -193,7 +194,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
 
         var state = HTTPConnectionPool.HTTP2StateMachine(
-            idGenerator: .init()
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 8
         )
 
         let mockRequest = MockHTTPRequest(eventLoop: elg.next())
@@ -230,7 +232,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
 
         var state = HTTPConnectionPool.HTTP2StateMachine(
-            idGenerator: .init()
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 8
         )
 
         let mockRequest = MockHTTPRequest(eventLoop: elg.next())
@@ -310,7 +313,10 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
 
         // second connection is a HTTP2 connection and we need to migrate
         let conn2: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn2ID, eventLoop: el1)
-        var http2State = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator)
+        var http2State = HTTPConnectionPool.HTTP2StateMachine(
+            idGenerator: idGenerator,
+            maximumConcurrentHTTP1Connections: 8
+        )
 
         let http2ConnectAction = http2State.migrateFromHTTP1(
             http1Connections: http1State.connections,
@@ -350,10 +356,19 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
         var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator)
         let conn1ID = http1Conns.createNewConnection(on: el1)
-        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator)
+        var state = HTTPConnectionPool.HTTP2StateMachine(
+            idGenerator: idGenerator,
+            maximumConcurrentHTTP1Connections: 8
+        )
 
         let conn1 = HTTPConnectionPool.Connection.__testOnly_connection(id: conn1ID, eventLoop: el1)
-        let connectAction = state.migrateFromHTTP1(http1Connections: http1Conns, requests: .init(), newHTTP2Connection: conn1, maxConcurrentStreams: 100)
+        let connectAction = state.migrateFromHTTP1(
+            http1Connections: http1Conns,
+            http2Connections: .init(generator: idGenerator),
+            requests: .init(),
+            newHTTP2Connection: conn1,
+            maxConcurrentStreams: 100
+        )
 
         XCTAssertEqual(connectAction.request, .none)
         XCTAssertEqual(connectAction.connection, .migration(
@@ -395,10 +410,20 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
         var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator)
         let conn1ID = http1Conns.createNewConnection(on: el1)
-        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator)
+        var state = HTTPConnectionPool.HTTP2StateMachine(
+            idGenerator: idGenerator,
+            maximumConcurrentHTTP1Connections: 8
+        )
 
         let conn1 = HTTPConnectionPool.Connection.__testOnly_connection(id: conn1ID, eventLoop: el1)
-        let connectAction = state.migrateFromHTTP1(http1Connections: http1Conns, requests: .init(), newHTTP2Connection: conn1, maxConcurrentStreams: 100)
+
+        let connectAction = state.migrateFromHTTP1(
+            http1Connections: http1Conns,
+            http2Connections: .init(generator: idGenerator),
+            requests: .init(),
+            newHTTP2Connection: conn1,
+            maxConcurrentStreams: 100
+        )
         XCTAssertEqual(connectAction.request, .none)
         XCTAssertEqual(connectAction.connection, .migration(
             createConnections: [],
@@ -423,9 +448,19 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
         var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator)
         let conn1ID = http1Conns.createNewConnection(on: el1)
-        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator)
+        var state = HTTPConnectionPool.HTTP2StateMachine(
+            idGenerator: idGenerator,
+            maximumConcurrentHTTP1Connections: 8
+        )
         let conn1 = HTTPConnectionPool.Connection.__testOnly_connection(id: conn1ID, eventLoop: el1)
-        let connectAction = state.migrateFromHTTP1(http1Connections: http1Conns, requests: .init(), newHTTP2Connection: conn1, maxConcurrentStreams: 100)
+        let connectAction = state.migrateFromHTTP1(
+            http1Connections: http1Conns,
+            http2Connections: .init(generator: idGenerator),
+            requests: .init(),
+            newHTTP2Connection: conn1,
+            maxConcurrentStreams: 100
+        )
+
         XCTAssertEqual(connectAction.request, .none)
         XCTAssertEqual(connectAction.connection, .migration(
             createConnections: [],
@@ -458,12 +493,16 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
         var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator)
         let conn1ID = http1Conns.createNewConnection(on: el1)
-        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator)
+        var state = HTTPConnectionPool.HTTP2StateMachine(
+            idGenerator: idGenerator,
+            maximumConcurrentHTTP1Connections: 8
+        )
 
         let conn1 = HTTPConnectionPool.Connection.__testOnly_connection(id: conn1ID, eventLoop: el1)
 
         let connectAction = state.migrateFromHTTP1(
             http1Connections: http1Conns,
+            http2Connections: .init(generator: idGenerator),
             requests: .init(),
             newHTTP2Connection: conn1,
             maxConcurrentStreams: 100
@@ -488,11 +527,15 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
         var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator)
         let conn1ID = http1Conns.createNewConnection(on: el1)
-        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator)
+        var state = HTTPConnectionPool.HTTP2StateMachine(
+            idGenerator: idGenerator,
+            maximumConcurrentHTTP1Connections: 8
+        )
 
         let conn1 = HTTPConnectionPool.Connection.__testOnly_connection(id: conn1ID, eventLoop: el1)
         let connectAction = state.migrateFromHTTP1(
             http1Connections: http1Conns,
+            http2Connections: .init(generator: idGenerator),
             requests: .init(),
             newHTTP2Connection: conn1,
             maxConcurrentStreams: 100
@@ -529,11 +572,15 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
         var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator)
         let conn1ID = http1Conns.createNewConnection(on: el1)
-        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator)
+        var state = HTTPConnectionPool.HTTP2StateMachine(
+            idGenerator: idGenerator,
+            maximumConcurrentHTTP1Connections: 8
+        )
 
         let conn1 = HTTPConnectionPool.Connection.__testOnly_connection(id: conn1ID, eventLoop: el1)
         let connectAction1 = state.migrateFromHTTP1(
             http1Connections: http1Conns,
+            http2Connections: .init(generator: idGenerator),
             requests: .init(),
             newHTTP2Connection: conn1,
             maxConcurrentStreams: 1
