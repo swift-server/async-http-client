@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-enum RequestBodyLength: Equatable {
+enum RequestBodyLength: Hashable {
     /// size of the request body is not known before starting the request
     case dynamic
     /// size of the request body is fixed and exactly `length` bytes
