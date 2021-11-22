@@ -41,6 +41,7 @@ extension HTTPConnectionPool_HTTP1ConnectionsTests {
             ("testMigrationFromHTTP2WithAlreadyLeasedHTTP1Connection", testMigrationFromHTTP2WithAlreadyLeasedHTTP1Connection),
             ("testMigrationFromHTTP2WithMoreStartingConnectionsThanMaximumAllowedConccurentConnections", testMigrationFromHTTP2WithMoreStartingConnectionsThanMaximumAllowedConccurentConnections),
             ("testMigrationFromHTTP2StartsEnoghOverflowConnectionsForRequiredEventLoopRequests", testMigrationFromHTTP2StartsEnoghOverflowConnectionsForRequiredEventLoopRequests),
+            ("testMigrationFromHTTP1ToHTTP2AndBackToHTTP1", testMigrationFromHTTP1ToHTTP2AndBackToHTTP1),
         ]
     }
 }
