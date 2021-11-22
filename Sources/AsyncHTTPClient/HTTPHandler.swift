@@ -62,7 +62,7 @@ extension HTTPClient {
         /// Create and stream body using `StreamWriter`.
         ///
         /// - parameters:
-        ///     - length: Body size. If nil, `Transfer-Encoding` will be automatically be set to `chunked`. Otherwise a `Content-Length`
+        ///     - length: Body size. If nil, `Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
         /// header is set with the given `length`.
         ///     - stream: Body chunk provider.
         public static func stream(length: Int? = nil, _ stream: @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
