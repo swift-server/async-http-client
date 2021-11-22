@@ -598,10 +598,8 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
 
 extension HTTPConnectionPool.HTTP1Connections.HTTP1ToHTTP2MigrationContext: Equatable {
     public static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.close == rhs.close && lhs.starting.elementsEqual(rhs.starting, by: {
-            $0.0 == $1.0 && $0.1 === $1.1
-        }) && lhs.backingOff.elsementsEqual(rhs.backingOff, by: {
-            $0.0 == $1.0 && $0.1 === $1.1
-        })
+        return lhs.close == rhs.close &&
+            lhs.starting.elementsEqual(rhs.starting, by: { $0.0 == $1.0 && $0.1 === $1.1 }) &&
+            lhs.backingOff.elementsEqual(rhs.backingOff, by: { $0.0 == $1.0 && $0.1 === $1.1 })
     }
 }
