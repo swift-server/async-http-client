@@ -249,7 +249,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
 
         case .succeedRequest:
             do {
-                let response = try self.delegate.didFinishRequest(task: task)
+                let response = try self.delegate.didFinishRequest(task: self.task)
                 self.task.promise.succeed(response)
             } catch {
                 self.task.promise.fail(error)
@@ -282,7 +282,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             break
         case .finishStream:
             do {
-                let response = try self.delegate.didFinishRequest(task: task)
+                let response = try self.delegate.didFinishRequest(task: self.task)
                 self.task.promise.succeed(response)
             } catch {
                 self.task.promise.fail(error)
