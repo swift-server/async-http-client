@@ -323,15 +323,19 @@ class RequestValidationTests: XCTestCase {
 
     func testTraceMethodIsNotAllowedToHaveAFixedLengthBody() {
         var headers = HTTPHeaders()
-        XCTAssertThrowsError(try headers.validateAndSetTransportFraming(method: .TRACE, bodyLength: .fixed(length: 10)))
+        XCTAssertThrowsError(try headers.validateAndSetTransportFraming(method: .TRACE, bodyLength: .fixed(length: 10))) {
+            XCTAssertEqual($0 as? HTTPClientError, .traceRequestWithBody)
+        }
     }
 
     func testTraceMethodIsNotAllowedToHaveADynamicLengthBody() {
         var headers = HTTPHeaders()
-        XCTAssertThrowsError(try headers.validateAndSetTransportFraming(method: .TRACE, bodyLength: .dynamic))
+        XCTAssertThrowsError(try headers.validateAndSetTransportFraming(method: .TRACE, bodyLength: .dynamic)) {
+            XCTAssertEqual($0 as? HTTPClientError, .traceRequestWithBody)
+        }
     }
 
-    func testTransferEncodingsAreOverwritteIfBodyLengthIsFixed() {
+    func testTransferEncodingsAreOverwrittenIfBodyLengthIsFixed() {
         var headers: HTTPHeaders = [
             "Transfer-Encoding": "gzip, chunked",
         ]
