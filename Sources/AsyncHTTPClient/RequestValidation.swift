@@ -16,79 +16,35 @@ import NIOCore
 import NIOHTTP1
 
 extension HTTPHeaders {
-    mutating func validateAndFixTransportFraming(
+    mutating func validateAndSetTransportFraming(
         method: HTTPMethod,
         bodyLength: RequestBodyLength
     ) throws -> RequestFramingMetadata {
-        let contentLength = self.first(name: "Content-Length")
-        let encodings = self[canonicalForm: "Transfer-Encoding"]
-
-        // "Transfer-Encoding" and "Content-Length" are not allowed to present at the same time (https://tools.ietf.org/html/rfc7230#section-3.3.1)
-        guard encodings.isEmpty || contentLength == nil else {
-            throw HTTPClientError.incompatibleHeaders
-        }
-
         try self.validateFieldNames()
-        try Self.validateTransferEncoding(encodings)
 
-        if contentLength != nil {
-            self.remove(name: "Content-Length")
+        if case .TRACE = method {
+            switch bodyLength {
+            case .fixed(length: 0):
+                break
+            case .dynamic, .fixed:
+                // A client MUST NOT send a message body in a TRACE request.
+                // https://tools.ietf.org/html/rfc7230#section-4.3.8
+                throw HTTPClientError.traceRequestWithBody
+            }
         }
-        if !encodings.isEmpty {
-            self.remove(name: "Transfer-Encoding")
-        }
+
+        self.setTransportFraming(method: method, bodyLength: bodyLength)
 
         let connectionClose = self[canonicalForm: "connection"].lazy.map { $0.lowercased() }.contains("close")
-
         switch bodyLength {
-        case .fixed(0):
-            // if we don't have a body we might not need to send the Content-Length field
-            // https://tools.ietf.org/html/rfc7230#section-3.3.2
-            switch method {
-            case .GET, .HEAD, .DELETE, .CONNECT, .TRACE:
-                // A user agent SHOULD NOT send a Content-Length header field when the request
-                // message does not contain a payload body and the method semantics do not
-                // anticipate such a body.
-                break
-            default:
-                // A user agent SHOULD send a Content-Length in a request message when
-                // no Transfer-Encoding is sent and the request method defines a meaning
-                // for an enclosed payload body.
-                self.add(name: "Content-Length", value: "0")
-            }
-            return .init(connectionClose: connectionClose, body: .fixedSize(0))
-        case .fixed(let length):
-            if case .TRACE = method {
-                // A client MUST NOT send a message body in a TRACE request.
-                // https://tools.ietf.org/html/rfc7230#section-4.3.8
-                throw HTTPClientError.traceRequestWithBody
-            }
-            if encodings.isEmpty {
-                self.add(name: "Content-Length", value: String(length))
-                return .init(connectionClose: connectionClose, body: .fixedSize(length))
-            } else {
-                self.add(name: "Transfer-Encoding", value: encodings.joined(separator: ", "))
-                return .init(connectionClose: connectionClose, body: .stream)
-            }
         case .dynamic:
-            if case .TRACE = method {
-                // A client MUST NOT send a message body in a TRACE request.
-                // https://tools.ietf.org/html/rfc7230#section-4.3.8
-                throw HTTPClientError.traceRequestWithBody
-            }
-
-            if encodings.isEmpty && contentLength == nil {
-                // if a user forgot to specify a Content-Length and Transfer-Encoding, we will set it for them
-                self.add(name: "Transfer-Encoding", value: "chunked")
-            } else {
-                self.add(name: "Transfer-Encoding", value: encodings.joined(separator: ", "))
-            }
-
             return .init(connectionClose: connectionClose, body: .stream)
+        case .fixed(let length):
+            return .init(connectionClose: connectionClose, body: .fixedSize(length))
         }
     }
 
-    func validateFieldNames() throws {
+    private func validateFieldNames() throws {
         let invalidFieldNames = self.compactMap { (name, _) -> String? in
             let satisfy = name.utf8.allSatisfy { (char) -> Bool in
                 switch char {
@@ -124,32 +80,33 @@ extension HTTPHeaders {
         }
     }
 
-    static func validateTransferEncoding<Encodings>(
-        _ encodings: Encodings
-    ) throws where Encodings: Sequence, Encodings.Element: StringProtocol {
-        let encodings = encodings.map { $0.lowercased() }
+    private mutating func setTransportFraming(
+        method: HTTPMethod,
+        bodyLength: RequestBodyLength
+    ) {
+        self.remove(name: "Content-Length")
+        self.remove(name: "Transfer-Encoding")
 
-        guard !encodings.contains("identity") else {
-            throw HTTPClientError.identityCodingIncorrectlyPresent
-        }
-
-        // If `Transfer-Encoding` is specified, `chunked` needs to be the last encoding and should not be specified multiple times
-        // https://datatracker.ietf.org/doc/html/rfc7230#section-3.3.1
-        let chunkedEncodingCount = encodings.lazy.filter { $0 == "chunked" }.count
-        switch chunkedEncodingCount {
-        case 0:
-            if !encodings.isEmpty {
-                throw HTTPClientError.transferEncodingSpecifiedButChunkedIsNotTheFinalEncoding
+        switch bodyLength {
+        case .fixed(0):
+            // if we don't have a body we might not need to send the Content-Length field
+            // https://tools.ietf.org/html/rfc7230#section-3.3.2
+            switch method {
+            case .GET, .HEAD, .DELETE, .CONNECT, .TRACE:
+                // A user agent SHOULD NOT send a Content-Length header field when the request
+                // message does not contain a payload body and the method semantics do not
+                // anticipate such a body.
+                break
+            default:
+                // A user agent SHOULD send a Content-Length in a request message when
+                // no Transfer-Encoding is sent and the request method defines a meaning
+                // for an enclosed payload body.
+                self.add(name: "Content-Length", value: "0")
             }
-        case 1:
-            guard encodings.last == "chunked" else {
-                throw HTTPClientError.transferEncodingSpecifiedButChunkedIsNotTheFinalEncoding
-            }
-        case 2...:
-            throw HTTPClientError.chunkedSpecifiedMultipleTimes
-        default:
-            // unreachable because `chunkedEncodingCount` is guaranteed to be positive
-            preconditionFailure()
+        case .fixed(let length):
+            self.add(name: "Content-Length", value: String(length))
+        case .dynamic:
+            self.add(name: "Transfer-Encoding", value: "chunked")
         }
     }
 }

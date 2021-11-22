@@ -308,7 +308,7 @@ extension HTTPClient {
                 head.headers.add(name: "host", value: host)
             }
 
-            let metadata = try head.headers.validateAndFixTransportFraming(method: self.method, bodyLength: .init(self.body))
+            let metadata = try head.headers.validateAndSetTransportFraming(method: self.method, bodyLength: .init(self.body))
 
             return (head, metadata)
         }
