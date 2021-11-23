@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Foundation
 import NIOCore
 
 public final class HTTPClientCopyingDelegate: HTTPClientResponseDelegate {

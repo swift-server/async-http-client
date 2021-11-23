@@ -883,6 +883,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case remoteConnectionClosed
         case cancelled
         case identityCodingIncorrectlyPresent
+        @available(*, deprecated, message: "AsyncHTTPClient now silently corrects this invalid header.")
         case chunkedSpecifiedMultipleTimes
         case invalidProxyResponse
         case contentLengthMissing
@@ -894,6 +895,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case invalidHeaderFieldNames([String])
         case bodyLengthMismatch
         case writeAfterRequestSent
+        @available(*, deprecated, message: "AsyncHTTPClient now silently corrects invalid headers.")
         case incompatibleHeaders
         case connectTimeout
         case socksHandshakeTimeout
@@ -937,6 +939,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     /// Request contains invalid identity encoding.
     public static let identityCodingIncorrectlyPresent = HTTPClientError(code: .identityCodingIncorrectlyPresent)
     /// Request contains multiple chunks definitions.
+    @available(*, deprecated, message: "AsyncHTTPClient now silently corrects this invalid header.")
     public static let chunkedSpecifiedMultipleTimes = HTTPClientError(code: .chunkedSpecifiedMultipleTimes)
     /// Proxy response was invalid.
     public static let invalidProxyResponse = HTTPClientError(code: .invalidProxyResponse)
@@ -959,6 +962,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     /// Body part was written after request was fully sent.
     public static let writeAfterRequestSent = HTTPClientError(code: .writeAfterRequestSent)
     /// Incompatible headers specified, for example `Transfer-Encoding` and `Content-Length`.
+    @available(*, deprecated, message: "AsyncHTTPClient now silently corrects invalid headers.")
     public static let incompatibleHeaders = HTTPClientError(code: .incompatibleHeaders)
     /// Creating a new tcp connection timed out
     public static let connectTimeout = HTTPClientError(code: .connectTimeout)

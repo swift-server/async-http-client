@@ -43,8 +43,8 @@ extension HTTPClient {
             }
         }
 
-        /// Body size. Request validation will be failed with `HTTPClientErrors.contentLengthMissing` if nil,
-        /// unless `Trasfer-Encoding: chunked` header is set.
+        /// Body size. if nil,`Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
+        /// header is set with the given `length`.
         public var length: Int?
         /// Body chunk provider.
         public var stream: (StreamWriter) -> EventLoopFuture<Void>
@@ -62,8 +62,8 @@ extension HTTPClient {
         /// Create and stream body using `StreamWriter`.
         ///
         /// - parameters:
-        ///     - length: Body size. Request validation will be failed with `HTTPClientErrors.contentLengthMissing` if nil,
-        ///               unless `Transfer-Encoding: chunked` header is set.
+        ///     - length: Body size. If nil, `Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
+        /// header is set with the given `length`.
         ///     - stream: Body chunk provider.
         public static func stream(length: Int? = nil, _ stream: @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
             return Body(length: length, stream: stream)
@@ -309,7 +309,7 @@ extension HTTPClient {
                 head.headers.add(name: "host", value: host)
             }
 
-            let metadata = try head.headers.validate(method: self.method, body: self.body)
+            let metadata = try head.headers.validateAndSetTransportFraming(method: self.method, bodyLength: .init(self.body))
 
             return (head, metadata)
         }
@@ -818,5 +818,19 @@ internal struct RedirectHandler<ResponseType> {
         } catch {
             promise.fail(error)
         }
+    }
+}
+
+extension RequestBodyLength {
+    init(_ body: HTTPClient.Body?) {
+        guard let body = body else {
+            self = .fixed(length: 0)
+            return
+        }
+        guard let length = body.length else {
+            self = .dynamic
+            return
+        }
+        self = .fixed(length: length)
     }
 }
