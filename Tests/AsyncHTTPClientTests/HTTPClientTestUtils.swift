@@ -17,6 +17,7 @@ import Foundation
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
+import NIOEmbedded
 import NIOHPACK
 import NIOHTTP1
 import NIOHTTP2
@@ -45,6 +46,18 @@ func getDefaultEventLoopGroup(numberOfThreads: Int) -> EventLoopGroup {
     #endif
     return MultiThreadedEventLoopGroup(numberOfThreads: numberOfThreads)
 }
+
+let canBindIPv6Loopback: Bool = {
+    let elg = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+    defer { try! elg.syncShutdownGracefully() }
+    let serverChannel = try? ServerBootstrap(group: elg)
+        .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+        .bind(host: "::1", port: 0)
+        .wait()
+    let didBind = (serverChannel != nil)
+    try! serverChannel?.close().wait()
+    return didBind
+}()
 
 class TestHTTPDelegate: HTTPClientResponseDelegate {
     typealias Response = Void
@@ -266,6 +279,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
     enum BindTarget {
         case unixDomainSocket(String)
         case localhostIPv4RandomPort
+        case localhostIPv6RandomPort
     }
 
     enum Mode {
@@ -331,6 +345,8 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
         switch bindTarget {
         case .localhostIPv4RandomPort:
             socketAddress = try! SocketAddress(ipAddress: "127.0.0.1", port: 0)
+        case .localhostIPv6RandomPort:
+            socketAddress = try! SocketAddress(ipAddress: "::1", port: 0)
         case .unixDomainSocket(let path):
             socketAddress = try! SocketAddress(unixDomainSocketPath: path)
         }

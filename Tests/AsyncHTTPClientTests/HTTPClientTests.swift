@@ -333,6 +333,40 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(.ok, response.status)
     }
 
+    func testGetHttpsWithIPv6() throws {
+        try XCTSkipUnless(canBindIPv6Loopback, "Requires IPv6")
+        let localHTTPBin = HTTPBin(.http1_1(ssl: true), bindTarget: .localhostIPv6RandomPort)
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
+        defer {
+            XCTAssertNoThrow(try localClient.syncShutdown())
+            XCTAssertNoThrow(try localHTTPBin.shutdown())
+        }
+        var response: HTTPClient.Response?
+        XCTAssertNoThrow(response = try localClient.get(url: "https://[::1]:\(localHTTPBin.port)/get").wait())
+        XCTAssertEqual(.ok, response?.status)
+    }
+
+    func testGetHTTPSWorksOnMTELGWithIPv6() throws {
+        try XCTSkipUnless(canBindIPv6Loopback, "Requires IPv6")
+        // Same test as above but this one will use NIO on Sockets even on Apple platforms, just to make sure
+        // this works.
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer {
+            XCTAssertNoThrow(try group.syncShutdownGracefully())
+        }
+        let localHTTPBin = HTTPBin(.http1_1(ssl: true), bindTarget: .localhostIPv6RandomPort)
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(group),
+                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
+        defer {
+            XCTAssertNoThrow(try localClient.syncShutdown())
+            XCTAssertNoThrow(try localHTTPBin.shutdown())
+        }
+        var response: HTTPClient.Response?
+        XCTAssertNoThrow(response = try localClient.get(url: "https://[::1]:\(localHTTPBin.port)/get").wait())
+        XCTAssertEqual(.ok, response?.status)
+    }
+
     func testPostHttps() throws {
         let localHTTPBin = HTTPBin(.http1_1(ssl: true))
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),

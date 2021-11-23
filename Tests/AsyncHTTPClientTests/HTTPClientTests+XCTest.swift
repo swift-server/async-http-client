@@ -38,6 +38,8 @@ extension HTTPClientTests {
             ("testGetHttps", testGetHttps),
             ("testGetHttpsWithIP", testGetHttpsWithIP),
             ("testGetHTTPSWorksOnMTELGWithIP", testGetHTTPSWorksOnMTELGWithIP),
+            ("testGetHttpsWithIPv6", testGetHttpsWithIPv6),
+            ("testGetHTTPSWorksOnMTELGWithIPv6", testGetHTTPSWorksOnMTELGWithIPv6),
             ("testPostHttps", testPostHttps),
             ("testHttpRedirect", testHttpRedirect),
             ("testHttpHostRedirect", testHttpHostRedirect),
