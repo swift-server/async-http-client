@@ -190,6 +190,11 @@ struct HTTPRequestStateMachine {
     }
 
     mutating func errorHappened(_ error: Error) -> Action {
+        if let error = error as? NIOSSLError,
+            error == .uncleanShutdown,
+            let action = self.handleNIOSSLUncleanShutdownError() {
+            return action
+        }
         switch self.state {
         case .initialized:
             preconditionFailure("After the state machine has been initialized, start must be called immediately. Thus this state is unreachable")
@@ -197,16 +202,30 @@ struct HTTPRequestStateMachine {
             // the request failed, before it was sent onto the wire.
             self.state = .failed(error)
             return .failRequest(error, .none)
+        case .running:
+            self.state = .failed(error)
+            return .failRequest(error, .close)
 
+        case .finished, .failed:
+            // ignore error
+            return .wait
+
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
+        }
+    }
+
+    private mutating func handleNIOSSLUncleanShutdownError() -> Action? {
+        switch self.state {
         case .running(.streaming, .waitingForHead),
-             .running(.endSent, .waitingForHead) where error as? NIOSSLError == .uncleanShutdown:
+             .running(.endSent, .waitingForHead):
             // if we received a NIOSSL.uncleanShutdown before we got an answer we should handle
             // this like a normal connection close. We will receive a call to channelInactive after
             // this error.
             return .wait
 
         case .running(.streaming, .receivingBody(let responseHead, _)),
-             .running(.endSent, .receivingBody(let responseHead, _)) where error as? NIOSSLError == .uncleanShutdown:
+             .running(.endSent, .receivingBody(let responseHead, _)):
             // This code is only reachable for request and responses, which we expect to have a body.
             // We depend on logic from the HTTPResponseDecoder here. The decoder will emit an
             // HTTPResponsePart.end right after the HTTPResponsePart.head, for every request with a
@@ -226,19 +245,11 @@ struct HTTPRequestStateMachine {
             // If the response is EOF terminated, we need to rely on a clean tls shutdown to be sure
             // we have received all necessary bytes. For this reason we forward the uncleanShutdown
             // error to the user.
-            self.state = .failed(error)
-            return .failRequest(error, .close)
+            self.state = .failed(NIOSSLError.uncleanShutdown)
+            return .failRequest(NIOSSLError.uncleanShutdown, .close)
 
-        case .running:
-            self.state = .failed(error)
-            return .failRequest(error, .close)
-
-        case .finished, .failed:
-            // ignore error
-            return .wait
-
-        case .modifying:
-            preconditionFailure("Invalid state: \(self.state)")
+        case .waitForChannelToBecomeWritable, .running, .finished, .failed, .initialized, .modifying:
+            return nil
         }
     }
 
@@ -270,7 +281,7 @@ struct HTTPRequestStateMachine {
 
             if let expected = expectedBodyLength, sentBodyBytes + part.readableBytes > expected {
                 let error = HTTPClientError.bodyLengthMismatch
-
+                self.state = .failed(error)
                 return .failRequest(error, .close)
             }
 
