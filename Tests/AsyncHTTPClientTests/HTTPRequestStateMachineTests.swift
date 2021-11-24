@@ -209,10 +209,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
 
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: 4...7))
         XCTAssertEqual(state.requestStreamPartReceived(part1), .sendBodyPart(part1))
-        guard case .failRequest(let error, .close) = state.requestStreamFinished() else {
-            return XCTFail("unexpected action")
-        }
-        XCTAssertEqual(error as? HTTPClientError, .bodyLengthMismatch)
+        XCTAssertEqual(state.requestStreamFinished(), .failRequest(HTTPClientError.bodyLengthMismatch, .close))
         XCTAssertEqual(state.channelInactive(), .wait)
     }
 
@@ -230,10 +227,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
 
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: 4...7))
         XCTAssertEqual(state.requestStreamPartReceived(part1), .sendBodyPart(part1))
-        guard case .failRequest(let error, .close) = state.requestStreamFinished() else {
-            return XCTFail("unexpected action")
-        }
-        XCTAssertEqual(error as? HTTPClientError, .bodyLengthMismatch)
+        XCTAssertEqual(state.requestStreamFinished(), .failRequest(HTTPClientError.bodyLengthMismatch, .close))
         XCTAssertEqual(state.channelRead(.end(nil)), .wait)
     }
 
@@ -258,10 +252,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .wait)
-        guard case .failRequest(let error, .none) = state.channelInactive() else {
-            return XCTFail("unexpected action")
-        }
-        XCTAssertEqual(error as? HTTPClientError, .remoteConnectionClosed)
+        XCTAssertEqual(state.channelInactive(), .failRequest(HTTPClientError.remoteConnectionClosed, .none))
     }
 
     func testResponseReadingWithBackpressure() {
@@ -351,10 +342,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
 
     func testCancellingARequestInStateInitializedKeepsTheConnectionAlive() {
         var state = HTTPRequestStateMachine(isChannelWritable: false)
-        guard case .failRequest(let error, .none) = state.requestCancelled() else {
-            return XCTFail("unexpected action")
-        }
-        XCTAssertEqual(error as? HTTPClientError, .cancelled)
+        XCTAssertEqual(state.requestCancelled(), .failRequest(HTTPClientError.cancelled, .none))
     }
 
     func testCancellingARequestBeforeBeingSendKeepsTheConnectionAlive() {
@@ -362,10 +350,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .wait)
-        guard case .failRequest(let error, .none) = state.requestCancelled() else {
-            return XCTFail("unexpected action")
-        }
-        XCTAssertEqual(error as? HTTPClientError, .cancelled)
+        XCTAssertEqual(state.requestCancelled(), .failRequest(HTTPClientError.cancelled, .none))
     }
 
     func testConnectionBecomesWritableBeforeFirstRequest() {
@@ -391,10 +376,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
-        guard case .failRequest(let error, .close) = state.requestCancelled() else {
-            return XCTFail("unexpected action")
-        }
-        XCTAssertEqual(error as? HTTPClientError, .cancelled)
+        XCTAssertEqual(state.requestCancelled(), .failRequest(HTTPClientError.cancelled, .close))
     }
 
     func testRemoteSuddenlyClosesTheConnection() {
@@ -402,10 +384,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/", headers: .init([("content-length", "4")]))
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(4))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
-        guard case .failRequest(let error, .close) = state.requestCancelled() else {
-            return XCTFail("unexpected action")
-        }
-        XCTAssertEqual(error as? HTTPClientError, .cancelled)
+        XCTAssertEqual(state.requestCancelled(), .failRequest(HTTPClientError.remoteConnectionClosed, .close))
         XCTAssertEqual(state.requestStreamPartReceived(.byteBuffer(.init(bytes: 1...3))), .wait)
     }
 
@@ -419,10 +398,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
         let part0 = ByteBuffer(bytes: 0...3)
         XCTAssertEqual(state.channelRead(.body(part0)), .wait)
-        guard case .failRequest(let error, .close) = state.idleReadTimeoutTriggered() else {
-            return XCTFail("unexpected action")
-        }
-        XCTAssertEqual(error as? HTTPClientError, .readTimeout)
+        XCTAssertEqual(state.idleReadTimeoutTriggered(), .failRequest(HTTPClientError.readTimeout, .close))
         XCTAssertEqual(state.channelRead(.body(ByteBuffer(bytes: 4...7))), .wait)
         XCTAssertEqual(state.channelRead(.body(ByteBuffer(bytes: 8...11))), .wait)
         XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
@@ -475,10 +451,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
 
-        guard case .failRequest(let error, .close) = state.errorHappened(HTTPParserError.invalidChunkSize) else {
-            return XCTFail("unexpected action")
-        }
-        XCTAssertEqual(error as? HTTPParserError, .invalidChunkSize)
+        XCTAssertEqual(state.errorHappened(HTTPParserError.invalidChunkSize), .failRequest(HTTPParserError.invalidChunkSize, .close))
         XCTAssertEqual(state.requestCancelled(), .wait, "A cancellation that happens to late is ignored")
     }
 
@@ -532,10 +505,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.read(), .read)
         XCTAssertEqual(state.channelReadComplete(), .wait)
         XCTAssertEqual(state.channelRead(.body(body)), .wait)
-        guard case .failRequest(let error, .close) = state.channelRead(.end(nil)) else {
-            return XCTFail("unexpected action")
-        }
-        XCTAssertEqual(error as? HTTPClientError, .remoteConnectionClosed)
+        XCTAssertEqual(state.channelRead(.end(nil)), .failRequest(HTTPClientError.remoteConnectionClosed, .close))
         XCTAssertEqual(state.channelInactive(), .wait)
     }
 
@@ -550,10 +520,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
         XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
         XCTAssertEqual(state.channelRead(.body(body)), .wait)
-        guard case .failRequest(let error, .close) = state.errorHappened(NIOSSLError.uncleanShutdown) else {
-            return XCTFail("unexpected action")
-        }
-        XCTAssertEqual(error as? NIOSSLError, .uncleanShutdown)
+        XCTAssertEqual(state.errorHappened(NIOSSLError.uncleanShutdown), .failRequest(NIOSSLError.uncleanShutdown, .close))
         XCTAssertEqual(state.channelRead(.end(nil)), .wait)
         XCTAssertEqual(state.channelInactive(), .wait)
     }
@@ -565,11 +532,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
 
         XCTAssertEqual(state.errorHappened(NIOSSLError.uncleanShutdown), .wait)
-        
-        guard case .failRequest(let error, .none) = state.channelInactive() else {
-            return XCTFail("unexpected action")
-        }
-        XCTAssertEqual(error as? HTTPClientError, .remoteConnectionClosed)
+        XCTAssertEqual(state.channelInactive(), .failRequest(HTTPClientError.remoteConnectionClosed, .none))
     }
 
     func testArbitraryErrorShouldBeTreatedAsARequestFailureWhileInWaitingForHeadState() {
@@ -578,10 +541,8 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
-        guard case .failRequest(let error, .close) = state.errorHappened(ArbitraryError()) else {
-            return XCTFail("unexpected action")
-        }
-        XCTAssertTrue(error is ArbitraryError)
+
+        XCTAssertEqual(state.errorHappened(ArbitraryError()), .failRequest(ArbitraryError(), .close))
         XCTAssertEqual(state.channelInactive(), .wait)
     }
 
@@ -599,10 +560,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelRead(.body(body)), .wait)
         XCTAssertEqual(state.channelReadComplete(), .forwardResponseBodyParts([body]))
         XCTAssertEqual(state.errorHappened(NIOSSLError.uncleanShutdown), .wait)
-        guard case .failRequest(let error, .close) = state.errorHappened(HTTPParserError.invalidEOFState) else {
-            return XCTFail("unexpected action")
-        }
-        XCTAssertEqual(error as? HTTPParserError, .invalidEOFState)
+        XCTAssertEqual(state.errorHappened(HTTPParserError.invalidEOFState), .failRequest(HTTPParserError.invalidEOFState, .close))
         XCTAssertEqual(state.channelInactive(), .wait)
     }
 
@@ -624,10 +582,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
 
         XCTAssertEqual(state.channelRead(.body(ByteBuffer(string: " baz lightyear"))), .wait)
         XCTAssertEqual(state.channelReadComplete(), .wait)
-        guard case .failRequest(let error, .none) = state.channelInactive() else {
-            return XCTFail("unexpected action")
-        }
-        XCTAssertEqual(error as? HTTPClientError, .remoteConnectionClosed)
+        XCTAssertEqual(state.channelInactive(), .failRequest(HTTPClientError.remoteConnectionClosed, .none))
     }
 
     func testFailHTTPRequestWithContentLengthBecauseOfChannelInactiveWaitingForRead() {
@@ -648,10 +603,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
 
         XCTAssertEqual(state.channelRead(.body(ByteBuffer(string: " baz lightyear"))), .wait)
         XCTAssertEqual(state.channelReadComplete(), .wait)
-        guard case .failRequest(let error, .none) = state.channelInactive() else {
-            return XCTFail("unexpected action")
-        }
-        XCTAssertEqual(error as? HTTPClientError, .remoteConnectionClosed)
+        XCTAssertEqual(state.channelInactive(), .failRequest(HTTPClientError.remoteConnectionClosed, .none))
     }
 
     func testFailHTTPRequestWithContentLengthBecauseOfChannelInactiveWaitingForReadAndDemand() {
@@ -671,10 +623,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
 
         XCTAssertEqual(state.channelRead(.body(ByteBuffer(string: " baz lightyear"))), .wait)
         XCTAssertEqual(state.channelReadComplete(), .wait)
-        guard case .failRequest(let error, .none) = state.channelInactive() else {
-            return XCTFail("unexpected action")
-        }
-        XCTAssertEqual(error as? HTTPClientError, .remoteConnectionClosed)
+        XCTAssertEqual(state.channelInactive(), .failRequest(HTTPClientError.remoteConnectionClosed, .none))
     }
 
     func testFailHTTPRequestWithContentLengthBecauseOfChannelInactiveWaitingForReadAndDemandMultipleTimes() {
