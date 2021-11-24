@@ -82,6 +82,9 @@ class HTTPRequestStateMachineTests: XCTestCase {
         }
 
         XCTAssertEqual(error as? HTTPClientError, .bodyLengthMismatch)
+
+        // if another error happens the new one is ignored
+        XCTAssertEqual(state.errorHappened(HTTPClientError.remoteConnectionClosed), .wait)
     }
 
     func testPOSTContentLengthIsTooShort() {
@@ -519,6 +522,27 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelRead(.body(body)), .wait)
         XCTAssertEqual(state.errorHappened(NIOSSLError.uncleanShutdown), .failRequest(NIOSSLError.uncleanShutdown, .close))
         XCTAssertEqual(state.channelRead(.end(nil)), .wait)
+        XCTAssertEqual(state.channelInactive(), .wait)
+    }
+
+    func testNIOSSLErrorUncleanShutdownShouldBeTreatedAsRemoteConnectionCloseWhileInWaitingForHeadState() {
+        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
+
+        XCTAssertEqual(state.errorHappened(NIOSSLError.uncleanShutdown), .wait)
+        XCTAssertEqual(state.channelInactive(), .failRequest(HTTPClientError.remoteConnectionClosed, .none))
+    }
+
+    func testArbitraryErrorShouldBeTreatedAsARequestFailureWhileInWaitingForHeadState() {
+        struct ArbitraryError: Error {}
+        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
+        XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
+
+        XCTAssertEqual(state.errorHappened(ArbitraryError()), .failRequest(ArbitraryError(), .close))
         XCTAssertEqual(state.channelInactive(), .wait)
     }
 

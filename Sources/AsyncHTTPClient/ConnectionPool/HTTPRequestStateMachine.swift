@@ -198,14 +198,14 @@ struct HTTPRequestStateMachine {
             self.state = .failed(error)
             return .failRequest(error, .none)
 
-        case .running(.streaming, .waitingForHead),
+        case .running(.streaming, .waitingForHead) where error as? NIOSSLError == .uncleanShutdown,
              .running(.endSent, .waitingForHead) where error as? NIOSSLError == .uncleanShutdown:
             // if we received a NIOSSL.uncleanShutdown before we got an answer we should handle
             // this like a normal connection close. We will receive a call to channelInactive after
             // this error.
             return .wait
 
-        case .running(.streaming, .receivingBody(let responseHead, _)),
+        case .running(.streaming, .receivingBody(let responseHead, _)) where error as? NIOSSLError == .uncleanShutdown,
              .running(.endSent, .receivingBody(let responseHead, _)) where error as? NIOSSLError == .uncleanShutdown:
             // This code is only reachable for request and responses, which we expect to have a body.
             // We depend on logic from the HTTPResponseDecoder here. The decoder will emit an
@@ -270,7 +270,7 @@ struct HTTPRequestStateMachine {
 
             if let expected = expectedBodyLength, sentBodyBytes + part.readableBytes > expected {
                 let error = HTTPClientError.bodyLengthMismatch
-
+                self.state = .failed(error)
                 return .failRequest(error, .close)
             }
 
