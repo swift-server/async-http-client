@@ -245,8 +245,8 @@ struct HTTPRequestStateMachine {
             // If the response is EOF terminated, we need to rely on a clean tls shutdown to be sure
             // we have received all necessary bytes. For this reason we forward the uncleanShutdown
             // error to the user.
-            self.state = .failed(error)
-            return .failRequest(error, .close)
+            self.state = .failed(NIOSSLError.uncleanShutdown)
+            return .failRequest(NIOSSLError.uncleanShutdown, .close)
 
         case .waitForChannelToBecomeWritable, .running, .finished, .failed, .initialized, .modifying:
             return nil
