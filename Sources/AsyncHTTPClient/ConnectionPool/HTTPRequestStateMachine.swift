@@ -189,7 +189,33 @@ struct HTTPRequestStateMachine {
         }
     }
 
-    mutating func handleNIOSSLUncleanShutdownError() -> Action? {
+    mutating func errorHappened(_ error: Error) -> Action {
+        if let error = error as? NIOSSLError,
+            error == .uncleanShutdown,
+            let action = self.handleNIOSSLUncleanShutdownError() {
+            return action
+        }
+        switch self.state {
+        case .initialized:
+            preconditionFailure("After the state machine has been initialized, start must be called immediately. Thus this state is unreachable")
+        case .waitForChannelToBecomeWritable:
+            // the request failed, before it was sent onto the wire.
+            self.state = .failed(error)
+            return .failRequest(error, .none)
+        case .running:
+            self.state = .failed(error)
+            return .failRequest(error, .close)
+
+        case .finished, .failed:
+            // ignore error
+            return .wait
+
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
+        }
+    }
+
+    private mutating func handleNIOSSLUncleanShutdownError() -> Action? {
         switch self.state {
         case .running(.streaming, .waitingForHead),
              .running(.endSent, .waitingForHead):
@@ -224,32 +250,6 @@ struct HTTPRequestStateMachine {
 
         case .waitForChannelToBecomeWritable, .running, .finished, .failed, .initialized, .modifying:
             return nil
-        }
-    }
-
-    mutating func errorHappened(_ error: Error) -> Action {
-        if let error = error as? NIOSSLError,
-            error == .uncleanShutdown,
-            let action = self.handleNIOSSLUncleanShutdownError() {
-            return action
-        }
-        switch self.state {
-        case .initialized:
-            preconditionFailure("After the state machine has been initialized, start must be called immediately. Thus this state is unreachable")
-        case .waitForChannelToBecomeWritable:
-            // the request failed, before it was sent onto the wire.
-            self.state = .failed(error)
-            return .failRequest(error, .none)
-        case .running:
-            self.state = .failed(error)
-            return .failRequest(error, .close)
-
-        case .finished, .failed:
-            // ignore error
-            return .wait
-
-        case .modifying:
-            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
