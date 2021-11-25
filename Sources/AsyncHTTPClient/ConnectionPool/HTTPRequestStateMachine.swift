@@ -191,8 +191,8 @@ struct HTTPRequestStateMachine {
 
     mutating func errorHappened(_ error: Error) -> Action {
         if let error = error as? NIOSSLError,
-            error == .uncleanShutdown,
-            let action = self.handleNIOSSLUncleanShutdownError() {
+           error == .uncleanShutdown,
+           let action = self.handleNIOSSLUncleanShutdownError() {
             return action
         }
         switch self.state {
@@ -435,7 +435,7 @@ struct HTTPRequestStateMachine {
         case .running(let requestState, .receivingBody(let head, var streamState)):
             // This should never happen. But we don't want to precondition this behavior. Let's just
             // pass the read event on
-            return self.avoidingStateMachineCoW { (state) -> Action in
+            return self.avoidingStateMachineCoW { state -> Action in
                 let action = streamState.read()
                 state = .running(requestState, .receivingBody(head, streamState))
                 return action.toRequestAction()
@@ -470,7 +470,7 @@ struct HTTPRequestStateMachine {
         case .running(let requestState, .receivingBody(let head, var streamState)):
             // This should never happen. But we don't want to precondition this behavior. Let's just
             // pass the read event on
-            return self.avoidingStateMachineCoW { (state) -> Action in
+            return self.avoidingStateMachineCoW { state -> Action in
                 let buffer = streamState.channelReadComplete()
                 state = .running(requestState, .receivingBody(head, streamState))
                 if let buffer = buffer {
@@ -542,7 +542,7 @@ struct HTTPRequestStateMachine {
             preconditionFailure("How can we receive a response body, if we haven't received a head. Invalid state: \(self.state)")
 
         case .running(let requestState, .receivingBody(let head, var responseStreamState)):
-            return self.avoidingStateMachineCoW { (state) -> Action in
+            return self.avoidingStateMachineCoW { state -> Action in
                 responseStreamState.receivedBodyPart(body)
                 state = .running(requestState, .receivingBody(head, responseStreamState))
                 return .wait

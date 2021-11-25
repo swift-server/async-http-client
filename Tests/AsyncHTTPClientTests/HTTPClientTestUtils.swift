@@ -40,7 +40,7 @@ func isTestingNIOTS() -> Bool {
 func getDefaultEventLoopGroup(numberOfThreads: Int) -> EventLoopGroup {
     #if canImport(Network)
         if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *),
-            isTestingNIOTS() {
+           isTestingNIOTS() {
             return NIOTSEventLoopGroup(loopCount: numberOfThreads, defaultQoS: .default)
         }
     #endif
@@ -601,7 +601,7 @@ final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
 
             if let expectedAuhorization = self.expectedAuhorization {
                 guard let authorization = head.headers["proxy-authorization"].first,
-                    expectedAuhorization == authorization else {
+                      expectedAuhorization == authorization else {
                     self.head.status = .proxyAuthenticationRequired
                     return
                 }

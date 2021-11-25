@@ -115,7 +115,7 @@ extension HTTPConnectionPool.ConnectionFactory {
             deadline: deadline,
             eventLoop: eventLoop,
             logger: logger
-        ).flatMapThrowing { (negotiated) -> Channel in
+        ).flatMapThrowing { negotiated -> Channel in
 
             guard case .http1_1(let channel) = negotiated else {
                 preconditionFailure("Expected to create http/1.1 connections only for now")
@@ -453,7 +453,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         let bootstrap = ClientBootstrap(group: eventLoop)
             .connectTimeout(deadline - NIODeadline.now())
             .channelInitializer { channel in
-                sslContextFuture.flatMap { (sslContext) -> EventLoopFuture<Void> in
+                sslContextFuture.flatMap { sslContext -> EventLoopFuture<Void> in
                     do {
                         let sync = channel.pipeline.syncOperations
                         let sslHandler = try NIOSSLClientHandler(
@@ -497,8 +497,8 @@ extension ConnectionPool.Key.Scheme {
     }
 }
 
-private extension String {
-    var isIPAddress: Bool {
+extension String {
+    fileprivate var isIPAddress: Bool {
         var ipv4Addr = in_addr()
         var ipv6Addr = in6_addr()
 

@@ -153,8 +153,8 @@ extension HTTPClient {
     }
 }
 
-private extension String {
-    func omittingQuotes() -> String {
+extension String {
+    fileprivate func omittingQuotes() -> String {
         let dquote = "\""
         if !hasPrefix(dquote) || !hasSuffix(dquote) {
             return self

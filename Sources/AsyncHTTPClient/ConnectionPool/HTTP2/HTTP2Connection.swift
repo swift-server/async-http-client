@@ -97,7 +97,7 @@ final class HTTP2Connection {
             targetWindowSize: 8 * 1024 * 1024, // 8mb
             outboundBufferSizeHighWatermark: 8196,
             outboundBufferSizeLowWatermark: 4092,
-            inboundStreamInitializer: { (channel) -> EventLoopFuture<Void> in
+            inboundStreamInitializer: { channel -> EventLoopFuture<Void> in
                 channel.eventLoop.makeFailedFuture(HTTP2PushNotSupportedError())
             }
         )
