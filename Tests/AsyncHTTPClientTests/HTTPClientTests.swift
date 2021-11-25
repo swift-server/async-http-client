@@ -2520,11 +2520,10 @@ class HTTPClientTests: XCTestCase {
             return done
         }
 
-        XCTAssertThrowsError(
-            try self.defaultClient.execute(request:
-                Request(url: url,
-                        body: .stream(length: 1, uploader))).wait()) { error in
-            XCTAssertEqual(HTTPClientError.writeAfterRequestSent, error as? HTTPClientError)
+        var request: HTTPClient.Request?
+        XCTAssertNoThrow(request = try Request(url: url, body: .stream(length: 1, uploader)))
+        XCTAssertThrowsError(try self.defaultClient.execute(request: XCTUnwrap(request)).wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .writeAfterRequestSent)
         }
 
         // Quickly try another request and check that it works. If we by accident wrote some extra bytes into the
