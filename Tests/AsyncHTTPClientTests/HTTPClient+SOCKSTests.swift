@@ -76,7 +76,7 @@ class HTTPClientSOCKSTests: XCTestCase {
     func testProxySOCKS() throws {
         let socksBin = try MockSOCKSServer(expectedURL: "/socks/test", expectedResponse: "it works!")
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(proxy: .socksServer(host: "localhost")))
+                                     configuration: .init(proxy: .socksServer(host: "localhost", port: socksBin.port)))
 
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
@@ -125,7 +125,7 @@ class HTTPClientSOCKSTests: XCTestCase {
     func testProxySOCKSMisbehavingServer() throws {
         let socksBin = try MockSOCKSServer(expectedURL: "/socks/test", expectedResponse: "it works!", misbehave: true)
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(proxy: .socksServer(host: "localhost")))
+                                     configuration: .init(proxy: .socksServer(host: "localhost", port: socksBin.port)))
 
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
