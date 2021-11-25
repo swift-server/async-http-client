@@ -1,14 +1,23 @@
 # file options
 
---swiftversion 5.0
+--swiftversion 5.2
 --exclude .build
 
 # format options
 
 --self insert
 --patternlet inline
---stripunusedargs unnamed-only
 --ranges nospace
---disable typeSugar, andOperator # typeSugar: https://github.com/nicklockwood/SwiftFormat/issues/636
+--stripunusedargs unnamed-only
+--ifdef indent
+--extensionacl on-declarations
+--disable typeSugar # https://github.com/nicklockwood/SwiftFormat/issues/636
+--disable andOperator
+--disable wrapMultilineStatementBraces
+--disable enumNamespaces
+--disable redundantExtensionACL
+--disable redundantReturn
+--disable preferKeyPath
+--disable sortedSwitchCases
 
 # rules

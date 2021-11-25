@@ -342,8 +342,7 @@ extension TestConnectionCreator: HTTPConnectionRequester {
     }
 
     func http1ConnectionCreated(_ connection: HTTP1Connection) {
-        let wrapper = self.lock.withLock {
-            () -> (EitherPromiseWrapper<HTTP1Connection, HTTP2Connection>) in
+        let wrapper = self.lock.withLock { () -> (EitherPromiseWrapper<HTTP1Connection, HTTP2Connection>) in
 
             switch self.state {
             case .waitingForHTTP1Connection(let promise):
@@ -360,8 +359,7 @@ extension TestConnectionCreator: HTTPConnectionRequester {
     }
 
     func http2ConnectionCreated(_ connection: HTTP2Connection, maximumStreams: Int) {
-        let wrapper = self.lock.withLock {
-            () -> (EitherPromiseWrapper<HTTP2Connection, HTTP1Connection>) in
+        let wrapper = self.lock.withLock { () -> (EitherPromiseWrapper<HTTP2Connection, HTTP1Connection>) in
 
             switch self.state {
             case .waitingForHTTP1Connection(let promise):
@@ -392,8 +390,7 @@ extension TestConnectionCreator: HTTPConnectionRequester {
     }
 
     func failedToCreateHTTPConnection(_: HTTPConnectionPool.Connection.ID, error: Swift.Error) {
-        let wrapper = self.lock.withLock {
-            () -> (FailPromiseWrapper<HTTP1Connection, HTTP2Connection>) in
+        let wrapper = self.lock.withLock { () -> (FailPromiseWrapper<HTTP1Connection, HTTP2Connection>) in
 
             switch self.state {
             case .waitingForHTTP1Connection(let promise):

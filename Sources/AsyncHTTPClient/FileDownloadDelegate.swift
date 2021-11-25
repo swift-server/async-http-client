@@ -67,7 +67,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         self.reportHead?(head)
 
         if let totalBytesString = head.headers.first(name: "Content-Length"),
-            let totalBytes = Int(totalBytesString) {
+           let totalBytes = Int(totalBytesString) {
             self.progress.totalBytes = totalBytes
         }
 

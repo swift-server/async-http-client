@@ -610,7 +610,7 @@ extension HTTPConnectionPool {
                 uniquingKeysWith: +
             )
             var connectionToCreate = requiredEventLoopOfPendingRequests
-                .flatMap { (eventLoop, requestCount) -> [(Connection.ID, EventLoop)] in
+                .flatMap { eventLoop, requestCount -> [(Connection.ID, EventLoop)] in
                     // We need a connection for each queued request with a required event loop.
                     // Therefore, we look how many request we have queued for a given `eventLoop` and
                     // how many connections we are already starting on the given `eventLoop`.

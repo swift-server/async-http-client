@@ -951,7 +951,7 @@ class HTTPClientTests: XCTestCase {
                                                     method: .GET,
                                                     uri: "/foo",
                                                     headers: HTTPHeaders([("Host", "localhost:\(web.serverPort)")]))),
-                                        try web.readInbound()))
+            try web.readInbound()))
         XCTAssertNoThrow(XCTAssertEqual(.end(nil),
                                         try web.readInbound()))
         XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 1),
@@ -998,7 +998,7 @@ class HTTPClientTests: XCTestCase {
                                                     method: .GET,
                                                     uri: "/foo",
                                                     headers: HTTPHeaders([("Host", "localhost:\(web.serverPort)")]))),
-                                        try web.readInbound()))
+            try web.readInbound()))
         XCTAssertNoThrow(XCTAssertEqual(.end(nil),
                                         try web.readInbound()))
         XCTAssertNoThrow(try web.stop())
@@ -1021,7 +1021,7 @@ class HTTPClientTests: XCTestCase {
                                                         method: .GET,
                                                         uri: "/foo",
                                                         headers: HTTPHeaders([("Host", "localhost:\(web.serverPort)")]))),
-                                            try web.readInbound()))
+                try web.readInbound()))
             XCTAssertNoThrow(XCTAssertEqual(.end(nil),
                                             try web.readInbound()))
             XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 0),
@@ -1049,7 +1049,7 @@ class HTTPClientTests: XCTestCase {
                                                         method: .GET,
                                                         uri: "/foo",
                                                         headers: HTTPHeaders([("Host", "localhost:\(web.serverPort)")]))),
-                                            try web.readInbound()))
+                try web.readInbound()))
             XCTAssertNoThrow(XCTAssertEqual(.end(nil),
                                             try web.readInbound()))
             XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 0),
@@ -1109,7 +1109,7 @@ class HTTPClientTests: XCTestCase {
                         // errSSLPeerProtocolVersion because the first bytes contain the version.
                         XCTAssert(clientError.status == errSSLHandshakeFail ||
                             clientError.status == errSSLPeerProtocolVersion,
-                                  "unexpected NWTLSError with status \(clientError.status)")
+                            "unexpected NWTLSError with status \(clientError.status)")
                     #endif
                 } else {
                     guard let clientError = error as? NIOSSLError, case NIOSSLError.handshakeFailed = clientError else {
@@ -1226,7 +1226,7 @@ class HTTPClientTests: XCTestCase {
                                                         method: .GET,
                                                         uri: "/foo",
                                                         headers: HTTPHeaders([("Host", "localhost:\(web.serverPort)")]))),
-                                            try web.readInbound()))
+                try web.readInbound()))
             XCTAssertNoThrow(XCTAssertEqual(.end(nil),
                                             try web.readInbound()))
             XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 1),
@@ -1524,7 +1524,7 @@ class HTTPClientTests: XCTestCase {
                 XCTAssertNoThrow(try localHTTPBin.shutdown())
             }
             guard let target = URL(string: "/echo-uri", relativeTo: URL(string: "unix://\(path)")),
-                let request = try? Request(url: target) else {
+                  let request = try? Request(url: target) else {
                 XCTFail("couldn't build URL for request")
                 return
             }
@@ -1541,7 +1541,7 @@ class HTTPClientTests: XCTestCase {
                 XCTAssertNoThrow(try localHTTPBin.shutdown())
             }
             guard let target = URL(httpURLWithSocketPath: path, uri: "/echo-uri"),
-                let request = try? Request(url: target) else {
+                  let request = try? Request(url: target) else {
                 XCTFail("couldn't build URL for request")
                 return
             }
@@ -1561,7 +1561,7 @@ class HTTPClientTests: XCTestCase {
                 XCTAssertNoThrow(try localHTTPBin.shutdown())
             }
             guard let target = URL(httpsURLWithSocketPath: path, uri: "/echo-uri"),
-                let request = try? Request(url: target) else {
+                  let request = try? Request(url: target) else {
                 XCTFail("couldn't build URL for request")
                 return
             }
@@ -1896,12 +1896,12 @@ class HTTPClientTests: XCTestCase {
             return
         }
         guard let statsBytes2 = try? self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "stats").wait().body,
-            let stats2 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes2) else {
+              let stats2 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes2) else {
             XCTFail("request 2 didn't work")
             return
         }
         guard let statsBytes3 = try? self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "stats").wait().body,
-            let stats3 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes3) else {
+              let stats3 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes3) else {
             XCTFail("request 3 didn't work")
             return
         }
@@ -1926,12 +1926,12 @@ class HTTPClientTests: XCTestCase {
             return
         }
         guard let statsBytes2 = try? self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "stats").wait().body,
-            let stats2 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes2) else {
+              let stats2 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes2) else {
             XCTFail("request 2 didn't work")
             return
         }
         guard let statsBytes3 = try? self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "stats").wait().body,
-            let stats3 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes3) else {
+              let stats3 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes3) else {
             XCTFail("request 3 didn't work")
             return
         }
@@ -1958,12 +1958,12 @@ class HTTPClientTests: XCTestCase {
                 return
             }
             guard let statsBytes2 = try? self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "stats").wait().body,
-                let stats2 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes2) else {
+                  let stats2 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes2) else {
                 XCTFail("request 2 didn't work")
                 return
             }
             guard let statsBytes3 = try? self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "stats").wait().body,
-                let stats3 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes3) else {
+                  let stats3 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes3) else {
                 XCTFail("request 3 didn't work")
                 return
             }
@@ -1990,12 +1990,12 @@ class HTTPClientTests: XCTestCase {
                 return
             }
             guard let statsBytes2 = try? self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "stats").wait().body,
-                let stats2 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes2) else {
+                  let stats2 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes2) else {
                 XCTFail("request 2 didn't work")
                 return
             }
             guard let statsBytes3 = try? self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "stats").wait().body,
-                let stats3 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes3) else {
+                  let stats3 = try? JSONDecoder().decode(RequestInfo.self, from: statsBytes3) else {
                 XCTFail("request 3 didn't work")
                 return
             }
@@ -2013,20 +2013,20 @@ class HTTPClientTests: XCTestCase {
     func testLoggingCorrectlyAttachesRequestInformation() {
         let logStore = CollectEverythingLogHandler.LogStore()
 
-        var loggerYolo001: Logger = Logger(label: "\(#function)", factory: { _ in
+        var loggerYolo001 = Logger(label: "\(#function)", factory: { _ in
             CollectEverythingLogHandler(logStore: logStore)
         })
         loggerYolo001.logLevel = .trace
         loggerYolo001[metadataKey: "yolo-request-id"] = "yolo-001"
-        var loggerACME002: Logger = Logger(label: "\(#function)", factory: { _ in
+        var loggerACME002 = Logger(label: "\(#function)", factory: { _ in
             CollectEverythingLogHandler(logStore: logStore)
         })
         loggerACME002.logLevel = .trace
         loggerACME002[metadataKey: "acme-request-id"] = "acme-002"
 
         guard let request1 = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get"),
-            let request2 = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "stats"),
-            let request3 = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "ok") else {
+              let request2 = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "stats"),
+              let request3 = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "ok") else {
             XCTFail("bad stuff, can't even make request structures")
             return
         }
@@ -2062,7 +2062,7 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssert(logsAfterReq1.allSatisfy { entry in
             if let httpRequestMetadata = entry.metadata["ahc-request-id"],
-                let yoloRequestID = entry.metadata["yolo-request-id"] {
+               let yoloRequestID = entry.metadata["yolo-request-id"] {
                 XCTAssertNil(entry.metadata["acme-request-id"])
                 XCTAssertEqual("yolo-001", yoloRequestID)
                 XCTAssertNotNil(Int(httpRequestMetadata))
@@ -2088,7 +2088,7 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssert(logsAfterReq2.allSatisfy { entry in
             if let httpRequestMetadata = entry.metadata["ahc-request-id"],
-                let yoloRequestID = entry.metadata["yolo-request-id"] {
+               let yoloRequestID = entry.metadata["yolo-request-id"] {
                 XCTAssertNil(entry.metadata["acme-request-id"])
                 XCTAssertEqual("yolo-001", yoloRequestID)
                 XCTAssertNotNil(Int(httpRequestMetadata))
@@ -2109,7 +2109,7 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssert(logsAfterReq3.allSatisfy { entry in
             if let httpRequestMetadata = entry.metadata["ahc-request-id"],
-                let acmeRequestID = entry.metadata["acme-request-id"] {
+               let acmeRequestID = entry.metadata["acme-request-id"] {
                 XCTAssertNil(entry.metadata["yolo-request-id"])
                 XCTAssertEqual("acme-002", acmeRequestID)
                 XCTAssertNotNil(Int(httpRequestMetadata))
@@ -2132,13 +2132,13 @@ class HTTPClientTests: XCTestCase {
     func testNothingIsLoggedAtInfoOrHigher() {
         let logStore = CollectEverythingLogHandler.LogStore()
 
-        var logger: Logger = Logger(label: "\(#function)", factory: { _ in
+        var logger = Logger(label: "\(#function)", factory: { _ in
             CollectEverythingLogHandler(logStore: logStore)
         })
         logger.logLevel = .info
 
         guard let request1 = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get"),
-            let request2 = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "stats") else {
+              let request2 = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "stats") else {
             XCTFail("bad stuff, can't even make request structures")
             return
         }
@@ -2227,7 +2227,7 @@ class HTTPClientTests: XCTestCase {
         func checkExpectationsWithLogger<T>(type: String, _ body: (Logger, String) throws -> T) throws -> T {
             let logStore = CollectEverythingLogHandler.LogStore()
 
-            var logger: Logger = Logger(label: "\(#function)", factory: { _ in
+            var logger = Logger(label: "\(#function)", factory: { _ in
                 CollectEverythingLogHandler(logStore: logStore)
             })
             logger.logLevel = .trace
@@ -2520,11 +2520,10 @@ class HTTPClientTests: XCTestCase {
             return done
         }
 
-        XCTAssertThrowsError(
-            try self.defaultClient.execute(request:
-                Request(url: url,
-                        body: .stream(length: 1, uploader))).wait()) { error in
-            XCTAssertEqual(HTTPClientError.writeAfterRequestSent, error as? HTTPClientError)
+        var request: HTTPClient.Request?
+        XCTAssertNoThrow(request = try Request(url: url, body: .stream(length: 1, uploader)))
+        XCTAssertThrowsError(try self.defaultClient.execute(request: XCTUnwrap(request)).wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .writeAfterRequestSent)
         }
 
         // Quickly try another request and check that it works. If we by accident wrote some extra bytes into the

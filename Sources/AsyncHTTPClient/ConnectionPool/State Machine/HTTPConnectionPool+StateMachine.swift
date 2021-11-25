@@ -26,7 +26,7 @@ extension HTTPConnectionPool {
                 self.connection = connection
             }
 
-            static let none: Action = Action(request: .none, connection: .none)
+            static let none = Action(request: .none, connection: .none)
         }
 
         enum ConnectionAction {
