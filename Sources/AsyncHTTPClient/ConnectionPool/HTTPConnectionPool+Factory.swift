@@ -21,7 +21,7 @@ import NIOSOCKS
 import NIOSSL
 import NIOTLS
 #if canImport(Network)
-    import NIOTransportServices
+import NIOTransportServices
 #endif
 
 extension HTTPConnectionPool {
@@ -341,18 +341,18 @@ extension HTTPConnectionPool.ConnectionFactory {
 
     private func makePlainBootstrap(deadline: NIODeadline, eventLoop: EventLoop) -> NIOClientTCPBootstrapProtocol {
         #if canImport(Network)
-            if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), let tsBootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoop) {
-                return tsBootstrap
-                    .connectTimeout(deadline - NIODeadline.now())
-                    .channelInitializer { channel in
-                        do {
-                            try channel.pipeline.syncOperations.addHandler(HTTPClient.NWErrorHandler())
-                            return channel.eventLoop.makeSucceededVoidFuture()
-                        } catch {
-                            return channel.eventLoop.makeFailedFuture(error)
-                        }
+        if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), let tsBootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoop) {
+            return tsBootstrap
+                .connectTimeout(deadline - NIODeadline.now())
+                .channelInitializer { channel in
+                    do {
+                        try channel.pipeline.syncOperations.addHandler(HTTPClient.NWErrorHandler())
+                        return channel.eventLoop.makeSucceededVoidFuture()
+                    } catch {
+                        return channel.eventLoop.makeFailedFuture(error)
                     }
-            }
+                }
+        }
         #endif
 
         if let nioBootstrap = ClientBootstrap(validatingGroup: eventLoop) {
@@ -392,10 +392,10 @@ extension HTTPConnectionPool.ConnectionFactory {
         }
 
         #if canImport(Network)
-            // If NIOTransportSecurity is used, we want to map NWErrors into NWPOsixErrors or NWTLSError.
-            channelFuture = channelFuture.flatMapErrorThrowing { error in
-                throw HTTPClient.NWErrorHandler.translateError(error)
-            }
+        // If NIOTransportSecurity is used, we want to map NWErrors into NWPOsixErrors or NWTLSError.
+        channelFuture = channelFuture.flatMapErrorThrowing { error in
+            throw HTTPClient.NWErrorHandler.translateError(error)
+        }
         #endif
 
         return channelFuture
@@ -416,29 +416,29 @@ extension HTTPConnectionPool.ConnectionFactory {
         }
 
         #if canImport(Network)
-            if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), let tsBootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoop) {
-                // create NIOClientTCPBootstrap with NIOTS TLS provider
-                let bootstrapFuture = tlsConfig.getNWProtocolTLSOptions(on: eventLoop).map {
-                    options -> NIOClientTCPBootstrapProtocol in
+        if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), let tsBootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoop) {
+            // create NIOClientTCPBootstrap with NIOTS TLS provider
+            let bootstrapFuture = tlsConfig.getNWProtocolTLSOptions(on: eventLoop).map {
+                options -> NIOClientTCPBootstrapProtocol in
 
-                    tsBootstrap
-                        .connectTimeout(deadline - NIODeadline.now())
-                        .tlsOptions(options)
-                        .channelInitializer { channel in
-                            do {
-                                try channel.pipeline.syncOperations.addHandler(HTTPClient.NWErrorHandler())
-                                // we don't need to set a TLS deadline for NIOTS connections, since the
-                                // TLS handshake is part of the TS connection bootstrap. If the TLS
-                                // handshake times out the complete connection creation will be failed.
-                                try channel.pipeline.syncOperations.addHandler(TLSEventsHandler(deadline: nil))
-                                return channel.eventLoop.makeSucceededVoidFuture()
-                            } catch {
-                                return channel.eventLoop.makeFailedFuture(error)
-                            }
-                        } as NIOClientTCPBootstrapProtocol
-                }
-                return bootstrapFuture
+                tsBootstrap
+                    .connectTimeout(deadline - NIODeadline.now())
+                    .tlsOptions(options)
+                    .channelInitializer { channel in
+                        do {
+                            try channel.pipeline.syncOperations.addHandler(HTTPClient.NWErrorHandler())
+                            // we don't need to set a TLS deadline for NIOTS connections, since the
+                            // TLS handshake is part of the TS connection bootstrap. If the TLS
+                            // handshake times out the complete connection creation will be failed.
+                            try channel.pipeline.syncOperations.addHandler(TLSEventsHandler(deadline: nil))
+                            return channel.eventLoop.makeSucceededVoidFuture()
+                        } catch {
+                            return channel.eventLoop.makeFailedFuture(error)
+                        }
+                    } as NIOClientTCPBootstrapProtocol
             }
+            return bootstrapFuture
+        }
         #endif
 
         let host = self.key.host

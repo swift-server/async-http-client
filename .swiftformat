@@ -9,7 +9,7 @@
 --patternlet inline
 --ranges nospace
 --stripunusedargs unnamed-only
---ifdef indent
+--ifdef no-indent
 --extensionacl on-declarations
 --disable typeSugar # https://github.com/nicklockwood/SwiftFormat/issues/636
 --disable andOperator

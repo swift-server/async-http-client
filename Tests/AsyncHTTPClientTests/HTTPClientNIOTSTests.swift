@@ -14,7 +14,7 @@
 
 @testable import AsyncHTTPClient
 #if canImport(Network)
-    import Network
+import Network
 #endif
 import NIOCore
 import NIOPosix
@@ -42,10 +42,10 @@ class HTTPClientNIOTSTests: XCTestCase {
             XCTAssertNoThrow(try httpClient.syncShutdown())
         }
         #if canImport(Network)
-            if #available(macOS 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
-                XCTAssertTrue(httpClient.eventLoopGroup is NIOTSEventLoopGroup)
-                return
-            }
+        if #available(macOS 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
+            XCTAssertTrue(httpClient.eventLoopGroup is NIOTSEventLoopGroup)
+            return
+        }
         #endif
         XCTAssertTrue(httpClient.eventLoopGroup is MultiThreadedEventLoopGroup)
     }
@@ -61,17 +61,17 @@ class HTTPClientNIOTSTests: XCTestCase {
         }
 
         #if canImport(Network)
-            do {
-                _ = try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()
-                XCTFail("This should have failed")
-            } catch let error as HTTPClient.NWTLSError {
-                XCTAssert(error.status == errSSLHandshakeFail || error.status == errSSLBadCert,
-                          "unexpected NWTLSError with status \(error.status)")
-            } catch {
-                XCTFail("Error should have been NWTLSError not \(type(of: error))")
-            }
+        do {
+            _ = try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()
+            XCTFail("This should have failed")
+        } catch let error as HTTPClient.NWTLSError {
+            XCTAssert(error.status == errSSLHandshakeFail || error.status == errSSLBadCert,
+                      "unexpected NWTLSError with status \(error.status)")
+        } catch {
+            XCTFail("Error should have been NWTLSError not \(type(of: error))")
+        }
         #else
-            XCTFail("wrong OS")
+        XCTFail("wrong OS")
         #endif
     }
 
@@ -97,44 +97,44 @@ class HTTPClientNIOTSTests: XCTestCase {
     func testTLSVersionError() {
         guard isTestingNIOTS() else { return }
         #if canImport(Network)
-            let httpBin = HTTPBin(.http1_1(ssl: true))
-            var tlsConfig = TLSConfiguration.makeClientConfiguration()
-            tlsConfig.certificateVerification = .none
-            tlsConfig.minimumTLSVersion = .tlsv11
-            tlsConfig.maximumTLSVersion = .tlsv1
-            let httpClient = HTTPClient(
-                eventLoopGroupProvider: .shared(self.clientGroup),
-                configuration: .init(tlsConfiguration: tlsConfig)
-            )
-            defer {
-                XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
-                XCTAssertNoThrow(try httpBin.shutdown())
-            }
+        let httpBin = HTTPBin(.http1_1(ssl: true))
+        var tlsConfig = TLSConfiguration.makeClientConfiguration()
+        tlsConfig.certificateVerification = .none
+        tlsConfig.minimumTLSVersion = .tlsv11
+        tlsConfig.maximumTLSVersion = .tlsv1
+        let httpClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: .init(tlsConfiguration: tlsConfig)
+        )
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
 
-            XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()) { error in
-                XCTAssertEqual((error as? HTTPClient.NWTLSError)?.status, errSSLHandshakeFail)
-            }
+        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()) { error in
+            XCTAssertEqual((error as? HTTPClient.NWTLSError)?.status, errSSLHandshakeFail)
+        }
         #endif
     }
 
     func testTrustRootCertificateLoadFail() {
         guard isTestingNIOTS() else { return }
         #if canImport(Network)
-            if #available(macOS 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
-                var tlsConfig = TLSConfiguration.makeClientConfiguration()
-                tlsConfig.trustRoots = .file("not/a/certificate")
+        if #available(macOS 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
+            var tlsConfig = TLSConfiguration.makeClientConfiguration()
+            tlsConfig.trustRoots = .file("not/a/certificate")
 
-                XCTAssertThrowsError(try tlsConfig.getNWProtocolTLSOptions()) { error in
-                    switch error {
-                    case let error as NIOSSL.NIOSSLError where error == .failedToLoadCertificate:
-                        break
-                    default:
-                        XCTFail("\(error)")
-                    }
+            XCTAssertThrowsError(try tlsConfig.getNWProtocolTLSOptions()) { error in
+                switch error {
+                case let error as NIOSSL.NIOSSLError where error == .failedToLoadCertificate:
+                    break
+                default:
+                    XCTFail("\(error)")
                 }
-            } else {
-                XCTFail("should be impossible")
             }
+        } else {
+            XCTFail("should be impossible")
+        }
         #endif
     }
 }

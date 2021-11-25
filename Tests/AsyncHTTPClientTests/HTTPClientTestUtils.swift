@@ -31,18 +31,18 @@ import XCTest
 /// Are we testing NIO Transport services
 func isTestingNIOTS() -> Bool {
     #if canImport(Network)
-        return ProcessInfo.processInfo.environment["DISABLE_TS_TESTS"] != "true"
+    return ProcessInfo.processInfo.environment["DISABLE_TS_TESTS"] != "true"
     #else
-        return false
+    return false
     #endif
 }
 
 func getDefaultEventLoopGroup(numberOfThreads: Int) -> EventLoopGroup {
     #if canImport(Network)
-        if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *),
-           isTestingNIOTS() {
-            return NIOTSEventLoopGroup(loopCount: numberOfThreads, defaultQoS: .default)
-        }
+    if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *),
+       isTestingNIOTS() {
+        return NIOTSEventLoopGroup(loopCount: numberOfThreads, defaultQoS: .default)
+    }
     #endif
     return MultiThreadedEventLoopGroup(numberOfThreads: numberOfThreads)
 }
@@ -175,21 +175,21 @@ class DelayOnHeadDelegate: HTTPClientResponseDelegate {
 enum TemporaryFileHelpers {
     private static var temporaryDirectory: String {
         #if targetEnvironment(simulator)
-            // Simulator temp directories are so long (and contain the user name) that they're not usable
-            // for UNIX Domain Socket paths (which are limited to 103 bytes).
-            return "/tmp"
+        // Simulator temp directories are so long (and contain the user name) that they're not usable
+        // for UNIX Domain Socket paths (which are limited to 103 bytes).
+        return "/tmp"
         #else
-            #if os(Android)
-                return "/data/local/tmp"
-            #elseif os(Linux)
-                return "/tmp"
-            #else
-                if #available(macOS 10.12, iOS 10, tvOS 10, watchOS 3, *) {
-                    return FileManager.default.temporaryDirectory.path
-                } else {
-                    return "/tmp"
-                }
-            #endif // os
+        #if os(Android)
+        return "/data/local/tmp"
+        #elseif os(Linux)
+        return "/tmp"
+        #else
+        if #available(macOS 10.12, iOS 10, tvOS 10, watchOS 3, *) {
+            return FileManager.default.temporaryDirectory.path
+        } else {
+            return "/tmp"
+        }
+        #endif // os
         #endif // targetEnvironment
     }
 
