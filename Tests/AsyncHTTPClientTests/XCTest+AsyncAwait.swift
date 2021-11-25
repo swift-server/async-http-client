@@ -45,7 +45,7 @@ extension XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line,
         function: StaticString = #function,
-        operation: @escaping () async throws -> Void
+        operation: @escaping @Sendable () async throws -> Void
     ) {
         let expectation = self.expectation(description: expectationDescription)
         Task {

@@ -35,7 +35,7 @@ This product contains derivations of various scripts from SwiftNIO.
     
 ---
     
-This product contains "XCTest+AsyncAwait.swift" from gRPC Swift.
+This product contains a derivation of "XCTest+AsyncAwait.swift" from gRPC Swift.
 
   * LICENSE (Apache License 2.0):
     * https://www.apache.org/licenses/LICENSE-2.0
