@@ -35,7 +35,10 @@ class TestSOCKSBadServerHandler: ChannelInboundHandler {
 
 class MockSOCKSServer {
     let channel: Channel
-
+    
+    var port: Int {
+        channel.localAddress!.port!
+    }
     init(expectedURL: String, expectedResponse: String, misbehave: Bool = false, file: String = #file, line: UInt = #line) throws {
         let elg = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         let bootstrap: ServerBootstrap
@@ -57,7 +60,7 @@ class MockSOCKSServer {
                     ])
                 }
         }
-        self.channel = try bootstrap.bind(host: "localhost", port: 1080).wait()
+        self.channel = try bootstrap.bind(host: "localhost", port: 0).wait()
     }
 
     func shutdown() throws {
