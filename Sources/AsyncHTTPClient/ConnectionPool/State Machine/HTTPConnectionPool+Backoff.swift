@@ -14,9 +14,9 @@
 
 import NIOCore
 #if canImport(Darwin)
-    import func Darwin.pow
+import func Darwin.pow
 #else
-    import func Glibc.pow
+import func Glibc.pow
 #endif
 
 extension HTTPConnectionPool {

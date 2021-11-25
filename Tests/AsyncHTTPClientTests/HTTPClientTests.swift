@@ -14,7 +14,7 @@
 
 /* NOT @testable */ import AsyncHTTPClient // Tests that need @testable go into HTTPClientInternalTests.swift
 #if canImport(Network)
-    import Network
+import Network
 #endif
 import Logging
 import NIOConcurrencyHelpers
@@ -1100,16 +1100,16 @@ class HTTPClientTests: XCTestCase {
             case .failure(let error):
                 if isTestingNIOTS() {
                     #if canImport(Network)
-                        guard let clientError = error as? HTTPClient.NWTLSError else {
-                            XCTFail("Unexpected error: \(error)")
-                            continue
-                        }
-                        // We're speaking TLS to a plain text server. This will cause the handshake to fail but given
-                        // that the bytes "HTTP/1.1" aren't the start of a valid TLS packet, we can also get
-                        // errSSLPeerProtocolVersion because the first bytes contain the version.
-                        XCTAssert(clientError.status == errSSLHandshakeFail ||
-                            clientError.status == errSSLPeerProtocolVersion,
-                            "unexpected NWTLSError with status \(clientError.status)")
+                    guard let clientError = error as? HTTPClient.NWTLSError else {
+                        XCTFail("Unexpected error: \(error)")
+                        continue
+                    }
+                    // We're speaking TLS to a plain text server. This will cause the handshake to fail but given
+                    // that the bytes "HTTP/1.1" aren't the start of a valid TLS packet, we can also get
+                    // errSSLPeerProtocolVersion because the first bytes contain the version.
+                    XCTAssert(clientError.status == errSSLHandshakeFail ||
+                        clientError.status == errSSLPeerProtocolVersion,
+                        "unexpected NWTLSError with status \(clientError.status)")
                     #endif
                 } else {
                     guard let clientError = error as? NIOSSLError, case NIOSSLError.handshakeFailed = clientError else {
