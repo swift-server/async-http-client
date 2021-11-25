@@ -35,10 +35,11 @@ class TestSOCKSBadServerHandler: ChannelInboundHandler {
 
 class MockSOCKSServer {
     let channel: Channel
-    
+
     var port: Int {
-        channel.localAddress!.port!
+        self.channel.localAddress!.port!
     }
+
     init(expectedURL: String, expectedResponse: String, misbehave: Bool = false, file: String = #file, line: UInt = #line) throws {
         let elg = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         let bootstrap: ServerBootstrap
