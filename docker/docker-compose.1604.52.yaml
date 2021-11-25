@@ -13,6 +13,8 @@ services:
     image: async-http-client:16.04-5.2
     environment:
       - SANITIZER_ARG=--sanitize=thread
+      - TEST_DISCOVERY=--enable-test-discovery
+    
 
   shell:
     image: async-http-client:16.04-5.2

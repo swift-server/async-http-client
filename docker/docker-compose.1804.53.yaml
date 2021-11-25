@@ -11,8 +11,8 @@ services:
 
   test:
     image: async-http-client:18.04-5.3
-    environment: []
-      #- SANITIZER_ARG=--sanitize=thread
+    environment:
+      - TEST_DISCOVERY=--enable-test-discovery
 
   shell:
     image: async-http-client:18.04-5.3
