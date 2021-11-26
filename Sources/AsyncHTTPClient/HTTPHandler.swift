@@ -19,6 +19,28 @@ import NIOCore
 import NIOHTTP1
 import NIOSSL
 
+enum SupportedScheme: String {
+    case http
+    case https
+    case unix
+    case httpUnix = "http+unix"
+    case httpsUnix = "https+unix"
+}
+
+extension SupportedScheme {
+    var useTLS: Bool {
+        switch self {
+        case .http, .httpUnix, .unix:
+            return false
+        case .https, .httpsUnix:
+            return true
+        }
+    }
+    var defaultPort: Int {
+        useTLS ? 443 : 80
+    }
+}
+
 extension HTTPClient {
     /// Represent request body.
     public struct Body {
@@ -92,68 +114,36 @@ extension HTTPClient {
 
     /// Represent HTTP request.
     public struct Request {
-        /// Represent kind of Request
-        enum Kind: Equatable {
-            enum UnixScheme: Equatable {
-                case baseURL
-                case http_unix
-                case https_unix
-            }
-
-            /// Remote host request.
-            case host
-            /// UNIX Domain Socket HTTP request.
-            case unixSocket(_ scheme: UnixScheme)
-
-            private static var hostRestrictedSchemes: Set = ["http", "https"]
-            private static var allSupportedSchemes: Set = ["http", "https", "unix", "http+unix", "https+unix"]
-
-            func supportsRedirects(to scheme: String?) -> Bool {
-                guard let scheme = scheme?.lowercased() else { return false }
-
-                switch self {
-                case .host:
-                    return Kind.hostRestrictedSchemes.contains(scheme)
-                case .unixSocket:
-                    return Kind.allSupportedSchemes.contains(scheme)
-                }
-            }
-        }
-
-        static func useTLS(_ scheme: String) -> Bool {
-            return scheme == "https" || scheme == "https+unix"
-        }
 
         static func deconstructURL(
             _ url: URL
         ) throws -> (
-            kind: Kind, scheme: String, hostname: String, port: Int, socketPath: String, uri: String
+            scheme: SupportedScheme, hostname: String, port: Int, socketPath: String, uri: String
         ) {
-            guard let scheme = url.scheme?.lowercased() else {
+            guard let schemeString = url.scheme else {
                 throw HTTPClientError.emptyScheme
             }
+            guard let scheme = SupportedScheme(rawValue: schemeString.lowercased()) else {
+                throw HTTPClientError.unsupportedScheme(schemeString)
+            }
             switch scheme {
-            case "http", "https":
+            case .http, .https:
                 guard let host = url.host, !host.isEmpty else {
                     throw HTTPClientError.emptyHost
                 }
-                let defaultPort = self.useTLS(scheme) ? 443 : 80
-                return (.host, scheme, host, url.port ?? defaultPort, "", url.uri)
-            case "http+unix", "https+unix":
+                return (scheme, host, url.port ?? scheme.defaultPort, "", url.uri)
+            case .httpUnix, .httpsUnix:
                 guard let socketPath = url.host, !socketPath.isEmpty else {
                     throw HTTPClientError.missingSocketPath
                 }
-                let (kind, defaultPort) = self.useTLS(scheme) ? (Kind.UnixScheme.https_unix, 443) : (.http_unix, 80)
-                return (.unixSocket(kind), scheme, "", url.port ?? defaultPort, socketPath, url.uri)
-            case "unix":
+                return (scheme, "", url.port ?? scheme.defaultPort, socketPath, url.uri)
+            case .unix:
                 let socketPath = url.baseURL?.path ?? url.path
                 let uri = url.baseURL != nil ? url.uri : "/"
                 guard !socketPath.isEmpty else {
                     throw HTTPClientError.missingSocketPath
                 }
-                return (.unixSocket(.baseURL), scheme, "", url.port ?? 80, socketPath, uri)
-            default:
-                throw HTTPClientError.unsupportedScheme(url.scheme!)
+                return (scheme, "", url.port ?? scheme.defaultPort, socketPath, uri)
             }
         }
 
@@ -162,7 +152,11 @@ extension HTTPClient {
         /// Remote URL.
         public let url: URL
         /// Remote HTTP scheme, resolved from `URL`.
-        public let scheme: String
+        internal let _scheme: SupportedScheme
+        /// Remote HTTP scheme, resolved from `URL`.
+        public var scheme: String {
+            _scheme.rawValue
+        }
         /// Remote host, resolved from `URL`.
         public let host: String
         /// Resolved port.
@@ -184,7 +178,6 @@ extension HTTPClient {
         }
 
         var redirectState: RedirectState?
-        let kind: Kind
 
         /// Create HTTP request.
         ///
@@ -255,7 +248,7 @@ extension HTTPClient {
         ///     - `emptyHost` if URL does not contains a host.
         ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration?) throws {
-            (self.kind, self.scheme, self.host, self.port, self.socketPath, self.uri) = try Request.deconstructURL(url)
+            (self._scheme, self.host, self.port, self.socketPath, self.uri) = try Request.deconstructURL(url)
             self.redirectState = nil
             self.url = url
             self.method = method
@@ -265,9 +258,7 @@ extension HTTPClient {
         }
 
         /// Whether request will be executed using secure socket.
-        public var useTLS: Bool {
-            return Request.useTLS(self.scheme)
-        }
+        public var useTLS: Bool { self._scheme.useTLS }
 
         func createRequestHead() throws -> (HTTPRequestHead, RequestFramingMetadata) {
             var head = HTTPRequestHead(
@@ -280,7 +271,7 @@ extension HTTPClient {
             if !head.headers.contains(name: "host") {
                 let port = self.port
                 var host = self.host
-                if !(port == 80 && self.scheme == "http"), !(port == 443 && self.scheme == "https") {
+                if !(port == 80 && self._scheme == .http), !(port == 443 && self._scheme == .https) {
                     host += ":\(port)"
                 }
                 head.headers.add(name: "host", value: host)
@@ -725,7 +716,7 @@ internal struct RedirectHandler<ResponseType> {
             return nil
         }
 
-        guard self.request.kind.supportsRedirects(to: url.scheme) else {
+        guard self.request._scheme.supportsRedirects(to: url.scheme) else {
             return nil
         }
 
@@ -794,6 +785,32 @@ internal struct RedirectHandler<ResponseType> {
             }
         } catch {
             promise.fail(error)
+        }
+    }
+}
+
+extension SupportedScheme {
+    func supportsRedirects(to destinationScheme: String?) -> Bool {
+        guard
+            let destinationSchemeString = destinationScheme?.lowercased(),
+            let destinationScheme = SupportedScheme(rawValue: destinationSchemeString)
+        else {
+            return false
+        }
+        return supportsRedirects(to: destinationScheme)
+    }
+    
+    func supportsRedirects(to destinationScheme: SupportedScheme) -> Bool {
+        switch self {
+        case .http, .https:
+            switch destinationScheme {
+            case .http, .https:
+                return true
+            case .unix, .httpUnix, .httpsUnix:
+                return false
+            }
+        case .unix, .httpUnix, .httpsUnix:
+            return true
         }
     }
 }

@@ -185,9 +185,9 @@ extension HTTPConnectionPool.ConnectionFactory {
         logger: Logger
     ) -> EventLoopFuture<NegotiatedProtocol> {
         switch self.key.scheme {
-        case .http, .http_unix, .unix:
+        case .http, .httpUnix, .unix:
             return self.makePlainChannel(deadline: deadline, eventLoop: eventLoop).map { .http1_1($0) }
-        case .https, .https_unix:
+        case .https, .httpsUnix:
             return self.makeTLSChannel(deadline: deadline, eventLoop: eventLoop, logger: logger).flatMapThrowing {
                 channel, negotiated in
 
@@ -202,9 +202,9 @@ extension HTTPConnectionPool.ConnectionFactory {
         switch self.key.scheme {
         case .http:
             return bootstrap.connect(host: self.key.host, port: self.key.port)
-        case .http_unix, .unix:
+        case .httpUnix, .unix:
             return bootstrap.connect(unixDomainSocketPath: self.key.unixPath)
-        case .https, .https_unix:
+        case .https, .httpsUnix:
             preconditionFailure("Unexpected scheme")
         }
     }
@@ -292,7 +292,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         logger: Logger
     ) -> EventLoopFuture<NegotiatedProtocol> {
         switch self.key.scheme {
-        case .unix, .http_unix, .https_unix:
+        case .unix, .httpUnix, .httpsUnix:
             preconditionFailure("Unexpected scheme. Not supported for proxy!")
         case .http:
             return channel.eventLoop.makeSucceededFuture(.http1_1(channel))
@@ -374,9 +374,9 @@ extension HTTPConnectionPool.ConnectionFactory {
             switch self.key.scheme {
             case .https:
                 return bootstrap.connect(host: self.key.host, port: self.key.port)
-            case .https_unix:
+            case .httpsUnix:
                 return bootstrap.connect(unixDomainSocketPath: self.key.unixPath)
-            case .http, .http_unix, .unix:
+            case .http, .httpUnix, .unix:
                 preconditionFailure("Unexpected scheme")
             }
         }.flatMap { channel -> EventLoopFuture<(Channel, String?)> in
@@ -486,12 +486,12 @@ extension HTTPConnectionPool.ConnectionFactory {
     }
 }
 
-extension ConnectionPool.Key.Scheme {
+extension SupportedScheme {
     var isProxyable: Bool {
         switch self {
         case .http, .https:
             return true
-        case .unix, .http_unix, .https_unix:
+        case .unix, .httpUnix, .httpsUnix:
             return false
         }
     }
