@@ -218,7 +218,7 @@ class HTTPClientTests: XCTestCase {
     func testBadUnixWithBaseURL() {
         let badUnixBaseURL = URL(string: "/foo", relativeTo: URL(string: "unix:")!)!
         XCTAssertEqual(badUnixBaseURL.baseURL?.path, "")
-        XCTAssertThrowsError(try Request(url: badUnixBaseURL), "should throw") { error in
+        XCTAssertThrowsError(try Request(url: badUnixBaseURL)) { error in
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.missingSocketPath)
         }
     }
