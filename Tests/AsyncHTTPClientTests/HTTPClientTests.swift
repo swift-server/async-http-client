@@ -224,20 +224,20 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testConvenienceExecuteMethods() throws {
-        XCTAssertNoThrow(XCTAssertEqual(["GET"[...]],
-                                        try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-        XCTAssertNoThrow(XCTAssertEqual(["POST"[...]],
-                                        try self.defaultClient.post(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-        XCTAssertNoThrow(XCTAssertEqual(["PATCH"[...]],
-                                        try self.defaultClient.patch(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-        XCTAssertNoThrow(XCTAssertEqual(["PUT"[...]],
-                                        try self.defaultClient.put(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-        XCTAssertNoThrow(XCTAssertEqual(["DELETE"[...]],
-                                        try self.defaultClient.delete(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-        XCTAssertNoThrow(XCTAssertEqual(["GET"[...]],
-                                        try self.defaultClient.execute(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-        XCTAssertNoThrow(XCTAssertEqual(["CHECKOUT"[...]],
-                                        try self.defaultClient.execute(.CHECKOUT, url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+        XCTAssertEqual(["GET"[...]],
+                       try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"])
+        XCTAssertEqual(["POST"[...]],
+                       try self.defaultClient.post(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"])
+        XCTAssertEqual(["PATCH"[...]],
+                       try self.defaultClient.patch(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"])
+        XCTAssertEqual(["PUT"[...]],
+                       try self.defaultClient.put(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"])
+        XCTAssertEqual(["DELETE"[...]],
+                       try self.defaultClient.delete(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"])
+        XCTAssertEqual(["GET"[...]],
+                       try self.defaultClient.execute(url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"])
+        XCTAssertEqual(["CHECKOUT"[...]],
+                       try self.defaultClient.execute(.CHECKOUT, url: self.defaultHTTPBinURLPrefix + "echo-method").wait().headers[canonicalForm: "X-Method-Used"])
     }
 
     func testConvenienceExecuteMethodsOverSocket() throws {
@@ -247,12 +247,12 @@ class HTTPClientTests: XCTestCase {
                 XCTAssertNoThrow(try localSocketPathHTTPBin.shutdown())
             }
 
-            XCTAssertNoThrow(XCTAssertEqual(["GET"[...]],
-                                            try self.defaultClient.execute(socketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-            XCTAssertNoThrow(XCTAssertEqual(["GET"[...]],
-                                            try self.defaultClient.execute(.GET, socketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-            XCTAssertNoThrow(XCTAssertEqual(["POST"[...]],
-                                            try self.defaultClient.execute(.POST, socketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+            XCTAssertEqual(["GET"[...]],
+                           try self.defaultClient.execute(socketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"])
+            XCTAssertEqual(["GET"[...]],
+                           try self.defaultClient.execute(.GET, socketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"])
+            XCTAssertEqual(["POST"[...]],
+                           try self.defaultClient.execute(.POST, socketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"])
         })
     }
 
@@ -266,12 +266,12 @@ class HTTPClientTests: XCTestCase {
                 XCTAssertNoThrow(try localSocketPathHTTPBin.shutdown())
             }
 
-            XCTAssertNoThrow(XCTAssertEqual(["GET"[...]],
-                                            try localClient.execute(secureSocketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-            XCTAssertNoThrow(XCTAssertEqual(["GET"[...]],
-                                            try localClient.execute(.GET, secureSocketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
-            XCTAssertNoThrow(XCTAssertEqual(["POST"[...]],
-                                            try localClient.execute(.POST, secureSocketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"]))
+            XCTAssertEqual(["GET"[...]],
+                           try localClient.execute(secureSocketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"])
+            XCTAssertEqual(["GET"[...]],
+                           try localClient.execute(.GET, secureSocketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"])
+            XCTAssertEqual(["POST"[...]],
+                           try localClient.execute(.POST, secureSocketPath: path, urlPath: "echo-method").wait().headers[canonicalForm: "X-Method-Used"])
         })
     }
 
@@ -955,13 +955,16 @@ class HTTPClientTests: XCTestCase {
         }
         let result = self.defaultClient.get(url: "http://localhost:\(web.serverPort)/foo")
 
-        XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
-                                                    method: .GET,
-                                                    uri: "/foo",
-                                                    headers: HTTPHeaders([("Host", "localhost:\(web.serverPort)")]))),
-            try web.readInbound()))
-        XCTAssertNoThrow(XCTAssertEqual(.end(nil),
-                                        try web.readInbound()))
+        XCTAssertNoThrow(try web.receiveHeadAndVerify { received in
+            let expected = HTTPRequestHead(
+                version: .http1_1,
+                method: .GET,
+                uri: "/foo",
+                headers: ["Host": "localhost:\(web.serverPort)"]
+            )
+            XCTAssertEqual(expected, received)
+        })
+        XCTAssertNoThrow(try web.receiveEnd())
         XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 1),
                                                            status: .internalServerError))))
         XCTAssertNoThrow(try web.writeOutbound(.end(nil)))
@@ -1002,13 +1005,16 @@ class HTTPClientTests: XCTestCase {
         let web = NIOHTTP1TestServer(group: self.serverGroup)
         let result = self.defaultClient.get(url: "http://localhost:\(web.serverPort)/foo")
 
-        XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
-                                                    method: .GET,
-                                                    uri: "/foo",
-                                                    headers: HTTPHeaders([("Host", "localhost:\(web.serverPort)")]))),
-            try web.readInbound()))
-        XCTAssertNoThrow(XCTAssertEqual(.end(nil),
-                                        try web.readInbound()))
+        XCTAssertNoThrow(try web.receiveHeadAndVerify { received in
+            let expected = HTTPRequestHead(
+                version: .http1_1,
+                method: .GET,
+                uri: "/foo",
+                headers: ["Host": "localhost:\(web.serverPort)"]
+            )
+            XCTAssertEqual(expected, received)
+        })
+        XCTAssertNoThrow(try web.receiveEnd())
         XCTAssertNoThrow(try web.stop())
 
         XCTAssertThrowsError(try result.wait()) { error in
@@ -1025,13 +1031,16 @@ class HTTPClientTests: XCTestCase {
         for _ in 0..<10 {
             let result = self.defaultClient.get(url: "http://localhost:\(web.serverPort)/foo")
 
-            XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
-                                                        method: .GET,
-                                                        uri: "/foo",
-                                                        headers: HTTPHeaders([("Host", "localhost:\(web.serverPort)")]))),
-                try web.readInbound()))
-            XCTAssertNoThrow(XCTAssertEqual(.end(nil),
-                                            try web.readInbound()))
+            XCTAssertNoThrow(try web.receiveHeadAndVerify { received in
+                let expected = HTTPRequestHead(
+                    version: .http1_1,
+                    method: .GET,
+                    uri: "/foo",
+                    headers: ["Host": "localhost:\(web.serverPort)"]
+                )
+                XCTAssertEqual(expected, received)
+            })
+            XCTAssertNoThrow(try web.receiveEnd())
             XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 0),
                                                                status: .ok,
                                                                headers: HTTPHeaders([("connection", "close")])))))
@@ -1053,13 +1062,16 @@ class HTTPClientTests: XCTestCase {
         for i in 0..<10 {
             let result = self.defaultClient.get(url: "http://localhost:\(web.serverPort)/foo")
 
-            XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
-                                                        method: .GET,
-                                                        uri: "/foo",
-                                                        headers: HTTPHeaders([("Host", "localhost:\(web.serverPort)")]))),
-                try web.readInbound()))
-            XCTAssertNoThrow(XCTAssertEqual(.end(nil),
-                                            try web.readInbound()))
+            XCTAssertNoThrow(try web.receiveHeadAndVerify { received in
+                let expected = HTTPRequestHead(
+                    version: .http1_1,
+                    method: .GET,
+                    uri: "/foo",
+                    headers: ["Host": "localhost:\(web.serverPort)"]
+                )
+                XCTAssertEqual(expected, received)
+            })
+            XCTAssertNoThrow(try web.receiveEnd())
             XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 0),
                                                                status: .ok,
                                                                headers: HTTPHeaders([("connection",
@@ -1188,7 +1200,7 @@ class HTTPClientTests: XCTestCase {
         let allDone = DispatchGroup()
 
         let url = self.defaultHTTPBinURLPrefix + "get"
-        XCTAssertNoThrow(XCTAssertEqual(.ok, try self.defaultClient.get(url: url).wait().status))
+        XCTAssertEqual(.ok, try self.defaultClient.get(url: url).wait().status)
 
         for w in 0..<numberOfWorkers {
             let q = DispatchQueue(label: "worker \(w)")
@@ -1198,7 +1210,7 @@ class HTTPClientTests: XCTestCase {
                     allWorkersGo.wait() // wait for the driver to let us go
 
                     for _ in 0..<numberOfRequestsPerWorkers {
-                        XCTAssertNoThrow(XCTAssertEqual(.ok, try self.defaultClient.get(url: url).wait().status))
+                        XCTAssertEqual(.ok, try self.defaultClient.get(url: url).wait().status)
                     }
                 }
                 go()
@@ -1230,13 +1242,16 @@ class HTTPClientTests: XCTestCase {
 
         for _ in 0..<10 {
             let result = localClient.get(url: "http://localhost:\(web.serverPort)/foo")
-            XCTAssertNoThrow(XCTAssertEqual(.head(.init(version: .init(major: 1, minor: 1),
-                                                        method: .GET,
-                                                        uri: "/foo",
-                                                        headers: HTTPHeaders([("Host", "localhost:\(web.serverPort)")]))),
-                try web.readInbound()))
-            XCTAssertNoThrow(XCTAssertEqual(.end(nil),
-                                            try web.readInbound()))
+            XCTAssertNoThrow(try web.receiveHeadAndVerify { received in
+                let expected = HTTPRequestHead(
+                    version: .http1_1,
+                    method: .GET,
+                    uri: "/foo",
+                    headers: ["Host": "localhost:\(web.serverPort)"]
+                )
+                XCTAssertEqual(expected, received)
+            })
+            XCTAssertNoThrow(try web.receiveEnd())
             XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 1),
                                                                status: .ok,
                                                                headers: HTTPHeaders([("CoNnEcTiOn", "cLoSe")])))))
@@ -1333,7 +1348,7 @@ class HTTPClientTests: XCTestCase {
         }
 
         let url = self.defaultHTTPBinURLPrefix + "get"
-        XCTAssertNoThrow(XCTAssertEqual(.ok, try localClient.get(url: url).wait().status))
+        XCTAssertEqual(.ok, try localClient.get(url: url).wait().status)
 
         for w in 0..<numberOfWorkers {
             let q = DispatchQueue(label: "worker \(w)")
@@ -1463,13 +1478,13 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try localClient.syncShutdown())
         }
 
-        XCTAssertNoThrow(XCTAssertEqual(.ok,
-                                        try el.flatSubmit { () -> EventLoopFuture<HTTPClient.Response> in
-                                            localClient.get(url: url).flatMap { firstResponse in
-                                                XCTAssertEqual(.ok, firstResponse.status)
-                                                return localClient.get(url: url) // <== interesting bit here
-                                            }
-                                        }.wait().status))
+        XCTAssertEqual(.ok,
+                       try el.flatSubmit { () -> EventLoopFuture<HTTPClient.Response> in
+                           localClient.get(url: url).flatMap { firstResponse in
+                               XCTAssertEqual(.ok, firstResponse.status)
+                               return localClient.get(url: url) // <== interesting bit here
+                           }
+                       }.wait().status)
     }
 
     func testMakeSecondRequestWhilstFirstIsOngoing() {
@@ -1490,20 +1505,20 @@ class HTTPClientTests: XCTestCase {
 
         // Now, the first request is ongoing but not complete, let's start a second one
         let secondRequest = client.get(url: url)
-        XCTAssertNoThrow(XCTAssertEqual(.end(nil), try web.readInbound())) // first request: .end
+        XCTAssertEqual(.end(nil), try web.readInbound()) // first request: .end
 
         XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 1), status: .ok))))
         XCTAssertNoThrow(try web.writeOutbound(.end(nil)))
 
-        XCTAssertNoThrow(XCTAssertEqual(.ok, try firstRequest.wait().status))
+        XCTAssertEqual(.ok, try firstRequest.wait().status)
 
         // Okay, first request done successfully, let's do the second one too.
         XCTAssertNoThrow(XCTAssertNotNil(try web.readInbound())) // first request: .head
-        XCTAssertNoThrow(XCTAssertEqual(.end(nil), try web.readInbound())) // first request: .end
+        XCTAssertEqual(.end(nil), try web.readInbound()) // first request: .end
 
         XCTAssertNoThrow(try web.writeOutbound(.head(.init(version: .init(major: 1, minor: 1), status: .created))))
         XCTAssertNoThrow(try web.writeOutbound(.end(nil)))
-        XCTAssertNoThrow(XCTAssertEqual(.created, try secondRequest.wait().status))
+        XCTAssertEqual(.created, try secondRequest.wait().status)
     }
 
     func testUDSBasic() {
@@ -1516,8 +1531,8 @@ class HTTPClientTests: XCTestCase {
                 XCTAssertNoThrow(try localHTTPBin.shutdown())
             }
             let target = "unix://\(path)"
-            XCTAssertNoThrow(XCTAssertEqual(["Yes"[...]],
-                                            try self.defaultClient.get(url: target).wait().headers[canonicalForm: "X-Is-This-Slash"]))
+            XCTAssertEqual(["Yes"[...]],
+                           try self.defaultClient.get(url: target).wait().headers[canonicalForm: "X-Is-This-Slash"])
         })
     }
 
@@ -1536,8 +1551,8 @@ class HTTPClientTests: XCTestCase {
                 XCTFail("couldn't build URL for request")
                 return
             }
-            XCTAssertNoThrow(XCTAssertEqual(["/echo-uri"[...]],
-                                            try self.defaultClient.execute(request: request).wait().headers[canonicalForm: "X-Calling-URI"]))
+            XCTAssertEqual(["/echo-uri"[...]],
+                           try self.defaultClient.execute(request: request).wait().headers[canonicalForm: "X-Calling-URI"])
         })
     }
 
@@ -1553,8 +1568,8 @@ class HTTPClientTests: XCTestCase {
                 XCTFail("couldn't build URL for request")
                 return
             }
-            XCTAssertNoThrow(XCTAssertEqual(["/echo-uri"[...]],
-                                            try self.defaultClient.execute(request: request).wait().headers[canonicalForm: "X-Calling-URI"]))
+            XCTAssertEqual(["/echo-uri"[...]],
+                           try self.defaultClient.execute(request: request).wait().headers[canonicalForm: "X-Calling-URI"])
         })
     }
 
@@ -1573,8 +1588,8 @@ class HTTPClientTests: XCTestCase {
                 XCTFail("couldn't build URL for request")
                 return
             }
-            XCTAssertNoThrow(XCTAssertEqual(["/echo-uri"[...]],
-                                            try localClient.execute(request: request).wait().headers[canonicalForm: "X-Calling-URI"]))
+            XCTAssertEqual(["/echo-uri"[...]],
+                           try localClient.execute(request: request).wait().headers[canonicalForm: "X-Calling-URI"])
         })
     }
 
@@ -1672,7 +1687,7 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertEqual(0, sharedStateServerHandler.connectionNumber.load())
         XCTAssertEqual(0, sharedStateServerHandler.requestNumber.load())
-        XCTAssertNoThrow(XCTAssertEqual(.ok, try client.get(url: url).wait().status))
+        XCTAssertEqual(.ok, try client.get(url: url).wait().status)
         XCTAssertEqual(1, sharedStateServerHandler.connectionNumber.load())
         XCTAssertEqual(1, sharedStateServerHandler.requestNumber.load())
         XCTAssertThrowsError(try client.get(url: url).wait().status) { error in
@@ -1680,7 +1695,7 @@ class HTTPClientTests: XCTestCase {
         }
         XCTAssertEqual(1, sharedStateServerHandler.connectionNumber.load())
         XCTAssertEqual(2, sharedStateServerHandler.requestNumber.load())
-        XCTAssertNoThrow(XCTAssertEqual(.ok, try client.get(url: url).wait().status))
+        XCTAssertEqual(.ok, try client.get(url: url).wait().status)
         XCTAssertEqual(2, sharedStateServerHandler.connectionNumber.load())
         XCTAssertEqual(3, sharedStateServerHandler.requestNumber.load())
     }
@@ -1867,13 +1882,13 @@ class HTTPClientTests: XCTestCase {
             return
         }
 
-        XCTAssertNoThrow(XCTAssertEqual(.POST, try headPromise.futureResult.wait().method))
+        XCTAssertEqual(.POST, try headPromise.futureResult.wait().method)
         for bodyChunkNumber in 0..<16 {
             buffer.clear()
             buffer.writeString(String(bodyChunkNumber, radix: 16))
             XCTAssertEqual(1, buffer.readableBytes)
             XCTAssertNoThrow(try streamWriter.write(.byteBuffer(buffer)).wait())
-            XCTAssertNoThrow(XCTAssertEqual(buffer, try bodyPromises[bodyChunkNumber].futureResult.wait()))
+            XCTAssertEqual(buffer, try bodyPromises[bodyChunkNumber].futureResult.wait())
         }
         sentOffAllBodyPartsPromise.succeed(())
         XCTAssertNoThrow(try endPromise.futureResult.wait())
@@ -2252,29 +2267,29 @@ class HTTPClientTests: XCTestCase {
             return result
         }
 
-        XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "GET") { logger, url in
+        XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "GET") { logger, url in
             try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + url, logger: logger).wait()
-        }.status))
+        }.status)
 
-        XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "PUT") { logger, url in
+        XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "PUT") { logger, url in
             try self.defaultClient.put(url: self.defaultHTTPBinURLPrefix + url, logger: logger).wait()
-        }.status))
+        }.status)
 
-        XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "POST") { logger, url in
+        XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "POST") { logger, url in
             try self.defaultClient.post(url: self.defaultHTTPBinURLPrefix + url, logger: logger).wait()
-        }.status))
+        }.status)
 
-        XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "DELETE") { logger, url in
+        XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "DELETE") { logger, url in
             try self.defaultClient.delete(url: self.defaultHTTPBinURLPrefix + url, logger: logger).wait()
-        }.status))
+        }.status)
 
-        XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "PATCH") { logger, url in
+        XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "PATCH") { logger, url in
             try self.defaultClient.patch(url: self.defaultHTTPBinURLPrefix + url, logger: logger).wait()
-        }.status))
+        }.status)
 
-        XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "CHECKOUT") { logger, url in
+        XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "CHECKOUT") { logger, url in
             try self.defaultClient.execute(.CHECKOUT, url: self.defaultHTTPBinURLPrefix + url, logger: logger).wait()
-        }.status))
+        }.status)
 
         // No background activity expected here.
         XCTAssertEqual(0, self.backgroundLogStore.allEntries.filter { $0.level >= .debug }.count)
@@ -2294,9 +2309,9 @@ class HTTPClientTests: XCTestCase {
                 XCTAssertNoThrow(try localSocketPathHTTPBin.shutdown())
             }
 
-            XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "GET") { logger, url in
+            XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "GET") { logger, url in
                 try localClient.execute(socketPath: path, urlPath: url, logger: logger).wait()
-            }.status))
+            }.status)
 
             // No background activity expected here.
             XCTAssertEqual(0, backgroundLogStore.allEntries.filter { $0.level >= .debug }.count)
@@ -2318,9 +2333,9 @@ class HTTPClientTests: XCTestCase {
                 XCTAssertNoThrow(try localSocketPathHTTPBin.shutdown())
             }
 
-            XCTAssertNoThrow(XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "GET") { logger, url in
+            XCTAssertEqual(.notFound, try checkExpectationsWithLogger(type: "GET") { logger, url in
                 try localClient.execute(secureSocketPath: path, urlPath: url, logger: logger).wait()
-            }.status))
+            }.status)
 
             // No background activity expected here.
             XCTAssertEqual(0, backgroundLogStore.allEntries.filter { $0.level >= .debug }.count)
