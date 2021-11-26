@@ -446,28 +446,28 @@ class HTTPClientInternalTests: XCTestCase {
 
     func testInternalRequestURI() throws {
         let request1 = try Request(url: "http://someserver.com:8888/some/path?foo=bar")
-        XCTAssertEqual(request1._scheme, .http)
-        XCTAssertEqual(request1.socketPath, "")
-        XCTAssertEqual(request1.uri, "/some/path?foo=bar")
+        XCTAssertEqual(request1.endpoint.scheme, .http)
+        XCTAssertEqual(request1.endpoint.socketPath, "")
+        XCTAssertEqual(request1.endpoint.uri, "/some/path?foo=bar")
 
         let request2 = try Request(url: "https://someserver.com")
-        XCTAssertEqual(request2._scheme, .https)
-        XCTAssertEqual(request2.socketPath, "")
-        XCTAssertEqual(request2.uri, "/")
+        XCTAssertEqual(request2.endpoint.scheme, .https)
+        XCTAssertEqual(request2.endpoint.socketPath, "")
+        XCTAssertEqual(request2.endpoint.uri, "/")
 
         let request3 = try Request(url: "unix:///tmp/file")
-        XCTAssertEqual(request3._scheme, .unix)
-        XCTAssertEqual(request3.socketPath, "/tmp/file")
-        XCTAssertEqual(request3.uri, "/")
+        XCTAssertEqual(request3.endpoint.scheme, .unix)
+        XCTAssertEqual(request3.endpoint.socketPath, "/tmp/file")
+        XCTAssertEqual(request3.endpoint.uri, "/")
 
         let request4 = try Request(url: "http+unix://%2Ftmp%2Ffile/file/path")
-        XCTAssertEqual(request4._scheme, .httpUnix)
-        XCTAssertEqual(request4.socketPath, "/tmp/file")
-        XCTAssertEqual(request4.uri, "/file/path")
+        XCTAssertEqual(request4.endpoint.scheme, .httpUnix)
+        XCTAssertEqual(request4.endpoint.socketPath, "/tmp/file")
+        XCTAssertEqual(request4.endpoint.uri, "/file/path")
 
         let request5 = try Request(url: "https+unix://%2Ftmp%2Ffile/file/path")
-        XCTAssertEqual(request5._scheme, .httpsUnix)
-        XCTAssertEqual(request5.socketPath, "/tmp/file")
-        XCTAssertEqual(request5.uri, "/file/path")
+        XCTAssertEqual(request5.endpoint.scheme, .httpsUnix)
+        XCTAssertEqual(request5.endpoint.socketPath, "/tmp/file")
+        XCTAssertEqual(request5.endpoint.uri, "/file/path")
     }
 }

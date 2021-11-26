@@ -20,10 +20,10 @@ enum ConnectionPool {
     /// connection providers associated to a certain request in constant time.
     struct Key: Hashable, CustomStringConvertible {
         init(_ request: HTTPClient.Request) {
-            self.scheme = request._scheme
-            self.port = request.port
-            self.host = request.host
-            self.unixPath = request.socketPath
+            self.scheme = request.endpoint.scheme
+            self.port = request.endpoint.port
+            self.host = request.endpoint.host
+            self.unixPath = request.endpoint.socketPath
             if let tls = request.tlsConfiguration {
                 self.tlsConfiguration = BestEffortHashableTLSConfiguration(wrapping: tls)
             }

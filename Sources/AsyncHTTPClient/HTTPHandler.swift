@@ -105,20 +105,17 @@ extension HTTPClient {
         public let method: HTTPMethod
         /// Remote URL.
         public let url: URL
-        /// Remote HTTP scheme, resolved from `URL`.
-        internal let _scheme: Endpoint.Scheme
+        
+        internal let endpoint: Endpoint
         /// Remote HTTP scheme, resolved from `URL`.
         public var scheme: String {
-            _scheme.rawValue
+            endpoint.scheme.rawValue
         }
         /// Remote host, resolved from `URL`.
-        public let host: String
+        public var host: String { endpoint.host }
         /// Resolved port.
-        public let port: Int
-        /// Socket path, resolved from `URL`.
-        let socketPath: String
-        /// URI composed of the path and query, resolved from `URL`.
-        let uri: String
+        public var port: Int { endpoint.port }
+
         /// Request custom HTTP Headers, defaults to no headers.
         public var headers: HTTPHeaders
         /// Request body, defaults to no body.
@@ -202,13 +199,8 @@ extension HTTPClient {
         ///     - `emptyHost` if URL does not contains a host.
         ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration?) throws {
-            let endpoint = try Endpoint(url: url)
-            
-            self._scheme = endpoint.scheme
-            self.host = endpoint.host
-            self.port = endpoint.port
-            self.socketPath = endpoint.socketPath
-            self.uri = endpoint.uri
+            self.endpoint = try Endpoint(url: url)
+        
             self.redirectState = nil
             self.url = url
             self.method = method
@@ -218,20 +210,20 @@ extension HTTPClient {
         }
 
         /// Whether request will be executed using secure socket.
-        public var useTLS: Bool { self._scheme.useTLS }
+        public var useTLS: Bool { self.endpoint.scheme.useTLS }
 
         func createRequestHead() throws -> (HTTPRequestHead, RequestFramingMetadata) {
             var head = HTTPRequestHead(
                 version: .http1_1,
                 method: self.method,
-                uri: self.uri,
+                uri: self.endpoint.uri,
                 headers: self.headers
             )
 
             if !head.headers.contains(name: "host") {
-                let port = self.port
-                var host = self.host
-                if !(port == 80 && self._scheme == .http), !(port == 443 && self._scheme == .https) {
+                let port = self.endpoint.port
+                var host = self.endpoint.host
+                if !(port == 80 && self.endpoint.scheme == .http), !(port == 443 && self.endpoint.scheme == .https) {
                     host += ":\(port)"
                 }
                 head.headers.add(name: "host", value: host)
@@ -391,9 +383,9 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
         case .idle:
             preconditionFailure("no head received before end")
         case .head(let head):
-            return Response(host: self.request.host, status: head.status, version: head.version, headers: head.headers, body: nil)
+            return Response(host: self.request.endpoint.host, status: head.status, version: head.version, headers: head.headers, body: nil)
         case .body(let head, let body):
-            return Response(host: self.request.host, status: head.status, version: head.version, headers: head.headers, body: body)
+            return Response(host: self.request.endpoint.host, status: head.status, version: head.version, headers: head.headers, body: body)
         case .end:
             preconditionFailure("request already processed")
         case .error(let error):
@@ -676,7 +668,7 @@ internal struct RedirectHandler<ResponseType> {
             return nil
         }
 
-        guard self.request._scheme.supportsRedirects(to: url.scheme) else {
+        guard self.request.endpoint.scheme.supportsRedirects(to: url.scheme) else {
             return nil
         }
 
