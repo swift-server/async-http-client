@@ -46,7 +46,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
     }
 
     convenience
-    init(target: ConnectionPool.Host,
+    init(target: ConnectionTarget,
          proxyAuthorization: HTTPClient.Authorization?,
          deadline: NIODeadline) {
         let targetHost: String

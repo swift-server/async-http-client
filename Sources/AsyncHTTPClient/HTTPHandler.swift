@@ -126,9 +126,7 @@ extension HTTPClient {
 
         static func deconstructURL(
             _ url: URL
-        ) throws -> (
-            kind: Kind, scheme: String, hostname: String, port: Int, socketPath: String, uri: String
-        ) {
+        ) throws -> (kind: Kind, scheme: String, connectionTarget: ConnectionTarget, uri: String) {
             guard let scheme = url.scheme?.lowercased() else {
                 throw HTTPClientError.emptyScheme
             }
@@ -138,20 +136,23 @@ extension HTTPClient {
                     throw HTTPClientError.emptyHost
                 }
                 let defaultPort = self.useTLS(scheme) ? 443 : 80
-                return (.host, scheme, host, url.port ?? defaultPort, "", url.uri)
+                let hostTarget = ConnectionTarget(remoteHost: host, port: url.port ?? defaultPort)
+                return (.host, scheme, hostTarget, url.uri)
             case "http+unix", "https+unix":
                 guard let socketPath = url.host, !socketPath.isEmpty else {
                     throw HTTPClientError.missingSocketPath
                 }
-                let (kind, defaultPort) = self.useTLS(scheme) ? (Kind.UnixScheme.https_unix, 443) : (.http_unix, 80)
-                return (.unixSocket(kind), scheme, "", url.port ?? defaultPort, socketPath, url.uri)
+                let socketTarget = ConnectionTarget.unixSocket(path: socketPath)
+                let kind = self.useTLS(scheme) ? Kind.UnixScheme.https_unix : .http_unix
+                return (.unixSocket(kind), scheme, socketTarget, url.uri)
             case "unix":
                 let socketPath = url.baseURL?.path ?? url.path
                 let uri = url.baseURL != nil ? url.uri : "/"
                 guard !socketPath.isEmpty else {
                     throw HTTPClientError.missingSocketPath
                 }
-                return (.unixSocket(.baseURL), scheme, "", url.port ?? 80, socketPath, uri)
+                let socketTarget = ConnectionTarget.unixSocket(path: socketPath)
+                return (.unixSocket(.baseURL), scheme, socketTarget, uri)
             default:
                 throw HTTPClientError.unsupportedScheme(url.scheme!)
             }
@@ -163,12 +164,8 @@ extension HTTPClient {
         public let url: URL
         /// Remote HTTP scheme, resolved from `URL`.
         public let scheme: String
-        /// Remote host, resolved from `URL`.
-        public let host: String
-        /// Resolved port.
-        public let port: Int
-        /// Socket path, resolved from `URL`.
-        let socketPath: String
+        /// The connection target, resolved from `URL`.
+        let connectionTarget: ConnectionTarget
         /// URI composed of the path and query, resolved from `URL`.
         let uri: String
         /// Request custom HTTP Headers, defaults to no headers.
@@ -255,7 +252,7 @@ extension HTTPClient {
         ///     - `emptyHost` if URL does not contains a host.
         ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration?) throws {
-            (self.kind, self.scheme, self.host, self.port, self.socketPath, self.uri) = try Request.deconstructURL(url)
+            (self.kind, self.scheme, self.connectionTarget, self.uri) = try Request.deconstructURL(url)
             self.redirectState = nil
             self.url = url
             self.method = method
@@ -267,6 +264,24 @@ extension HTTPClient {
         /// Whether request will be executed using secure socket.
         public var useTLS: Bool {
             return Request.useTLS(self.scheme)
+        }
+
+        /// Remote host, resolved from `URL`.
+        public var host: String {
+            switch self.connectionTarget {
+            case .ipAddress(let serialization, _): return serialization
+            case .domain(let name, _): return name
+            case .unixSocket: return ""
+            }
+        }
+
+        /// Resolved port.
+        public var port: Int {
+            switch self.connectionTarget {
+            case .ipAddress(_, let address): return address.port!
+            case .domain(_, let port): return port
+            case .unixSocket: return Request.useTLS(self.scheme) ? 443 : 80
+            }
         }
 
         func createRequestHead() throws -> (HTTPRequestHead, RequestFramingMetadata) {
