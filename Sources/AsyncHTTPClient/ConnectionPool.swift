@@ -29,7 +29,7 @@ enum ConnectionPool {
             }
         }
 
-        var scheme: SupportedScheme
+        var scheme: Endpoint.Scheme
         var host: String
         var port: Int
         var unixPath: String

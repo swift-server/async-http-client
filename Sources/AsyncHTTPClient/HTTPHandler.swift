@@ -27,20 +27,6 @@ enum SupportedScheme: String {
     case httpsUnix = "https+unix"
 }
 
-extension SupportedScheme {
-    var useTLS: Bool {
-        switch self {
-        case .http, .httpUnix, .unix:
-            return false
-        case .https, .httpsUnix:
-            return true
-        }
-    }
-    var defaultPort: Int {
-        useTLS ? 443 : 80
-    }
-}
-
 extension HTTPClient {
     /// Represent request body.
     public struct Body {
@@ -115,44 +101,12 @@ extension HTTPClient {
     /// Represent HTTP request.
     public struct Request {
 
-        static func deconstructURL(
-            _ url: URL
-        ) throws -> (
-            scheme: SupportedScheme, hostname: String, port: Int, socketPath: String, uri: String
-        ) {
-            guard let schemeString = url.scheme else {
-                throw HTTPClientError.emptyScheme
-            }
-            guard let scheme = SupportedScheme(rawValue: schemeString.lowercased()) else {
-                throw HTTPClientError.unsupportedScheme(schemeString)
-            }
-            switch scheme {
-            case .http, .https:
-                guard let host = url.host, !host.isEmpty else {
-                    throw HTTPClientError.emptyHost
-                }
-                return (scheme, host, url.port ?? scheme.defaultPort, "", url.uri)
-            case .httpUnix, .httpsUnix:
-                guard let socketPath = url.host, !socketPath.isEmpty else {
-                    throw HTTPClientError.missingSocketPath
-                }
-                return (scheme, "", url.port ?? scheme.defaultPort, socketPath, url.uri)
-            case .unix:
-                let socketPath = url.baseURL?.path ?? url.path
-                let uri = url.baseURL != nil ? url.uri : "/"
-                guard !socketPath.isEmpty else {
-                    throw HTTPClientError.missingSocketPath
-                }
-                return (scheme, "", url.port ?? scheme.defaultPort, socketPath, uri)
-            }
-        }
-
         /// Request HTTP method, defaults to `GET`.
         public let method: HTTPMethod
         /// Remote URL.
         public let url: URL
         /// Remote HTTP scheme, resolved from `URL`.
-        internal let _scheme: SupportedScheme
+        internal let _scheme: Endpoint.Scheme
         /// Remote HTTP scheme, resolved from `URL`.
         public var scheme: String {
             _scheme.rawValue
@@ -248,7 +202,13 @@ extension HTTPClient {
         ///     - `emptyHost` if URL does not contains a host.
         ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration?) throws {
-            (self._scheme, self.host, self.port, self.socketPath, self.uri) = try Request.deconstructURL(url)
+            let endpoint = try Endpoint(url: url)
+            
+            self._scheme = endpoint.scheme
+            self.host = endpoint.host
+            self.port = endpoint.port
+            self.socketPath = endpoint.socketPath
+            self.uri = endpoint.uri
             self.redirectState = nil
             self.url = url
             self.method = method
@@ -789,7 +749,7 @@ internal struct RedirectHandler<ResponseType> {
     }
 }
 
-extension SupportedScheme {
+extension Endpoint.Scheme {
     func supportsRedirects(to destinationScheme: String?) -> Bool {
         guard
             let destinationSchemeString = destinationScheme?.lowercased(),

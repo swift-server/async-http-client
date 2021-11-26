@@ -486,7 +486,7 @@ extension HTTPConnectionPool.ConnectionFactory {
     }
 }
 
-extension SupportedScheme {
+extension Endpoint.Scheme {
     var isProxyable: Bool {
         switch self {
         case .http, .https:
