@@ -45,6 +45,30 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
         return self.proxyEstablishedPromise?.futureResult
     }
 
+    convenience
+    init(target: ConnectionPool.Host,
+         proxyAuthorization: HTTPClient.Authorization?,
+         deadline: NIODeadline) {
+        let targetHost: String
+        let targetPort: Int
+        switch target {
+        case .ipAddress(serialization: let serialization, address: let address):
+            targetHost = serialization
+            targetPort = address.port!
+        case .domain(name: let domain, port: let port):
+            targetHost = domain
+            targetPort = port
+        case .unixSocket:
+            fatalError("Unix Domain Sockets do not support proxies")
+        }
+        self.init(
+            targetHost: targetHost,
+            targetPort: targetPort,
+            proxyAuthorization: proxyAuthorization,
+            deadline: deadline
+        )
+    }
+
     init(targetHost: String,
          targetPort: Int,
          proxyAuthorization: HTTPClient.Authorization?,
