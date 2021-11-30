@@ -19,16 +19,13 @@ enum ConnectionPool {
     /// used by the `providers` dictionary to allow retrieving and creating
     /// connection providers associated to a certain request in constant time.
     struct Key: Hashable, CustomStringConvertible {
-        var scheme: Scheme
+        var scheme: Endpoint.Scheme
         var connectionTarget: ConnectionTarget
         private var tlsConfiguration: BestEffortHashableTLSConfiguration?
 
         init(_ request: HTTPClient.Request) {
-            self.connectionTarget = request.connectionTarget
             self.scheme = request.endpoint.scheme
-            self.port = request.endpoint.port
-            self.host = request.endpoint.host
-            self.unixPath = request.endpoint.socketPath
+            self.connectionTarget = request.endpoint.connectionTarget
             if let tls = request.tlsConfiguration {
                 self.tlsConfiguration = BestEffortHashableTLSConfiguration(wrapping: tls)
             }

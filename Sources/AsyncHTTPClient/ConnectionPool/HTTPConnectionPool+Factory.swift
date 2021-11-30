@@ -356,7 +356,7 @@ extension HTTPConnectionPool.ConnectionFactory {
     }
 
     private func makeTLSChannel(deadline: NIODeadline, eventLoop: EventLoop, logger: Logger) -> EventLoopFuture<(Channel, String?)> {
-        precondition(self.key.scheme.requiresTLS, "Unexpected scheme")
+        precondition(self.key.scheme.useTLS, "Unexpected scheme")
         let bootstrapFuture = self.makeTLSBootstrap(
             deadline: deadline,
             eventLoop: eventLoop,

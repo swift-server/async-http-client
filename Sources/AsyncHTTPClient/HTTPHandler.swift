@@ -101,54 +101,34 @@ extension HTTPClient {
     /// Represent HTTP request.
     public struct Request {
 
-        static func deconstructURL(
-            _ url: URL
-        ) throws -> (kind: Kind, scheme: String, connectionTarget: ConnectionTarget, uri: String) {
-            guard let scheme = url.scheme?.lowercased() else {
-                throw HTTPClientError.emptyScheme
-            }
-            switch scheme {
-            case "http", "https":
-                guard let host = url.host, !host.isEmpty else {
-                    throw HTTPClientError.emptyHost
-                }
-                let defaultPort = self.useTLS(scheme) ? 443 : 80
-                let hostTarget = ConnectionTarget(remoteHost: host, port: url.port ?? defaultPort)
-                return (.host, scheme, hostTarget, url.uri)
-            case "http+unix", "https+unix":
-                guard let socketPath = url.host, !socketPath.isEmpty else {
-                    throw HTTPClientError.missingSocketPath
-                }
-                let socketTarget = ConnectionTarget.unixSocket(path: socketPath)
-                let kind = self.useTLS(scheme) ? Kind.UnixScheme.https_unix : .http_unix
-                return (.unixSocket(kind), scheme, socketTarget, url.uri)
-            case "unix":
-                let socketPath = url.baseURL?.path ?? url.path
-                let uri = url.baseURL != nil ? url.uri : "/"
-                guard !socketPath.isEmpty else {
-                    throw HTTPClientError.missingSocketPath
-                }
-                let socketTarget = ConnectionTarget.unixSocket(path: socketPath)
-                return (.unixSocket(.baseURL), scheme, socketTarget, uri)
-            default:
-                throw HTTPClientError.unsupportedScheme(url.scheme!)
-            }
-        }
-
         /// Request HTTP method, defaults to `GET`.
         public let method: HTTPMethod
         /// Remote URL.
         public let url: URL
         
         internal let endpoint: Endpoint
+        
         /// Remote HTTP scheme, resolved from `URL`.
         public var scheme: String {
             endpoint.scheme.rawValue
         }
         /// Remote host, resolved from `URL`.
-        public var host: String { endpoint.host }
+        public var host: String {
+            switch self.endpoint.connectionTarget {
+            case .ipAddress(let serialization, _): return serialization
+            case .domain(let name, _): return name
+            case .unixSocket: return ""
+            }
+        }
+        
         /// Resolved port.
-        public var port: Int { endpoint.port }
+        public var port: Int {
+            switch self.endpoint.connectionTarget {
+            case .ipAddress(_, let address): return address.port!
+            case .domain(_, let port): return port
+            case .unixSocket: return endpoint.scheme.defaultPort
+            }
+        }
 
         /// Request custom HTTP Headers, defaults to no headers.
         public var headers: HTTPHeaders
@@ -246,24 +226,6 @@ extension HTTPClient {
         /// Whether request will be executed using secure socket.
         public var useTLS: Bool { self.endpoint.scheme.useTLS }
 
-        /// Remote host, resolved from `URL`.
-        public var host: String {
-            switch self.connectionTarget {
-            case .ipAddress(let serialization, _): return serialization
-            case .domain(let name, _): return name
-            case .unixSocket: return ""
-            }
-        }
-
-        /// Resolved port.
-        public var port: Int {
-            switch self.connectionTarget {
-            case .ipAddress(_, let address): return address.port!
-            case .domain(_, let port): return port
-            case .unixSocket: return Request.useTLS(self.scheme) ? 443 : 80
-            }
-        }
-
         func createRequestHead() throws -> (HTTPRequestHead, RequestFramingMetadata) {
             var head = HTTPRequestHead(
                 version: .http1_1,
@@ -273,8 +235,8 @@ extension HTTPClient {
             )
 
             if !head.headers.contains(name: "host") {
-                let port = self.endpoint.port
-                var host = self.endpoint.host
+                let port = self.port
+                var host = self.host
                 if !(port == 80 && self.endpoint.scheme == .http), !(port == 443 && self.endpoint.scheme == .https) {
                     host += ":\(port)"
                 }
@@ -435,9 +397,9 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
         case .idle:
             preconditionFailure("no head received before end")
         case .head(let head):
-            return Response(host: self.request.endpoint.host, status: head.status, version: head.version, headers: head.headers, body: nil)
+            return Response(host: self.request.host, status: head.status, version: head.version, headers: head.headers, body: nil)
         case .body(let head, let body):
-            return Response(host: self.request.endpoint.host, status: head.status, version: head.version, headers: head.headers, body: body)
+            return Response(host: self.request.host, status: head.status, version: head.version, headers: head.headers, body: body)
         case .end:
             preconditionFailure("request already processed")
         case .error(let error):

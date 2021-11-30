@@ -446,77 +446,77 @@ class HTTPClientInternalTests: XCTestCase {
 
     func testInternalRequestURI() throws {
         let request1 = try Request(url: "https://someserver.com:8888/some/path?foo=bar")
-        XCTAssertEqual(request1.kind, .host)
-        XCTAssertEqual(request1.connectionTarget, .domain(name: "someserver.com", port: 8888))
-        XCTAssertEqual(request1.uri, "/some/path?foo=bar")
+        XCTAssertEqual(request1.endpoint.scheme, .https)
+        XCTAssertEqual(request1.endpoint.connectionTarget, .domain(name: "someserver.com", port: 8888))
+        XCTAssertEqual(request1.endpoint.uri, "/some/path?foo=bar")
+
+        let request2 = try Request(url: "https://someserver.com")
+        XCTAssertEqual(request2.endpoint.scheme, .https)
+        XCTAssertEqual(request2.endpoint.connectionTarget, .domain(name: "someserver.com", port: 443))
         XCTAssertEqual(request2.endpoint.uri, "/")
 
-        XCTAssertEqual(request2.kind, .host)
-        XCTAssertEqual(request2.connectionTarget, .domain(name: "someserver.com", port: 443))
-        XCTAssertEqual(request2.uri, "/")
+        let request3 = try Request(url: "unix:///tmp/file")
+        XCTAssertEqual(request3.endpoint.scheme, .unix)
+        XCTAssertEqual(request3.endpoint.connectionTarget, .unixSocket(path: "/tmp/file"))
         XCTAssertEqual(request3.endpoint.uri, "/")
 
-        XCTAssertEqual(request3.kind, .unixSocket(.baseURL))
-        XCTAssertEqual(request3.connectionTarget, .unixSocket(path: "/tmp/file"))
-        XCTAssertEqual(request3.uri, "/")
+        let request4 = try Request(url: "http+unix://%2Ftmp%2Ffile/file/path")
+        XCTAssertEqual(request4.endpoint.scheme, .httpUnix)
+        XCTAssertEqual(request4.endpoint.connectionTarget, .unixSocket(path: "/tmp/file"))
         XCTAssertEqual(request4.endpoint.uri, "/file/path")
 
-        XCTAssertEqual(request4.kind, .unixSocket(.http_unix))
-        XCTAssertEqual(request4.connectionTarget, .unixSocket(path: "/tmp/file"))
-        XCTAssertEqual(request4.uri, "/file/path")
+        let request5 = try Request(url: "https+unix://%2Ftmp%2Ffile/file/path")
+        XCTAssertEqual(request5.endpoint.scheme, .httpsUnix)
+        XCTAssertEqual(request5.endpoint.connectionTarget, .unixSocket(path: "/tmp/file"))
         XCTAssertEqual(request5.endpoint.uri, "/file/path")
-    
-        XCTAssertEqual(request5.kind, .unixSocket(.https_unix))
-        XCTAssertEqual(request5.connectionTarget, .unixSocket(path: "/tmp/file"))
-        XCTAssertEqual(request5.uri, "/file/path")
 
         let request6 = try Request(url: "https://127.0.0.1")
-        XCTAssertEqual(request6.kind, .host)
-        XCTAssertEqual(request6.connectionTarget, .ipAddress(
+        XCTAssertEqual(request6.endpoint.scheme, .https)
+        XCTAssertEqual(request6.endpoint.connectionTarget, .ipAddress(
             serialization: "127.0.0.1",
             address: try! SocketAddress(ipAddress: "127.0.0.1", port: 443)
         ))
-        XCTAssertEqual(request6.uri, "/")
+        XCTAssertEqual(request6.endpoint.uri, "/")
 
         let request7 = try Request(url: "https://0x7F.1:9999")
-        XCTAssertEqual(request7.kind, .host)
-        XCTAssertEqual(request7.connectionTarget, .domain(name: "0x7F.1", port: 9999))
-        XCTAssertEqual(request7.uri, "/")
+        XCTAssertEqual(request7.endpoint.scheme, .https)
+        XCTAssertEqual(request7.endpoint.connectionTarget, .domain(name: "0x7F.1", port: 9999))
+        XCTAssertEqual(request7.endpoint.uri, "/")
 
         let request8 = try Request(url: "http://[::1]")
-        XCTAssertEqual(request8.kind, .host)
-        XCTAssertEqual(request8.connectionTarget, .ipAddress(
+        XCTAssertEqual(request8.endpoint.scheme, .http)
+        XCTAssertEqual(request8.endpoint.connectionTarget, .ipAddress(
             serialization: "[::1]",
             address: try! SocketAddress(ipAddress: "::1", port: 80)
         ))
-        XCTAssertEqual(request8.uri, "/")
+        XCTAssertEqual(request8.endpoint.uri, "/")
 
         let request9 = try Request(url: "http://[763e:61d9::6ACA:3100:6274]:4242/foo/bar?baz")
-        XCTAssertEqual(request9.kind, .host)
-        XCTAssertEqual(request9.connectionTarget, .ipAddress(
+        XCTAssertEqual(request9.endpoint.scheme, .http)
+        XCTAssertEqual(request9.endpoint.connectionTarget, .ipAddress(
             serialization: "[763e:61d9::6ACA:3100:6274]",
             address: try! SocketAddress(ipAddress: "763e:61d9::6aca:3100:6274", port: 4242)
         ))
-        XCTAssertEqual(request9.uri, "/foo/bar?baz")
+        XCTAssertEqual(request9.endpoint.uri, "/foo/bar?baz")
 
         // Some systems have quirks in their implementations of 'ntop' which cause them to write
         // certain IPv6 addresses with embedded IPv4 parts (e.g. "::192.168.0.1" vs "::c0a8:1").
         // We want to make sure that our request formatting doesn't depend on the platform's quirks,
         // so the serialization must be kept verbatim as it was given in the request.
         let request10 = try Request(url: "http://[::c0a8:1]:4242/foo/bar?baz")
-        XCTAssertEqual(request10.kind, .host)
-        XCTAssertEqual(request10.connectionTarget, .ipAddress(
+        XCTAssertEqual(request10.endpoint.scheme, .http)
+        XCTAssertEqual(request10.endpoint.connectionTarget, .ipAddress(
             serialization: "[::c0a8:1]",
             address: try! SocketAddress(ipAddress: "::c0a8:1", port: 4242)
         ))
-        XCTAssertEqual(request9.uri, "/foo/bar?baz")
+        XCTAssertEqual(request10.endpoint.uri, "/foo/bar?baz")
 
         let request11 = try Request(url: "http://[::192.168.0.1]:4242/foo/bar?baz")
-        XCTAssertEqual(request11.kind, .host)
-        XCTAssertEqual(request11.connectionTarget, .ipAddress(
+        XCTAssertEqual(request11.endpoint.scheme, .http)
+        XCTAssertEqual(request11.endpoint.connectionTarget, .ipAddress(
             serialization: "[::192.168.0.1]",
             address: try! SocketAddress(ipAddress: "::192.168.0.1", port: 4242)
         ))
-        XCTAssertEqual(request11.uri, "/foo/bar?baz")
+        XCTAssertEqual(request11.endpoint.uri, "/foo/bar?baz")
     }
 }

@@ -23,10 +23,21 @@ struct Endpoint {
         case httpsUnix = "https+unix"
     }
     let scheme: Scheme
-    let host: String
-    let socketPath: String
-    let port: Int
+    let connectionTarget: ConnectionTarget
     let uri: String
+    
+    internal init(
+        scheme: Endpoint.Scheme,
+        connectionTarget: ConnectionTarget,
+        uri: String
+    ) {
+        self.scheme = scheme
+        self.connectionTarget = connectionTarget
+        self.uri = uri
+    }
+}
+
+extension Endpoint {
     init(url: URL) throws {
         guard let schemeString = url.scheme else {
             throw HTTPClientError.emptyScheme
@@ -34,24 +45,29 @@ struct Endpoint {
         guard let scheme = Scheme(rawValue: schemeString.lowercased()) else {
             throw HTTPClientError.unsupportedScheme(schemeString)
         }
-        self.scheme = scheme
-        self.port = url.port ?? scheme.defaultPort
+        
         switch scheme {
         case .http, .https:
             guard let host = url.host, !host.isEmpty else {
                 throw HTTPClientError.emptyHost
             }
-            self.host = host
-            self.uri = url.uri
-            self.socketPath = ""
+            
+            self.init(
+                scheme: scheme,
+                connectionTarget: .init(remoteHost: host, port: url.port ?? scheme.defaultPort),
+                uri: url.uri
+            )
             
         case .httpUnix, .httpsUnix:
             guard let socketPath = url.host, !socketPath.isEmpty else {
                 throw HTTPClientError.missingSocketPath
             }
-            self.host = ""
-            self.uri = url.uri
-            self.socketPath = socketPath
+            
+            self.init(
+                scheme: scheme,
+                connectionTarget: .unixSocket(path: socketPath),
+                uri: url.uri
+            )
             
         case .unix:
             let socketPath = url.baseURL?.path ?? url.path
@@ -59,9 +75,12 @@ struct Endpoint {
             guard !socketPath.isEmpty else {
                 throw HTTPClientError.missingSocketPath
             }
-            self.host = ""
-            self.uri = uri
-            self.socketPath = socketPath
+        
+            self.init(
+                scheme: scheme,
+                connectionTarget: .unixSocket(path: socketPath),
+                uri: uri
+            )
         }
     }
 }
