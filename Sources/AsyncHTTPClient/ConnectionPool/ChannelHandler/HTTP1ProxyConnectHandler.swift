@@ -45,10 +45,11 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
         return self.proxyEstablishedPromise?.futureResult
     }
 
-    convenience
-    init(target: ConnectionTarget,
-         proxyAuthorization: HTTPClient.Authorization?,
-         deadline: NIODeadline) {
+    convenience init(
+        target: ConnectionTarget,
+        proxyAuthorization: HTTPClient.Authorization?,
+        deadline: NIODeadline
+    ) {
         let targetHost: String
         let targetPort: Int
         switch target {
