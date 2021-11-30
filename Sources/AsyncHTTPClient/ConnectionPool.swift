@@ -74,7 +74,7 @@ enum ConnectionPool {
             var hasher = Hasher()
             self.tlsConfiguration?.hash(into: &hasher)
             let hash = hasher.finalize()
-            var hostDescription = ""
+            let hostDescription: String
             switch self.connectionTarget {
             case .ipAddress(let serialization, let addr):
                 hostDescription = "\(serialization):\(addr.port!)"
