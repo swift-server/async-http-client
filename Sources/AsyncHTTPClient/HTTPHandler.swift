@@ -92,18 +92,17 @@ extension HTTPClient {
 
     /// Represent HTTP request.
     public struct Request {
-
         /// Request HTTP method, defaults to `GET`.
         public let method: HTTPMethod
         /// Remote URL.
         public let url: URL
-        
+
         /// Parsed, validated and deconstructed URL.
         internal let deconstructedURL: DeconstructedURL
-        
+
         /// Remote HTTP scheme, resolved from `URL`.
         public var scheme: String {
-            deconstructedURL.scheme.rawValue
+            self.deconstructedURL.scheme.rawValue
         }
 
         /// Request custom HTTP Headers, defaults to no headers.
@@ -190,7 +189,7 @@ extension HTTPClient {
         ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration?) throws {
             self.deconstructedURL = try DeconstructedURL(url: url)
-        
+
             self.redirectState = nil
             self.url = url
             self.method = method
@@ -198,7 +197,7 @@ extension HTTPClient {
             self.body = body
             self.tlsConfiguration = tlsConfiguration
         }
-        
+
         /// Remote host, resolved from `URL`.
         public var host: String {
             switch self.deconstructedURL.connectionTarget {
@@ -207,16 +206,16 @@ extension HTTPClient {
             case .unixSocket: return ""
             }
         }
-        
+
         /// Resolved port.
         public var port: Int {
             switch self.deconstructedURL.connectionTarget {
             case .ipAddress(_, let address): return address.port!
             case .domain(_, let port): return port
-            case .unixSocket: return deconstructedURL.scheme.defaultPort
+            case .unixSocket: return self.deconstructedURL.scheme.defaultPort
             }
         }
-        
+
         /// Whether request will be executed using secure socket.
         public var useTLS: Bool { self.deconstructedURL.scheme.useTLS }
 
@@ -757,9 +756,9 @@ extension DeconstructedURL.Scheme {
         else {
             return false
         }
-        return supportsRedirects(to: destinationScheme)
+        return self.supportsRedirects(to: destinationScheme)
     }
-    
+
     func supportsRedirects(to destinationScheme: Self) -> Bool {
         switch self {
         case .http, .https:

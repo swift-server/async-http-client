@@ -22,10 +22,11 @@ struct DeconstructedURL {
         case httpUnix = "http+unix"
         case httpsUnix = "https+unix"
     }
+
     let scheme: Scheme
     let connectionTarget: ConnectionTarget
     let uri: String
-    
+
     internal init(
         scheme: DeconstructedURL.Scheme,
         connectionTarget: ConnectionTarget,
@@ -45,7 +46,7 @@ extension DeconstructedURL {
         guard let scheme = Scheme(rawValue: schemeString.lowercased()) else {
             throw HTTPClientError.unsupportedScheme(schemeString)
         }
-        
+
         switch scheme {
         case .http, .https:
             guard let host = url.host, !host.isEmpty else {
@@ -56,7 +57,7 @@ extension DeconstructedURL {
                 connectionTarget: .init(remoteHost: host, port: url.port ?? scheme.defaultPort),
                 uri: url.uri
             )
-            
+
         case .httpUnix, .httpsUnix:
             guard let socketPath = url.host, !socketPath.isEmpty else {
                 throw HTTPClientError.missingSocketPath
@@ -66,7 +67,7 @@ extension DeconstructedURL {
                 connectionTarget: .unixSocket(path: socketPath),
                 uri: url.uri
             )
-            
+
         case .unix:
             let socketPath = url.baseURL?.path ?? url.path
             let uri = url.baseURL != nil ? url.uri : "/"
@@ -91,7 +92,8 @@ extension DeconstructedURL.Scheme {
             return true
         }
     }
+
     var defaultPort: Int {
-        useTLS ? 443 : 80
+        self.useTLS ? 443 : 80
     }
 }
