@@ -101,6 +101,40 @@ extension HTTPClient {
     /// Represent HTTP request.
     public struct Request {
 
+        static func deconstructURL(
+            _ url: URL
+        ) throws -> (kind: Kind, scheme: String, connectionTarget: ConnectionTarget, uri: String) {
+            guard let scheme = url.scheme?.lowercased() else {
+                throw HTTPClientError.emptyScheme
+            }
+            switch scheme {
+            case "http", "https":
+                guard let host = url.host, !host.isEmpty else {
+                    throw HTTPClientError.emptyHost
+                }
+                let defaultPort = self.useTLS(scheme) ? 443 : 80
+                let hostTarget = ConnectionTarget(remoteHost: host, port: url.port ?? defaultPort)
+                return (.host, scheme, hostTarget, url.uri)
+            case "http+unix", "https+unix":
+                guard let socketPath = url.host, !socketPath.isEmpty else {
+                    throw HTTPClientError.missingSocketPath
+                }
+                let socketTarget = ConnectionTarget.unixSocket(path: socketPath)
+                let kind = self.useTLS(scheme) ? Kind.UnixScheme.https_unix : .http_unix
+                return (.unixSocket(kind), scheme, socketTarget, url.uri)
+            case "unix":
+                let socketPath = url.baseURL?.path ?? url.path
+                let uri = url.baseURL != nil ? url.uri : "/"
+                guard !socketPath.isEmpty else {
+                    throw HTTPClientError.missingSocketPath
+                }
+                let socketTarget = ConnectionTarget.unixSocket(path: socketPath)
+                return (.unixSocket(.baseURL), scheme, socketTarget, uri)
+            default:
+                throw HTTPClientError.unsupportedScheme(url.scheme!)
+            }
+        }
+
         /// Request HTTP method, defaults to `GET`.
         public let method: HTTPMethod
         /// Remote URL.
@@ -211,6 +245,24 @@ extension HTTPClient {
 
         /// Whether request will be executed using secure socket.
         public var useTLS: Bool { self.endpoint.scheme.useTLS }
+
+        /// Remote host, resolved from `URL`.
+        public var host: String {
+            switch self.connectionTarget {
+            case .ipAddress(let serialization, _): return serialization
+            case .domain(let name, _): return name
+            case .unixSocket: return ""
+            }
+        }
+
+        /// Resolved port.
+        public var port: Int {
+            switch self.connectionTarget {
+            case .ipAddress(_, let address): return address.port!
+            case .domain(_, let port): return port
+            case .unixSocket: return Request.useTLS(self.scheme) ? 443 : 80
+            }
+        }
 
         func createRequestHead() throws -> (HTTPRequestHead, RequestFramingMetadata) {
             var head = HTTPRequestHead(

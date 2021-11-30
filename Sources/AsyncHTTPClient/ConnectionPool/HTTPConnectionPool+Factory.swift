@@ -197,16 +197,8 @@ extension HTTPConnectionPool.ConnectionFactory {
     }
 
     private func makePlainChannel(deadline: NIODeadline, eventLoop: EventLoop) -> EventLoopFuture<Channel> {
-        let bootstrap = self.makePlainBootstrap(deadline: deadline, eventLoop: eventLoop)
-
-        switch self.key.scheme {
-        case .http:
-            return bootstrap.connect(host: self.key.host, port: self.key.port)
-        case .httpUnix, .unix:
-            return bootstrap.connect(unixDomainSocketPath: self.key.unixPath)
-        case .https, .httpsUnix:
-            preconditionFailure("Unexpected scheme")
-        }
+        precondition(!self.key.scheme.useTLS, "Unexpected scheme")
+        return self.makePlainBootstrap(deadline: deadline, eventLoop: eventLoop).connect(target: self.key.connectionTarget)
     }
 
     private func makeHTTPProxyChannel(
@@ -224,8 +216,7 @@ extension HTTPConnectionPool.ConnectionFactory {
             let encoder = HTTPRequestEncoder()
             let decoder = ByteToMessageHandler(HTTPResponseDecoder(leftOverBytesStrategy: .dropBytes))
             let proxyHandler = HTTP1ProxyConnectHandler(
-                targetHost: self.key.host,
-                targetPort: self.key.port,
+                target: self.key.connectionTarget,
                 proxyAuthorization: proxy.authorization,
                 deadline: deadline
             )
@@ -264,7 +255,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         // upgraded to TLS before we send our first request.
         let bootstrap = self.makePlainBootstrap(deadline: deadline, eventLoop: eventLoop)
         return bootstrap.connect(host: proxy.host, port: proxy.port).flatMap { channel in
-            let socksConnectHandler = SOCKSClientHandler(targetAddress: .domain(self.key.host, port: self.key.port))
+            let socksConnectHandler = SOCKSClientHandler(targetAddress: SOCKSAddress(self.key.connectionTarget))
             let socksEventHandler = SOCKSEventsHandler(deadline: deadline)
 
             do {
@@ -310,6 +301,7 @@ extension HTTPConnectionPool.ConnectionFactory {
             }
             let tlsEventHandler = TLSEventsHandler(deadline: deadline)
 
+            let sslServerHostname = self.key.connectionTarget.sslServerHostname
             let sslContextFuture = self.sslContextCache.sslContext(
                 tlsConfiguration: tlsConfig,
                 eventLoop: channel.eventLoop,
@@ -320,7 +312,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                 do {
                     let sslHandler = try NIOSSLClientHandler(
                         context: sslContext,
-                        serverHostname: self.key.host
+                        serverHostname: sslServerHostname
                     )
                     try channel.pipeline.syncOperations.addHandler(sslHandler)
                     try channel.pipeline.syncOperations.addHandler(tlsEventHandler)
@@ -364,6 +356,7 @@ extension HTTPConnectionPool.ConnectionFactory {
     }
 
     private func makeTLSChannel(deadline: NIODeadline, eventLoop: EventLoop, logger: Logger) -> EventLoopFuture<(Channel, String?)> {
+        precondition(self.key.scheme.requiresTLS, "Unexpected scheme")
         let bootstrapFuture = self.makeTLSBootstrap(
             deadline: deadline,
             eventLoop: eventLoop,
@@ -371,14 +364,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         )
 
         var channelFuture = bootstrapFuture.flatMap { bootstrap -> EventLoopFuture<Channel> in
-            switch self.key.scheme {
-            case .https:
-                return bootstrap.connect(host: self.key.host, port: self.key.port)
-            case .httpsUnix:
-                return bootstrap.connect(unixDomainSocketPath: self.key.unixPath)
-            case .http, .httpUnix, .unix:
-                preconditionFailure("Unexpected scheme")
-            }
+            return bootstrap.connect(target: self.key.connectionTarget)
         }.flatMap { channel -> EventLoopFuture<(Channel, String?)> in
             // It is save to use `try!` here, since we are sure, that a `TLSEventsHandler` exists
             // within the pipeline. It is added in `makeTLSBootstrap`.
@@ -441,9 +427,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         }
         #endif
 
-        let host = self.key.host
-        let hostname = (host.isIPAddress || host.isEmpty) ? nil : host
-
+        let sslServerHostname = self.key.connectionTarget.sslServerHostname
         let sslContextFuture = sslContextCache.sslContext(
             tlsConfiguration: tlsConfig,
             eventLoop: eventLoop,
@@ -458,7 +442,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                         let sync = channel.pipeline.syncOperations
                         let sslHandler = try NIOSSLClientHandler(
                             context: sslContext,
-                            serverHostname: hostname
+                            serverHostname: sslServerHostname
                         )
                         let tlsEventHandler = TLSEventsHandler(deadline: deadline)
 
@@ -497,14 +481,34 @@ extension Endpoint.Scheme {
     }
 }
 
-extension String {
-    fileprivate var isIPAddress: Bool {
-        var ipv4Addr = in_addr()
-        var ipv6Addr = in6_addr()
+extension ConnectionTarget {
+    fileprivate var sslServerHostname: String? {
+        switch self {
+        case .domain(let domain, _): return domain
+        case .ipAddress, .unixSocket: return nil
+        }
+    }
+}
 
-        return self.withCString { ptr in
-            inet_pton(AF_INET, ptr, &ipv4Addr) == 1 ||
-                inet_pton(AF_INET6, ptr, &ipv6Addr) == 1
+extension SOCKSAddress {
+    fileprivate init(_ host: ConnectionTarget) {
+        switch host {
+        case .ipAddress(_, let address): self = .address(address)
+        case .domain(let domain, let port): self = .domain(domain, port: port)
+        case .unixSocket: fatalError("Unix Domain Sockets are not supported by SOCKSAddress")
+        }
+    }
+}
+
+extension NIOClientTCPBootstrapProtocol {
+    func connect(target: ConnectionTarget) -> EventLoopFuture<Channel> {
+        switch target {
+        case .ipAddress(_, let socketAddress):
+            return self.connect(to: socketAddress)
+        case .domain(let domain, let port):
+            return self.connect(host: domain, port: port)
+        case .unixSocket(let path):
+            return self.connect(unixDomainSocketPath: path)
         }
     }
 }

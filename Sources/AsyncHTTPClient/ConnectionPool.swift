@@ -15,11 +15,16 @@
 enum ConnectionPool {
     /// Used by the `ConnectionPool` to index its `HTTP1ConnectionProvider`s
     ///
-    /// A key is initialized from a `URL`, it uses the components to derive a hashed value
+    /// A key is initialized from a `Request`, it uses the components to derive a hashed value
     /// used by the `providers` dictionary to allow retrieving and creating
     /// connection providers associated to a certain request in constant time.
     struct Key: Hashable, CustomStringConvertible {
+        var scheme: Scheme
+        var connectionTarget: ConnectionTarget
+        private var tlsConfiguration: BestEffortHashableTLSConfiguration?
+
         init(_ request: HTTPClient.Request) {
+            self.connectionTarget = request.connectionTarget
             self.scheme = request.endpoint.scheme
             self.port = request.endpoint.port
             self.host = request.endpoint.host
@@ -28,12 +33,6 @@ enum ConnectionPool {
                 self.tlsConfiguration = BestEffortHashableTLSConfiguration(wrapping: tls)
             }
         }
-
-        var scheme: Endpoint.Scheme
-        var host: String
-        var port: Int
-        var unixPath: String
-        private var tlsConfiguration: BestEffortHashableTLSConfiguration?
 
         /// Returns a key-specific `HTTPClient.Configuration` by overriding the properties of `base`
         func config(overriding base: HTTPClient.Configuration) -> HTTPClient.Configuration {
@@ -48,13 +47,16 @@ enum ConnectionPool {
             var hasher = Hasher()
             self.tlsConfiguration?.hash(into: &hasher)
             let hash = hasher.finalize()
-            var path = ""
-            if self.unixPath != "" {
-                path = self.unixPath
-            } else {
-                path = "\(self.host):\(self.port)"
+            let hostDescription: String
+            switch self.connectionTarget {
+            case .ipAddress(let serialization, let addr):
+                hostDescription = "\(serialization):\(addr.port!)"
+            case .domain(let domain, port: let port):
+                hostDescription = "\(domain):\(port)"
+            case .unixSocket(let socketPath):
+                hostDescription = socketPath
             }
-            return "\(self.scheme)://\(path) TLS-hash: \(hash)"
+            return "\(self.scheme)://\(hostDescription) TLS-hash: \(hash)"
         }
     }
 }
