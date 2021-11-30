@@ -14,7 +14,7 @@
 
 import Foundation
 
-struct Endpoint {
+struct DeconstructedURL {
     enum Scheme: String {
         case http
         case https
@@ -27,7 +27,7 @@ struct Endpoint {
     let uri: String
     
     internal init(
-        scheme: Endpoint.Scheme,
+        scheme: DeconstructedURL.Scheme,
         connectionTarget: ConnectionTarget,
         uri: String
     ) {
@@ -37,7 +37,7 @@ struct Endpoint {
     }
 }
 
-extension Endpoint {
+extension DeconstructedURL {
     init(url: URL) throws {
         guard let schemeString = url.scheme else {
             throw HTTPClientError.emptyScheme
@@ -51,7 +51,6 @@ extension Endpoint {
             guard let host = url.host, !host.isEmpty else {
                 throw HTTPClientError.emptyHost
             }
-            
             self.init(
                 scheme: scheme,
                 connectionTarget: .init(remoteHost: host, port: url.port ?? scheme.defaultPort),
@@ -62,7 +61,6 @@ extension Endpoint {
             guard let socketPath = url.host, !socketPath.isEmpty else {
                 throw HTTPClientError.missingSocketPath
             }
-            
             self.init(
                 scheme: scheme,
                 connectionTarget: .unixSocket(path: socketPath),
@@ -75,7 +73,6 @@ extension Endpoint {
             guard !socketPath.isEmpty else {
                 throw HTTPClientError.missingSocketPath
             }
-        
             self.init(
                 scheme: scheme,
                 connectionTarget: .unixSocket(path: socketPath),
@@ -85,7 +82,7 @@ extension Endpoint {
     }
 }
 
-extension Endpoint.Scheme {
+extension DeconstructedURL.Scheme {
     var useTLS: Bool {
         switch self {
         case .http, .httpUnix, .unix:

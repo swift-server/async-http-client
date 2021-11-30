@@ -470,7 +470,7 @@ extension HTTPConnectionPool.ConnectionFactory {
     }
 }
 
-extension Endpoint.Scheme {
+extension DeconstructedURL.Scheme {
     var isProxyable: Bool {
         switch self {
         case .http, .https:

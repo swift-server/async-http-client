@@ -19,14 +19,6 @@ import NIOCore
 import NIOHTTP1
 import NIOSSL
 
-enum SupportedScheme: String {
-    case http
-    case https
-    case unix
-    case httpUnix = "http+unix"
-    case httpsUnix = "https+unix"
-}
-
 extension HTTPClient {
     /// Represent request body.
     public struct Body {
@@ -106,28 +98,12 @@ extension HTTPClient {
         /// Remote URL.
         public let url: URL
         
-        internal let endpoint: Endpoint
+        /// Parsed, validated and deconstructed URL.
+        internal let deconstructedURL: DeconstructedURL
         
         /// Remote HTTP scheme, resolved from `URL`.
         public var scheme: String {
-            endpoint.scheme.rawValue
-        }
-        /// Remote host, resolved from `URL`.
-        public var host: String {
-            switch self.endpoint.connectionTarget {
-            case .ipAddress(let serialization, _): return serialization
-            case .domain(let name, _): return name
-            case .unixSocket: return ""
-            }
-        }
-        
-        /// Resolved port.
-        public var port: Int {
-            switch self.endpoint.connectionTarget {
-            case .ipAddress(_, let address): return address.port!
-            case .domain(_, let port): return port
-            case .unixSocket: return endpoint.scheme.defaultPort
-            }
+            deconstructedURL.scheme.rawValue
         }
 
         /// Request custom HTTP Headers, defaults to no headers.
@@ -213,7 +189,7 @@ extension HTTPClient {
         ///     - `emptyHost` if URL does not contains a host.
         ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration?) throws {
-            self.endpoint = try Endpoint(url: url)
+            self.deconstructedURL = try DeconstructedURL(url: url)
         
             self.redirectState = nil
             self.url = url
@@ -222,22 +198,40 @@ extension HTTPClient {
             self.body = body
             self.tlsConfiguration = tlsConfiguration
         }
-
+        
+        /// Remote host, resolved from `URL`.
+        public var host: String {
+            switch self.deconstructedURL.connectionTarget {
+            case .ipAddress(let serialization, _): return serialization
+            case .domain(let name, _): return name
+            case .unixSocket: return ""
+            }
+        }
+        
+        /// Resolved port.
+        public var port: Int {
+            switch self.deconstructedURL.connectionTarget {
+            case .ipAddress(_, let address): return address.port!
+            case .domain(_, let port): return port
+            case .unixSocket: return deconstructedURL.scheme.defaultPort
+            }
+        }
+        
         /// Whether request will be executed using secure socket.
-        public var useTLS: Bool { self.endpoint.scheme.useTLS }
+        public var useTLS: Bool { self.deconstructedURL.scheme.useTLS }
 
         func createRequestHead() throws -> (HTTPRequestHead, RequestFramingMetadata) {
             var head = HTTPRequestHead(
                 version: .http1_1,
                 method: self.method,
-                uri: self.endpoint.uri,
+                uri: self.deconstructedURL.uri,
                 headers: self.headers
             )
 
             if !head.headers.contains(name: "host") {
                 let port = self.port
                 var host = self.host
-                if !(port == 80 && self.endpoint.scheme == .http), !(port == 443 && self.endpoint.scheme == .https) {
+                if !(port == 80 && self.deconstructedURL.scheme == .http), !(port == 443 && self.deconstructedURL.scheme == .https) {
                     host += ":\(port)"
                 }
                 head.headers.add(name: "host", value: host)
@@ -682,7 +676,7 @@ internal struct RedirectHandler<ResponseType> {
             return nil
         }
 
-        guard self.request.endpoint.scheme.supportsRedirects(to: url.scheme) else {
+        guard self.request.deconstructedURL.scheme.supportsRedirects(to: url.scheme) else {
             return nil
         }
 
@@ -755,18 +749,18 @@ internal struct RedirectHandler<ResponseType> {
     }
 }
 
-extension Endpoint.Scheme {
+extension DeconstructedURL.Scheme {
     func supportsRedirects(to destinationScheme: String?) -> Bool {
         guard
             let destinationSchemeString = destinationScheme?.lowercased(),
-            let destinationScheme = SupportedScheme(rawValue: destinationSchemeString)
+            let destinationScheme = Self(rawValue: destinationSchemeString)
         else {
             return false
         }
         return supportsRedirects(to: destinationScheme)
     }
     
-    func supportsRedirects(to destinationScheme: SupportedScheme) -> Bool {
+    func supportsRedirects(to destinationScheme: Self) -> Bool {
         switch self {
         case .http, .https:
             switch destinationScheme {
