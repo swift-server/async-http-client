@@ -23,11 +23,11 @@ struct DeconstructedURL {
         case httpsUnix = "https+unix"
     }
 
-    let scheme: Scheme
-    let connectionTarget: ConnectionTarget
-    let uri: String
+    var scheme: Scheme
+    var connectionTarget: ConnectionTarget
+    var uri: String
 
-    internal init(
+    init(
         scheme: DeconstructedURL.Scheme,
         connectionTarget: ConnectionTarget,
         uri: String
