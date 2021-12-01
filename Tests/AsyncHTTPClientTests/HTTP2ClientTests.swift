@@ -62,6 +62,38 @@ class HTTP2ClientTests: XCTestCase {
         XCTAssertEqual(response?.version, .http2)
     }
 
+    func testStreamRequestBodyWithoutKnowledgeAboutLength() {
+        let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+        let client = self.makeDefaultHTTPClient()
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+        var response: HTTPClient.Response?
+        let body = HTTPClient.Body.stream(length: nil) { writer in
+            writer.write(.byteBuffer(ByteBuffer(integer: UInt64(0)))).flatMap {
+                writer.write(.byteBuffer(ByteBuffer(integer: UInt64(0))))
+            }
+        }
+        XCTAssertNoThrow(response = try client.post(url: "https://localhost:\(bin.port)", body: body).wait())
+
+        XCTAssertEqual(.ok, response?.status)
+        XCTAssertEqual(response?.version, .http2)
+    }
+
+    func testStreamRequestBodyWithFalseKnowledgeAboutLength() {
+        let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+        let client = self.makeDefaultHTTPClient()
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+        let body = HTTPClient.Body.stream(length: 12) { writer in
+            writer.write(.byteBuffer(ByteBuffer(integer: UInt64(0)))).flatMap {
+                writer.write(.byteBuffer(ByteBuffer(integer: UInt64(0))))
+            }
+        }
+        XCTAssertThrowsError(try client.post(url: "https://localhost:\(bin.port)", body: body).wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .bodyLengthMismatch)
+        }
+    }
+
     func testConcurrentRequests() {
         let bin = HTTPBin(.http2(compress: false))
         defer { XCTAssertNoThrow(try bin.shutdown()) }

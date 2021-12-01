@@ -1218,13 +1218,14 @@ class HTTPEchoHandler: ChannelInboundHandler {
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let request = self.unwrapInboundIn(data)
         switch request {
-        case .head:
-            context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok))), promise: nil)
+        case .head(let requestHead):
+            context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok, headers: requestHead.headers))), promise: nil)
         case .body(let bytes):
             context.writeAndFlush(self.wrapOutboundOut(.body(.byteBuffer(bytes))), promise: nil)
         case .end:
-            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
-            context.close(promise: nil)
+            context.writeAndFlush(self.wrapOutboundOut(.end(nil))).whenSuccess {
+                context.close(promise: nil)
+            }
         }
     }
 }
