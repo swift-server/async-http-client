@@ -19,7 +19,7 @@ enum ConnectionPool {
     /// used by the `providers` dictionary to allow retrieving and creating
     /// connection providers associated to a certain request in constant time.
     struct Key: Hashable, CustomStringConvertible {
-        var scheme: DeconstructedURL.Scheme
+        var scheme: Scheme
         var connectionTarget: ConnectionTarget
         private var tlsConfiguration: BestEffortHashableTLSConfiguration?
 

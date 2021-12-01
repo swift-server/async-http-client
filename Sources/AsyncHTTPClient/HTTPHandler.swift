@@ -217,7 +217,7 @@ extension HTTPClient {
         }
 
         /// Whether request will be executed using secure socket.
-        public var useTLS: Bool { self.deconstructedURL.scheme.useTLS }
+        public var useTLS: Bool { self.deconstructedURL.scheme.usesTLS }
 
         func createRequestHead() throws -> (HTTPRequestHead, RequestFramingMetadata) {
             var head = HTTPRequestHead(
@@ -748,7 +748,7 @@ internal struct RedirectHandler<ResponseType> {
     }
 }
 
-extension DeconstructedURL.Scheme {
+extension Scheme {
     func supportsRedirects(to destinationScheme: String?) -> Bool {
         guard
             let destinationSchemeString = destinationScheme?.lowercased(),

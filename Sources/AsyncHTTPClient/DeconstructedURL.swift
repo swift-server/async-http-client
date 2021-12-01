@@ -12,23 +12,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Foundation
+import struct Foundation.URL
 
 struct DeconstructedURL {
-    enum Scheme: String {
-        case http
-        case https
-        case unix
-        case httpUnix = "http+unix"
-        case httpsUnix = "https+unix"
-    }
-
     var scheme: Scheme
     var connectionTarget: ConnectionTarget
     var uri: String
 
     init(
-        scheme: DeconstructedURL.Scheme,
+        scheme: Scheme,
         connectionTarget: ConnectionTarget,
         uri: String
     ) {
@@ -80,20 +72,5 @@ extension DeconstructedURL {
                 uri: uri
             )
         }
-    }
-}
-
-extension DeconstructedURL.Scheme {
-    var useTLS: Bool {
-        switch self {
-        case .http, .httpUnix, .unix:
-            return false
-        case .https, .httpsUnix:
-            return true
-        }
-    }
-
-    var defaultPort: Int {
-        self.useTLS ? 443 : 80
     }
 }

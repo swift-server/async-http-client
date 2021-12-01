@@ -197,7 +197,7 @@ extension HTTPConnectionPool.ConnectionFactory {
     }
 
     private func makePlainChannel(deadline: NIODeadline, eventLoop: EventLoop) -> EventLoopFuture<Channel> {
-        precondition(!self.key.scheme.useTLS, "Unexpected scheme")
+        precondition(!self.key.scheme.usesTLS, "Unexpected scheme")
         return self.makePlainBootstrap(deadline: deadline, eventLoop: eventLoop).connect(target: self.key.connectionTarget)
     }
 
@@ -356,7 +356,7 @@ extension HTTPConnectionPool.ConnectionFactory {
     }
 
     private func makeTLSChannel(deadline: NIODeadline, eventLoop: EventLoop, logger: Logger) -> EventLoopFuture<(Channel, String?)> {
-        precondition(self.key.scheme.useTLS, "Unexpected scheme")
+        precondition(self.key.scheme.usesTLS, "Unexpected scheme")
         let bootstrapFuture = self.makeTLSBootstrap(
             deadline: deadline,
             eventLoop: eventLoop,
@@ -470,7 +470,7 @@ extension HTTPConnectionPool.ConnectionFactory {
     }
 }
 
-extension DeconstructedURL.Scheme {
+extension Scheme {
     var isProxyable: Bool {
         switch self {
         case .http, .https:
