@@ -185,9 +185,9 @@ extension HTTPConnectionPool.ConnectionFactory {
         logger: Logger
     ) -> EventLoopFuture<NegotiatedProtocol> {
         switch self.key.scheme {
-        case .http, .http_unix, .unix:
+        case .http, .httpUnix, .unix:
             return self.makePlainChannel(deadline: deadline, eventLoop: eventLoop).map { .http1_1($0) }
-        case .https, .https_unix:
+        case .https, .httpsUnix:
             return self.makeTLSChannel(deadline: deadline, eventLoop: eventLoop, logger: logger).flatMapThrowing {
                 channel, negotiated in
 
@@ -197,7 +197,7 @@ extension HTTPConnectionPool.ConnectionFactory {
     }
 
     private func makePlainChannel(deadline: NIODeadline, eventLoop: EventLoop) -> EventLoopFuture<Channel> {
-        precondition(!self.key.scheme.requiresTLS, "Unexpected scheme")
+        precondition(!self.key.scheme.usesTLS, "Unexpected scheme")
         return self.makePlainBootstrap(deadline: deadline, eventLoop: eventLoop).connect(target: self.key.connectionTarget)
     }
 
@@ -283,7 +283,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         logger: Logger
     ) -> EventLoopFuture<NegotiatedProtocol> {
         switch self.key.scheme {
-        case .unix, .http_unix, .https_unix:
+        case .unix, .httpUnix, .httpsUnix:
             preconditionFailure("Unexpected scheme. Not supported for proxy!")
         case .http:
             return channel.eventLoop.makeSucceededFuture(.http1_1(channel))
@@ -356,7 +356,7 @@ extension HTTPConnectionPool.ConnectionFactory {
     }
 
     private func makeTLSChannel(deadline: NIODeadline, eventLoop: EventLoop, logger: Logger) -> EventLoopFuture<(Channel, String?)> {
-        precondition(self.key.scheme.requiresTLS, "Unexpected scheme")
+        precondition(self.key.scheme.usesTLS, "Unexpected scheme")
         let bootstrapFuture = self.makeTLSBootstrap(
             deadline: deadline,
             eventLoop: eventLoop,
@@ -470,12 +470,12 @@ extension HTTPConnectionPool.ConnectionFactory {
     }
 }
 
-extension ConnectionPool.Key.Scheme {
+extension Scheme {
     var isProxyable: Bool {
         switch self {
         case .http, .https:
             return true
-        case .unix, .http_unix, .https_unix:
+        case .unix, .httpUnix, .httpsUnix:
             return false
         }
     }

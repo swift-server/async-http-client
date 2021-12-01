@@ -24,50 +24,11 @@ enum ConnectionPool {
         private var tlsConfiguration: BestEffortHashableTLSConfiguration?
 
         init(_ request: HTTPClient.Request) {
-            self.connectionTarget = request.connectionTarget
-            switch request.scheme {
-            case "http":
-                self.scheme = .http
-            case "https":
-                self.scheme = .https
-            case "unix":
-                self.scheme = .unix
-            case "http+unix":
-                self.scheme = .http_unix
-            case "https+unix":
-                self.scheme = .https_unix
-            default:
-                fatalError("HTTPClient.Request scheme should already be a valid one")
-            }
+            self.scheme = request.deconstructedURL.scheme
+            self.connectionTarget = request.deconstructedURL.connectionTarget
             if let tls = request.tlsConfiguration {
                 self.tlsConfiguration = BestEffortHashableTLSConfiguration(wrapping: tls)
             }
-        }
-
-        enum Scheme: Hashable {
-            case http
-            case https
-            case unix
-            case http_unix
-            case https_unix
-
-            var requiresTLS: Bool {
-                switch self {
-                case .https, .https_unix:
-                    return true
-                default:
-                    return false
-                }
-            }
-        }
-
-        /// Returns a key-specific `HTTPClient.Configuration` by overriding the properties of `base`
-        func config(overriding base: HTTPClient.Configuration) -> HTTPClient.Configuration {
-            var config = base
-            if let tlsConfiguration = self.tlsConfiguration {
-                config.tlsConfiguration = tlsConfiguration.base
-            }
-            return config
         }
 
         var description: String {
