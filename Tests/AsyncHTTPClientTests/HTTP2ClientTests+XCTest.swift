@@ -26,6 +26,8 @@ extension HTTP2ClientTests {
     static var allTests: [(String, (HTTP2ClientTests) -> () throws -> Void)] {
         return [
             ("testSimpleGet", testSimpleGet),
+            ("testStreamRequestBodyWithoutKnowledgeAboutLength", testStreamRequestBodyWithoutKnowledgeAboutLength),
+            ("testStreamRequestBodyWithFalseKnowledgeAboutLength", testStreamRequestBodyWithFalseKnowledgeAboutLength),
             ("testConcurrentRequests", testConcurrentRequests),
             ("testConcurrentRequestsFromDifferentThreads", testConcurrentRequestsFromDifferentThreads),
             ("testConcurrentRequestsWorkWithRequiredEventLoop", testConcurrentRequestsWorkWithRequiredEventLoop),
