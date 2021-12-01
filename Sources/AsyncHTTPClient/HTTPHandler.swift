@@ -97,9 +97,6 @@ extension HTTPClient {
         /// Remote URL.
         public let url: URL
 
-        /// Parsed, validated and deconstructed URL.
-        internal let deconstructedURL: DeconstructedURL
-
         /// Remote HTTP scheme, resolved from `URL`.
         public var scheme: String {
             self.deconstructedURL.scheme.rawValue
@@ -116,6 +113,9 @@ extension HTTPClient {
             var count: Int
             var visited: Set<URL>?
         }
+
+        /// Parsed, validated and deconstructed URL.
+        let deconstructedURL: DeconstructedURL
 
         var redirectState: RedirectState?
 
@@ -744,32 +744,6 @@ internal struct RedirectHandler<ResponseType> {
             }
         } catch {
             promise.fail(error)
-        }
-    }
-}
-
-extension Scheme {
-    func supportsRedirects(to destinationScheme: String?) -> Bool {
-        guard
-            let destinationSchemeString = destinationScheme?.lowercased(),
-            let destinationScheme = Self(rawValue: destinationSchemeString)
-        else {
-            return false
-        }
-        return self.supportsRedirects(to: destinationScheme)
-    }
-
-    func supportsRedirects(to destinationScheme: Self) -> Bool {
-        switch self {
-        case .http, .https:
-            switch destinationScheme {
-            case .http, .https:
-                return true
-            case .unix, .httpUnix, .httpsUnix:
-                return false
-            }
-        case .unix, .httpUnix, .httpsUnix:
-            return true
         }
     }
 }

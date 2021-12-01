@@ -35,3 +35,29 @@ extension Scheme {
         self.usesTLS ? 443 : 80
     }
 }
+
+extension Scheme {
+    func supportsRedirects(to destinationScheme: String?) -> Bool {
+        guard
+            let destinationSchemeString = destinationScheme?.lowercased(),
+            let destinationScheme = Self(rawValue: destinationSchemeString)
+        else {
+            return false
+        }
+        return self.supportsRedirects(to: destinationScheme)
+    }
+
+    func supportsRedirects(to destinationScheme: Self) -> Bool {
+        switch self {
+        case .http, .https:
+            switch destinationScheme {
+            case .http, .https:
+                return true
+            case .unix, .httpUnix, .httpsUnix:
+                return false
+            }
+        case .unix, .httpUnix, .httpsUnix:
+            return true
+        }
+    }
+}
