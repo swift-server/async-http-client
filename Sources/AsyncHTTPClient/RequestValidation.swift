@@ -110,3 +110,20 @@ extension HTTPHeaders {
         }
     }
 }
+
+extension HTTPHeaders {
+    mutating func addHostIfNeeded(for url: DeconstructedURL) {
+        // if no host header was set, let's use the url host
+        guard !self.contains(name: "host"),
+              var host = url.connectionTarget.host
+        else {
+            return
+        }
+        // if the request uses a non-default port, we need to add it after the host
+        if let port = url.connectionTarget.port,
+           port != url.scheme.defaultPort {
+            host += ":\(port)"
+        }
+        self.add(name: "host", value: host)
+    }
+}

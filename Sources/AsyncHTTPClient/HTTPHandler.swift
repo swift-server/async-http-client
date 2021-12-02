@@ -200,20 +200,12 @@ extension HTTPClient {
 
         /// Remote host, resolved from `URL`.
         public var host: String {
-            switch self.deconstructedURL.connectionTarget {
-            case .ipAddress(let serialization, _): return serialization
-            case .domain(let name, _): return name
-            case .unixSocket: return ""
-            }
+            self.deconstructedURL.connectionTarget.host ?? ""
         }
 
         /// Resolved port.
         public var port: Int {
-            switch self.deconstructedURL.connectionTarget {
-            case .ipAddress(_, let address): return address.port!
-            case .domain(_, let port): return port
-            case .unixSocket: return self.deconstructedURL.scheme.defaultPort
-            }
+            self.deconstructedURL.connectionTarget.port ?? self.deconstructedURL.scheme.defaultPort
         }
 
         /// Whether request will be executed using secure socket.
@@ -227,14 +219,7 @@ extension HTTPClient {
                 headers: self.headers
             )
 
-            if !head.headers.contains(name: "host") {
-                let port = self.port
-                var host = self.host
-                if !(port == 80 && self.deconstructedURL.scheme == .http), !(port == 443 && self.deconstructedURL.scheme == .https) {
-                    host += ":\(port)"
-                }
-                head.headers.add(name: "host", value: host)
-            }
+            head.headers.addHostIfNeeded(for: self.deconstructedURL)
 
             let metadata = try head.headers.validateAndSetTransportFraming(method: self.method, bodyLength: .init(self.body))
 
