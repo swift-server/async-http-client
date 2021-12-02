@@ -84,19 +84,6 @@ extension HTTPClientRequest.Body {
         })
     }
 
-    /// This method should never be used and was always deprecated.
-    /// The whole purpose of this overload is to prevent users from providing a redundant length if `Bytes` conforms to
-    /// `RandomAccessCollection` because it already provide a property `count` to get the length in O(**1**).
-    /// - Note: `length` is ignored in favour of `bytes.count`
-    @available(*, deprecated, message: "no need to manually specify `length` because we automatically use `bytes.count` as the `length`")
-    @inlinable
-    static func bytes<Bytes: RandomAccessCollection>(
-        length: Int,
-        _ collection: Bytes
-    ) -> Self where Bytes.Element == UInt8 {
-        return .bytes(collection)
-    }
-
     @inlinable
     static func stream<SequenceOfBytes: AsyncSequence>(
         length: Int? = nil,
