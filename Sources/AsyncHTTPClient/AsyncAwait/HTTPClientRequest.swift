@@ -55,10 +55,11 @@ extension HTTPClientRequest.Body {
         self.init(.byteBuffer(byteBuffer))
     }
 
-    static func bytes<Bytes>(
+    @inlinable
+    static func bytes<Bytes: Sequence>(
         length: Int? = nil,
         _ bytes: Bytes
-    ) -> Self where Bytes: Sequence, Bytes.Element == UInt8 {
+    ) -> Self where Bytes.Element == UInt8 {
         self.init(.sequence(length: length) { allocator in
             if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
                 // fastpath
@@ -69,9 +70,10 @@ extension HTTPClientRequest.Body {
         })
     }
 
-    static func bytes<Bytes>(
+    @inlinable
+    static func bytes<Bytes: RandomAccessCollection>(
         _ bytes: Bytes
-    ) -> Self where Bytes: RandomAccessCollection, Bytes.Element == UInt8 {
+    ) -> Self where Bytes.Element == UInt8 {
         self.init(.sequence(length: bytes.count) { allocator in
             if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
                 // fastpath
@@ -87,17 +89,19 @@ extension HTTPClientRequest.Body {
     /// `RandomAccessCollection` because it already provide a property `count` to get the length in O(**1**).
     /// - Note: `length` is ignored in favour of `bytes.count`
     @available(*, deprecated, message: "no need to manually specify `length` because we automatically use `bytes.count` as the `length`")
-    static func bytes<Bytes>(
+    @inlinable
+    static func bytes<Bytes: RandomAccessCollection>(
         length: Int,
         _ collection: Bytes
-    ) -> Self where Bytes: RandomAccessCollection, Bytes.Element == UInt8 {
+    ) -> Self where Bytes.Element == UInt8 {
         return .bytes(collection)
     }
 
-    static func stream<SequenceOfBytes>(
+    @inlinable
+    static func stream<SequenceOfBytes: AsyncSequence>(
         length: Int? = nil,
         _ sequenceOfBytes: SequenceOfBytes
-    ) -> Self where SequenceOfBytes: AsyncSequence, SequenceOfBytes.Element == ByteBuffer {
+    ) -> Self where SequenceOfBytes.Element == ByteBuffer {
         var iterator = sequenceOfBytes.makeAsyncIterator()
         let body = self.init(.asyncSequence(length: length) { _ -> ByteBuffer? in
             try await iterator.next()
@@ -105,10 +109,11 @@ extension HTTPClientRequest.Body {
         return body
     }
 
-    static func stream<Bytes>(
+    @inlinable
+    static func stream<Bytes: AsyncSequence>(
         length: Int? = nil,
         _ bytes: Bytes
-    ) -> Self where Bytes: AsyncSequence, Bytes.Element == UInt8 {
+    ) -> Self where Bytes.Element == UInt8 {
         var iterator = bytes.makeAsyncIterator()
         let body = self.init(.asyncSequence(length: nil) { allocator -> ByteBuffer? in
             var buffer = allocator.buffer(capacity: 1024) // TODO: Magic number
