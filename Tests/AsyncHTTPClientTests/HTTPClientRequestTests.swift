@@ -25,31 +25,162 @@ class HTTPClientRequestTests: XCTestCase {
     private typealias PreparedRequest = HTTPClientRequest.Prepared
     #endif
 
+    func testCustomHeadersAreRespected() {
+        #if compiler(>=5.5) && canImport(_Concurrency)
+        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        XCTAsyncTest {
+            var request = Request(url: "https://example.com/get")
+            request.headers = [
+                "custom-header": "custom-header-value",
+            ]
+            var preparedRequest: PreparedRequest?
+            XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
+            guard let preparedRequest = preparedRequest else { return }
+
+            XCTAssertEqual(preparedRequest.poolKey, .init(
+                scheme: .https,
+                connectionTarget: .domain(name: "example.com", port: 443),
+                tlsConfiguration: nil
+            ))
+            XCTAssertEqual(preparedRequest.head, .init(
+                version: .http1_1,
+                method: .GET,
+                uri: "/get",
+                headers: [
+                    "host": "example.com",
+                    "custom-header": "custom-header-value",
+                ]
+            ))
+            XCTAssertEqual(preparedRequest.requestFramingMetadata, .init(
+                connectionClose: false,
+                body: .fixedSize(0)
+            ))
+            guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
+            XCTAssertEqual(buffer, ByteBuffer())
+        }
+        #endif
+    }
+
+    func testUnixScheme() {
+        #if compiler(>=5.5) && canImport(_Concurrency)
+        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        XCTAsyncTest {
+            var request = Request(url: "unix://%2Fexample%2Ffolder.sock/some_path")
+            request.headers = ["custom-header": "custom-value"]
+            var preparedRequest: PreparedRequest?
+            XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
+            guard let preparedRequest = preparedRequest else { return }
+
+            XCTAssertEqual(preparedRequest.poolKey, .init(
+                scheme: .unix,
+                connectionTarget: .unixSocket(path: "/example/folder.sock"),
+                tlsConfiguration: nil
+            ))
+            XCTAssertEqual(preparedRequest.head, .init(
+                version: .http1_1,
+                method: .GET,
+                uri: "/some_path",
+                headers: ["custom-header": "custom-value"]
+            ))
+            XCTAssertEqual(preparedRequest.requestFramingMetadata, .init(
+                connectionClose: false,
+                body: .fixedSize(0)
+            ))
+            guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
+            XCTAssertEqual(buffer, ByteBuffer())
+        }
+        #endif
+    }
+
+    func testHTTPUnixScheme() {
+        #if compiler(>=5.5) && canImport(_Concurrency)
+        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        XCTAsyncTest {
+            var request = Request(url: "http+unix://%2Fexample%2Ffolder.sock/some_path")
+            request.headers = ["custom-header": "custom-value"]
+            var preparedRequest: PreparedRequest?
+            XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
+            guard let preparedRequest = preparedRequest else { return }
+
+            XCTAssertEqual(preparedRequest.poolKey, .init(
+                scheme: .httpUnix,
+                connectionTarget: .unixSocket(path: "/example/folder.sock"),
+                tlsConfiguration: nil
+            ))
+            XCTAssertEqual(preparedRequest.head, .init(
+                version: .http1_1,
+                method: .GET,
+                uri: "/some_path",
+                headers: ["custom-header": "custom-value"]
+            ))
+            XCTAssertEqual(preparedRequest.requestFramingMetadata, .init(
+                connectionClose: false,
+                body: .fixedSize(0)
+            ))
+            guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
+            XCTAssertEqual(buffer, ByteBuffer())
+        }
+        #endif
+    }
+
+    func testHTTPSUnixScheme() {
+        #if compiler(>=5.5) && canImport(_Concurrency)
+        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        XCTAsyncTest {
+            var request = Request(url: "https+unix://%2Fexample%2Ffolder.sock/some_path")
+            request.headers = ["custom-header": "custom-value"]
+            var preparedRequest: PreparedRequest?
+            XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
+            guard let preparedRequest = preparedRequest else { return }
+
+            XCTAssertEqual(preparedRequest.poolKey, .init(
+                scheme: .httpsUnix,
+                connectionTarget: .unixSocket(path: "/example/folder.sock"),
+                tlsConfiguration: nil
+            ))
+            XCTAssertEqual(preparedRequest.head, .init(
+                version: .http1_1,
+                method: .GET,
+                uri: "/some_path",
+                headers: ["custom-header": "custom-value"]
+            ))
+            XCTAssertEqual(preparedRequest.requestFramingMetadata, .init(
+                connectionClose: false,
+                body: .fixedSize(0)
+            ))
+            guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
+            XCTAssertEqual(buffer, ByteBuffer())
+        }
+        #endif
+    }
+
     func testGetWithoutBody() {
         #if compiler(>=5.5) && canImport(_Concurrency)
         guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        XCTAsyncTest {
+            let request = Request(url: "https://example.com/get")
+            var preparedRequest: PreparedRequest?
+            XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
+            guard let preparedRequest = preparedRequest else { return }
 
-        let request = Request(url: "https://example.com/get")
-        var preparedRequest: PreparedRequest?
-        XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
-        guard let preparedRequest = preparedRequest else { return }
-
-        XCTAssertEqual(preparedRequest.poolKey, .init(
-            scheme: .https,
-            connectionTarget: .domain(name: "example.com", port: 443),
-            tlsConfiguration: nil
-        ))
-        XCTAssertEqual(preparedRequest.head, .init(
-            version: .http1_1,
-            method: .GET,
-            uri: "/get",
-            headers: ["host": "example.com"]
-        ))
-        XCTAssertEqual(preparedRequest.requestFramingMetadata, .init(
-            connectionClose: false,
-            body: .fixedSize(0)
-        ))
-
+            XCTAssertEqual(preparedRequest.poolKey, .init(
+                scheme: .https,
+                connectionTarget: .domain(name: "example.com", port: 443),
+                tlsConfiguration: nil
+            ))
+            XCTAssertEqual(preparedRequest.head, .init(
+                version: .http1_1,
+                method: .GET,
+                uri: "/get",
+                headers: ["host": "example.com"]
+            ))
+            XCTAssertEqual(preparedRequest.requestFramingMetadata, .init(
+                connectionClose: false,
+                body: .fixedSize(0)
+            ))
+            guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
+            XCTAssertEqual(buffer, ByteBuffer())
+        }
         #endif
     }
 
@@ -166,7 +297,7 @@ class HTTPClientRequestTests: XCTestCase {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
             let sequence = AnySequence(ByteBuffer(string: "post body").readableBytesView)
-            request.body = .bytes(sequence)
+            request.body = .bytes(length: nil, sequence)
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }
@@ -239,7 +370,7 @@ class HTTPClientRequestTests: XCTestCase {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
             let collection = ByteBuffer(string: "post body").readableBytesView
-            request.body = .bytes(collection)
+            request.body = .bytes(length: nil, collection)
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }

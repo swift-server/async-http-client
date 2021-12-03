@@ -25,6 +25,10 @@ import XCTest
 extension HTTPClientRequestTests {
     static var allTests: [(String, (HTTPClientRequestTests) -> () throws -> Void)] {
         return [
+            ("testCustomHeadersAreRespected", testCustomHeadersAreRespected),
+            ("testUnixScheme", testUnixScheme),
+            ("testHTTPUnixScheme", testHTTPUnixScheme),
+            ("testHTTPSUnixScheme", testHTTPSUnixScheme),
             ("testGetWithoutBody", testGetWithoutBody),
             ("testPostWithoutBody", testPostWithoutBody),
             ("testPostWithEmptyByteBuffer", testPostWithEmptyByteBuffer),
