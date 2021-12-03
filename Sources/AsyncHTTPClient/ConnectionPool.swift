@@ -12,6 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+import NIOSSL
+
 enum ConnectionPool {
     /// Used by the `ConnectionPool` to index its `HTTP1ConnectionProvider`s
     ///
@@ -23,12 +25,14 @@ enum ConnectionPool {
         var connectionTarget: ConnectionTarget
         private var tlsConfiguration: BestEffortHashableTLSConfiguration?
 
-        init(_ request: HTTPClient.Request) {
-            self.scheme = request.deconstructedURL.scheme
-            self.connectionTarget = request.deconstructedURL.connectionTarget
-            if let tls = request.tlsConfiguration {
-                self.tlsConfiguration = BestEffortHashableTLSConfiguration(wrapping: tls)
-            }
+        init(
+            scheme: Scheme,
+            connectionTarget: ConnectionTarget,
+            tlsConfiguration: BestEffortHashableTLSConfiguration? = nil
+        ) {
+            self.scheme = scheme
+            self.connectionTarget = connectionTarget
+            self.tlsConfiguration = tlsConfiguration
         }
 
         var description: String {
@@ -46,5 +50,24 @@ enum ConnectionPool {
             }
             return "\(self.scheme)://\(hostDescription) TLS-hash: \(hash)"
         }
+    }
+}
+
+extension ConnectionPool.Key {
+    init(url: DeconstructedURL, tlsConfiguration: TLSConfiguration?) {
+        self.init(
+            scheme: url.scheme,
+            connectionTarget: url.connectionTarget,
+            tlsConfiguration: tlsConfiguration.map {
+                BestEffortHashableTLSConfiguration(wrapping: $0)
+            }
+        )
+    }
+
+    init(_ request: HTTPClient.Request) {
+        self.init(
+            url: request.deconstructedURL,
+            tlsConfiguration: request.tlsConfiguration
+        )
     }
 }

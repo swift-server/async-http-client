@@ -31,6 +31,13 @@ struct DeconstructedURL {
 }
 
 extension DeconstructedURL {
+    init(url: String) throws {
+        guard let url = URL(string: url) else {
+            throw HTTPClientError.invalidURL
+        }
+        try self.init(url: url)
+    }
+
     init(url: URL) throws {
         guard let schemeString = url.scheme else {
             throw HTTPClientError.emptyScheme

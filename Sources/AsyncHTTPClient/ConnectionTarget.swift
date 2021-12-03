@@ -40,3 +40,25 @@ enum ConnectionTarget: Equatable, Hashable {
         }
     }
 }
+
+extension ConnectionTarget {
+    /// The host name which will be send as an HTTP `Host` header.
+    /// Only returns nil if the `self` is a `unixSocket`.
+    var host: String? {
+        switch self {
+        case .ipAddress(let serialization, _): return serialization
+        case .domain(let name, _): return name
+        case .unixSocket: return nil
+        }
+    }
+
+    /// The host name which will be send as an HTTP host header.
+    /// Only returns nil if the `self` is a `unixSocket`.
+    var port: Int? {
+        switch self {
+        case .ipAddress(_, let address): return address.port!
+        case .domain(_, let port): return port
+        case .unixSocket: return nil
+        }
+    }
+}
