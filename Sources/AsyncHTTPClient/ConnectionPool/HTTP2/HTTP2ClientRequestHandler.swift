@@ -256,8 +256,8 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
     private func writeRequestBodyPart0(_ data: IOData, request: HTTPExecutableRequest) {
         guard self.request === request, let context = self.channelContext else {
-            // Because the HTTPExecutingRequest may run in a different thread to our eventLoop,
-            // calls from the HTTPExecutingRequest to our ChannelHandler may arrive here after
+            // Because the HTTPExecutableRequest may run in a different thread to our eventLoop,
+            // calls from the HTTPExecutableRequest to our ChannelHandler may arrive here after
             // the request has been popped by the state machine or the ChannelHandler has been
             // removed from the Channel pipeline. This is a normal threading issue, noone has
             // screwed up.
