@@ -148,14 +148,24 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         case .sendRequestHead(let head, let startBody):
             if startBody {
                 context.writeAndFlush(self.wrapOutboundOut(.head(head)), promise: nil)
-                self.request!.requestHeadSent()
-                self.request!.resumeRequestBodyStream()
+
+                // Writing the header might lead to errors. For this reason, we need to check, if
+                // the request is still present. It might have been removed, because the request was
+                // already failed.
+                if let request = self.request {
+                    request.requestHeadSent()
+                    request.resumeRequestBodyStream()
+                }
+
             } else {
                 context.write(self.wrapOutboundOut(.head(head)), promise: nil)
                 context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
                 context.flush()
 
-                self.request!.requestHeadSent()
+                // Writing the header might lead to errors. For this reason, we need to check, if
+                // the request is still present. It might have been removed, because the request was
+                // already failed.
+                self.request?.requestHeadSent()
 
                 if let timeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
                     self.runTimeoutAction(timeoutAction, context: context)

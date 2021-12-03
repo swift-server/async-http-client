@@ -14,6 +14,7 @@
 
 @testable import AsyncHTTPClient
 import Logging
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOEmbedded
 import NIOHTTP1
@@ -70,7 +71,10 @@ final class RequestBagTests: XCTestCase {
 
         XCTAssert(bag.task.eventLoop === embeddedEventLoop)
 
-        let executor = MockRequestExecutor(pauseRequestBodyPartStreamAfterASingleWrite: true)
+        let executor = MockRequestExecutor(
+            pauseRequestBodyPartStreamAfterASingleWrite: true,
+            eventLoop: embeddedEventLoop
+        )
 
         bag.willExecuteRequest(executor)
 
@@ -99,7 +103,7 @@ final class RequestBagTests: XCTestCase {
                 streamIsAllowedToWrite = true
                 bag.resumeRequestBodyStream()
                 streamIsAllowedToWrite = false
-                XCTAssertLessThanOrEqual(executor.requestBodyParts.count, 2)
+                XCTAssertLessThanOrEqual(executor.requestBodyPartsCount, 2)
                 XCTAssertEqual(delegate.hitDidSendRequestPart, writes)
             }
         }
@@ -110,6 +114,7 @@ final class RequestBagTests: XCTestCase {
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: .init([
             ("Transfer-Encoding", "chunked"),
         ]))
+        XCTAssertFalse(executor.signalledDemandForResponseBody)
         bag.receiveResponseHead(responseHead)
         XCTAssertEqual(responseHead, delegate.receivedHead)
         XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
@@ -178,7 +183,7 @@ final class RequestBagTests: XCTestCase {
         guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
         XCTAssert(bag.task.eventLoop === embeddedEventLoop)
 
-        let executor = MockRequestExecutor()
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
 
         bag.willExecuteRequest(executor)
 
@@ -221,7 +226,7 @@ final class RequestBagTests: XCTestCase {
         guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
         XCTAssert(bag.eventLoop === embeddedEventLoop)
 
-        let executor = MockRequestExecutor()
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
         bag.cancel()
 
         bag.willExecuteRequest(executor)
@@ -254,7 +259,7 @@ final class RequestBagTests: XCTestCase {
         guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
         XCTAssert(bag.eventLoop === embeddedEventLoop)
 
-        let executor = MockRequestExecutor()
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
 
         bag.willExecuteRequest(executor)
         XCTAssertFalse(executor.isCancelled)
@@ -329,7 +334,7 @@ final class RequestBagTests: XCTestCase {
         ))
         guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
 
-        let executor = MockRequestExecutor()
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
         bag.willExecuteRequest(executor)
         bag.requestHeadSent()
         bag.receiveResponseHead(.init(version: .http1_1, status: .ok))
@@ -386,7 +391,7 @@ final class RequestBagTests: XCTestCase {
         ))
         guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
 
-        let executor = MockRequestExecutor()
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
         bag.willExecuteRequest(executor)
 
         XCTAssertEqual(delegate.hitDidSendRequestHead, 0)
@@ -431,7 +436,7 @@ final class RequestBagTests: XCTestCase {
         ))
         guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
 
-        let executor = MockRequestExecutor()
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
         bag.willExecuteRequest(executor)
         bag.requestHeadSent()
         bag.receiveResponseHead(.init(version: .http1_1, status: .ok))
@@ -472,45 +477,98 @@ class MockRequestExecutor: HTTPRequestExecutor {
         case endOfStream
     }
 
+    let eventLoop: EventLoop
+    let lock = Lock()
     let pauseRequestBodyPartStreamAfterASingleWrite: Bool
 
-    private(set) var requestBodyParts = CircularBuffer<RequestParts>()
-    private(set) var isCancelled: Bool = false
-    private(set) var signalledDemandForResponseBody: Bool = false
+    var isCancelled: Bool {
+        self.lock.withLock { self._isCancelled }
+    }
 
-    init(pauseRequestBodyPartStreamAfterASingleWrite: Bool = false) {
+    var signalledDemandForResponseBody: Bool {
+        self.lock.withLock { self._signaledDemandForResponseBody }
+    }
+
+    var requestBodyPartsCount: Int {
+        self.lock.withLock { self._requestBodyParts.count }
+    }
+
+    private(set) var _requestBodyParts = CircularBuffer<RequestParts>()
+    private(set) var _isCancelled: Bool = false
+    private(set) var _signaledDemandForResponseBody: Bool = false
+    private(set) var _readable: EventLoopPromise<Void>?
+
+    init(pauseRequestBodyPartStreamAfterASingleWrite: Bool = false, eventLoop: EventLoop) {
         self.pauseRequestBodyPartStreamAfterASingleWrite = pauseRequestBodyPartStreamAfterASingleWrite
+        self.eventLoop = eventLoop
     }
 
     func nextBodyPart() -> RequestParts? {
-        guard !self.requestBodyParts.isEmpty else { return nil }
-        return self.requestBodyParts.removeFirst()
+        self.lock.withLock { () -> RequestParts? in
+            guard !self._requestBodyParts.isEmpty else { return nil }
+            return self._requestBodyParts.removeFirst()
+        }
     }
 
     func resetDemandSignal() {
-        self.signalledDemandForResponseBody = false
+        self.lock.withLockVoid {
+            self._signaledDemandForResponseBody = false
+        }
+    }
+
+    func readable() -> EventLoopFuture<Void> {
+        self.lock.withLock { () -> EventLoopFuture<Void> in
+            if !self._requestBodyParts.isEmpty {
+                return self.eventLoop.makeSucceededVoidFuture()
+            }
+
+            let promise = self.eventLoop.makePromise(of: Void.self)
+            self._readable = promise
+            return promise.futureResult
+        }
     }
 
     // this should always be called twice. When we receive the first call, the next call to produce
     // data is already scheduled. If we call pause here, once, after the second call new subsequent
     // calls should not be scheduled.
     func writeRequestBodyPart(_ part: IOData, request: HTTPExecutableRequest) {
-        if self.requestBodyParts.isEmpty, self.pauseRequestBodyPartStreamAfterASingleWrite {
+        let (pause, promise) = self.lock.withLock { () -> (Bool, EventLoopPromise<Void>?) in
+            var pause = false
+            if self._requestBodyParts.isEmpty, self.pauseRequestBodyPartStreamAfterASingleWrite {
+                pause = true
+            }
+            self._requestBodyParts.append(.body(part))
+            let promise = self._readable
+            self._readable = nil
+            return (pause, promise)
+        }
+
+        if pause {
             request.pauseRequestBodyStream()
         }
-        self.requestBodyParts.append(.body(part))
+
+        promise?.succeed(())
     }
 
     func finishRequestBodyStream(_: HTTPExecutableRequest) {
-        self.requestBodyParts.append(.endOfStream)
+        let promise = self.lock.withLock { () -> EventLoopPromise<Void>? in
+            self._requestBodyParts.append(.endOfStream)
+            let promise = self._readable
+            self._readable = nil
+            return promise
+        }
+
+        promise?.succeed(())
     }
 
     func demandResponseBodyStream(_: HTTPExecutableRequest) {
-        self.signalledDemandForResponseBody = true
+        self.lock.withLockVoid {
+            self._signaledDemandForResponseBody = true
+        }
     }
 
     func cancelRequest(_: HTTPExecutableRequest) {
-        self.isCancelled = true
+        self._isCancelled = true
     }
 }
 
