@@ -57,5 +57,7 @@ XCTMain([
     testCase(SOCKSEventsHandlerTests.allTests),
     testCase(SSLContextCacheTests.allTests),
     testCase(TLSEventsHandlerTests.allTests),
+    testCase(TransactionTests.allTests),
+    testCase(Transaction_StateMachineTests.allTests),
 ])
 #endif
