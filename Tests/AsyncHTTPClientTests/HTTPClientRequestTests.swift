@@ -73,13 +73,13 @@ class HTTPClientRequestTests: XCTestCase {
 
             XCTAssertEqual(preparedRequest.poolKey, .init(
                 scheme: .unix,
-                connectionTarget: .unixSocket(path: "/example/folder.sock"),
+                connectionTarget: .unixSocket(path: "/some_path"),
                 tlsConfiguration: nil
             ))
             XCTAssertEqual(preparedRequest.head, .init(
                 version: .http1_1,
                 method: .GET,
-                uri: "/some_path",
+                uri: "/",
                 headers: ["custom-header": "custom-value"]
             ))
             XCTAssertEqual(preparedRequest.requestFramingMetadata, .init(
@@ -370,7 +370,7 @@ class HTTPClientRequestTests: XCTestCase {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
             let collection = ByteBuffer(string: "post body").readableBytesView
-            request.body = .bytes(length: nil, collection)
+            request.body = .bytes(collection)
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }
