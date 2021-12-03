@@ -18,10 +18,10 @@ import NIOHTTP1
 @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
 extension HTTPClientRequest {
     struct Prepared {
-        let poolKey: ConnectionPool.Key
-        let requestFramingMetadata: RequestFramingMetadata
-        let head: HTTPRequestHead
-        let body: Body?
+        var poolKey: ConnectionPool.Key
+        var requestFramingMetadata: RequestFramingMetadata
+        var head: HTTPRequestHead
+        var body: Body?
     }
 }
 
