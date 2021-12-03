@@ -641,7 +641,7 @@ internal struct HTTPResponseBuilder {
     }
 }
 
-internal struct RequestInfo: Codable {
+internal struct RequestInfo: Codable, Equatable {
     var data: String
     var requestNumber: Int
     var connectionNumber: Int

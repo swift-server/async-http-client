@@ -28,6 +28,7 @@ final class RequestBagTests: XCTestCase {
         var writtenBytes = 0
         var writes = 0
         let bytesToSent = (3000...10000).randomElement()!
+        let expectedWrites = bytesToSent / 100 + ((bytesToSent % 100 > 0) ? 1 : 0)
         var streamIsAllowedToWrite = false
 
         let writeDonePromise = embeddedEventLoop.makePromise(of: Void.self)
@@ -70,9 +71,12 @@ final class RequestBagTests: XCTestCase {
 
         XCTAssert(bag.task.eventLoop === embeddedEventLoop)
 
-        let executor = MockRequestExecutor(pauseRequestBodyPartStreamAfterASingleWrite: true)
+        let executor = MockRequestExecutor(
+            pauseRequestBodyPartStreamAfterASingleWrite: true,
+            eventLoop: embeddedEventLoop
+        )
 
-        bag.willExecuteRequest(executor)
+        executor.runRequest(bag)
 
         XCTAssertEqual(delegate.hitDidSendRequestHead, 0)
         bag.requestHeadSent()
@@ -82,39 +86,35 @@ final class RequestBagTests: XCTestCase {
         streamIsAllowedToWrite = false
 
         // after starting the body stream we should have received two writes
-        var eof = false
         var receivedBytes = 0
-        while !eof {
-            switch executor.nextBodyPart() {
-            case .body(.byteBuffer(let bytes)):
-                XCTAssertEqual(delegate.hitDidSendRequestPart, writes)
-                receivedBytes += bytes.readableBytes
-            case .body(.fileRegion(_)):
-                return XCTFail("We never send a file region. Something is really broken")
-            case .endOfStream:
-                XCTAssertEqual(delegate.hitDidSendRequest, 1)
-                eof = true
-            case .none:
-                // this should produce maximum two parts
+        for i in 0..<expectedWrites {
+            XCTAssertNoThrow(try executor.receiveRequestBody {
+                receivedBytes += $0.readableBytes
+            })
+            XCTAssertEqual(delegate.hitDidSendRequestPart, writes)
+
+            if i % 2 == 1 {
                 streamIsAllowedToWrite = true
-                bag.resumeRequestBodyStream()
+                executor.resumeRequestBodyStream()
                 streamIsAllowedToWrite = false
-                XCTAssertLessThanOrEqual(executor.requestBodyParts.count, 2)
+                XCTAssertLessThanOrEqual(executor.requestBodyPartsCount, 2)
                 XCTAssertEqual(delegate.hitDidSendRequestPart, writes)
             }
         }
 
+        XCTAssertNoThrow(try executor.receiveEndOfStream())
         XCTAssertEqual(receivedBytes, bytesToSent, "We have sent all request bytes...")
 
         XCTAssertNil(delegate.receivedHead, "Expected not to have a response head, before `receiveResponseHead`")
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: .init([
             ("Transfer-Encoding", "chunked"),
         ]))
+        XCTAssertFalse(executor.signalledDemandForResponseBody)
         bag.receiveResponseHead(responseHead)
         XCTAssertEqual(responseHead, delegate.receivedHead)
         XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
         XCTAssertTrue(executor.signalledDemandForResponseBody)
-        executor.resetDemandSignal()
+        executor.resetResponseStreamDemandSignal()
 
         // we will receive 20 chunks with each 10 byteBuffers and 32 bytes
         let bodyPart = ByteBuffer(bytes: 0..<32)
@@ -136,7 +136,7 @@ final class RequestBagTests: XCTestCase {
                 }
             }
 
-            executor.resetDemandSignal()
+            executor.resetResponseStreamDemandSignal()
         }
 
         XCTAssertEqual(delegate.hitDidReceiveResponse, 0)
@@ -178,7 +178,7 @@ final class RequestBagTests: XCTestCase {
         guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
         XCTAssert(bag.task.eventLoop === embeddedEventLoop)
 
-        let executor = MockRequestExecutor()
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
 
         bag.willExecuteRequest(executor)
 
@@ -221,7 +221,7 @@ final class RequestBagTests: XCTestCase {
         guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
         XCTAssert(bag.eventLoop === embeddedEventLoop)
 
-        let executor = MockRequestExecutor()
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
         bag.cancel()
 
         bag.willExecuteRequest(executor)
@@ -254,7 +254,7 @@ final class RequestBagTests: XCTestCase {
         guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
         XCTAssert(bag.eventLoop === embeddedEventLoop)
 
-        let executor = MockRequestExecutor()
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
 
         bag.willExecuteRequest(executor)
         XCTAssertFalse(executor.isCancelled)
@@ -329,7 +329,7 @@ final class RequestBagTests: XCTestCase {
         ))
         guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
 
-        let executor = MockRequestExecutor()
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
         bag.willExecuteRequest(executor)
         bag.requestHeadSent()
         bag.receiveResponseHead(.init(version: .http1_1, status: .ok))
@@ -386,7 +386,7 @@ final class RequestBagTests: XCTestCase {
         ))
         guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
 
-        let executor = MockRequestExecutor()
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
         bag.willExecuteRequest(executor)
 
         XCTAssertEqual(delegate.hitDidSendRequestHead, 0)
@@ -396,7 +396,7 @@ final class RequestBagTests: XCTestCase {
         XCTAssertEqual(delegate.hitDidSendRequest, 0)
 
         bag.resumeRequestBodyStream()
-        XCTAssertEqual(executor.nextBodyPart(), .body(.byteBuffer(.init(bytes: 0...3))))
+        XCTAssertNoThrow(try executor.receiveRequestBody { XCTAssertEqual($0, ByteBuffer(bytes: 0...3)) })
         // receive a 301 response immediately.
         bag.receiveResponseHead(.init(version: .http1_1, status: .movedPermanently))
         XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
@@ -431,14 +431,14 @@ final class RequestBagTests: XCTestCase {
         ))
         guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
 
-        let executor = MockRequestExecutor()
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
         bag.willExecuteRequest(executor)
         bag.requestHeadSent()
         bag.receiveResponseHead(.init(version: .http1_1, status: .ok))
         XCTAssertFalse(executor.signalledDemandForResponseBody)
         XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
         XCTAssertTrue(executor.signalledDemandForResponseBody)
-        executor.resetDemandSignal()
+        executor.resetResponseStreamDemandSignal()
 
         // "foo" is forwarded for consumption. We expect the RequestBag to consume "foo" with the
         // delegate and call demandMoreBody afterwards.
@@ -448,7 +448,7 @@ final class RequestBagTests: XCTestCase {
         XCTAssertEqual(delegate.hitDidReceiveBodyPart, 1)
         XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
         XCTAssertTrue(executor.signalledDemandForResponseBody)
-        executor.resetDemandSignal()
+        executor.resetResponseStreamDemandSignal()
 
         bag.receiveResponseBodyParts([ByteBuffer(string: "bar")])
         XCTAssertEqual(delegate.hitDidReceiveBodyPart, 2)
@@ -463,54 +463,6 @@ final class RequestBagTests: XCTestCase {
         XCTAssertEqual(delegate.hitDidReceiveResponse, 0)
         XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
         XCTAssertEqual(delegate.hitDidReceiveResponse, 1)
-    }
-}
-
-class MockRequestExecutor: HTTPRequestExecutor {
-    enum RequestParts: Equatable {
-        case body(IOData)
-        case endOfStream
-    }
-
-    let pauseRequestBodyPartStreamAfterASingleWrite: Bool
-
-    private(set) var requestBodyParts = CircularBuffer<RequestParts>()
-    private(set) var isCancelled: Bool = false
-    private(set) var signalledDemandForResponseBody: Bool = false
-
-    init(pauseRequestBodyPartStreamAfterASingleWrite: Bool = false) {
-        self.pauseRequestBodyPartStreamAfterASingleWrite = pauseRequestBodyPartStreamAfterASingleWrite
-    }
-
-    func nextBodyPart() -> RequestParts? {
-        guard !self.requestBodyParts.isEmpty else { return nil }
-        return self.requestBodyParts.removeFirst()
-    }
-
-    func resetDemandSignal() {
-        self.signalledDemandForResponseBody = false
-    }
-
-    // this should always be called twice. When we receive the first call, the next call to produce
-    // data is already scheduled. If we call pause here, once, after the second call new subsequent
-    // calls should not be scheduled.
-    func writeRequestBodyPart(_ part: IOData, request: HTTPExecutableRequest) {
-        if self.requestBodyParts.isEmpty, self.pauseRequestBodyPartStreamAfterASingleWrite {
-            request.pauseRequestBodyStream()
-        }
-        self.requestBodyParts.append(.body(part))
-    }
-
-    func finishRequestBodyStream(_: HTTPExecutableRequest) {
-        self.requestBodyParts.append(.endOfStream)
-    }
-
-    func demandResponseBodyStream(_: HTTPExecutableRequest) {
-        self.signalledDemandForResponseBody = true
-    }
-
-    func cancelRequest(_: HTTPExecutableRequest) {
-        self.isCancelled = true
     }
 }
 
