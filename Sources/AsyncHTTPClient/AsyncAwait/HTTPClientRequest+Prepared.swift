@@ -26,27 +26,27 @@ extension HTTPClientRequest {
 }
 
 @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
-extension HTTPClientRequest {
-    func prepared() throws -> Prepared {
-        let url = try DeconstructedURL(url: self.url)
+extension HTTPClientRequest.Prepared {
+    init(_ request: HTTPClientRequest) throws {
+        let url = try DeconstructedURL(url: request.url)
 
-        var headers = self.headers
+        var headers = request.headers
         headers.addHostIfNeeded(for: url)
         let metadata = try headers.validateAndSetTransportFraming(
-            method: self.method,
-            bodyLength: .init(self.body)
+            method: request.method,
+            bodyLength: .init(request.body)
         )
 
-        return .init(
+        self.init(
             poolKey: .init(url: url, tlsConfiguration: nil),
             requestFramingMetadata: metadata,
             head: .init(
                 version: .http1_1,
-                method: self.method,
+                method: request.method,
                 uri: url.uri,
                 headers: headers
             ),
-            body: self.body
+            body: request.body
         )
     }
 }
