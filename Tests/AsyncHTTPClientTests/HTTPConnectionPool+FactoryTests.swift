@@ -76,7 +76,10 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
         let factory = HTTPConnectionPool.ConnectionFactory(
             key: .init(request),
             tlsConfiguration: nil,
-            clientConfiguration: .init(proxy: .socksServer(host: "127.0.0.1", port: server!.localAddress!.port!)),
+            clientConfiguration: .init(
+                timeout: .init(connect: .seconds(2), read: nil),
+                proxy: .socksServer(host: "127.0.0.1", port: server!.localAddress!.port!)
+            ),
             sslContextCache: .init()
         )
 
