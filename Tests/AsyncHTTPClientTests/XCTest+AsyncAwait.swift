@@ -76,4 +76,17 @@ internal func XCTAssertThrowsError<T>(
     }
 }
 
+internal func XCTAssertNoThrowWithResult<Result>(
+    _ expression: @autoclosure () async throws -> Result,
+    file: StaticString = #file,
+    line: UInt = #line
+) async -> Result? {
+    do {
+        return try await expression()
+    } catch {
+        XCTFail("Expression did throw: \(error)", file: file, line: line)
+    }
+    return nil
+}
+
 #endif // compiler(>=5.5)

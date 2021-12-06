@@ -38,6 +38,7 @@ XCTMain([
     testCase(HTTPClientInternalTests.allTests),
     testCase(HTTPClientNIOTSTests.allTests),
     testCase(HTTPClientReproTests.allTests),
+    testCase(HTTPClientRequestTests.allTests),
     testCase(HTTPClientSOCKSTests.allTests),
     testCase(HTTPClientTests.allTests),
     testCase(HTTPClientUncleanSSLConnectionShutdownTests.allTests),
