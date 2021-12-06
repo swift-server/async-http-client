@@ -646,10 +646,8 @@ class HTTPClientTests: XCTestCase {
             task.cancel()
         }
 
-        XCTAssertThrowsError(try task.wait(), "Should fail") { error in
-            guard case let error = error as? HTTPClientError, error == .cancelled else {
-                return XCTFail("Should fail with cancelled")
-            }
+        XCTAssertThrowsError(try task.wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .cancelled)
         }
     }
 
@@ -730,19 +728,23 @@ class HTTPClientTests: XCTestCase {
 
     func testProxyPlaintextWithIncorrectlyAuthorization() throws {
         let localHTTPBin = HTTPBin(proxy: .simulate(authorization: "Basic YWxhZGRpbjpvcGVuc2VzYW1l"))
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(proxy: .server(host: "localhost",
-                                                                         port: localHTTPBin.port,
-                                                                         authorization: .basic(username: "aladdin",
-                                                                                               password: "opensesamefoo"))))
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: .init(
+                timeout: .init(connect: .seconds(2), read: nil),
+                proxy: .server(
+                    host: "localhost",
+                    port: localHTTPBin.port,
+                    authorization: .basic(username: "aladdin", password: "opensesamefoo")
+                )
+            )
+        )
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
             XCTAssertNoThrow(try localHTTPBin.shutdown())
         }
-        XCTAssertThrowsError(try localClient.get(url: "http://test/ok").wait(), "Should fail") { error in
-            guard case let error = error as? HTTPClientError, error == .proxyAuthenticationRequired else {
-                return XCTFail("Should fail with HTTPClientError.proxyAuthenticationRequired")
-            }
+        XCTAssertThrowsError(try localClient.get(url: "http://test/ok").wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .proxyAuthenticationRequired)
         }
     }
 
@@ -859,31 +861,41 @@ class HTTPClientTests: XCTestCase {
 
     func testLoopDetectionRedirectLimit() throws {
         let localHTTPBin = HTTPBin(.http1_1(ssl: true))
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: HTTPClient.Configuration(certificateVerification: .none, redirectConfiguration: .follow(max: 5, allowCycles: false)))
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: .init(
+                certificateVerification: .none,
+                redirectConfiguration: .follow(max: 5, allowCycles: false)
+            )
+        )
 
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
             XCTAssertNoThrow(try localHTTPBin.shutdown())
         }
 
-        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/redirect/infinite1").wait(), "Should fail with redirect limit") { error in
-            XCTAssertEqual(error as? HTTPClientError, HTTPClientError.redirectCycleDetected)
+        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/redirect/infinite1").wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, HTTPClientError.redirectCycleDetected)
         }
     }
 
     func testCountRedirectLimit() throws {
         let localHTTPBin = HTTPBin(.http1_1(ssl: true))
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: HTTPClient.Configuration(certificateVerification: .none, redirectConfiguration: .follow(max: 10, allowCycles: true)))
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: .init(
+                certificateVerification: .none,
+                redirectConfiguration: .follow(max: 10, allowCycles: true)
+            )
+        )
 
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
             XCTAssertNoThrow(try localHTTPBin.shutdown())
         }
 
-        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/redirect/infinite1").wait(), "Should fail with redirect limit") { error in
-            XCTAssertEqual(error as? HTTPClientError, HTTPClientError.redirectLimitReached)
+        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/redirect/infinite1").wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, HTTPClientError.redirectLimitReached)
         }
     }
 
@@ -1105,9 +1117,15 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testStressGetHttpsSSLError() throws {
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .createNew,
+            configuration: .init(timeout: .init(connect: .seconds(2), read: nil))
+        )
+        defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+
         let request = try Request(url: "https://localhost:\(self.defaultHTTPBin.port)/wait", method: .GET)
         let tasks = (1...100).map { _ -> HTTPClient.Task<TestHTTPDelegate.Response> in
-            self.defaultClient.execute(request: request, delegate: TestHTTPDelegate())
+            localClient.execute(request: request, delegate: TestHTTPDelegate())
         }
 
         let results = try EventLoopFuture<TestHTTPDelegate.Response>.whenAllComplete(tasks.map { $0.futureResult }, on: self.defaultClient.eventLoopGroup.next()).wait()
@@ -1148,14 +1166,10 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try localClient.syncShutdown())
             XCTAssertNoThrow(try localHTTPBin.shutdown())
         }
-        do {
-            _ = try localClient.get(url: "http://localhost:\(localHTTPBin.port)/get").timeout(after: .seconds(5)).wait()
-            XCTFail("Shouldn't succeed")
-        } catch {
-            guard !(error is EventLoopFutureTimeoutError) else {
-                XCTFail("Timed out but should have failed immediately")
-                return
-            }
+
+        let future = localClient.get(url: "http://localhost:\(localHTTPBin.port)/get").timeout(after: .seconds(5))
+        XCTAssertThrowsError(try future.wait()) {
+            XCTAssertFalse($0 is EventLoopFutureTimeoutError, "Timed out but should have failed immediately")
         }
     }
 
@@ -1296,11 +1310,7 @@ class HTTPClientTests: XCTestCase {
             case .success:
                 XCTFail("Shouldn't succeed")
             case .failure(let error):
-                if let clientError = error as? HTTPClientError, clientError == .cancelled {
-                    continue
-                } else {
-                    XCTFail("Unexpected error: \(error)")
-                }
+                XCTAssertEqual(error as? HTTPClientError, .cancelled)
             }
         }
     }
@@ -1308,29 +1318,18 @@ class HTTPClientTests: XCTestCase {
     func testDoubleShutdown() {
         let client = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
         XCTAssertNoThrow(try client.syncShutdown())
-        do {
-            try client.syncShutdown()
-            XCTFail("Shutdown should fail with \(HTTPClientError.alreadyShutdown)")
-        } catch {
-            guard let clientError = error as? HTTPClientError, clientError == .alreadyShutdown else {
-                XCTFail("Unexpected error: \(error) instead of \(HTTPClientError.alreadyShutdown)")
-                return
-            }
+
+        XCTAssertThrowsError(try client.syncShutdown()) {
+            XCTAssertEqual($0 as? HTTPClientError, .alreadyShutdown)
         }
     }
 
     func testTaskFailsWhenClientIsShutdown() {
         let client = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
         XCTAssertNoThrow(try client.syncShutdown())
-        do {
-            _ = try client.get(url: "http://localhost/").wait()
-            XCTFail("Request shouldn't succeed")
-        } catch {
-            if let error = error as? HTTPClientError, error == .alreadyShutdown {
-                return
-            } else {
-                XCTFail("Unexpected error: \(error)")
-            }
+
+        XCTAssertThrowsError(try client.get(url: "http://localhost/").wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .alreadyShutdown)
         }
     }
 
@@ -1712,11 +1711,12 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testRacePoolIdleConnectionsAndGet() {
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(connectionPool: .init(idleTimeout: .milliseconds(10))))
-        defer {
-            XCTAssertNoThrow(try localClient.syncShutdown())
-        }
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: .init(connectionPool: .init(idleTimeout: .milliseconds(10)))
+        )
+
+        defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
         for _ in 1...500 {
             XCTAssertNoThrow(try localClient.get(url: self.defaultHTTPBinURLPrefix + "get").wait())
             Thread.sleep(forTimeInterval: 0.01 + .random(in: -0.05...0.05))
@@ -1724,13 +1724,15 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testAvoidLeakingTLSHandshakeCompletionPromise() {
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: .init(timeout: .init(connect: .milliseconds(100))))
         let localHTTPBin = HTTPBin()
         let port = localHTTPBin.port
         XCTAssertNoThrow(try localHTTPBin.shutdown())
-        defer {
-            XCTAssertNoThrow(try localClient.syncShutdown())
-        }
+
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: .init(timeout: .init(connect: .milliseconds(100)))
+        )
+        defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
 
         XCTAssertThrowsError(try localClient.get(url: "http://localhost:\(port)").wait()) { error in
             if isTestingNIOTS() {
