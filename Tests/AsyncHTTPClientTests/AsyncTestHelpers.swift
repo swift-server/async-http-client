@@ -17,16 +17,13 @@ import NIOConcurrencyHelpers
 import NIOCore
 
 @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
-class AsyncSequenceWriter<E>: AsyncSequence {
+class AsyncSequenceWriter<Element>: AsyncSequence {
     typealias AsyncIterator = Iterator
-    typealias Element = E
 
     struct Iterator: AsyncIteratorProtocol {
-        typealias Element = E
+        private let writer: AsyncSequenceWriter<Element>
 
-        private let writer: AsyncSequenceWriter
-
-        init(_ writer: AsyncSequenceWriter) {
+        init(_ writer: AsyncSequenceWriter<Element>) {
             self.writer = writer
         }
 
@@ -40,10 +37,10 @@ class AsyncSequenceWriter<E>: AsyncSequence {
     }
 
     private enum State {
-        case buffering(CircularBuffer<Element?>, CheckedContinuation<Void, Error>?)
+        case buffering(CircularBuffer<Element?>, CheckedContinuation<Void, Never>?)
         case finished
         case waiting(CheckedContinuation<Element?, Error>)
-        case failed(Error)
+        case failed(Error, CheckedContinuation<Void, Never>?)
     }
 
     private var _state = State.buffering(.init(), nil)
@@ -60,12 +57,13 @@ class AsyncSequenceWriter<E>: AsyncSequence {
         }
     }
 
-    public func demand() async throws {
+    /// Wait until a downstream consumer has issued more demand by calling `next`.
+    public func demand() async {
         self.lock.lock()
 
         switch self._state {
         case .buffering(let buffer, .none):
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                 self._state = .buffering(buffer, continuation)
                 self.lock.unlock()
             }
@@ -74,9 +72,10 @@ class AsyncSequenceWriter<E>: AsyncSequence {
             self.lock.unlock()
             return
 
-        case .buffering(_, .some):
+        case .buffering(_, .some), .failed(_, .some):
+            let state = self._state
             self.lock.unlock()
-            preconditionFailure("Already waiting for demand")
+            preconditionFailure("Already waiting for demand. Invalid state: \(state)")
 
         case .finished, .failed:
             let state = self._state
@@ -105,43 +104,47 @@ class AsyncSequenceWriter<E>: AsyncSequence {
             self.lock.unlock()
             return first
 
-        case .failed(let error):
+        case .failed(let error, let demandContinuation):
             self._state = .finished
             self.lock.unlock()
+            demandContinuation?.resume()
             throw error
 
         case .finished:
+            self.lock.unlock()
             return nil
 
         case .waiting:
-            preconditionFailure("How can this be called twice?!")
+            let state = self._state
+            self.lock.unlock()
+            preconditionFailure("Expected that there is always only one concurrent call to next. Invalid state: \(state)")
         }
     }
 
-    public func write(_ byteBuffer: Element) {
-        self.writeBufferOrEnd(byteBuffer)
+    public func write(_ element: Element) {
+        self.writeBufferOrEnd(element)
     }
 
     public func end() {
         self.writeBufferOrEnd(nil)
     }
-    
+
     private enum WriteAction {
         case succeedContinuation(CheckedContinuation<Element?, Error>, Element?)
         case none
     }
 
-    private func writeBufferOrEnd(_ byteBuffer: Element?) {
+    private func writeBufferOrEnd(_ element: Element?) {
         let writeAction = self.lock.withLock { () -> WriteAction in
             switch self._state {
             case .buffering(var buffer, let continuation):
-                buffer.append(byteBuffer)
+                buffer.append(element)
                 self._state = .buffering(buffer, continuation)
                 return .none
 
             case .waiting(let continuation):
                 self._state = .buffering(.init(), nil)
-                return .succeedContinuation(continuation, byteBuffer)
+                return .succeedContinuation(continuation, element)
 
             case .finished, .failed:
                 preconditionFailure("Invalid state: \(self._state)")
@@ -156,17 +159,19 @@ class AsyncSequenceWriter<E>: AsyncSequence {
             break
         }
     }
-    
+
     private enum ErrorAction {
         case failContinuation(CheckedContinuation<Element?, Error>, Error)
         case none
     }
 
+    /// Drops all buffered writes and emits an error on the waiting `next`. If there is no call to `next`
+    /// waiting, will emit the error on the next call to `next`.
     public func fail(_ error: Error) {
         let errorAction = self.lock.withLock { () -> ErrorAction in
             switch self._state {
-            case .buffering:
-                self._state = .failed(error)
+            case .buffering(_, let demandContinuation):
+                self._state = .failed(error, demandContinuation)
                 return .none
 
             case .failed, .finished:
