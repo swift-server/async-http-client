@@ -76,11 +76,10 @@ final class RequestBagTests: XCTestCase {
             eventLoop: embeddedEventLoop
         )
 
-        executor.runRequest(bag)
-
         XCTAssertEqual(delegate.hitDidSendRequestHead, 0)
-        bag.requestHeadSent()
+        executor.runRequest(bag)
         XCTAssertEqual(delegate.hitDidSendRequestHead, 1)
+
         streamIsAllowedToWrite = true
         bag.resumeRequestBodyStream()
         streamIsAllowedToWrite = false
@@ -180,10 +179,8 @@ final class RequestBagTests: XCTestCase {
 
         let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
 
-        bag.willExecuteRequest(executor)
-
         XCTAssertEqual(delegate.hitDidSendRequestHead, 0)
-        bag.requestHeadSent()
+        executor.runRequest(bag)
         XCTAssertEqual(delegate.hitDidSendRequestHead, 1)
         XCTAssertEqual(delegate.hitDidSendRequestPart, 0)
         bag.resumeRequestBodyStream()
@@ -256,12 +253,11 @@ final class RequestBagTests: XCTestCase {
 
         let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
 
-        bag.willExecuteRequest(executor)
         XCTAssertFalse(executor.isCancelled)
 
         XCTAssertEqual(delegate.hitDidSendRequestHead, 0)
         XCTAssertEqual(delegate.hitDidSendRequest, 0)
-        bag.requestHeadSent()
+        executor.runRequest(bag)
         XCTAssertEqual(delegate.hitDidSendRequestHead, 1)
         XCTAssertEqual(delegate.hitDidSendRequest, 1)
 
@@ -330,8 +326,7 @@ final class RequestBagTests: XCTestCase {
         guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
 
         let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
-        bag.willExecuteRequest(executor)
-        bag.requestHeadSent()
+        executor.runRequest(bag)
         bag.receiveResponseHead(.init(version: .http1_1, status: .ok))
         XCTAssertEqual(executor.isCancelled, false)
         bag.fail(HTTPClientError.readTimeout)
@@ -387,11 +382,10 @@ final class RequestBagTests: XCTestCase {
         guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
 
         let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
-        bag.willExecuteRequest(executor)
 
         XCTAssertEqual(delegate.hitDidSendRequestHead, 0)
         XCTAssertEqual(delegate.hitDidSendRequest, 0)
-        bag.requestHeadSent()
+        executor.runRequest(bag)
         XCTAssertEqual(delegate.hitDidSendRequestHead, 1)
         XCTAssertEqual(delegate.hitDidSendRequest, 0)
 
@@ -432,8 +426,7 @@ final class RequestBagTests: XCTestCase {
         guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
 
         let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
-        bag.willExecuteRequest(executor)
-        bag.requestHeadSent()
+        executor.runRequest(bag)
         bag.receiveResponseHead(.init(version: .http1_1, status: .ok))
         XCTAssertFalse(executor.signalledDemandForResponseBody)
         XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
