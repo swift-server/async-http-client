@@ -320,6 +320,7 @@ class HTTP1ConnectionTests: XCTestCase {
         defer { XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully()) }
 
         let httpBin = HTTPBin(handlerFactory: { _ in AfterRequestCloseConnectionChannelHandler() })
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
 
         var maybeChannel: Channel?
 
@@ -362,7 +363,6 @@ class HTTP1ConnectionTests: XCTestCase {
 
         XCTAssertNoThrow(try XCTUnwrap(maybeChannel).closeFuture.wait())
         XCTAssertEqual(connectionDelegate.hitConnectionClosed, 1)
-        XCTAssertEqual(httpBin.activeConnections, 0)
     }
 
     func testConnectionIsClosedAfterSwitchingProtocols() {
