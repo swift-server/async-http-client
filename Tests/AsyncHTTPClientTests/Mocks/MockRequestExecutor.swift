@@ -88,6 +88,7 @@ final class MockRequestExecutor {
         precondition(self.request == nil)
         self.request = request
         request.willExecuteRequest(self)
+        request.requestHeadSent()
     }
 
     func receiveRequestBody(deadline: NIODeadline = .now() + .seconds(60), _ verify: (ByteBuffer) throws -> Void) throws {
@@ -166,7 +167,7 @@ final class MockRequestExecutor {
         }
     }
 
-    func resetResponseStreamDemandSignal0() {
+    private func resetResponseStreamDemandSignal0() {
         self._signaledDemandForResponseBody = false
     }
 }
