@@ -96,7 +96,7 @@ class AsyncSequenceWriter: AsyncSequence {
             }
 
         case .buffering(var buffer, let demandContinuation):
-            let first = buffer.popFirst()!
+            let first = buffer.removeFirst()
             if first != nil {
                 self._state = .buffering(buffer, demandContinuation)
             } else {
