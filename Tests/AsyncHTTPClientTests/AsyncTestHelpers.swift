@@ -17,12 +17,12 @@ import NIOConcurrencyHelpers
 import NIOCore
 
 @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
-class AsyncSequenceWriter: AsyncSequence {
+class AsyncSequenceWriter<E>: AsyncSequence {
     typealias AsyncIterator = Iterator
-    typealias Element = ByteBuffer
+    typealias Element = E
 
     struct Iterator: AsyncIteratorProtocol {
-        typealias Element = ByteBuffer
+        typealias Element = E
 
         private let writer: AsyncSequenceWriter
 
@@ -30,7 +30,7 @@ class AsyncSequenceWriter: AsyncSequence {
             self.writer = writer
         }
 
-        mutating func next() async throws -> ByteBuffer? {
+        mutating func next() async throws -> Element? {
             try await self.writer.next()
         }
     }
@@ -40,9 +40,9 @@ class AsyncSequenceWriter: AsyncSequence {
     }
 
     private enum State {
-        case buffering(CircularBuffer<ByteBuffer?>, CheckedContinuation<Void, Error>?)
+        case buffering(CircularBuffer<Element?>, CheckedContinuation<Void, Error>?)
         case finished
-        case waiting(CheckedContinuation<ByteBuffer?, Error>)
+        case waiting(CheckedContinuation<Element?, Error>)
         case failed(Error)
     }
 
@@ -85,7 +85,7 @@ class AsyncSequenceWriter: AsyncSequence {
         }
     }
 
-    private func next() async throws -> ByteBuffer? {
+    private func next() async throws -> Element? {
         self.lock.lock()
         switch self._state {
         case .buffering(let buffer, let demandContinuation) where buffer.isEmpty:
@@ -118,20 +118,20 @@ class AsyncSequenceWriter: AsyncSequence {
         }
     }
 
-    public func write(_ byteBuffer: ByteBuffer) {
+    public func write(_ byteBuffer: Element) {
         self.writeBufferOrEnd(byteBuffer)
     }
 
     public func end() {
         self.writeBufferOrEnd(nil)
     }
+    
+    private enum WriteAction {
+        case succeedContinuation(CheckedContinuation<Element?, Error>, Element?)
+        case none
+    }
 
-    private func writeBufferOrEnd(_ byteBuffer: ByteBuffer?) {
-        enum WriteAction {
-            case succeedContinuation(CheckedContinuation<ByteBuffer?, Error>, ByteBuffer?)
-            case none
-        }
-
+    private func writeBufferOrEnd(_ byteBuffer: Element?) {
         let writeAction = self.lock.withLock { () -> WriteAction in
             switch self._state {
             case .buffering(var buffer, let continuation):
@@ -149,20 +149,20 @@ class AsyncSequenceWriter: AsyncSequence {
         }
 
         switch writeAction {
-        case .succeedContinuation(let continuation, let byteBuffer):
-            continuation.resume(returning: byteBuffer)
+        case .succeedContinuation(let continuation, let element):
+            continuation.resume(returning: element)
 
         case .none:
             break
         }
     }
+    
+    private enum ErrorAction {
+        case failContinuation(CheckedContinuation<Element?, Error>, Error)
+        case none
+    }
 
     public func fail(_ error: Error) {
-        enum ErrorAction {
-            case failContinuation(CheckedContinuation<ByteBuffer?, Error>, Error)
-            case none
-        }
-
         let errorAction = self.lock.withLock { () -> ErrorAction in
             switch self._state {
             case .buffering:
