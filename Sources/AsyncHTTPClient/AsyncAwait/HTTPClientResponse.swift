@@ -99,7 +99,7 @@ extension HTTPClientResponse.Body {
             }
         }
 
-        var id: ID { ID(self) }
+        private var id: ID { ID(self) }
         private let bag: Transaction
 
         init(bag: Transaction) {
