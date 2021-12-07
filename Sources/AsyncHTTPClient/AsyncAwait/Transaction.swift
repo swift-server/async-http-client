@@ -175,7 +175,6 @@ extension Transaction: HTTPSchedulableRequest {
 @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
 extension Transaction: HTTPExecutableRequest {
     var requestHead: HTTPRequestHead { self.request.head }
-    var requestBody: HTTPClientRequest.Body? { self.request.body }
 
     var requestFramingMetadata: RequestFramingMetadata { self.request.requestFramingMetadata }
 
