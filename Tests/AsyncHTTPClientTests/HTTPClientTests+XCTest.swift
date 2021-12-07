@@ -67,6 +67,7 @@ extension HTTPClientTests {
             ("testDecompressionLimit", testDecompressionLimit),
             ("testLoopDetectionRedirectLimit", testLoopDetectionRedirectLimit),
             ("testCountRedirectLimit", testCountRedirectLimit),
+            ("testRedirectToTheInitialURLDoesThrowOnFirstRedirect", testRedirectToTheInitialURLDoesThrowOnFirstRedirect),
             ("testMultipleConcurrentRequests", testMultipleConcurrentRequests),
             ("testWorksWith500Error", testWorksWith500Error),
             ("testWorksWithHTTP10Response", testWorksWithHTTP10Response),

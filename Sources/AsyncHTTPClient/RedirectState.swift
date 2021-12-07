@@ -21,7 +21,7 @@ struct RedirectState {
 
     /// All visited URLs.
     private var visited: [String]
-    
+
     /// if true, `redirect(to:)` will throw an error if a cycle is detected.
     private let allowCycles: Bool
 }

@@ -882,11 +882,11 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try localHTTPBin.shutdown())
         }
 
-        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/redirect/infinite1").timeout(after: .seconds(10)).wait(), "Should fail with redirect limit") { error in
+        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/redirect/infinite1").timeout(after: .seconds(10)).wait()) { error in
             XCTAssertEqual(error as? HTTPClientError, HTTPClientError.redirectLimitReached)
         }
     }
-    
+
     func testRedirectToTheInitialURLDoesThrowOnFirstRedirect() throws {
         let localHTTPBin = HTTPBin(.http1_1(ssl: true))
         defer { XCTAssertNoThrow(try localHTTPBin.shutdown()) }
@@ -898,8 +898,7 @@ class HTTPClientTests: XCTestCase {
             )
         )
         defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
-        
-        
+
         var maybeRequest: HTTPClient.Request?
         XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(
             url: "https://localhost:\(localHTTPBin.port)/redirect/target",
@@ -909,10 +908,9 @@ class HTTPClientTests: XCTestCase {
             ]
         ))
         guard let request = maybeRequest else { return }
-        
+
         XCTAssertThrowsError(
-            try localClient.execute(request: request).timeout(after: .seconds(10)).wait(),
-            "Should fail with redirect limit"
+            try localClient.execute(request: request).timeout(after: .seconds(10)).wait()
         ) { error in
             XCTAssertEqual(error as? HTTPClientError, HTTPClientError.redirectCycleDetected)
         }
