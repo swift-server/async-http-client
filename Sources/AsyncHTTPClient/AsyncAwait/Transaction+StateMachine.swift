@@ -250,7 +250,7 @@ extension Transaction {
 
         enum NextWriteAction {
             case write(ByteBuffer, HTTPRequestExecutor, continue: Bool)
-            case ignore
+            case none
         }
 
         func producedNextRequestPart(_ part: ByteBuffer) -> NextWriteAction {
@@ -269,7 +269,7 @@ extension Transaction {
                 return .write(part, context.executor, continue: false)
 
             case .finished:
-                return .ignore
+                return .none
             }
         }
 

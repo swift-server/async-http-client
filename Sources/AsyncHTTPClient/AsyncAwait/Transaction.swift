@@ -56,23 +56,34 @@ final class Transaction {
     // MARK: Request body helpers
 
     private func writeOnceAndOneTimeOnly(byteBuffer: ByteBuffer) {
-        // TODO: @fabianfett
+        // This method is synchronously invoked after sending the request head. For this reason we
+        // can make a number of assumptions, how the state machine will react.
         let writeAction = self.stateLock.withLock {
             self.state.producedNextRequestPart(byteBuffer)
         }
-        guard case .write(let part, let executor, true) = writeAction else {
-            preconditionFailure("")
+
+        switch writeAction {
+        case .write(let part, let executor, continue: _):
+            // the continue flag can be ignored. We will maximum write the request's end.
+            executor.writeRequestBodyPart(.byteBuffer(part), request: self)
+            // we break here to continue in the function flow.
+
+        case .none:
+            // an error/cancellation has happened. we don't need to continue here
+            return
         }
-        executor.writeRequestBodyPart(.byteBuffer(part), request: self)
 
         let finishAction = self.stateLock.withLock {
             self.state.finishRequestBodyStream()
         }
 
-        guard case .forwardStreamFinished(let executor) = finishAction else {
-            preconditionFailure("")
+        switch finishAction {
+        case .forwardStreamFinished(let executor):
+            executor.finishRequestBodyStream(self)
+        case .none:
+            // an error/cancellation has happened. we don't need to continue here
+            return
         }
-        executor.finishRequestBodyStream(self)
     }
 
     private func continueRequestBodyStream(
@@ -118,9 +129,9 @@ final class Transaction {
                 return .pause
             }
 
-        case .ignore:
-            // we only ignore reads, if the request has failed anyway. we should leave
-            // the reader loop
+        case .none:
+            // Request body write are only ignore by the state machine, if the request has failed
+            // anyway. we should leave the reader loop in this case.
             return .pause
         }
     }
