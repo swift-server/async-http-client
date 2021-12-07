@@ -95,38 +95,33 @@ final class TransactionTests: XCTestCase {
             XCTAssertFalse(executor.signalledDemandForResponseBody)
             transaction.receiveResponseHead(responseHead)
 
-            do {
-                let response = try await responseTask.value
-                XCTAssertEqual(response.status, responseHead.status)
-                XCTAssertEqual(response.headers, responseHead.headers)
-                XCTAssertEqual(response.version, responseHead.version)
+            let response = try await responseTask.value
+            XCTAssertEqual(response.status, responseHead.status)
+            XCTAssertEqual(response.headers, responseHead.headers)
+            XCTAssertEqual(response.version, responseHead.version)
 
-                let iterator = SharedIterator(response.body.filter { $0.readableBytes > 0 }.makeAsyncIterator())
+            let iterator = SharedIterator(response.body.filter { $0.readableBytes > 0 }.makeAsyncIterator())
 
-                for i in 0..<100 {
-                    XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
-
-                    async let part = iterator.next()
-
-                    XCTAssertNoThrow(try executor.receiveResponseDemand())
-                    executor.resetResponseStreamDemandSignal()
-                    transaction.receiveResponseBodyParts([ByteBuffer(integer: i)])
-
-                    let result = try await part
-                    XCTAssertEqual(result, ByteBuffer(integer: i))
-                }
-
+            for i in 0..<100 {
                 XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
+
                 async let part = iterator.next()
+
                 XCTAssertNoThrow(try executor.receiveResponseDemand())
                 executor.resetResponseStreamDemandSignal()
-                transaction.succeedRequest([])
-                let result = try await part
-                XCTAssertNil(result)
+                transaction.receiveResponseBodyParts([ByteBuffer(integer: i)])
 
-            } catch {
-                XCTFail("Failing tests are bad: \(error)")
+                let result = try await part
+                XCTAssertEqual(result, ByteBuffer(integer: i))
             }
+
+            XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
+            async let part = iterator.next()
+            XCTAssertNoThrow(try executor.receiveResponseDemand())
+            executor.resetResponseStreamDemandSignal()
+            transaction.succeedRequest([])
+            let result = try await part
+            XCTAssertNil(result)
         }
         #endif
     }
@@ -210,52 +205,48 @@ final class TransactionTests: XCTestCase {
 
             executor.runRequest(transaction)
 
-            do {
-                for i in 0..<100 {
-                    XCTAssertFalse(streamWriter.hasDemand, "Did not expect to have demand yet")
-
-                    transaction.resumeRequestBodyStream()
-                    await streamWriter.demand() // wait's for the stream writer to signal demand
-                    transaction.pauseRequestBodyStream()
-
-                    let part = ByteBuffer(integer: i)
-                    streamWriter.write(part)
-
-                    XCTAssertNoThrow(try executor.receiveRequestBody {
-                        XCTAssertEqual($0, part)
-                    })
-                }
+            for i in 0..<100 {
+                XCTAssertFalse(streamWriter.hasDemand, "Did not expect to have demand yet")
 
                 transaction.resumeRequestBodyStream()
-                await streamWriter.demand()
+                await streamWriter.demand() // wait's for the stream writer to signal demand
+                transaction.pauseRequestBodyStream()
 
-                streamWriter.end()
-                XCTAssertNoThrow(try executor.receiveEndOfStream())
+                let part = ByteBuffer(integer: i)
+                streamWriter.write(part)
 
-                // write response!
-
-                let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["foo": "bar"])
-                XCTAssertFalse(executor.signalledDemandForResponseBody)
-                transaction.receiveResponseHead(responseHead)
-
-                let response = try await responseTask.result.get()
-                XCTAssertEqual(response.status, responseHead.status)
-                XCTAssertEqual(response.headers, responseHead.headers)
-                XCTAssertEqual(response.version, responseHead.version)
-
-                let iterator = SharedIterator(response.body.makeAsyncIterator())
-
-                XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
-                async let part = iterator.next()
-
-                XCTAssertNoThrow(try executor.receiveResponseDemand())
-                executor.resetResponseStreamDemandSignal()
-                transaction.succeedRequest([])
-                let result = try await part
-                XCTAssertNil(result)
-            } catch {
-                XCTFail("Failing tests are bad: \(error)")
+                XCTAssertNoThrow(try executor.receiveRequestBody {
+                    XCTAssertEqual($0, part)
+                })
             }
+
+            transaction.resumeRequestBodyStream()
+            await streamWriter.demand()
+
+            streamWriter.end()
+            XCTAssertNoThrow(try executor.receiveEndOfStream())
+
+            // write response!
+
+            let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["foo": "bar"])
+            XCTAssertFalse(executor.signalledDemandForResponseBody)
+            transaction.receiveResponseHead(responseHead)
+
+            let response = try await responseTask.result.get()
+            XCTAssertEqual(response.status, responseHead.status)
+            XCTAssertEqual(response.headers, responseHead.headers)
+            XCTAssertEqual(response.version, responseHead.version)
+
+            let iterator = SharedIterator(response.body.makeAsyncIterator())
+
+            XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
+            async let part = iterator.next()
+
+            XCTAssertNoThrow(try executor.receiveResponseDemand())
+            executor.resetResponseStreamDemandSignal()
+            transaction.succeedRequest([])
+            let result = try await part
+            XCTAssertNil(result)
         }
         #endif
     }
@@ -283,41 +274,37 @@ final class TransactionTests: XCTestCase {
                 return XCTFail("Expected to have an HTTP2 connection here.")
             }
 
-            do {
-                var request = HTTPClientRequest(url: "https://localhost:\(httpBin.port)/")
-                request.headers = ["host": "localhost:\(httpBin.port)"]
+            var request = HTTPClientRequest(url: "https://localhost:\(httpBin.port)/")
+            request.headers = ["host": "localhost:\(httpBin.port)"]
 
-                var maybePreparedRequest: PreparedRequest?
-                XCTAssertNoThrow(maybePreparedRequest = try PreparedRequest(request))
-                guard let preparedRequest = maybePreparedRequest else {
-                    return XCTFail("Expected to have a request here.")
-                }
-                let (transaction, responseTask) = Transaction.makeWithResultTask(
-                    request: preparedRequest,
-                    preferredEventLoop: eventLoopGroup.next()
-                )
-
-                http2Connection.executeRequest(transaction)
-
-                XCTAssertEqual(delegate.hitStreamClosed, 0)
-
-                let response = try await responseTask.result.get()
-
-                XCTAssertEqual(response.status, .ok)
-                XCTAssertEqual(response.version, .http2)
-                XCTAssertEqual(delegate.hitStreamClosed, 1)
-
-                var body = try await response.body.reduce(into: ByteBuffer()) { partialResult, next in
-                    var next = next
-                    partialResult.writeBuffer(&next)
-                }
-                XCTAssertEqual(
-                    try body.readJSONDecodable(RequestInfo.self, length: body.readableBytes),
-                    RequestInfo(data: "", requestNumber: 1, connectionNumber: 0)
-                )
-            } catch {
-                XCTFail("We don't like errors in tests: \(error)")
+            var maybePreparedRequest: PreparedRequest?
+            XCTAssertNoThrow(maybePreparedRequest = try PreparedRequest(request))
+            guard let preparedRequest = maybePreparedRequest else {
+                return XCTFail("Expected to have a request here.")
             }
+            let (transaction, responseTask) = Transaction.makeWithResultTask(
+                request: preparedRequest,
+                preferredEventLoop: eventLoopGroup.next()
+            )
+
+            http2Connection.executeRequest(transaction)
+
+            XCTAssertEqual(delegate.hitStreamClosed, 0)
+
+            let response = try await responseTask.result.get()
+
+            XCTAssertEqual(response.status, .ok)
+            XCTAssertEqual(response.version, .http2)
+            XCTAssertEqual(delegate.hitStreamClosed, 1)
+
+            var body = try await response.body.reduce(into: ByteBuffer()) { partialResult, next in
+                var next = next
+                partialResult.writeBuffer(&next)
+            }
+            XCTAssertEqual(
+                try body.readJSONDecodable(RequestInfo.self, length: body.readableBytes),
+                RequestInfo(data: "", requestNumber: 1, connectionNumber: 0)
+            )
         }
         #endif
     }
@@ -439,36 +426,32 @@ final class TransactionTests: XCTestCase {
             XCTAssertFalse(executor.signalledDemandForResponseBody)
             transaction.receiveResponseHead(responseHead)
 
-            do {
-                let response = try await responseTask.value
-                XCTAssertEqual(response.status, responseHead.status)
-                XCTAssertEqual(response.headers, responseHead.headers)
-                XCTAssertEqual(response.version, responseHead.version)
+            let response = try await responseTask.value
+            XCTAssertEqual(response.status, responseHead.status)
+            XCTAssertEqual(response.headers, responseHead.headers)
+            XCTAssertEqual(response.version, responseHead.version)
 
-                XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
-                let iterator = SharedIterator(response.body.filter { $0.readableBytes > 0 }.makeAsyncIterator())
+            XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
+            let iterator = SharedIterator(response.body.filter { $0.readableBytes > 0 }.makeAsyncIterator())
 
-                async let part1 = iterator.next()
-                XCTAssertNoThrow(try executor.receiveResponseDemand())
-                executor.resetResponseStreamDemandSignal()
-                transaction.receiveResponseBodyParts([ByteBuffer(integer: 123)])
-                let result = try await part1
-                XCTAssertEqual(result, ByteBuffer(integer: 123))
+            async let part1 = iterator.next()
+            XCTAssertNoThrow(try executor.receiveResponseDemand())
+            executor.resetResponseStreamDemandSignal()
+            transaction.receiveResponseBodyParts([ByteBuffer(integer: 123)])
+            let result = try await part1
+            XCTAssertEqual(result, ByteBuffer(integer: 123))
 
-                let responsePartTask = Task {
-                    try await iterator.next()
-                }
-                XCTAssertNoThrow(try executor.receiveResponseDemand())
-                executor.resetResponseStreamDemandSignal()
-                transaction.fail(HTTPClientError.readTimeout)
+            let responsePartTask = Task {
+                try await iterator.next()
+            }
+            XCTAssertNoThrow(try executor.receiveResponseDemand())
+            executor.resetResponseStreamDemandSignal()
+            transaction.fail(HTTPClientError.readTimeout)
 
-                // can't use XCTAssertThrowsError() here, since capturing async let variables is
-                // not allowed.
-                await XCTAssertThrowsError(try await responsePartTask.value) {
-                    XCTAssertEqual($0 as? HTTPClientError, .readTimeout)
-                }
-            } catch {
-                XCTFail("Failing tests are bad: \(error)")
+            // can't use XCTAssertThrowsError() here, since capturing async let variables is
+            // not allowed.
+            await XCTAssertThrowsError(try await responsePartTask.value) {
+                XCTAssertEqual($0 as? HTTPClientError, .readTimeout)
             }
         }
         #endif
@@ -497,60 +480,54 @@ final class TransactionTests: XCTestCase {
                 return XCTFail("Expected to have an HTTP2 connection here.")
             }
 
-            do {
-                let streamWriter = AsyncSequenceWriter<ByteBuffer>()
-                XCTAssertFalse(streamWriter.hasDemand, "Did not expect to have a demand at this point")
+            let streamWriter = AsyncSequenceWriter<ByteBuffer>()
+            XCTAssertFalse(streamWriter.hasDemand, "Did not expect to have a demand at this point")
 
-                var request = HTTPClientRequest(url: "https://localhost:\(httpBin.port)/")
-                request.method = .POST
-                request.headers = ["host": "localhost:\(httpBin.port)"]
-                request.body = .stream(length: 800, streamWriter)
+            var request = HTTPClientRequest(url: "https://localhost:\(httpBin.port)/")
+            request.method = .POST
+            request.headers = ["host": "localhost:\(httpBin.port)"]
+            request.body = .stream(length: 800, streamWriter)
 
-                var maybePreparedRequest: PreparedRequest?
-                XCTAssertNoThrow(maybePreparedRequest = try PreparedRequest(request))
-                guard let preparedRequest = maybePreparedRequest else {
-                    return
-                }
-                let (transaction, responseTask) = Transaction.makeWithResultTask(
-                    request: preparedRequest,
-                    preferredEventLoop: eventLoopGroup.next()
-                )
-
-                http2Connection.executeRequest(transaction)
-
-                XCTAssertEqual(delegate.hitStreamClosed, 0)
-
-                let response = try await responseTask.result.get()
-
-                XCTAssertEqual(response.status, .ok)
-                XCTAssertEqual(response.version, .http2)
-                XCTAssertEqual(delegate.hitStreamClosed, 0)
-
-                let iterator = SharedIterator(response.body.filter { $0.readableBytes > 0 }.makeAsyncIterator())
-
-                // at this point we can start to write to the stream and wait for the results
-
-                for i in 0..<100 {
-                    let buffer = ByteBuffer(integer: i)
-                    streamWriter.write(buffer)
-                    var echoedBuffer = try await iterator.next()
-                    guard let echoedInt = echoedBuffer?.readInteger(as: Int.self) else {
-                        XCTFail("Expected to not be finished at this point")
-                        break
-                    }
-                    XCTAssertEqual(i, echoedInt)
-                }
-
-                XCTAssertEqual(delegate.hitStreamClosed, 0)
-                streamWriter.end()
-                let final = try await iterator.next()
-                XCTAssertNil(final)
-                XCTAssertEqual(delegate.hitStreamClosed, 1)
-
-            } catch {
-                print(error)
-                XCTFail("We don't like errors in tests: \(error)")
+            var maybePreparedRequest: PreparedRequest?
+            XCTAssertNoThrow(maybePreparedRequest = try PreparedRequest(request))
+            guard let preparedRequest = maybePreparedRequest else {
+                return
             }
+            let (transaction, responseTask) = Transaction.makeWithResultTask(
+                request: preparedRequest,
+                preferredEventLoop: eventLoopGroup.next()
+            )
+
+            http2Connection.executeRequest(transaction)
+
+            XCTAssertEqual(delegate.hitStreamClosed, 0)
+
+            let response = try await responseTask.result.get()
+
+            XCTAssertEqual(response.status, .ok)
+            XCTAssertEqual(response.version, .http2)
+            XCTAssertEqual(delegate.hitStreamClosed, 0)
+
+            let iterator = SharedIterator(response.body.filter { $0.readableBytes > 0 }.makeAsyncIterator())
+
+            // at this point we can start to write to the stream and wait for the results
+
+            for i in 0..<100 {
+                let buffer = ByteBuffer(integer: i)
+                streamWriter.write(buffer)
+                var echoedBuffer = try await iterator.next()
+                guard let echoedInt = echoedBuffer?.readInteger(as: Int.self) else {
+                    XCTFail("Expected to not be finished at this point")
+                    break
+                }
+                XCTAssertEqual(i, echoedInt)
+            }
+
+            XCTAssertEqual(delegate.hitStreamClosed, 0)
+            streamWriter.end()
+            let final = try await iterator.next()
+            XCTAssertNil(final)
+            XCTAssertEqual(delegate.hitStreamClosed, 1)
         }
         #endif
     }
