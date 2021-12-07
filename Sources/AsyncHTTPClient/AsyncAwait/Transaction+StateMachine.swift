@@ -87,6 +87,7 @@ extension Transaction {
             case none
             /// fail response before head received. scheduler and executor are exclusive here.
             case failResponseHead(CheckedContinuation<HTTPClientResponse, Error>, Error, HTTPRequestScheduler?, HTTPRequestExecutor?)
+            /// fail response after response head received. fail the response stream (aka call to `next()`)
             case failResponseStream(CheckedContinuation<ByteBuffer?, Error>, Error, HTTPRequestExecutor)
         }
 
@@ -106,19 +107,29 @@ extension Transaction {
 
             case .executing(_, _, .waitingForStream(_, next: .error)),
                  .executing(_, _, .buffering(_, _, next: .error)):
+                // We have an error buffered that we will forward to the response stream. We always
+                // only forward the first error.
                 return .none
 
             case .executing(let context, let requestStreamState, .waitingForStream(let buffer, next: .askExecutorForMore)),
                  .executing(let context, let requestStreamState, .waitingForStream(let buffer, next: .eof)):
+                // We have already received a response head, but no AsyncIterator has been seen so
+                // far. We should deliver the error on the first call to `next`.
+                
                 switch requestStreamState {
                 case .initialized:
                     preconditionFailure("Invalid state: \(self.state)")
 
                 case .paused, .finished:
+                    // The request body stream is paused or finished. We don't need to change the
+                    // requestStreamState, producing is already paused/finished.
                     self.state = .executing(context, requestStreamState, .waitingForStream(buffer, next: .error(error)))
                     return .none
 
                 case .producing:
+                    // The request body stream is producing. We stop the request body stream, by
+                    // changing the request stream state to paused. This will lead to no further
+                    // produce calls. Once the next bytes are delivered.
                     self.state = .executing(context, .paused, .waitingForStream(buffer, next: .error(error)))
                     return .none
                 }
@@ -140,10 +151,14 @@ extension Transaction {
                 }
 
             case .executing(let context, _, .waitingForRemote(let streamID, let continuation)):
+                // We are in response streaming. The response stream is waiting for the next bytes
+                // from the server. We can fail the call to `next` immediately.
                 self.state = .finished(error: error, streamID)
                 return .failResponseStream(continuation, error, context.executor)
 
             case .finished(error: _, _):
+                // The request has already failed, succeeded, or the users is not interested in the
+                // response. There is no more way to reach the user code. Just drop the error.
                 return .none
 
             case .executing(let context, _, .finished(let streamID, let continuation)):
@@ -191,6 +206,7 @@ extension Transaction {
                 preconditionFailure("Received a resumeBodyRequest on a request, that isn't executing. Invalid state: \(self.state)")
 
             case .executing(let context, .initialized, .initialized):
+                // the request can start to send its body.
                 self.state = .executing(context, .producing, .initialized)
                 return .resumeStream(context.allocator)
 
@@ -198,6 +214,7 @@ extension Transaction {
                 preconditionFailure("Received a resumeBodyRequest on a request, that is producing. Invalid state: \(self.state)")
 
             case .executing(let context, .paused, let responseState):
+                // the request body was paused. we can start the body streaming again.
                 self.state = .executing(context, .producing, responseState)
                 return .resumeStream(context.allocator)
 
@@ -210,7 +227,7 @@ extension Transaction {
                  .executing(_, .initialized, .buffering),
                  .executing(_, .initialized, .waitingForRemote),
                  .executing(_, .initialized, .finished):
-                preconditionFailure("Invalid states: Response can not be received before request")
+                preconditionFailure("Invalid state: Response can not be received before request. \(self.state)")
 
             case .finished:
                 return .none
@@ -230,7 +247,7 @@ extension Transaction {
             case .executing(_, .paused, _),
                  .executing(_, .finished, _),
                  .finished:
-                // the channels writability changed to writable after we have forwarded all the
+                // the channels writability changed to writable after we have already forwarded all
                 // request bytes. Can be ignored.
                 break
             }
@@ -247,12 +264,18 @@ extension Transaction {
                  .queued,
                  .executing(_, .initialized, _),
                  .executing(_, .finished, _):
-                preconditionFailure("A request stream can only be resumed, if the request was started. Invalid state: \(self.state)")
+                preconditionFailure("A request stream can only produce, if the request was started. Invalid state: \(self.state)")
 
             case .executing(let context, .producing, _):
+                // We are currently producing the request body. The executors channel is writable.
+                // For this reason we can continue to produce data.
                 return .write(part, context.executor, continue: true)
 
             case .executing(let context, .paused, _):
+                // We are currently pausing the request body, since the executor's channel is not
+                // writable. We receive this call, since we were writable when we received the last
+                // data. At that point, we wanted to produce more. While waiting for more request
+                // bytes, the channel became not writable. Now is the point to pause producing.
                 return .write(part, context.executor, continue: false)
 
             case .finished:
