@@ -38,36 +38,27 @@ final class MockRequestExecutor {
         }
     }
 
-    let eventLoop: EventLoop
-    let _blockingQueue = BlockingQueue<RequestParts>()
-    let pauseRequestBodyPartStreamAfterASingleWrite: Bool
-
     var isCancelled: Bool {
-        if self.eventLoop.inEventLoop {
-            return self._isCancelled
-        } else {
-            return try! self.eventLoop.submit { self._isCancelled }.wait()
-        }
+        self.cancellationLock.value
     }
 
     var signalledDemandForResponseBody: Bool {
-        if self.eventLoop.inEventLoop {
-            return self._signaledDemandForResponseBody
-        } else {
-            return try! self.eventLoop.submit { self._signaledDemandForResponseBody }.wait()
-        }
+        self.responseBodyDemandLock.value
     }
 
     var requestBodyPartsCount: Int {
-        return self._blockingQueue.count
+        return self.blockingQueue.count
     }
 
+    let eventLoop: EventLoop
+    let pauseRequestBodyPartStreamAfterASingleWrite: Bool
+
+    private let blockingQueue = BlockingQueue<RequestParts>()
+    private let responseBodyDemandLock = ConditionLock(value: false)
+    private let cancellationLock = ConditionLock(value: false)
+
     private var request: HTTPExecutableRequest?
-    private var _requestBodyParts = CircularBuffer<RequestParts>()
     private var _signaledDemandForRequestBody: Bool = false
-    private var _signaledDemandForResponseBody: Bool = false
-    private var _whenWritable: EventLoopPromise<RequestParts>?
-    private var _isCancelled: Bool = false
 
     init(pauseRequestBodyPartStreamAfterASingleWrite: Bool = false, eventLoop: EventLoop) {
         self.pauseRequestBodyPartStreamAfterASingleWrite = pauseRequestBodyPartStreamAfterASingleWrite
@@ -91,13 +82,13 @@ final class MockRequestExecutor {
         request.requestHeadSent()
     }
 
-    func receiveRequestBody(deadline: NIODeadline = .now() + .seconds(60), _ verify: (ByteBuffer) throws -> Void) throws {
+    func receiveRequestBody(deadline: NIODeadline = .now() + .seconds(5), _ verify: (ByteBuffer) throws -> Void) throws {
         enum ReceiveAction {
             case value(RequestParts)
             case future(EventLoopFuture<RequestParts>)
         }
 
-        switch try self._blockingQueue.popFirst(deadline: deadline) {
+        switch try self.blockingQueue.popFirst(deadline: deadline) {
         case .body(.byteBuffer(let buffer)):
             try verify(buffer)
         case .body(.fileRegion):
@@ -107,13 +98,13 @@ final class MockRequestExecutor {
         }
     }
 
-    func receiveEndOfStream(deadline: NIODeadline = .now() + .seconds(60)) throws {
+    func receiveEndOfStream(deadline: NIODeadline = .now() + .seconds(5)) throws {
         enum ReceiveAction {
             case value(RequestParts)
             case future(EventLoopFuture<RequestParts>)
         }
 
-        switch try self._blockingQueue.popFirst(deadline: deadline) {
+        switch try self.blockingQueue.popFirst(deadline: deadline) {
         case .body(.byteBuffer):
             throw Errors.unexpectedByteBuffer
         case .body(.fileRegion):
@@ -158,17 +149,34 @@ final class MockRequestExecutor {
     }
 
     func resetResponseStreamDemandSignal() {
-        if self.eventLoop.inEventLoop {
-            self.resetResponseStreamDemandSignal0()
-        } else {
-            self.eventLoop.execute {
-                self.resetResponseStreamDemandSignal0()
-            }
-        }
+        self.responseBodyDemandLock.lock()
+        self.responseBodyDemandLock.unlock(withValue: false)
     }
 
-    private func resetResponseStreamDemandSignal0() {
-        self._signaledDemandForResponseBody = false
+    func receiveResponseDemand(deadline: NIODeadline = .now() + .seconds(5)) throws {
+        let secondsUntilDeath = deadline - NIODeadline.now()
+        guard self.responseBodyDemandLock.lock(
+            whenValue: true,
+            timeoutSeconds: .init(secondsUntilDeath.nanoseconds / 1_000_000_000)
+        )
+        else {
+            throw TimeoutError()
+        }
+
+        self.responseBodyDemandLock.unlock()
+    }
+
+    func receiveCancellation(deadline: NIODeadline = .now() + .seconds(5)) throws {
+        let secondsUntilDeath = deadline - NIODeadline.now()
+        guard self.cancellationLock.lock(
+            whenValue: true,
+            timeoutSeconds: .init(secondsUntilDeath.nanoseconds / 1_000_000_000)
+        )
+        else {
+            throw TimeoutError()
+        }
+
+        self.cancellationLock.unlock()
     }
 }
 
@@ -192,12 +200,12 @@ extension MockRequestExecutor: HTTPRequestExecutor {
 
         let stateChange = { () -> WriteAction in
             var pause = false
-            if self._blockingQueue.isEmpty && self.pauseRequestBodyPartStreamAfterASingleWrite && part.isBody {
+            if self.blockingQueue.isEmpty && self.pauseRequestBodyPartStreamAfterASingleWrite && part.isBody {
                 pause = true
                 self._signaledDemandForRequestBody = false
             }
 
-            self._blockingQueue.append(.success(part))
+            self.blockingQueue.append(.success(part))
 
             return pause ? .pauseBodyStream : .none
         }
@@ -218,28 +226,22 @@ extension MockRequestExecutor: HTTPRequestExecutor {
     }
 
     func demandResponseBodyStream(_: HTTPExecutableRequest) {
-        if self.eventLoop.inEventLoop {
-            self._signaledDemandForResponseBody = true
-        } else {
-            self.eventLoop.execute { self._signaledDemandForResponseBody = true }
-        }
+        self.responseBodyDemandLock.lock()
+        self.responseBodyDemandLock.unlock(withValue: true)
     }
 
     func cancelRequest(_: HTTPExecutableRequest) {
-        if self.eventLoop.inEventLoop {
-            self._isCancelled = true
-        } else {
-            self.eventLoop.execute { self._isCancelled = true }
-        }
+        self.cancellationLock.lock()
+        self.cancellationLock.unlock(withValue: true)
     }
 }
 
 extension MockRequestExecutor {
+    public struct TimeoutError: Error {}
+
     final class BlockingQueue<Element> {
         private let condition = ConditionLock(value: false)
         private var buffer = CircularBuffer<Result<Element, Error>>()
-
-        public struct TimeoutError: Error {}
 
         internal func append(_ element: Result<Element, Error>) {
             self.condition.lock()
