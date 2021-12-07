@@ -188,14 +188,14 @@ extension Transaction {
         mutating func resumeRequestBodyStream() -> ResumeProducingAction {
             switch self.state {
             case .initialized, .queued:
-                preconditionFailure("A request stream can only be resumed, if the request was started")
+                preconditionFailure("Received a resumeBodyRequest on a request, that isn't executing. Invalid state: \(self.state)")
 
             case .executing(let context, .initialized, .initialized):
                 self.state = .executing(context, .producing, .initialized)
                 return .resumeStream(context.allocator)
 
             case .executing(_, .producing, _):
-                preconditionFailure("Expected that resume is only called when if we were paused before")
+                preconditionFailure("Received a resumeBodyRequest on a request, that is producing. Invalid state: \(self.state)")
 
             case .executing(let context, .paused, let responseState):
                 self.state = .executing(context, .producing, responseState)

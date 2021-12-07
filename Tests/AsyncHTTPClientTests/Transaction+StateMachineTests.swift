@@ -73,6 +73,7 @@ final class Transaction_StateMachineTests: XCTestCase {
     }
 }
 
+#if compiler(>=5.5) && canImport(_Concurrency)
 @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
 extension Transaction.StateMachine.StartExecutionAction: Equatable {
     public static func == (lhs: Self, rhs: Self) -> Bool {
@@ -123,3 +124,4 @@ extension Transaction.StateMachine.NextWriteAction: Equatable {
         }
     }
 }
+#endif
