@@ -78,7 +78,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return
             }
-            let (requestBag, responseTask) = Transaction.makeWithResultTask(
+            let (transaction, responseTask) = Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
@@ -88,12 +88,12 @@ final class TransactionTests: XCTestCase {
                 eventLoop: embeddedEventLoop
             )
 
-            requestBag.willExecuteRequest(executor)
-            requestBag.requestHeadSent()
+            transaction.willExecuteRequest(executor)
+            transaction.requestHeadSent()
 
             let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["foo": "bar"])
             XCTAssertFalse(executor.signalledDemandForResponseBody)
-            requestBag.receiveResponseHead(responseHead)
+            transaction.receiveResponseHead(responseHead)
 
             do {
                 let response = try await responseTask.value
@@ -110,7 +110,7 @@ final class TransactionTests: XCTestCase {
 
                     XCTAssertNoThrow(try executor.receiveResponseDemand())
                     executor.resetResponseStreamDemandSignal()
-                    requestBag.receiveResponseBodyParts([ByteBuffer(integer: i)])
+                    transaction.receiveResponseBodyParts([ByteBuffer(integer: i)])
 
                     let result = try await part
                     XCTAssertEqual(result, ByteBuffer(integer: i))
@@ -120,7 +120,7 @@ final class TransactionTests: XCTestCase {
                 async let part = iterator.next()
                 XCTAssertNoThrow(try executor.receiveResponseDemand())
                 executor.resetResponseStreamDemandSignal()
-                requestBag.succeedRequest([])
+                transaction.succeedRequest([])
                 let result = try await part
                 XCTAssertNil(result)
 
@@ -201,22 +201,22 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return XCTFail("Expected to have a request here.")
             }
-            let (requestBag, responseTask) = Transaction.makeWithResultTask(
+            let (transaction, responseTask) = Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
 
             let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
 
-            executor.runRequest(requestBag)
+            executor.runRequest(transaction)
 
             do {
                 for i in 0..<100 {
                     XCTAssertFalse(streamWriter.hasDemand, "Did not expect to have demand yet")
 
-                    requestBag.resumeRequestBodyStream()
+                    transaction.resumeRequestBodyStream()
                     await streamWriter.demand() // wait's for the stream writer to signal demand
-                    requestBag.pauseRequestBodyStream()
+                    transaction.pauseRequestBodyStream()
 
                     let part = ByteBuffer(integer: i)
                     streamWriter.write(part)
@@ -226,7 +226,7 @@ final class TransactionTests: XCTestCase {
                     })
                 }
 
-                requestBag.resumeRequestBodyStream()
+                transaction.resumeRequestBodyStream()
                 await streamWriter.demand()
 
                 streamWriter.end()
@@ -236,7 +236,7 @@ final class TransactionTests: XCTestCase {
 
                 let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["foo": "bar"])
                 XCTAssertFalse(executor.signalledDemandForResponseBody)
-                requestBag.receiveResponseHead(responseHead)
+                transaction.receiveResponseHead(responseHead)
 
                 let response = try await responseTask.result.get()
                 XCTAssertEqual(response.status, responseHead.status)
@@ -250,7 +250,7 @@ final class TransactionTests: XCTestCase {
 
                 XCTAssertNoThrow(try executor.receiveResponseDemand())
                 executor.resetResponseStreamDemandSignal()
-                requestBag.succeedRequest([])
+                transaction.succeedRequest([])
                 let result = try await part
                 XCTAssertNil(result)
             } catch {
@@ -292,12 +292,12 @@ final class TransactionTests: XCTestCase {
                 guard let preparedRequest = maybePreparedRequest else {
                     return XCTFail("Expected to have a request here.")
                 }
-                let (requestBag, responseTask) = Transaction.makeWithResultTask(
+                let (transaction, responseTask) = Transaction.makeWithResultTask(
                     request: preparedRequest,
                     preferredEventLoop: eventLoopGroup.next()
                 )
 
-                http2Connection.executeRequest(requestBag)
+                http2Connection.executeRequest(transaction)
 
                 XCTAssertEqual(delegate.hitStreamClosed, 0)
 
@@ -511,12 +511,12 @@ final class TransactionTests: XCTestCase {
                 guard let preparedRequest = maybePreparedRequest else {
                     return
                 }
-                let (requestBag, responseTask) = Transaction.makeWithResultTask(
+                let (transaction, responseTask) = Transaction.makeWithResultTask(
                     request: preparedRequest,
                     preferredEventLoop: eventLoopGroup.next()
                 )
 
-                http2Connection.executeRequest(requestBag)
+                http2Connection.executeRequest(transaction)
 
                 XCTAssertEqual(delegate.hitStreamClosed, 0)
 
@@ -585,10 +585,10 @@ extension Transaction {
         connectionDeadline: NIODeadline = .distantFuture,
         preferredEventLoop: EventLoop
     ) -> (Transaction, _Concurrency.Task<HTTPClientResponse, Error>) {
-        let requestBagPromise = preferredEventLoop.makePromise(of: Transaction.self)
+        let transactionPromise = preferredEventLoop.makePromise(of: Transaction.self)
         let result = Task {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<HTTPClientResponse, Error>) in
-                let requestBag = Transaction(
+                let transaction = Transaction(
                     request: request,
                     requestOptions: requestOptions,
                     logger: logger,
@@ -596,13 +596,13 @@ extension Transaction {
                     preferredEventLoop: preferredEventLoop,
                     responseContinuation: continuation
                 )
-                requestBagPromise.succeed(requestBag)
+                transactionPromise.succeed(transaction)
             }
         }
         // the promise can never fail and it is therefore safe to force unwrap
-        let requestBag = try! requestBagPromise.futureResult.wait()
+        let transaction = try! transactionPromise.futureResult.wait()
 
-        return (requestBag, result)
+        return (transaction, result)
     }
 }
 #endif
