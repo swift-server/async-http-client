@@ -43,7 +43,7 @@ extension Transaction {
             enum Next {
                 case askExecutorForMore
                 case error(Error)
-                case eof
+                case endOfFile
             }
 
             case initialized
@@ -112,10 +112,10 @@ extension Transaction {
                 return .none
 
             case .executing(let context, let requestStreamState, .waitingForStream(let buffer, next: .askExecutorForMore)),
-                 .executing(let context, let requestStreamState, .waitingForStream(let buffer, next: .eof)):
+                 .executing(let context, let requestStreamState, .waitingForStream(let buffer, next: .endOfFile)):
                 // We have already received a response head, but no AsyncIterator has been seen so
                 // far. We should deliver the error on the first call to `next`.
-                
+
                 switch requestStreamState {
                 case .initialized:
                     preconditionFailure("Invalid state: \(self.state)")
@@ -135,7 +135,7 @@ extension Transaction {
                 }
 
             case .executing(let context, let requestStreamState, .buffering(let streamID, let buffer, next: .askExecutorForMore)),
-                 .executing(let context, let requestStreamState, .buffering(let streamID, let buffer, next: .eof)):
+                 .executing(let context, let requestStreamState, .buffering(let streamID, let buffer, next: .endOfFile)):
 
                 switch requestStreamState {
                 case .initialized:
@@ -401,7 +401,7 @@ extension Transaction {
                  .executing(_, _, .initialized):
                 preconditionFailure("Invalid state: \(self.state)")
 
-            case .executing(_, _, .waitingForStream(_, next: .eof)):
+            case .executing(_, _, .waitingForStream(_, next: .endOfFile)):
                 self.state = .finished(error: nil, nil)
                 return .none
 
@@ -421,6 +421,27 @@ extension Transaction {
                  .executing(_, _, .waitingForRemote),
                  .executing(_, _, .finished):
                 // user is consuming the stream with an iterator
+                return .none
+            }
+        }
+
+        mutating func cancelResponseStream(streamID: HTTPClientResponse.Body.IteratorStream.ID) -> FailAction {
+            switch self.state {
+            case .initialized, .queued, .executing(_, _, .initialized):
+                preconditionFailure("Got notice about a deinited iterator, before we even received a response. Invalid state: \(self.state)")
+
+            case .executing(_, _, .buffering(let registeredStreamID, _, next: _)),
+                 .executing(_, _, .waitingForRemote(let registeredStreamID, _)):
+                guard registeredStreamID == streamID else {
+                    // we got informed about an iterator that we don't actually serve!
+                    return .none
+                }
+                return self.fail(HTTPClientError.cancelled)
+
+            case .executing(_, _, .waitingForStream),
+                 .executing(_, _, .finished),
+                 .finished:
+                // the iterator went out of memory after the request was done. nothing to do.
                 return .none
             }
         }
@@ -460,17 +481,21 @@ extension Transaction {
                 self.state = .finished(error: error, streamID)
                 return .failContinuation(continuation, error)
 
-            case .executing(_, _, .waitingForStream(let buffer, next: .eof)) where buffer.isEmpty:
+            case .executing(_, _, .waitingForStream(let buffer, next: .endOfFile)) where buffer.isEmpty:
                 self.state = .finished(error: nil, streamID)
                 return .succeedContinuation(continuation, nil)
 
-            case .executing(let context, let requestState, .waitingForStream(var buffer, next: .eof)):
+            case .executing(let context, let requestState, .waitingForStream(var buffer, next: .endOfFile)):
                 assert(!buffer.isEmpty)
                 let toReturn = buffer.removeFirst()
-                self.state = .executing(context, requestState, .buffering(streamID, buffer, next: .eof))
+                self.state = .executing(context, requestState, .buffering(streamID, buffer, next: .endOfFile))
                 return .succeedContinuation(continuation, toReturn)
 
-            case .executing(let context, let requestState, .buffering(let streamID, var buffer, next: .askExecutorForMore)):
+            case .executing(let context, let requestState, .buffering(let registeredStreamID, var buffer, next: .askExecutorForMore)):
+                guard registeredStreamID == streamID else {
+                    return .failContinuation(continuation, TriedToRegisteredASecondConsumer())
+                }
+
                 if buffer.isEmpty {
                     self.state = .executing(context, requestState, .waitingForRemote(streamID, continuation))
                     return .askExecutorForMore(context.executor)
@@ -487,21 +512,24 @@ extension Transaction {
                 self.state = .finished(error: error, registeredStreamID)
                 return .failContinuation(continuation, error)
 
-            case .executing(_, _, .buffering(let registeredStreamID, let buffer, next: .eof)) where buffer.isEmpty:
+            case .executing(_, _, .buffering(let registeredStreamID, let buffer, next: .endOfFile)) where buffer.isEmpty:
                 guard registeredStreamID == streamID else {
                     return .failContinuation(continuation, TriedToRegisteredASecondConsumer())
                 }
                 self.state = .finished(error: nil, registeredStreamID)
                 return .succeedContinuation(continuation, nil)
 
-            case .executing(let context, let requestState, .buffering(let streamID, var buffer, next: .eof)):
-                assert(!buffer.isEmpty)
+            case .executing(let context, let requestState, .buffering(let registeredStreamID, var buffer, next: .endOfFile)):
+                guard registeredStreamID == streamID else {
+                    return .failContinuation(continuation, TriedToRegisteredASecondConsumer())
+                }
+                assert(!buffer.isEmpty) // TODO: This looks fishy!
                 let toReturn = buffer.removeFirst()
-                self.state = .executing(context, requestState, .buffering(streamID, buffer, next: .eof))
+                self.state = .executing(context, requestState, .buffering(streamID, buffer, next: .endOfFile))
                 return .succeedContinuation(continuation, toReturn)
 
             case .executing(_, _, .waitingForRemote(let registeredStreamID, _)):
-                if registeredStreamID != streamID {
+                guard registeredStreamID == streamID else {
                     return .failContinuation(continuation, TriedToRegisteredASecondConsumer())
                 }
                 preconditionFailure("A body response continuation from this iterator already exists! Queuing calls to `next()` is not supported.")
@@ -537,13 +565,13 @@ extension Transaction {
                 if let newChunks = newChunks, !newChunks.isEmpty {
                     buffer.append(contentsOf: newChunks)
                 }
-                self.state = .executing(context, requestState, .waitingForStream(buffer, next: .eof))
+                self.state = .executing(context, requestState, .waitingForStream(buffer, next: .endOfFile))
                 return .none
 
             case .executing(let context, let requestState, .waitingForRemote(let streamID, let continuation)):
                 if var newChunks = newChunks, !newChunks.isEmpty {
                     let first = newChunks.removeFirst()
-                    self.state = .executing(context, requestState, .buffering(streamID, newChunks, next: .eof))
+                    self.state = .executing(context, requestState, .buffering(streamID, newChunks, next: .endOfFile))
                     return .succeedContinuation(continuation, first)
                 }
 
@@ -554,7 +582,7 @@ extension Transaction {
                 if let newChunks = newChunks, !newChunks.isEmpty {
                     buffer.append(contentsOf: newChunks)
                 }
-                self.state = .executing(context, requestState, .buffering(streamID, buffer, next: .eof))
+                self.state = .executing(context, requestState, .buffering(streamID, buffer, next: .endOfFile))
                 return .none
 
             case .finished:
@@ -562,9 +590,9 @@ extension Transaction {
                 return .none
 
             case .executing(_, _, .waitingForStream(_, next: .error)),
-                 .executing(_, _, .waitingForStream(_, next: .eof)),
+                 .executing(_, _, .waitingForStream(_, next: .endOfFile)),
                  .executing(_, _, .buffering(_, _, next: .error)),
-                 .executing(_, _, .buffering(_, _, next: .eof)),
+                 .executing(_, _, .buffering(_, _, next: .endOfFile)),
                  .executing(_, _, .finished(_, _)):
                 preconditionFailure("Already received an eof or error before. Must not receive further events. Invalid state: \(self.state)")
             }

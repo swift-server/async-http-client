@@ -281,7 +281,10 @@ extension Transaction: HTTPExecutableRequest {
         let action = self.stateLock.withLock {
             self.state.fail(error)
         }
+        self.performFailAction(action)
+    }
 
+    private func performFailAction(_ action: StateMachine.FailAction) {
         switch action {
         case .none:
             break
@@ -330,7 +333,10 @@ extension Transaction {
     }
 
     func cancelResponseStream(streamID: HTTPClientResponse.Body.IteratorStream.ID) {
-        self.cancel()
+        let action = self.stateLock.withLock {
+            self.state.cancelResponseStream(streamID: streamID)
+        }
+        self.performFailAction(action)
     }
 }
 #endif
