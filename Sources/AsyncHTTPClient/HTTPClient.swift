@@ -543,22 +543,23 @@ public class HTTPClient {
             return failedTask
         }
 
-        let redirectHandler: RedirectHandler<Delegate.Response>?
-        switch self.configuration.redirectConfiguration.configuration {
-        case .follow(let max, let allowCycles):
+        let redirectHandler: RedirectHandler<Delegate.Response>? = {
             var request = request
             if request.redirectState == nil {
-                request.redirectState = .init(count: max, visited: allowCycles ? nil : Set())
+                request.redirectState = RedirectState(
+                    self.configuration.redirectConfiguration.configuration,
+                    initialURL: request.url.absoluteString
+                )
             }
-            redirectHandler = RedirectHandler<Delegate.Response>(request: request) { newRequest in
+            guard request.redirectState != nil else { return nil }
+
+            return .init(request: request) { newRequest in
                 self.execute(request: newRequest,
                              delegate: delegate,
                              eventLoop: eventLoopPreference,
                              deadline: deadline)
             }
-        case .disallow:
-            redirectHandler = nil
-        }
+        }()
 
         let task = Task<Delegate.Response>(eventLoop: taskEL, logger: logger)
         do {

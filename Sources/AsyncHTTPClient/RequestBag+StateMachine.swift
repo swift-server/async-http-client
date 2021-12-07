@@ -268,7 +268,10 @@ extension RequestBag.StateMachine {
                 preconditionFailure("If we receive a response, we must not have received something else before")
             }
 
-            if let redirectURL = self.redirectHandler?.redirectTarget(status: head.status, headers: head.headers) {
+            if let redirectURL = self.redirectHandler?.redirectTarget(
+                status: head.status,
+                responseHeaders: head.headers
+            ) {
                 self.state = .redirected(head, redirectURL)
                 return false
             } else {
