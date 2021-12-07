@@ -498,17 +498,18 @@ extension Transaction {
                 self.state = .executing(context, requestState, .buffering(streamID, buffer, next: .eof))
                 return .succeedContinuation(continuation, toReturn)
 
-            case .executing(_, _, .waitingForRemote(let registeredStreamID, let continuation)):
+            case .executing(_, _, .waitingForRemote(let registeredStreamID, _)):
                 if registeredStreamID != streamID {
                     return .failContinuation(continuation, TriedToRegisteredASecondConsumer())
                 }
-                preconditionFailure("")
+                preconditionFailure("A body response continuation from this iterator already exists! Queuing calls to `next()` is not supported.")
 
             case .finished(error: .some(let error), let registeredStreamID):
                 guard registeredStreamID == streamID else {
                     return .failContinuation(continuation, TriedToRegisteredASecondConsumer())
                 }
                 return .failContinuation(continuation, error)
+
             case .finished(error: .none, let registeredStreamID):
                 guard registeredStreamID == streamID else {
                     return .failContinuation(continuation, TriedToRegisteredASecondConsumer())
