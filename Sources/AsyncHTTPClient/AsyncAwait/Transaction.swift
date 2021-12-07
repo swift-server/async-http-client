@@ -30,7 +30,7 @@ final class Transaction {
     let requestOptions: RequestOptions
 
     private let stateLock = Lock()
-    private var state: StateMachine = .init()
+    private var state: StateMachine
 
     init(
         request: HTTPClientRequest.Prepared,
@@ -45,8 +45,7 @@ final class Transaction {
         self.logger = logger
         self.connectionDeadline = connectionDeadline
         self.preferredEventLoop = preferredEventLoop
-
-        self.state.registerContinuation(responseContinuation)
+        self.state = StateMachine(responseContinuation)
     }
 
     func cancel() {

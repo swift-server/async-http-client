@@ -26,8 +26,7 @@ extension Transaction {
         }
 
         private enum State {
-            case initialized
-            case waiting(CheckedContinuation<HTTPClientResponse, Error>)
+            case initialized(CheckedContinuation<HTTPClientResponse, Error>)
             case queued(CheckedContinuation<HTTPClientResponse, Error>, HTTPRequestScheduler)
             case executing(ExecutionContext, RequestStreamState, ResponseStreamState)
             case finished(error: Error?, HTTPClientResponse.Body.IteratorStream.ID?)
@@ -56,20 +55,12 @@ extension Transaction {
 
         private var state: State
 
-        init() {
-            self.state = .initialized
-        }
-
-        mutating func registerContinuation(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
-            guard case .initialized = self.state else {
-                preconditionFailure("Invalid state: \(self.state)")
-            }
-
-            self.state = .waiting(continuation)
+        init(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
+            self.state = .initialized(continuation)
         }
 
         mutating func requestWasQueued(_ scheduler: HTTPRequestScheduler) {
-            guard case .waiting(let continuation) = self.state else {
+            guard case .initialized(let continuation) = self.state else {
                 // There might be a race between `requestWasQueued` and `willExecuteRequest`:
                 //
                 // If the request is created and passed to the HTTPClient on thread A, it will move into
@@ -101,10 +92,7 @@ extension Transaction {
 
         mutating func fail(_ error: Error) -> FailAction {
             switch self.state {
-            case .initialized:
-                preconditionFailure("")
-
-            case .waiting(let continuation):
+            case .initialized(let continuation):
                 self.state = .finished(error: error, nil)
                 return .failResponseHead(continuation, error, nil, nil)
 
@@ -173,7 +161,7 @@ extension Transaction {
 
         mutating func willExecuteRequest(_ executor: HTTPRequestExecutor) -> StartExecutionAction {
             switch self.state {
-            case .waiting(let continuation), .queued(let continuation, _):
+            case .initialized(let continuation), .queued(let continuation, _):
                 let context = ExecutionContext(
                     executor: executor,
                     allocator: .init(),
@@ -181,10 +169,11 @@ extension Transaction {
                 )
                 self.state = .executing(context, .initialized, .initialized)
                 return .none
+
             case .finished(error: .some, .none):
                 return .cancel(executor)
-            case .initialized,
-                 .executing,
+
+            case .executing,
                  .finished(error: .none, _),
                  .finished(error: .some, .some):
                 preconditionFailure("Invalid state: \(self.state)")
@@ -198,7 +187,7 @@ extension Transaction {
 
         mutating func resumeRequestBodyStream() -> ResumeProducingAction {
             switch self.state {
-            case .initialized, .waiting, .queued:
+            case .initialized, .queued:
                 preconditionFailure("A request stream can only be resumed, if the request was started")
 
             case .executing(let context, .initialized, .initialized):
@@ -231,7 +220,6 @@ extension Transaction {
         mutating func pauseRequestBodyStream() {
             switch self.state {
             case .initialized,
-                 .waiting,
                  .queued,
                  .executing(_, .initialized, _):
                 preconditionFailure("A request stream can only be resumed, if the request was started")
@@ -256,11 +244,10 @@ extension Transaction {
         func producedNextRequestPart(_ part: ByteBuffer) -> NextWriteAction {
             switch self.state {
             case .initialized,
-                 .waiting,
                  .queued,
                  .executing(_, .initialized, _),
                  .executing(_, .finished, _):
-                preconditionFailure("A request stream can only be resumed, if the request was started")
+                preconditionFailure("A request stream can only be resumed, if the request was started. Invalid state: \(self.state)")
 
             case .executing(let context, .producing, _):
                 return .write(part, context.executor, continue: true)
@@ -273,11 +260,6 @@ extension Transaction {
             }
         }
 
-        enum ProduceErrorAction {
-            case none
-            case informRequestAboutFailure(Error, cancelExecutor: HTTPRequestExecutor, failResponseStream: CheckedContinuation<ByteBuffer?, Error>?)
-        }
-
         enum FinishAction {
             case forwardStreamFinished(HTTPRequestExecutor)
             case none
@@ -286,7 +268,6 @@ extension Transaction {
         mutating func finishRequestBodyStream() -> FinishAction {
             switch self.state {
             case .initialized,
-                 .waiting,
                  .queued,
                  .executing(_, .initialized, _),
                  .executing(_, .finished, _):
@@ -312,7 +293,6 @@ extension Transaction {
         mutating func receiveResponseHead(_ head: HTTPResponseHead) -> ReceiveResponseHeadAction {
             switch self.state {
             case .initialized,
-                 .waiting,
                  .queued,
                  .executing(_, _, .waitingForStream),
                  .executing(_, _, .buffering),
@@ -339,8 +319,9 @@ extension Transaction {
 
         mutating func receiveResponseBodyParts(_ buffer: CircularBuffer<ByteBuffer>) -> ReceiveResponsePartAction {
             switch self.state {
-            case .initialized, .waiting, .queued:
-                preconditionFailure("How can we receive a response body part, if the request hasn't started yet.")
+            case .initialized, .queued:
+                preconditionFailure("Received a response body part, but request hasn't started yet. Invalid state: \(self.state)")
+
             case .executing(_, _, .initialized):
                 preconditionFailure("If we receive a response body, we must have received a head before")
 
@@ -393,7 +374,6 @@ extension Transaction {
         mutating func responseBodyDeinited() -> ResponseBodyDeinitedAction {
             switch self.state {
             case .initialized,
-                 .waiting,
                  .queued,
                  .executing(_, _, .initialized):
                 preconditionFailure("Invalid state: \(self.state)")
@@ -436,7 +416,6 @@ extension Transaction {
         ) -> ConsumeAction {
             switch self.state {
             case .initialized,
-                 .waiting,
                  .queued,
                  .executing(_, _, .initialized):
                 preconditionFailure("If we receive a response body, we must have received a head before")
@@ -527,7 +506,6 @@ extension Transaction {
         mutating func succeedRequest(_ newChunks: CircularBuffer<ByteBuffer>?) -> ReceiveResponseEndAction {
             switch self.state {
             case .initialized,
-                 .waiting,
                  .queued,
                  .executing(_, _, .initialized):
                 preconditionFailure("Received no response head, but received a response end. Invalid state: \(self.state)")

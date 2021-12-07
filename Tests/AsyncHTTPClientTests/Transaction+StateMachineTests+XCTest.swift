@@ -25,6 +25,8 @@ import XCTest
 extension Transaction_StateMachineTests {
     static var allTests: [(String, (Transaction_StateMachineTests) -> () throws -> Void)] {
         return [
+            ("testRequestWasQueuedAfterWillExecuteRequestWasCalled", testRequestWasQueuedAfterWillExecuteRequestWasCalled),
+            ("testRequestBodyStreamWasPaused", testRequestBodyStreamWasPaused),
         ]
     }
 }
