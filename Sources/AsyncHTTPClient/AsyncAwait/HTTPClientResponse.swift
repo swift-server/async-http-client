@@ -25,9 +25,11 @@ struct HTTPClientResponse {
 
     struct Body {
         private let bag: Transaction
+        private let reference: ResponseRef
 
-        fileprivate init(_ bag: Transaction) {
-            self.bag = bag
+        fileprivate init(_ transaction: Transaction) {
+            self.bag = transaction
+            self.reference = ResponseRef(transaction: transaction)
         }
     }
 
@@ -66,7 +68,28 @@ extension HTTPClientResponse.Body: AsyncSequence {
     func makeAsyncIterator() -> Iterator {
         Iterator(stream: IteratorStream(bag: self.bag))
     }
+}
 
+@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+extension HTTPClientResponse.Body {
+    /// The purpose of this object is to inform the transaction about the response body being deinitialized.
+    /// If the users has not called `makeAsyncIterator` on the body, before it is deinited, the http
+    /// request needs to be cancelled.
+    fileprivate class ResponseRef {
+        private let transaction: Transaction
+
+        init(transaction: Transaction) {
+            self.transaction = transaction
+        }
+
+        deinit {
+            self.transaction.responseBodyDeinited()
+        }
+    }
+}
+
+@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+extension HTTPClientResponse.Body {
     internal class IteratorStream {
         struct ID: Hashable {
             private let objectID: ObjectIdentifier

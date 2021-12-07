@@ -146,16 +146,19 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
+            var tuple: (Transaction, Task<HTTPClientResponse, Error>)! = Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
+
+            let transaction = tuple.0
+            var responseTask: Task<HTTPClientResponse, Error>! = tuple.1
+            tuple = nil
 
             let executor = MockRequestExecutor(
                 pauseRequestBodyPartStreamAfterASingleWrite: true,
                 eventLoop: embeddedEventLoop
             )
-
             executor.runRequest(transaction)
 
             let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["foo": "bar"])
@@ -163,12 +166,18 @@ final class TransactionTests: XCTestCase {
             transaction.receiveResponseHead(responseHead)
 
             var response: HTTPClientResponse? = try await responseTask.value
+            responseTask = nil
             XCTAssertEqual(response?.status, responseHead.status)
             XCTAssertEqual(response?.headers, responseHead.headers)
             XCTAssertEqual(response?.version, responseHead.version)
             response = nil
 
+            XCTAssertFalse(executor.signalledDemandForResponseBody)
             XCTAssertNoThrow(try executor.receiveCancellation())
+
+            // doesn't crash if receives more data because of race
+            transaction.receiveResponseBodyParts([ByteBuffer(string: "foo bar")])
+            transaction.succeedRequest(nil)
         }
         #endif
     }

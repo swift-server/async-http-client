@@ -376,11 +376,49 @@ extension Transaction {
                 self.state = .executing(executor, requestState, .buffering(streamID, buffer, next: .askExecutorForMore))
                 return .succeedContinuation(continuation, first)
 
-            case .finished(error: .some, _):
+            case .finished:
+                // the request failed or was cancelled before, we can ignore further data
                 return .none
-            case .executing(_, _, .finished),
-                 .finished(error: .none, _):
-                preconditionFailure("How can the request be finished without error, before receiving response head?")
+
+            case .executing(_, _, .finished):
+                preconditionFailure("Received response end. Must not receive further body parts after that. Invalid state: \(self.state)")
+            }
+        }
+
+        enum ResponseBodyDeinitedAction {
+            case cancel(HTTPRequestExecutor)
+            case none
+        }
+
+        mutating func responseBodyDeinited() -> ResponseBodyDeinitedAction {
+            switch self.state {
+            case .initialized,
+                 .waiting,
+                 .queued,
+                 .executing(_, _, .initialized):
+                preconditionFailure("Invalid state: \(self.state)")
+
+            case .executing(_, _, .waitingForStream(_, next: .eof)):
+                self.state = .finished(error: nil, nil)
+                return .none
+
+            case .executing(let context, _, .waitingForStream(_, next: .askExecutorForMore)):
+                self.state = .finished(error: nil, nil)
+                return .cancel(context.executor)
+
+            case .executing(_, _, .waitingForStream(_, next: .error(let error))):
+                self.state = .finished(error: error, nil)
+                return .none
+
+            case .finished:
+                // body was released after the response was consumed
+                return .none
+
+            case .executing(_, _, .buffering),
+                 .executing(_, _, .waitingForRemote),
+                 .executing(_, _, .finished):
+                // user is consuming the stream with an iterator
+                return .none
             }
         }
 
@@ -487,11 +525,11 @@ extension Transaction {
 
         mutating func succeedRequest(_ newChunks: CircularBuffer<ByteBuffer>?) -> ReceiveResponseEndAction {
             switch self.state {
-            case .initialized, .waiting, .queued:
-                preconditionFailure("How can we receive a response body part, if the request hasn't started yet.")
-
-            case .executing(_, _, .initialized):
-                preconditionFailure("If we receive a response end, we must have received a head before")
+            case .initialized,
+                 .waiting,
+                 .queued,
+                 .executing(_, _, .initialized):
+                preconditionFailure("Received no response head, but received a response end. Invalid state: \(self.state)")
 
             case .executing(let context, let requestState, .waitingForStream(var buffer, next: .askExecutorForMore)):
                 if let newChunks = newChunks, !newChunks.isEmpty {
@@ -517,18 +555,16 @@ extension Transaction {
                 self.state = .executing(context, requestState, .buffering(streamID, buffer, next: .eof))
                 return .none
 
-            case .finished(error: .some, _):
+            case .finished:
+                // the request failed or was cancelled before, we can ignore all events
                 return .none
-
-            case .finished(error: .none, _):
-                preconditionFailure("How can the request be finished without error, before receiving response head?")
 
             case .executing(_, _, .waitingForStream(_, next: .error)),
                  .executing(_, _, .waitingForStream(_, next: .eof)),
                  .executing(_, _, .buffering(_, _, next: .error)),
                  .executing(_, _, .buffering(_, _, next: .eof)),
                  .executing(_, _, .finished(_, _)):
-                preconditionFailure("How can the request be succeeded, if we received an error or eof before")
+                preconditionFailure("Already received an eof or error before. Must not receive further events. Invalid state: \(self.state)")
             }
         }
     }

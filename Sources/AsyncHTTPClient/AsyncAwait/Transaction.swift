@@ -291,6 +291,19 @@ extension Transaction: HTTPExecutableRequest {
 
 @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
 extension Transaction {
+    func responseBodyDeinited() {
+        let deinitedAction = self.stateLock.withLock {
+            self.state.responseBodyDeinited()
+        }
+
+        switch deinitedAction {
+        case .cancel(let executor):
+            executor.cancelRequest(self)
+        case .none:
+            break
+        }
+    }
+
     func nextResponsePart(streamID: HTTPClientResponse.Body.IteratorStream.ID) async throws -> ByteBuffer? {
         try await withCheckedThrowingContinuation { continuation in
             let action = self.stateLock.withLock {
