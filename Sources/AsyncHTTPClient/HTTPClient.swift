@@ -512,7 +512,7 @@ public class HTTPClient {
         deadline: NIODeadline? = nil,
         logger originalLogger: Logger?
     ) -> Task<Delegate.Response> {
-        _execute(
+        self._execute(
             request: request,
             delegate: delegate,
             eventLoop: eventLoopPreference,
@@ -524,7 +524,7 @@ public class HTTPClient {
             )
         )
     }
-    
+
     /// Execute arbitrary HTTP request and handle response processing using provided delegate.
     ///
     /// - parameters:
@@ -541,7 +541,6 @@ public class HTTPClient {
         logger originalLogger: Logger?,
         redirectState: RedirectState?
     ) -> Task<Delegate.Response> {
-        
         let logger = (originalLogger ?? HTTPClient.loggingDisabled).attachingRequestInformation(request, requestID: globalRequestID.add(1))
         let taskEL: EventLoop
         switch eventLoopPreference.preference {
