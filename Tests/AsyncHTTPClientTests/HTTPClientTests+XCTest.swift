@@ -110,6 +110,7 @@ extension HTTPClientTests {
             ("testWeHandleUsReceivingACloseHeaderCorrectly", testWeHandleUsReceivingACloseHeaderCorrectly),
             ("testWeHandleUsSendingACloseHeaderAmongstOtherConnectionHeadersCorrectly", testWeHandleUsSendingACloseHeaderAmongstOtherConnectionHeadersCorrectly),
             ("testWeHandleUsReceivingACloseHeaderAmongstOtherConnectionHeadersCorrectly", testWeHandleUsReceivingACloseHeaderAmongstOtherConnectionHeadersCorrectly),
+            ("testLoggingCorrectlyAttachesRequestInformationEvenAfterDuringRedirect", testLoggingCorrectlyAttachesRequestInformationEvenAfterDuringRedirect),
             ("testLoggingCorrectlyAttachesRequestInformation", testLoggingCorrectlyAttachesRequestInformation),
             ("testNothingIsLoggedAtInfoOrHigher", testNothingIsLoggedAtInfoOrHigher),
             ("testAllMethodsLog", testAllMethodsLog),
