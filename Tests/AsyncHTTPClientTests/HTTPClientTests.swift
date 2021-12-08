@@ -882,8 +882,37 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try localHTTPBin.shutdown())
         }
 
-        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/redirect/infinite1").wait(), "Should fail with redirect limit") { error in
+        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(localHTTPBin.port)/redirect/infinite1").timeout(after: .seconds(10)).wait()) { error in
             XCTAssertEqual(error as? HTTPClientError, HTTPClientError.redirectLimitReached)
+        }
+    }
+
+    func testRedirectToTheInitialURLDoesThrowOnFirstRedirect() throws {
+        let localHTTPBin = HTTPBin(.http1_1(ssl: true))
+        defer { XCTAssertNoThrow(try localHTTPBin.shutdown()) }
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: .init(
+                certificateVerification: .none,
+                redirectConfiguration: .follow(max: 1, allowCycles: false)
+            )
+        )
+        defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(
+            url: "https://localhost:\(localHTTPBin.port)/redirect/target",
+            method: .GET,
+            headers: [
+                "X-Target-Redirect-URL": "/redirect/target",
+            ]
+        ))
+        guard let request = maybeRequest else { return }
+
+        XCTAssertThrowsError(
+            try localClient.execute(request: request).timeout(after: .seconds(10)).wait()
+        ) { error in
+            XCTAssertEqual(error as? HTTPClientError, HTTPClientError.redirectCycleDetected)
         }
     }
 
@@ -2031,6 +2060,52 @@ class HTTPClientTests: XCTestCase {
             XCTAssertEqual(stats2.requestNumber + 1, stats3.requestNumber)
             XCTAssertEqual(stats2.connectionNumber, stats3.connectionNumber)
         }
+    }
+
+    func testLoggingCorrectlyAttachesRequestInformationEvenAfterDuringRedirect() {
+        let logStore = CollectEverythingLogHandler.LogStore()
+
+        var logger = Logger(label: "\(#function)", factory: { _ in
+            CollectEverythingLogHandler(logStore: logStore)
+        })
+        logger.logLevel = .trace
+        logger[metadataKey: "custom-request-id"] = "abcd"
+
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(
+            url: "http://localhost:\(self.defaultHTTPBin.port)/redirect/target",
+            method: .GET,
+            headers: [
+                "X-Target-Redirect-URL": "/get",
+            ]
+        ))
+        guard let request = maybeRequest else { return }
+
+        XCTAssertNoThrow(try self.defaultClient.execute(
+            request: request,
+            eventLoop: .indifferent,
+            deadline: nil,
+            logger: logger
+        ).wait())
+        let logs = logStore.allEntries
+
+        XCTAssertTrue(logs.allSatisfy { $0.metadata["custom-request-id"] == "abcd" })
+
+        guard let firstRequestID = logs.first?.metadata["ahc-request-id"] else {
+            return XCTFail("could not get first request ID")
+        }
+        guard let lastRequestID = logs.last?.metadata["ahc-request-id"] else {
+            return XCTFail("could not get second request ID")
+        }
+
+        let firstRequestLogs = logs.prefix(while: { $0.metadata["ahc-request-id"] == firstRequestID })
+        XCTAssertGreaterThan(firstRequestLogs.count, 0)
+
+        let secondRequestLogs = logs.drop(while: { $0.metadata["ahc-request-id"] == firstRequestID })
+        XCTAssertGreaterThan(secondRequestLogs.count, 0)
+        XCTAssertTrue(secondRequestLogs.allSatisfy { $0.metadata["ahc-request-id"] == lastRequestID })
+
+        logs.forEach { print($0) }
     }
 
     func testLoggingCorrectlyAttachesRequestInformation() {

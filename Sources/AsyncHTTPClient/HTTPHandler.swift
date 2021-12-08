@@ -109,15 +109,8 @@ extension HTTPClient {
         /// Request-specific TLS configuration, defaults to no request-specific TLS configuration.
         public var tlsConfiguration: TLSConfiguration?
 
-        struct RedirectState {
-            var count: Int
-            var visited: Set<URL>?
-        }
-
         /// Parsed, validated and deconstructed URL.
         let deconstructedURL: DeconstructedURL
-
-        var redirectState: RedirectState?
 
         /// Create HTTP request.
         ///
@@ -190,7 +183,6 @@ extension HTTPClient {
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration?) throws {
             self.deconstructedURL = try DeconstructedURL(url: url)
 
-            self.redirectState = nil
             self.url = url
             self.method = method
             self.headers = headers
@@ -642,87 +634,42 @@ internal struct TaskCancelEvent {}
 
 internal struct RedirectHandler<ResponseType> {
     let request: HTTPClient.Request
-    let execute: (HTTPClient.Request) -> HTTPClient.Task<ResponseType>
+    let redirectState: RedirectState
+    let execute: (HTTPClient.Request, RedirectState) -> HTTPClient.Task<ResponseType>
 
-    func redirectTarget(status: HTTPResponseStatus, headers: HTTPHeaders) -> URL? {
-        switch status {
-        case .movedPermanently, .found, .seeOther, .notModified, .useProxy, .temporaryRedirect, .permanentRedirect:
-            break
-        default:
-            return nil
-        }
-
-        guard let location = headers.first(name: "Location") else {
-            return nil
-        }
-
-        guard let url = URL(string: location, relativeTo: request.url) else {
-            return nil
-        }
-
-        guard self.request.deconstructedURL.scheme.supportsRedirects(to: url.scheme) else {
-            return nil
-        }
-
-        if url.isFileURL {
-            return nil
-        }
-
-        return url.absoluteURL
+    func redirectTarget(status: HTTPResponseStatus, responseHeaders: HTTPHeaders) -> URL? {
+        responseHeaders.extractRedirectTarget(
+            status: status,
+            originalURL: self.request.url,
+            originalScheme: self.request.deconstructedURL.scheme
+        )
     }
 
-    func redirect(status: HTTPResponseStatus, to redirectURL: URL, promise: EventLoopPromise<ResponseType>) {
-        var nextState: HTTPClient.Request.RedirectState?
-        if var state = request.redirectState {
-            guard state.count > 0 else {
-                return promise.fail(HTTPClientError.redirectLimitReached)
-            }
-
-            state.count -= 1
-
-            if var visited = state.visited {
-                guard !visited.contains(redirectURL) else {
-                    return promise.fail(HTTPClientError.redirectCycleDetected)
-                }
-
-                visited.insert(redirectURL)
-                state.visited = visited
-            }
-
-            nextState = state
-        }
-
-        let originalRequest = self.request
-
-        var convertToGet = false
-        if status == .seeOther, self.request.method != .HEAD {
-            convertToGet = true
-        } else if status == .movedPermanently || status == .found, self.request.method == .POST {
-            convertToGet = true
-        }
-
-        var method = originalRequest.method
-        var headers = originalRequest.headers
-        var body = originalRequest.body
-
-        if convertToGet {
-            method = .GET
-            body = nil
-            headers.remove(name: "Content-Length")
-            headers.remove(name: "Content-Type")
-        }
-
-        if !originalRequest.url.hasTheSameOrigin(as: redirectURL) {
-            headers.remove(name: "Origin")
-            headers.remove(name: "Cookie")
-            headers.remove(name: "Authorization")
-            headers.remove(name: "Proxy-Authorization")
-        }
-
+    func redirect(
+        status: HTTPResponseStatus,
+        to redirectURL: URL,
+        promise: EventLoopPromise<ResponseType>
+    ) {
         do {
-            var newRequest = try HTTPClient.Request(url: redirectURL, method: method, headers: headers, body: body)
-            newRequest.redirectState = nextState
-            self.execute(newRequest).futureResult.whenComplete { result in
+            var redirectState = self.redirectState
+            try redirectState.redirect(to: redirectURL.absoluteString)
+
+            let (method, headers, body) = transformRequestForRedirect(
+                from: request.url,
+                method: self.request.method,
+                headers: self.request.headers,
+                body: self.request.body,
+                to: redirectURL,
+                status: status
+            )
+
+            let newRequest = try HTTPClient.Request(
+                url: redirectURL,
+                method: method,
+                headers: headers,
+                body: body
+            )
+            self.execute(newRequest, redirectState).futureResult.whenComplete { result in
                 promise.futureResult.eventLoop.execute {
                     promise.completeWith(result)
                 }

@@ -504,11 +504,43 @@ public class HTTPClient {
     ///     - delegate: Delegate to process response parts.
     ///     - eventLoop: NIO Event Loop preference.
     ///     - deadline: Point in time by which the request must complete.
-    public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
-                                                              delegate: Delegate,
-                                                              eventLoop eventLoopPreference: EventLoopPreference,
-                                                              deadline: NIODeadline? = nil,
-                                                              logger originalLogger: Logger?) -> Task<Delegate.Response> {
+    ///     - logger: The logger to use for this request.
+    public func execute<Delegate: HTTPClientResponseDelegate>(
+        request: Request,
+        delegate: Delegate,
+        eventLoop eventLoopPreference: EventLoopPreference,
+        deadline: NIODeadline? = nil,
+        logger originalLogger: Logger?
+    ) -> Task<Delegate.Response> {
+        self._execute(
+            request: request,
+            delegate: delegate,
+            eventLoop: eventLoopPreference,
+            deadline: deadline,
+            logger: originalLogger,
+            redirectState: RedirectState(
+                self.configuration.redirectConfiguration.mode,
+                initialURL: request.url.absoluteString
+            )
+        )
+    }
+
+    /// Execute arbitrary HTTP request and handle response processing using provided delegate.
+    ///
+    /// - parameters:
+    ///     - request: HTTP request to execute.
+    ///     - delegate: Delegate to process response parts.
+    ///     - eventLoop: NIO Event Loop preference.
+    ///     - deadline: Point in time by which the request must complete.
+    ///     - logger: The logger to use for this request.
+    func _execute<Delegate: HTTPClientResponseDelegate>(
+        request: Request,
+        delegate: Delegate,
+        eventLoop eventLoopPreference: EventLoopPreference,
+        deadline: NIODeadline? = nil,
+        logger originalLogger: Logger?,
+        redirectState: RedirectState?
+    ) -> Task<Delegate.Response> {
         let logger = (originalLogger ?? HTTPClient.loggingDisabled).attachingRequestInformation(request, requestID: globalRequestID.add(1))
         let taskEL: EventLoop
         switch eventLoopPreference.preference {
@@ -543,22 +575,20 @@ public class HTTPClient {
             return failedTask
         }
 
-        let redirectHandler: RedirectHandler<Delegate.Response>?
-        switch self.configuration.redirectConfiguration.configuration {
-        case .follow(let max, let allowCycles):
-            var request = request
-            if request.redirectState == nil {
-                request.redirectState = .init(count: max, visited: allowCycles ? nil : Set())
+        let redirectHandler: RedirectHandler<Delegate.Response>? = {
+            guard let redirectState = redirectState else { return nil }
+
+            return .init(request: request, redirectState: redirectState) { newRequest, newRedirectState in
+                self._execute(
+                    request: newRequest,
+                    delegate: delegate,
+                    eventLoop: eventLoopPreference,
+                    deadline: deadline,
+                    logger: logger,
+                    redirectState: newRedirectState
+                )
             }
-            redirectHandler = RedirectHandler<Delegate.Response>(request: request) { newRequest in
-                self.execute(request: newRequest,
-                             delegate: delegate,
-                             eventLoop: eventLoopPreference,
-                             deadline: deadline)
-            }
-        case .disallow:
-            redirectHandler = nil
-        }
+        }()
 
         let task = Task<Delegate.Response>(eventLoop: taskEL, logger: logger)
         do {
@@ -804,21 +834,21 @@ extension HTTPClient.Configuration {
 
     /// Specifies redirect processing settings.
     public struct RedirectConfiguration {
-        enum Configuration {
+        enum Mode {
             /// Redirects are not followed.
             case disallow
             /// Redirects are followed with a specified limit.
             case follow(max: Int, allowCycles: Bool)
         }
 
-        var configuration: Configuration
+        var mode: Mode
 
         init() {
-            self.configuration = .follow(max: 5, allowCycles: false)
+            self.mode = .follow(max: 5, allowCycles: false)
         }
 
-        init(configuration: Configuration) {
-            self.configuration = configuration
+        init(configuration: Mode) {
+            self.mode = configuration
         }
 
         /// Redirects are not followed.
