@@ -31,7 +31,7 @@ extension RedirectState {
     /// Returns nil if the user disallowed redirects,
     /// otherwise an instance of `RedirectState` which respects the user defined settings.
     init?(
-        _ configuration: HTTPClient.Configuration.RedirectConfiguration.Configuration,
+        _ configuration: HTTPClient.Configuration.RedirectConfiguration.Mode,
         initialURL: String
     ) {
         switch configuration {

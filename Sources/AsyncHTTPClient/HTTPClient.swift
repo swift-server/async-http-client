@@ -519,7 +519,7 @@ public class HTTPClient {
             deadline: deadline,
             logger: originalLogger,
             redirectState: RedirectState(
-                self.configuration.redirectConfiguration.configuration,
+                self.configuration.redirectConfiguration.mode,
                 initialURL: request.url.absoluteString
             )
         )
@@ -835,21 +835,21 @@ extension HTTPClient.Configuration {
 
     /// Specifies redirect processing settings.
     public struct RedirectConfiguration {
-        enum Configuration {
+        enum Mode {
             /// Redirects are not followed.
             case disallow
             /// Redirects are followed with a specified limit.
             case follow(max: Int, allowCycles: Bool)
         }
 
-        var configuration: Configuration
+        var mode: Mode
 
         init() {
-            self.configuration = .follow(max: 5, allowCycles: false)
+            self.mode = .follow(max: 5, allowCycles: false)
         }
 
-        init(configuration: Configuration) {
-            self.configuration = configuration
+        init(configuration: Mode) {
+            self.mode = configuration
         }
 
         /// Redirects are not followed.
