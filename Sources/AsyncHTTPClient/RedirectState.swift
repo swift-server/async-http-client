@@ -15,6 +15,8 @@
 import struct Foundation.URL
 import NIOHTTP1
 
+typealias RedirectMode = HTTPClient.Configuration.RedirectConfiguration.Mode
+
 struct RedirectState {
     /// number of redirects we are allowed to follow.
     private var limit: Int
@@ -31,7 +33,7 @@ extension RedirectState {
     /// Returns nil if the user disallowed redirects,
     /// otherwise an instance of `RedirectState` which respects the user defined settings.
     init?(
-        _ configuration: HTTPClient.Configuration.RedirectConfiguration.Mode,
+        _ configuration: RedirectMode,
         initialURL: String
     ) {
         switch configuration {
