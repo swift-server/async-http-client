@@ -112,11 +112,13 @@ func transformRequestForRedirect<Body>(
     to redirectURL: URL,
     status responseStatus: HTTPResponseStatus
 ) -> (HTTPMethod, HTTPHeaders, Body?) {
-    var convertToGet = false
+    let convertToGet: Bool
     if responseStatus == .seeOther, requestMethod != .HEAD {
         convertToGet = true
     } else if responseStatus == .movedPermanently || responseStatus == .found, requestMethod == .POST {
         convertToGet = true
+    } else {
+        convertToGet = false
     }
 
     var method = requestMethod
