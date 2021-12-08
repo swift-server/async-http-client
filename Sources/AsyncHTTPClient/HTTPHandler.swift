@@ -112,8 +112,6 @@ extension HTTPClient {
         /// Parsed, validated and deconstructed URL.
         let deconstructedURL: DeconstructedURL
 
-        var redirectState: RedirectState?
-
         /// Create HTTP request.
         ///
         /// - parameters:
@@ -185,7 +183,6 @@ extension HTTPClient {
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration?) throws {
             self.deconstructedURL = try DeconstructedURL(url: url)
 
-            self.redirectState = nil
             self.url = url
             self.method = method
             self.headers = headers
@@ -637,7 +634,8 @@ internal struct TaskCancelEvent {}
 
 internal struct RedirectHandler<ResponseType> {
     let request: HTTPClient.Request
-    let execute: (HTTPClient.Request) -> HTTPClient.Task<ResponseType>
+    let redirectState: RedirectState
+    let execute: (HTTPClient.Request, RedirectState) -> HTTPClient.Task<ResponseType>
 
     func redirectTarget(status: HTTPResponseStatus, responseHeaders: HTTPHeaders) -> URL? {
         responseHeaders.extractRedirectTarget(
@@ -653,8 +651,8 @@ internal struct RedirectHandler<ResponseType> {
         promise: EventLoopPromise<ResponseType>
     ) {
         do {
-            var redirectState = self.request.redirectState
-            try redirectState?.redirect(to: redirectURL.absoluteString)
+            var redirectState = self.redirectState
+            try redirectState.redirect(to: redirectURL.absoluteString)
 
             let (method, headers, body) = transformRequestForRedirect(
                 from: request.url,
@@ -665,9 +663,13 @@ internal struct RedirectHandler<ResponseType> {
                 status: status
             )
 
-            var newRequest = try HTTPClient.Request(url: redirectURL, method: method, headers: headers, body: body)
-            newRequest.redirectState = redirectState
-            self.execute(newRequest).futureResult.whenComplete { result in
+            let newRequest = try HTTPClient.Request(
+                url: redirectURL,
+                method: method,
+                headers: headers,
+                body: body
+            )
+            self.execute(newRequest, redirectState).futureResult.whenComplete { result in
                 promise.futureResult.eventLoop.execute {
                     promise.completeWith(result)
                 }

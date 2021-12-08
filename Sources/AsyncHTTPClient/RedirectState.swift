@@ -2,7 +2,7 @@
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2018-2019 Apple Inc. and the AsyncHTTPClient project authors
+// Copyright (c) 2021 Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -17,7 +17,7 @@ import NIOHTTP1
 
 struct RedirectState {
     /// number of redirects we are allowed to follow.
-    private var count: Int
+    private var limit: Int
 
     /// All visited URLs.
     private var visited: [String]
@@ -38,7 +38,7 @@ extension RedirectState {
         case .disallow:
             return nil
         case .follow(let maxRedirects, let allowCycles):
-            self.init(count: maxRedirects, visited: [initialURL], allowCycles: allowCycles)
+            self.init(limit: maxRedirects, visited: [initialURL], allowCycles: allowCycles)
         }
     }
 }
@@ -49,15 +49,13 @@ extension RedirectState {
     /// - Parameter redirectURL: the new URL to redirect the request to
     /// - Throws: if it reaches the redirect limit or detects a redirect cycle if and `allowCycles` is false
     mutating func redirect(to redirectURL: String) throws {
-        guard self.count > 0 else {
+        guard self.visited.count <= limit else {
             throw HTTPClientError.redirectLimitReached
         }
 
-        if !allowCycles && self.visited.contains(redirectURL) == true {
+        guard allowCycles || !self.visited.contains(redirectURL) else {
             throw HTTPClientError.redirectCycleDetected
         }
-
-        self.count -= 1
         self.visited.append(redirectURL)
     }
 }

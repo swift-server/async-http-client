@@ -504,11 +504,44 @@ public class HTTPClient {
     ///     - delegate: Delegate to process response parts.
     ///     - eventLoop: NIO Event Loop preference.
     ///     - deadline: Point in time by which the request must complete.
-    public func execute<Delegate: HTTPClientResponseDelegate>(request: Request,
-                                                              delegate: Delegate,
-                                                              eventLoop eventLoopPreference: EventLoopPreference,
-                                                              deadline: NIODeadline? = nil,
-                                                              logger originalLogger: Logger?) -> Task<Delegate.Response> {
+    ///     - logger: The logger to use for this request.
+    public func execute<Delegate: HTTPClientResponseDelegate>(
+        request: Request,
+        delegate: Delegate,
+        eventLoop eventLoopPreference: EventLoopPreference,
+        deadline: NIODeadline? = nil,
+        logger originalLogger: Logger?
+    ) -> Task<Delegate.Response> {
+        _execute(
+            request: request,
+            delegate: delegate,
+            eventLoop: eventLoopPreference,
+            deadline: deadline,
+            logger: originalLogger,
+            redirectState: RedirectState(
+                self.configuration.redirectConfiguration.configuration,
+                initialURL: request.url.absoluteString
+            )
+        )
+    }
+    
+    /// Execute arbitrary HTTP request and handle response processing using provided delegate.
+    ///
+    /// - parameters:
+    ///     - request: HTTP request to execute.
+    ///     - delegate: Delegate to process response parts.
+    ///     - eventLoop: NIO Event Loop preference.
+    ///     - deadline: Point in time by which the request must complete.
+    ///     - logger: The logger to use for this request.
+    func _execute<Delegate: HTTPClientResponseDelegate>(
+        request: Request,
+        delegate: Delegate,
+        eventLoop eventLoopPreference: EventLoopPreference,
+        deadline: NIODeadline? = nil,
+        logger originalLogger: Logger?,
+        redirectState: RedirectState?
+    ) -> Task<Delegate.Response> {
+        
         let logger = (originalLogger ?? HTTPClient.loggingDisabled).attachingRequestInformation(request, requestID: globalRequestID.add(1))
         let taskEL: EventLoop
         switch eventLoopPreference.preference {
@@ -544,20 +577,17 @@ public class HTTPClient {
         }
 
         let redirectHandler: RedirectHandler<Delegate.Response>? = {
-            var request = request
-            if request.redirectState == nil {
-                request.redirectState = RedirectState(
-                    self.configuration.redirectConfiguration.configuration,
-                    initialURL: request.url.absoluteString
-                )
-            }
-            guard request.redirectState != nil else { return nil }
+            guard let redirectState = redirectState else { return nil }
 
-            return .init(request: request) { newRequest in
-                self.execute(request: newRequest,
-                             delegate: delegate,
-                             eventLoop: eventLoopPreference,
-                             deadline: deadline)
+            return .init(request: request, redirectState: redirectState) { newRequest, newRedirectState in
+                self._execute(
+                    request: newRequest,
+                    delegate: delegate,
+                    eventLoop: eventLoopPreference,
+                    deadline: deadline,
+                    logger: logger,
+                    redirectState: newRedirectState
+                )
             }
         }()
 
