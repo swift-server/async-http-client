@@ -63,26 +63,16 @@ final class Transaction {
 
         switch writeAction {
         case .write(let part, let executor, continue: _):
-            // the continue flag can be ignored. We will maximum write the request's end.
+            // the continue flag, which is used for write backpressure can be ignored. We will
+            // only write the request's end next.
             executor.writeRequestBodyPart(.byteBuffer(part), request: self)
-            // we break here to continue in the function flow.
 
         case .none:
             // an error/cancellation has happened. we don't need to continue here
             return
         }
 
-        let finishAction = self.stateLock.withLock {
-            self.state.finishRequestBodyStream()
-        }
-
-        switch finishAction {
-        case .forwardStreamFinished(let executor):
-            executor.finishRequestBodyStream(self)
-        case .none:
-            // an error/cancellation has happened. we don't need to continue here
-            return
-        }
+        self.requestBodyStreamFinished()
     }
 
     private func continueRequestBodyStream(
@@ -142,11 +132,12 @@ final class Transaction {
 
         switch finishAction {
         case .none:
-            // no more data to produce
+            // an error/cancellation has happened. nothing to do.
             break
 
-        case .forwardStreamFinished(let executor):
+        case .forwardStreamFinished(let executor, let succeedContinuation):
             executor.finishRequestBodyStream(self)
+            succeedContinuation?.resume(returning: nil)
         }
         return
     }
@@ -324,10 +315,15 @@ extension Transaction {
             switch action {
             case .succeedContinuation(let continuation, let result):
                 continuation.resume(returning: result)
+
             case .failContinuation(let continuation, let error):
                 continuation.resume(throwing: error)
+
             case .askExecutorForMore(let executor):
                 executor.demandResponseBodyStream(self)
+
+            case .none:
+                return
             }
         }
     }
