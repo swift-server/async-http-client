@@ -77,7 +77,7 @@ final class Transaction: @unchecked Sendable {
         _ allocator: ByteBufferAllocator,
         next: @escaping ((ByteBufferAllocator) async throws -> ByteBuffer?)
     ) {
-        Task.detached {
+        Task {
             do {
                 while let part = try await next(allocator) {
                     do {
