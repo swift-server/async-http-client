@@ -39,7 +39,7 @@ struct HTTPClientResponse {
         status: HTTPResponseStatus,
         headers: HTTPHeaders
     ) {
-        self.body = .init(bag)
+        self.body = Body(bag)
         self.version = version
         self.status = status
         self.headers = headers
