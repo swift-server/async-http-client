@@ -107,7 +107,7 @@ extension HTTPClientResponse.Body {
         }
 
         deinit {
-            self.bag.cancelResponseStream(streamID: self.id)
+            self.bag.responseBodyIteratorDeinited(streamID: self.id)
         }
 
         func next() async throws -> ByteBuffer? {

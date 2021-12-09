@@ -328,9 +328,9 @@ extension Transaction {
         }
     }
 
-    func cancelResponseStream(streamID: HTTPClientResponse.Body.IteratorStream.ID) {
+    func responseBodyIteratorDeinited(streamID: HTTPClientResponse.Body.IteratorStream.ID) {
         let action = self.stateLock.withLock {
-            self.state.cancelResponseStream(streamID: streamID)
+            self.state.responseBodyIteratorDeinited(streamID: streamID)
         }
         self.performFailAction(action)
     }

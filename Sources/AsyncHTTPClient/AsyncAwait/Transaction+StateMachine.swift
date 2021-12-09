@@ -46,8 +46,11 @@ extension Transaction {
                 case endOfFile
             }
 
+            // Waiting for response head. Valid transitions to: waitingForStream.
             case waitingForResponseHead
-            case waitingForStream(CircularBuffer<ByteBuffer>, next: Next)
+            // We are waiting for the user to create a response body iterator and to call next on
+            // it for the first time.
+            case waitingForResponseIterator(CircularBuffer<ByteBuffer>, next: Next)
             case buffering(HTTPClientResponse.Body.IteratorStream.ID, CircularBuffer<ByteBuffer>, next: Next)
             case waitingForRemote(HTTPClientResponse.Body.IteratorStream.ID, CheckedContinuation<ByteBuffer?, Error>)
             case finished(HTTPClientResponse.Body.IteratorStream.ID, CheckedContinuation<ByteBuffer?, Error>)
@@ -105,14 +108,14 @@ extension Transaction {
                 self.state = .finished(error: error, nil)
                 return .failResponseHead(context.continuation, error, nil, context.executor)
 
-            case .executing(_, _, .waitingForStream(_, next: .error)),
+            case .executing(_, _, .waitingForResponseIterator(_, next: .error)),
                  .executing(_, _, .buffering(_, _, next: .error)):
                 // We have an error buffered that we will forward to the response stream. We always
                 // only forward the first error.
                 return .none
 
-            case .executing(let context, let requestStreamState, .waitingForStream(let buffer, next: .askExecutorForMore)),
-                 .executing(let context, let requestStreamState, .waitingForStream(let buffer, next: .endOfFile)):
+            case .executing(let context, let requestStreamState, .waitingForResponseIterator(let buffer, next: .askExecutorForMore)),
+                 .executing(let context, let requestStreamState, .waitingForResponseIterator(let buffer, next: .endOfFile)):
                 // We have already received a response head, but no AsyncIterator has been seen so
                 // far. We should deliver the error on the first call to `next`.
 
@@ -123,14 +126,14 @@ extension Transaction {
                 case .paused, .finished:
                     // The request body stream is paused or finished. We don't need to change the
                     // requestStreamState, producing is already paused/finished.
-                    self.state = .executing(context, requestStreamState, .waitingForStream(buffer, next: .error(error)))
+                    self.state = .executing(context, requestStreamState, .waitingForResponseIterator(buffer, next: .error(error)))
                     return .none
 
                 case .producing:
                     // The request body stream is producing. We stop the request body stream, by
                     // changing the request stream state to paused. This will lead to no further
                     // produce calls. Once the next bytes are delivered.
-                    self.state = .executing(context, .paused, .waitingForStream(buffer, next: .error(error)))
+                    self.state = .executing(context, .paused, .waitingForResponseIterator(buffer, next: .error(error)))
                     return .none
                 }
 
@@ -302,7 +305,7 @@ extension Transaction {
                     self.state = .finished(error: nil, registeredStreamID)
                     return .forwardStreamFinished(context.executor, finalContinuation: continuation)
 
-                case .waitingForResponseHead, .waitingForStream, .waitingForRemote, .buffering:
+                case .waitingForResponseHead, .waitingForResponseIterator, .waitingForRemote, .buffering:
                     self.state = .executing(context, .finished, responseState)
                     return .forwardStreamFinished(context.executor, finalContinuation: nil)
                 }
@@ -323,16 +326,20 @@ extension Transaction {
             switch self.state {
             case .initialized,
                  .queued,
-                 .executing(_, _, .waitingForStream),
+                 .executing(_, _, .waitingForResponseIterator),
                  .executing(_, _, .buffering),
                  .executing(_, _, .waitingForRemote):
                 preconditionFailure("How can we receive a response, if the request hasn't started yet.")
 
             case .executing(let context, let requestState, .waitingForResponseHead):
-                self.state = .executing(context, requestState, .waitingForStream(.init(), next: .askExecutorForMore))
+                // The response head was received. Next we will wait for the consumer to create a
+                // response body stream.
+                self.state = .executing(context, requestState, .waitingForResponseIterator(.init(), next: .askExecutorForMore))
                 return .succeedResponseHead(head, context.continuation)
 
             case .finished(error: .some, _):
+                // If the request failed before, we don't need to do anything in response to
+                // receiving the response head.
                 return .none
 
             case .executing(_, _, .finished),
@@ -367,7 +374,7 @@ extension Transaction {
                 self.state = .executing(context, requestState, .buffering(streamID, currentBuffer, next: next))
                 return .none
 
-            case .executing(let executor, let requestState, .waitingForStream(var currentBuffer, next: let next)):
+            case .executing(let executor, let requestState, .waitingForResponseIterator(var currentBuffer, next: let next)):
                 guard case .askExecutorForMore = next else {
                     preconditionFailure("If we have received an error or eof before, why did we get another body part? Next: \(next)")
                 }
@@ -377,7 +384,7 @@ extension Transaction {
                 } else {
                     currentBuffer.append(contentsOf: buffer)
                 }
-                self.state = .executing(executor, requestState, .waitingForStream(currentBuffer, next: next))
+                self.state = .executing(executor, requestState, .waitingForResponseIterator(currentBuffer, next: next))
                 return .none
 
             case .executing(let executor, let requestState, .waitingForRemote(let streamID, let continuation)):
@@ -407,15 +414,15 @@ extension Transaction {
                  .executing(_, _, .waitingForResponseHead):
                 preconditionFailure("Got notice about a deinited response, before we even received a response. Invalid state: \(self.state)")
 
-            case .executing(_, _, .waitingForStream(_, next: .endOfFile)):
+            case .executing(_, _, .waitingForResponseIterator(_, next: .endOfFile)):
                 self.state = .finished(error: nil, nil)
                 return .none
 
-            case .executing(let context, _, .waitingForStream(_, next: .askExecutorForMore)):
+            case .executing(let context, _, .waitingForResponseIterator(_, next: .askExecutorForMore)):
                 self.state = .finished(error: nil, nil)
                 return .cancel(context.executor)
 
-            case .executing(_, _, .waitingForStream(_, next: .error(let error))):
+            case .executing(_, _, .waitingForResponseIterator(_, next: .error(let error))):
                 self.state = .finished(error: error, nil)
                 return .none
 
@@ -431,7 +438,7 @@ extension Transaction {
             }
         }
 
-        mutating func cancelResponseStream(streamID: HTTPClientResponse.Body.IteratorStream.ID) -> FailAction {
+        mutating func responseBodyIteratorDeinited(streamID: HTTPClientResponse.Body.IteratorStream.ID) -> FailAction {
             switch self.state {
             case .initialized, .queued, .executing(_, _, .waitingForResponseHead):
                 preconditionFailure("Got notice about a deinited response body iterator, before we even received a response. Invalid state: \(self.state)")
@@ -441,7 +448,7 @@ extension Transaction {
                 self.verifyStreamIDIsEqual(registered: registeredStreamID, this: streamID)
                 return self.fail(HTTPClientError.cancelled)
 
-            case .executing(_, _, .waitingForStream),
+            case .executing(_, _, .waitingForResponseIterator),
                  .executing(_, _, .finished),
                  .finished:
                 // the iterator went out of memory after the request was done. nothing to do.
@@ -456,8 +463,6 @@ extension Transaction {
             case none
         }
 
-        struct TriedToRegisteredASecondConsumer: Error {}
-
         mutating func consumeNextResponsePart(
             streamID: HTTPClientResponse.Body.IteratorStream.ID,
             continuation: CheckedContinuation<ByteBuffer?, Error>
@@ -471,7 +476,7 @@ extension Transaction {
             case .executing(_, _, .finished):
                 preconditionFailure("This is an invalid state at this point. We are waiting for the request stream to finish to succeed the response stream. By sending a fi")
 
-            case .executing(let context, let requestState, .waitingForStream(var buffer, next: .askExecutorForMore)):
+            case .executing(let context, let requestState, .waitingForResponseIterator(var buffer, next: .askExecutorForMore)):
                 if buffer.isEmpty {
                     self.state = .executing(context, requestState, .waitingForRemote(streamID, continuation))
                     return .askExecutorForMore(context.executor)
@@ -481,15 +486,15 @@ extension Transaction {
                     return .succeedContinuation(continuation, toReturn)
                 }
 
-            case .executing(_, _, .waitingForStream(_, next: .error(let error))):
+            case .executing(_, _, .waitingForResponseIterator(_, next: .error(let error))):
                 self.state = .finished(error: error, streamID)
                 return .failContinuation(continuation, error)
 
-            case .executing(_, _, .waitingForStream(let buffer, next: .endOfFile)) where buffer.isEmpty:
+            case .executing(_, _, .waitingForResponseIterator(let buffer, next: .endOfFile)) where buffer.isEmpty:
                 self.state = .finished(error: nil, streamID)
                 return .succeedContinuation(continuation, nil)
 
-            case .executing(let context, let requestState, .waitingForStream(var buffer, next: .endOfFile)):
+            case .executing(let context, let requestState, .waitingForResponseIterator(var buffer, next: .endOfFile)):
                 assert(!buffer.isEmpty)
                 let toReturn = buffer.removeFirst()
                 self.state = .executing(context, requestState, .buffering(streamID, buffer, next: .endOfFile))
@@ -542,15 +547,20 @@ extension Transaction {
                 preconditionFailure("A body response continuation from this iterator already exists! Queuing calls to `next()` is not supported.")
 
             case .finished(error: .some(let error), let registeredStreamID):
-                guard registeredStreamID == streamID else {
-                    return .failContinuation(continuation, TriedToRegisteredASecondConsumer())
+                if let registeredStreamID = registeredStreamID {
+                    self.verifyStreamIDIsEqual(registered: registeredStreamID, this: streamID)
+                } else {
+                    self.state = .finished(error: error, streamID)
                 }
                 return .failContinuation(continuation, error)
 
             case .finished(error: .none, let registeredStreamID):
-                guard registeredStreamID == streamID else {
-                    return .failContinuation(continuation, TriedToRegisteredASecondConsumer())
+                if let registeredStreamID = registeredStreamID {
+                    self.verifyStreamIDIsEqual(registered: registeredStreamID, this: streamID)
+                } else {
+                    self.state = .finished(error: .none, streamID)
                 }
+
                 return .succeedContinuation(continuation, nil)
             }
         }
@@ -582,11 +592,11 @@ extension Transaction {
                  .executing(_, _, .waitingForResponseHead):
                 preconditionFailure("Received no response head, but received a response end. Invalid state: \(self.state)")
 
-            case .executing(let context, let requestState, .waitingForStream(var buffer, next: .askExecutorForMore)):
+            case .executing(let context, let requestState, .waitingForResponseIterator(var buffer, next: .askExecutorForMore)):
                 if let newChunks = newChunks, !newChunks.isEmpty {
                     buffer.append(contentsOf: newChunks)
                 }
-                self.state = .executing(context, requestState, .waitingForStream(buffer, next: .endOfFile))
+                self.state = .executing(context, requestState, .waitingForResponseIterator(buffer, next: .endOfFile))
                 return .none
 
             case .executing(let context, let requestState, .waitingForRemote(let streamID, let continuation)):
@@ -610,8 +620,8 @@ extension Transaction {
                 // the request failed or was cancelled before, we can ignore all events
                 return .none
 
-            case .executing(_, _, .waitingForStream(_, next: .error)),
-                 .executing(_, _, .waitingForStream(_, next: .endOfFile)),
+            case .executing(_, _, .waitingForResponseIterator(_, next: .error)),
+                 .executing(_, _, .waitingForResponseIterator(_, next: .endOfFile)),
                  .executing(_, _, .buffering(_, _, next: .error)),
                  .executing(_, _, .buffering(_, _, next: .endOfFile)),
                  .executing(_, _, .finished(_, _)):
