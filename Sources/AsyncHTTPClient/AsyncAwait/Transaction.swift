@@ -20,7 +20,7 @@ import NIOHTTP1
 import NIOSSL
 
 @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
-final class Transaction {
+final class Transaction: @unchecked Sendable {
     let logger: Logger
 
     let request: HTTPClientRequest.Prepared
@@ -58,16 +58,14 @@ final class Transaction {
         // This method is synchronously invoked after sending the request head. For this reason we
         // can make a number of assumptions, how the state machine will react.
         let writeAction = self.stateLock.withLock {
-            self.state.producedNextRequestPart(byteBuffer)
+            self.state.writeNextRequestPart()
         }
 
         switch writeAction {
-        case .write(let part, let executor, continue: _):
-            // the continue flag, which is used for write backpressure can be ignored. We will
-            // only write the request's end next.
-            executor.writeRequestBodyPart(.byteBuffer(part), request: self)
+        case .writeAndWait(let executor), .writeAndContinue(let executor):
+            executor.writeRequestBodyPart(.byteBuffer(byteBuffer), request: self)
 
-        case .none:
+        case .fail:
             // an error/cancellation has happened. we don't need to continue here
             return
         }
@@ -79,14 +77,15 @@ final class Transaction {
         _ allocator: ByteBufferAllocator,
         next: @escaping ((ByteBufferAllocator) async throws -> ByteBuffer?)
     ) {
-        Task {
+        Task.detached {
             do {
-                while let part = try await next(allocator) { // <---- dispatch point!
-                    switch self.requestBodyStreamNextPart(part) {
-                    case .pause:
+                while let part = try await next(allocator) {
+                    do {
+                        try await self.writeRequestBodyPart(part)
+                    } catch {
+                        // If a write fails, the request has failed somewhere else. We must exit the
+                        // write loop though. We don't need to report the error somewhere.
                         return
-                    case .continue:
-                        continue
                     }
                 }
 
@@ -104,24 +103,26 @@ final class Transaction {
         case pause
     }
 
-    private func requestBodyStreamNextPart(_ part: ByteBuffer) -> AfterNextBodyPartAction {
-        let writeAction = self.stateLock.withLock {
-            self.state.producedNextRequestPart(part)
-        }
+    struct BreakTheWriteLoopError: Swift.Error {}
 
-        switch writeAction {
-        case .write(let part, let executor, let continueAfter):
+    private func writeRequestBodyPart(_ part: ByteBuffer) async throws {
+        self.stateLock.lock()
+        switch self.state.writeNextRequestPart() {
+        case .writeAndContinue(let executor):
+            self.stateLock.unlock()
             executor.writeRequestBodyPart(.byteBuffer(part), request: self)
-            if continueAfter {
-                return .continue
-            } else {
-                return .pause
+
+        case .writeAndWait(let executor):
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                self.state.waitForRequestBodyDemand(continuation: continuation)
+                self.stateLock.unlock()
+
+                executor.writeRequestBodyPart(.byteBuffer(part), request: self)
             }
 
-        case .none:
-            // Request body write are only ignore by the state machine, if the request has failed
-            // anyway. we should leave the reader loop in this case.
-            return .pause
+        case .fail:
+            self.stateLock.unlock()
+            throw BreakTheWriteLoopError()
         }
     }
 
@@ -195,7 +196,7 @@ extension Transaction: HTTPExecutableRequest {
         case .none:
             break
 
-        case .resumeStream(let allocator):
+        case .startStream(let allocator):
             switch self.request.body?.mode {
             case .asyncSequence(_, let next):
                 // it is safe to call this async here. it dispatches...
@@ -211,6 +212,9 @@ extension Transaction: HTTPExecutableRequest {
                 let byteBuffer = create(allocator)
                 self.writeOnceAndOneTimeOnly(byteBuffer: byteBuffer)
             }
+
+        case .resumeStream(let continuation):
+            continuation.resume(returning: ())
         }
     }
 
@@ -280,14 +284,19 @@ extension Transaction: HTTPExecutableRequest {
         case .none:
             break
 
-        case .failResponseHead(let continuation, let error, let scheduler, let executor):
+        case .failResponseHead(let continuation, let error, let scheduler, let executor, let bodyStreamContinuation):
             continuation.resume(throwing: error)
+            bodyStreamContinuation?.resume(throwing: error)
             scheduler?.cancelRequest(self) // NOTE: scheduler and executor are exclusive here
             executor?.cancelRequest(self)
 
-        case .failResponseStream(let continuation, let error, let executor):
+        case .failResponseStream(let continuation, let error, let executor, let bodyStreamContinuation):
             continuation.resume(throwing: error)
+            bodyStreamContinuation?.resume(throwing: error)
             executor.cancelRequest(self)
+
+        case .failRequestStreamContinuation(let bodyStreamContinuation, let error):
+            bodyStreamContinuation.resume(throwing: error)
         }
     }
 }

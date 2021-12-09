@@ -17,6 +17,8 @@ import NIOCore
 import NIOEmbedded
 import XCTest
 
+#if false
+
 final class Transaction_StateMachineTests: XCTestCase {
     func testRequestWasQueuedAfterWillExecuteRequestWasCalled() {
         #if compiler(>=5.5) && canImport(_Concurrency)
@@ -124,4 +126,6 @@ extension Transaction.StateMachine.NextWriteAction: Equatable {
         }
     }
 }
+#endif
+
 #endif
