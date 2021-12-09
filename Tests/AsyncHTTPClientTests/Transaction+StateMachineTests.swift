@@ -32,11 +32,12 @@ final class Transaction_StateMachineTests: XCTestCase {
                 state.requestWasQueued(queuer)
 
                 let failAction = state.fail(HTTPClientError.cancelled)
-                guard case .failResponseHead(_, let error, let scheduler, let rexecutor, nil) = failAction else {
+                guard case .failResponseHead(_, let error, let scheduler, let rexecutor, let bodyStreamContinuation) = failAction else {
                     return XCTFail("Unexpected fail action: \(failAction)")
                 }
                 XCTAssertEqual(error as? HTTPClientError, .cancelled)
                 XCTAssertNil(scheduler)
+                XCTAssertNil(bodyStreamContinuation)
                 XCTAssert((rexecutor as? MockRequestExecutor) === executor)
 
                 continuation.resume(throwing: HTTPClientError.cancelled)
