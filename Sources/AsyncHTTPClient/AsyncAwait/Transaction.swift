@@ -98,11 +98,6 @@ final class Transaction: @unchecked Sendable {
         }
     }
 
-    enum AfterNextBodyPartAction {
-        case `continue`
-        case pause
-    }
-
     struct BreakTheWriteLoopError: Swift.Error {}
 
     private func writeRequestBodyPart(_ part: ByteBuffer) async throws {

@@ -17,8 +17,6 @@ import NIOCore
 import NIOEmbedded
 import XCTest
 
-#if false
-
 final class Transaction_StateMachineTests: XCTestCase {
     func testRequestWasQueuedAfterWillExecuteRequestWasCalled() {
         #if compiler(>=5.5) && canImport(_Concurrency)
@@ -34,7 +32,7 @@ final class Transaction_StateMachineTests: XCTestCase {
                 state.requestWasQueued(queuer)
 
                 let failAction = state.fail(HTTPClientError.cancelled)
-                guard case .failResponseHead(_, let error, let scheduler, let rexecutor) = failAction else {
+                guard case .failResponseHead(_, let error, let scheduler, let rexecutor, nil) = failAction else {
                     return XCTFail("Unexpected fail action: \(failAction)")
                 }
                 XCTAssertEqual(error as? HTTPClientError, .cancelled)
@@ -59,12 +57,10 @@ final class Transaction_StateMachineTests: XCTestCase {
                 let executor = MockRequestExecutor(eventLoop: eventLoop)
 
                 XCTAssertEqual(state.willExecuteRequest(executor), .none)
-                XCTAssertEqual(state.resumeRequestBodyStream(), .resumeStream(ByteBufferAllocator()))
-                let part1 = ByteBuffer(string: "foo")
-                XCTAssertEqual(state.producedNextRequestPart(part1), .write(part1, executor, continue: true))
+                XCTAssertEqual(state.resumeRequestBodyStream(), .startStream(ByteBufferAllocator()))
+                XCTAssertEqual(state.writeNextRequestPart(), .writeAndContinue(executor))
                 state.pauseRequestBodyStream()
-                let part2 = ByteBuffer(string: "foo")
-                XCTAssertEqual(state.producedNextRequestPart(part1), .write(part2, executor, continue: false))
+                XCTAssertEqual(state.writeNextRequestPart(), .writeAndWait(executor))
 
                 continuation.resume(throwing: HTTPClientError.cancelled)
             }
@@ -101,6 +97,8 @@ extension Transaction.StateMachine.ResumeProducingAction: Equatable {
             return true
         case (.resumeStream, .resumeStream):
             return true
+        case (.startStream, .startStream):
+            return true
         default:
             return false
         }
@@ -111,21 +109,17 @@ extension Transaction.StateMachine.ResumeProducingAction: Equatable {
 extension Transaction.StateMachine.NextWriteAction: Equatable {
     public static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
-        case (.none, .none):
-            return true
-        case (.write(let lhsBuffer, let lhsEx, let lhsCont), .write(let rhsBuffer, let rhsEx, let rhsCont)):
-            guard lhsBuffer == rhsBuffer && lhsCont == rhsCont else {
-                return false
-            }
+        case (.writeAndWait(let lhsEx), .writeAndWait(let rhsEx)),
+             (.writeAndContinue(let lhsEx), .writeAndContinue(let rhsEx)):
             if let lhsMock = lhsEx as? MockRequestExecutor, let rhsMock = rhsEx as? MockRequestExecutor {
                 return lhsMock === rhsMock
             }
             return false
+        case (.fail, .fail):
+            return true
         default:
             return false
         }
     }
 }
-#endif
-
 #endif
