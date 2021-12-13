@@ -57,7 +57,7 @@ extension HTTPClientRequest.Body {
 
     @inlinable
     static func bytes<Bytes: Sequence>(
-        length: Int? = nil,
+        length: Int?,
         _ bytes: Bytes
     ) -> Self where Bytes.Element == UInt8 {
         self.init(.sequence(length: length, canBeConsumedMultipleTimes: false) { allocator in
@@ -72,7 +72,7 @@ extension HTTPClientRequest.Body {
 
     @inlinable
     static func bytes<Bytes: Collection>(
-        length: Int? = nil,
+        length: Int?,
         _ bytes: Bytes
     ) -> Self where Bytes.Element == UInt8 {
         self.init(.sequence(length: length, canBeConsumedMultipleTimes: true) { allocator in
@@ -101,7 +101,7 @@ extension HTTPClientRequest.Body {
 
     @inlinable
     static func stream<SequenceOfBytes: AsyncSequence>(
-        length: Int? = nil,
+        length: Int?,
         _ sequenceOfBytes: SequenceOfBytes
     ) -> Self where SequenceOfBytes.Element == ByteBuffer {
         var iterator = sequenceOfBytes.makeAsyncIterator()
@@ -113,11 +113,11 @@ extension HTTPClientRequest.Body {
 
     @inlinable
     static func stream<Bytes: AsyncSequence>(
-        length: Int? = nil,
+        length: Int?,
         _ bytes: Bytes
     ) -> Self where Bytes.Element == UInt8 {
         var iterator = bytes.makeAsyncIterator()
-        let body = self.init(.asyncSequence(length: nil) { allocator -> ByteBuffer? in
+        let body = self.init(.asyncSequence(length: length) { allocator -> ByteBuffer? in
             var buffer = allocator.buffer(capacity: 1024) // TODO: Magic number
             while buffer.writableBytes > 0, let byte = try await iterator.next() {
                 buffer.writeInteger(byte)
