@@ -50,26 +50,24 @@ extension HTTPClient {
     ) async throws -> HTTPClientResponse {
         let preparedRequest = try HTTPClientRequest.Prepared(request)
         let response = try await executeWithoutFollowingRedirects(preparedRequest, deadline: deadline, logger: logger)
-        guard
-            preparedRequest.body.canBeConsumedMultipleTimes,
-            let redirectState = redirectState,
-            let redirectURL = response.headers.extractRedirectTarget(
-                status: response.status,
-                originalURL: preparedRequest.url,
-                originalScheme: preparedRequest.poolKey.scheme
-            )
-        else {
-            return response
-        }
 
-        return try await self.followRedirect(
-            redirectURL: redirectURL,
-            redirectState: redirectState,
-            request: preparedRequest,
-            response: response,
-            deadline: deadline,
-            logger: logger
-        )
+        if !preparedRequest.body.canBeConsumedMultipleTimes,
+           let redirectState = redirectState,
+           let redirectURL = response.headers.extractRedirectTarget(
+               status: response.status,
+               originalURL: preparedRequest.url,
+               originalScheme: preparedRequest.poolKey.scheme
+           ) {
+            return try await self.followRedirect(
+                redirectURL: redirectURL,
+                redirectState: redirectState,
+                request: preparedRequest,
+                response: response,
+                deadline: deadline,
+                logger: logger
+            )
+        }
+        return response
     }
 
     private func followRedirect(
