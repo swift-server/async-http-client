@@ -107,7 +107,8 @@ extension HTTPClient {
                     preferredEventLoop: self.eventLoopGroup.next(),
                     responseContinuation: continuation
                 )
-
+                
+                // `HTTPClient.Task` conflicts with Swift Concurrency Task and `Swift.Task` doesn't work
                 _Concurrency.Task {
                     await cancelHandler.registerTransaction(transaction)
                 }
@@ -115,6 +116,7 @@ extension HTTPClient {
                 self.poolManager.executeRequest(transaction)
             }
         }, onCancel: {
+            // `HTTPClient.Task` conflicts with Swift Concurrency Task and `Swift.Task` doesn't work
             _Concurrency.Task {
                 await cancelHandler.cancel()
             }
