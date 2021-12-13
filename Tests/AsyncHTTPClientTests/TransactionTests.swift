@@ -189,7 +189,7 @@ final class TransactionTests: XCTestCase {
 
             var request = HTTPClientRequest(url: "https://localhost/")
             request.method = .POST
-            request.body = .stream(streamWriter)
+            request.body = .stream(length: nil, streamWriter)
 
             var maybePreparedRequest: PreparedRequest?
             XCTAssertNoThrow(maybePreparedRequest = try PreparedRequest(request))
@@ -318,7 +318,7 @@ final class TransactionTests: XCTestCase {
 
             var request = HTTPClientRequest(url: "https://localhost/")
             request.method = .POST
-            request.body = .bytes("Hello world!".utf8)
+            request.body = .bytes(length: nil, "Hello world!".utf8)
             var maybePreparedRequest: PreparedRequest?
             XCTAssertNoThrow(maybePreparedRequest = try PreparedRequest(request))
             guard let preparedRequest = maybePreparedRequest else {

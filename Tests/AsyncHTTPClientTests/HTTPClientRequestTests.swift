@@ -411,7 +411,7 @@ class HTTPClientRequestTests: XCTestCase {
                 .asAsyncSequence()
                 .map { ByteBuffer($0) }
 
-            request.body = .stream(asyncSequence)
+            request.body = .stream(length: nil, asyncSequence)
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }
