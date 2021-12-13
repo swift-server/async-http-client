@@ -16,6 +16,7 @@
 import struct Foundation.URL
 import Logging
 import NIOCore
+import NIOHTTP1
 
 @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
 extension HTTPClient {
@@ -61,7 +62,7 @@ extension HTTPClient {
             return try await self.followRedirect(
                 redirectURL: redirectURL,
                 redirectState: redirectState,
-                request: preparedRequest,
+                previousRequest: preparedRequest,
                 response: response,
                 deadline: deadline,
                 logger: logger
@@ -73,27 +74,16 @@ extension HTTPClient {
     private func followRedirect(
         redirectURL: URL,
         redirectState: RedirectState,
-        request: HTTPClientRequest.Prepared,
+        previousRequest: HTTPClientRequest.Prepared,
         response: HTTPClientResponse,
         deadline: NIODeadline,
         logger: Logger
     ) async throws -> HTTPClientResponse {
         var redirectState = redirectState
         try redirectState.redirect(to: redirectURL.absoluteString)
-        let (method, headers, body) = transformRequestForRedirect(
-            from: request.url,
-            method: request.head.method,
-            headers: request.head.headers,
-            body: request.body,
-            to: redirectURL,
-            status: response.status
-        )
-        var newRequest = HTTPClientRequest(url: redirectURL.absoluteString)
-        newRequest.method = method
-        newRequest.headers = headers
-        newRequest.body = body
+
         return try await self.executeAndFollowRedirectsIfNeeded(
-            newRequest,
+            previousRequest.followingRedirect(to: redirectURL, status: response.status),
             deadline: deadline,
             logger: logger,
             redirectState: redirectState
@@ -105,44 +95,6 @@ extension HTTPClient {
         deadline: NIODeadline,
         logger: Logger
     ) async throws -> HTTPClientResponse {
-        /// There is currently no good way to asynchronously cancel an object that is initiated inside the `body` closure of `with*Continuation`.
-        /// As a workaround we use `TransactionCancelHandler` which will take care of the race between instantiation of `Transaction`
-        /// in the `body` closure and cancelation from the `onCancel` closure  of `with*Continuation`.
-        actor TransactionCancelHandler {
-            private enum State {
-                case initialised
-                case register(Transaction)
-                case cancelled
-            }
-
-            private var state: State = .initialised
-
-            init() {}
-
-            func registerTransaction(_ transaction: Transaction) {
-                switch self.state {
-                case .initialised:
-                    self.state = .register(transaction)
-                case .cancelled:
-                    transaction.cancel()
-                case .register:
-                    preconditionFailure("transaction already set")
-                }
-            }
-
-            func cancel() {
-                switch self.state {
-                case .register(let bag):
-                    self.state = .cancelled
-                    bag.cancel()
-                case .cancelled:
-                    break
-                case .initialised:
-                    self.state = .cancelled
-                }
-            }
-        }
-
         let cancelHandler = TransactionCancelHandler()
 
         return try await withTaskCancellationHandler(operation: { () async throws -> HTTPClientResponse in
@@ -167,6 +119,45 @@ extension HTTPClient {
                 await cancelHandler.cancel()
             }
         })
+    }
+}
+
+/// There is currently no good way to asynchronously cancel an object that is initiated inside the `body` closure of `with*Continuation`.
+/// As a workaround we use `TransactionCancelHandler` which will take care of the race between instantiation of `Transaction`
+/// in the `body` closure and cancelation from the `onCancel` closure  of `with*Continuation`.
+@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+private actor TransactionCancelHandler {
+    private enum State {
+        case initialised
+        case register(Transaction)
+        case cancelled
+    }
+
+    private var state: State = .initialised
+
+    init() {}
+
+    func registerTransaction(_ transaction: Transaction) {
+        switch self.state {
+        case .initialised:
+            self.state = .register(transaction)
+        case .cancelled:
+            transaction.cancel()
+        case .register:
+            preconditionFailure("transaction already set")
+        }
+    }
+
+    func cancel() {
+        switch self.state {
+        case .register(let bag):
+            self.state = .cancelled
+            bag.cancel()
+        case .cancelled:
+            break
+        case .initialised:
+            self.state = .cancelled
+        }
     }
 }
 
