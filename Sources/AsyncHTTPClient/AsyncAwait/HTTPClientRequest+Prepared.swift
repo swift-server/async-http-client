@@ -13,11 +13,13 @@
 //===----------------------------------------------------------------------===//
 
 #if compiler(>=5.5) && canImport(_Concurrency)
+import struct Foundation.URL
 import NIOHTTP1
 
 @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
 extension HTTPClientRequest {
     struct Prepared {
+        var url: URL
         var poolKey: ConnectionPool.Key
         var requestFramingMetadata: RequestFramingMetadata
         var head: HTTPRequestHead
@@ -28,22 +30,27 @@ extension HTTPClientRequest {
 @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
 extension HTTPClientRequest.Prepared {
     init(_ request: HTTPClientRequest) throws {
-        let url = try DeconstructedURL(url: request.url)
+        guard let url = URL(string: request.url) else {
+            throw HTTPClientError.invalidURL
+        }
+
+        let deconstructedURL = try DeconstructedURL(url: url)
 
         var headers = request.headers
-        headers.addHostIfNeeded(for: url)
+        headers.addHostIfNeeded(for: deconstructedURL)
         let metadata = try headers.validateAndSetTransportFraming(
             method: request.method,
             bodyLength: .init(request.body)
         )
 
         self.init(
-            poolKey: .init(url: url, tlsConfiguration: nil),
+            url: url,
+            poolKey: .init(url: deconstructedURL, tlsConfiguration: nil),
             requestFramingMetadata: metadata,
             head: .init(
                 version: .http1_1,
                 method: request.method,
-                uri: url.uri,
+                uri: deconstructedURL.uri,
                 headers: headers
             ),
             body: request.body
@@ -59,9 +66,9 @@ extension RequestBodyLength {
             self = .fixed(length: 0)
         case .byteBuffer(let buffer):
             self = .fixed(length: buffer.readableBytes)
-        case .sequence(nil, _), .asyncSequence(nil, _):
+        case .sequence(nil, _, _), .asyncSequence(nil, _):
             self = .dynamic
-        case .sequence(.some(let length), _), .asyncSequence(.some(let length), _):
+        case .sequence(.some(let length), _, _), .asyncSequence(.some(let length), _):
             self = .fixed(length: length)
         }
     }

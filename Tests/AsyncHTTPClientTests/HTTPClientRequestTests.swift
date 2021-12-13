@@ -498,7 +498,7 @@ extension Optional where Wrapped == HTTPClientRequest.Body {
             return ByteBuffer()
         case .byteBuffer(let buffer):
             return buffer
-        case .sequence(let announcedLength, let generate):
+        case .sequence(let announcedLength, _, let generate):
             let buffer = generate(ByteBufferAllocator())
             if let announcedLength = announcedLength,
                announcedLength != buffer.readableBytes {
