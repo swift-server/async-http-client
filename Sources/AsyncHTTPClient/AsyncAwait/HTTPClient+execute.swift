@@ -49,7 +49,7 @@ extension HTTPClient {
         redirectState: RedirectState?
     ) async throws -> HTTPClientResponse {
         let preparedRequest = try HTTPClientRequest.Prepared(request)
-        let response = try await execute(request, deadline: deadline, logger: logger)
+        let response = try await executeWithoutFollowingRedirects(preparedRequest, deadline: deadline, logger: logger)
         guard
             preparedRequest.body.canBeConsumedMultipleTimes,
             let redirectState = redirectState,
