@@ -51,6 +51,8 @@ extension HTTPClient {
     ) async throws -> HTTPClientResponse {
         var currentRequest = request
         var currentRedirectState = redirectState
+
+        // this loop is there to follow potential redirects
         while true {
             let preparedRequest = try HTTPClientRequest.Prepared(currentRequest)
             let response = try await executeCancellable(preparedRequest, deadline: deadline, logger: logger)
