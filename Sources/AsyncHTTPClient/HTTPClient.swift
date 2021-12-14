@@ -545,7 +545,8 @@ public class HTTPClient {
         let taskEL: EventLoop
         switch eventLoopPreference.preference {
         case .indifferent:
-            taskEL = self.eventLoopGroup.next()
+            // if possible we want a connection on the current `EventLoop`
+            taskEL = self.eventLoopGroup.any()
         case .delegate(on: let eventLoop):
             precondition(self.eventLoopGroup.makeIterator().contains { $0 === eventLoop }, "Provided EventLoop must be part of clients EventLoopGroup.")
             taskEL = eventLoop
