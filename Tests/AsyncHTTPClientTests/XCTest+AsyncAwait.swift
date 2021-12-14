@@ -76,6 +76,7 @@ internal func XCTAssertThrowsError<T>(
     }
 }
 
+@available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
 internal func XCTAssertNoThrowWithResult<Result>(
     _ expression: @autoclosure () async throws -> Result,
     file: StaticString = #file,
