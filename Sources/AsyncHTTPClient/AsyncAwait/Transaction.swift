@@ -203,7 +203,7 @@ extension Transaction: HTTPExecutableRequest {
             case .none:
                 break
 
-            case .sequence(_, let create):
+            case .sequence(_, _, let create):
                 let byteBuffer = create(allocator)
                 self.writeOnceAndOneTimeOnly(byteBuffer: byteBuffer)
             }

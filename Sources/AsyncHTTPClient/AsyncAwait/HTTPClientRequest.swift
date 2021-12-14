@@ -37,7 +37,7 @@ extension HTTPClientRequest {
     struct Body {
         internal enum Mode {
             case asyncSequence(length: Int?, (ByteBufferAllocator) async throws -> ByteBuffer?)
-            case sequence(length: Int?, (ByteBufferAllocator) -> ByteBuffer)
+            case sequence(length: Int?, canBeConsumedMultipleTimes: Bool, (ByteBufferAllocator) -> ByteBuffer)
             case byteBuffer(ByteBuffer)
         }
 
@@ -57,10 +57,25 @@ extension HTTPClientRequest.Body {
 
     @inlinable
     static func bytes<Bytes: Sequence>(
-        length: Int? = nil,
+        length: Int?,
         _ bytes: Bytes
     ) -> Self where Bytes.Element == UInt8 {
-        self.init(.sequence(length: length) { allocator in
+        self.init(.sequence(length: length, canBeConsumedMultipleTimes: false) { allocator in
+            if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
+                // fastpath
+                return buffer
+            }
+            // potentially really slow path
+            return allocator.buffer(bytes: bytes)
+        })
+    }
+
+    @inlinable
+    static func bytes<Bytes: Collection>(
+        length: Int?,
+        _ bytes: Bytes
+    ) -> Self where Bytes.Element == UInt8 {
+        self.init(.sequence(length: length, canBeConsumedMultipleTimes: true) { allocator in
             if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
                 // fastpath
                 return buffer
@@ -74,7 +89,7 @@ extension HTTPClientRequest.Body {
     static func bytes<Bytes: RandomAccessCollection>(
         _ bytes: Bytes
     ) -> Self where Bytes.Element == UInt8 {
-        self.init(.sequence(length: bytes.count) { allocator in
+        self.init(.sequence(length: bytes.count, canBeConsumedMultipleTimes: true) { allocator in
             if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
                 // fastpath
                 return buffer
@@ -86,7 +101,7 @@ extension HTTPClientRequest.Body {
 
     @inlinable
     static func stream<SequenceOfBytes: AsyncSequence>(
-        length: Int? = nil,
+        length: Int?,
         _ sequenceOfBytes: SequenceOfBytes
     ) -> Self where SequenceOfBytes.Element == ByteBuffer {
         var iterator = sequenceOfBytes.makeAsyncIterator()
@@ -98,11 +113,11 @@ extension HTTPClientRequest.Body {
 
     @inlinable
     static func stream<Bytes: AsyncSequence>(
-        length: Int? = nil,
+        length: Int?,
         _ bytes: Bytes
     ) -> Self where Bytes.Element == UInt8 {
         var iterator = bytes.makeAsyncIterator()
-        let body = self.init(.asyncSequence(length: nil) { allocator -> ByteBuffer? in
+        let body = self.init(.asyncSequence(length: length) { allocator -> ByteBuffer? in
             var buffer = allocator.buffer(capacity: 1024) // TODO: Magic number
             while buffer.writableBytes > 0, let byte = try await iterator.next() {
                 buffer.writeInteger(byte)
@@ -113,6 +128,18 @@ extension HTTPClientRequest.Body {
             return nil
         })
         return body
+    }
+}
+
+@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+extension Optional where Wrapped == HTTPClientRequest.Body {
+    internal var canBeConsumedMultipleTimes: Bool {
+        switch self?.mode {
+        case .none: return true
+        case .byteBuffer: return true
+        case .sequence(_, let canBeConsumedMultipleTimes, _): return canBeConsumedMultipleTimes
+        case .asyncSequence: return false
+        }
     }
 }
 
