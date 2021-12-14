@@ -116,7 +116,7 @@ extension HTTPClient {
 
 /// There is currently no good way to asynchronously cancel an object that is initiated inside the `body` closure of `with*Continuation`.
 /// As a workaround we use `TransactionCancelHandler` which will take care of the race between instantiation of `Transaction`
-/// in the `body` closure and cancelation from the `onCancel` closure  of `with*Continuation`.
+/// in the `body` closure and cancelation from the `onCancel` closure  of `withTaskCancellationHandler`.
 @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
 private actor TransactionCancelHandler {
     private enum State {
