@@ -549,6 +549,7 @@ extension Collection {
     }
 }
 
+@available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
 struct AsyncSequenceFromSyncSequence<Wrapped: Sequence>: AsyncSequence {
     typealias Element = Wrapped.Element
     struct AsyncIterator: AsyncIteratorProtocol {
@@ -565,6 +566,7 @@ struct AsyncSequenceFromSyncSequence<Wrapped: Sequence>: AsyncSequence {
     }
 }
 
+@available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
 extension Sequence {
     /// Turns `self` into an `AsyncSequence` by wending each element of `self` asynchronously.
     func asAsyncSequence() -> AsyncSequenceFromSyncSequence<Self> {
