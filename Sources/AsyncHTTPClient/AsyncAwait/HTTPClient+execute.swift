@@ -49,45 +49,39 @@ extension HTTPClient {
         logger: Logger,
         redirectState: RedirectState?
     ) async throws -> HTTPClientResponse {
-        let preparedRequest = try HTTPClientRequest.Prepared(request)
-        let response = try await executeCancellable(preparedRequest, deadline: deadline, logger: logger)
+        var currentRequest = request
+        var currentRedirectState = redirectState
+        while true {
+            let preparedRequest = try HTTPClientRequest.Prepared(currentRequest)
+            let response = try await executeCancellable(preparedRequest, deadline: deadline, logger: logger)
 
-        if !preparedRequest.body.canBeConsumedMultipleTimes,
-           let redirectState = redirectState,
-           let redirectURL = response.headers.extractRedirectTarget(
-               status: response.status,
-               originalURL: preparedRequest.url,
-               originalScheme: preparedRequest.poolKey.scheme
-           ) {
-            return try await self.followRedirect(
-                redirectURL: redirectURL,
-                redirectState: redirectState,
-                previousRequest: preparedRequest,
-                response: response,
-                deadline: deadline,
-                logger: logger
-            )
+            guard var redirectState = currentRedirectState else {
+                // a `nil` redirectState means we should not follow redirects
+                return response
+            }
+
+            guard let redirectURL = response.headers.extractRedirectTarget(
+                status: response.status,
+                originalURL: preparedRequest.url,
+                originalScheme: preparedRequest.poolKey.scheme
+            ) else {
+                // response does not want a redirect
+                return response
+            }
+
+            // validate that we do not exceed any limits or are running circles
+            try redirectState.redirect(to: redirectURL.absoluteString)
+            currentRedirectState = redirectState
+
+            let newRequest = preparedRequest.followingRedirect(to: redirectURL, status: response.status)
+
+            guard newRequest.body.canBeConsumedMultipleTimes else {
+                // we already send the request body and it cannot be send again
+                return response
+            }
+
+            currentRequest = newRequest
         }
-        return response
-    }
-
-    private func followRedirect(
-        redirectURL: URL,
-        redirectState: RedirectState,
-        previousRequest: HTTPClientRequest.Prepared,
-        response: HTTPClientResponse,
-        deadline: NIODeadline,
-        logger: Logger
-    ) async throws -> HTTPClientResponse {
-        var redirectState = redirectState
-        try redirectState.redirect(to: redirectURL.absoluteString)
-
-        return try await self.executeAndFollowRedirectsIfNeeded(
-            previousRequest.followingRedirect(to: redirectURL, status: response.status),
-            deadline: deadline,
-            logger: logger,
-            redirectState: redirectState
-        )
     }
 
     private func executeCancellable(
@@ -107,7 +101,7 @@ extension HTTPClient {
                     preferredEventLoop: self.eventLoopGroup.next(),
                     responseContinuation: continuation
                 )
-                
+
                 // `HTTPClient.Task` conflicts with Swift Concurrency Task and `Swift.Task` doesn't work
                 _Concurrency.Task {
                     await cancelHandler.registerTransaction(transaction)
@@ -116,10 +110,7 @@ extension HTTPClient {
                 self.poolManager.executeRequest(transaction)
             }
         }, onCancel: {
-            // `HTTPClient.Task` conflicts with Swift Concurrency Task and `Swift.Task` doesn't work
-            _Concurrency.Task {
-                await cancelHandler.cancel()
-            }
+            cancelHandler.cancel()
         })
     }
 }
@@ -150,7 +141,7 @@ private actor TransactionCancelHandler {
         }
     }
 
-    func cancel() {
+    func _cancel() {
         switch self.state {
         case .register(let bag):
             self.state = .cancelled
@@ -159,6 +150,12 @@ private actor TransactionCancelHandler {
             break
         case .initialised:
             self.state = .cancelled
+        }
+    }
+
+    nonisolated func cancel() {
+        Task {
+            await self._cancel()
         }
     }
 }
