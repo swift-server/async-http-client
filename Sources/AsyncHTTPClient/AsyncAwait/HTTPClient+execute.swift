@@ -104,10 +104,7 @@ extension HTTPClient {
                     responseContinuation: continuation
                 )
 
-                // `HTTPClient.Task` conflicts with Swift Concurrency Task and `Swift.Task` doesn't work
-                _Concurrency.Task {
-                    await cancelHandler.registerTransaction(transaction)
-                }
+                cancelHandler.registerTransaction(transaction)
 
                 self.poolManager.executeRequest(transaction)
             }
@@ -132,7 +129,7 @@ private actor TransactionCancelHandler {
 
     init() {}
 
-    func registerTransaction(_ transaction: Transaction) {
+    private func _registerTransaction(_ transaction: Transaction) {
         switch self.state {
         case .initialised:
             self.state = .register(transaction)
@@ -143,7 +140,13 @@ private actor TransactionCancelHandler {
         }
     }
 
-    func _cancel() {
+    nonisolated func registerTransaction(_ transaction: Transaction) {
+        Task {
+            await self._registerTransaction(transaction)
+        }
+    }
+
+    private func _cancel() {
         switch self.state {
         case .register(let bag):
             self.state = .cancelled
