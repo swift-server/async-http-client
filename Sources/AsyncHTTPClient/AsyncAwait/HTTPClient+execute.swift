@@ -50,7 +50,7 @@ extension HTTPClient {
         redirectState: RedirectState?
     ) async throws -> HTTPClientResponse {
         let preparedRequest = try HTTPClientRequest.Prepared(request)
-        let response = try await executeWithoutFollowingRedirects(preparedRequest, deadline: deadline, logger: logger)
+        let response = try await executeCancellable(preparedRequest, deadline: deadline, logger: logger)
 
         if !preparedRequest.body.canBeConsumedMultipleTimes,
            let redirectState = redirectState,
@@ -90,7 +90,7 @@ extension HTTPClient {
         )
     }
 
-    private func executeWithoutFollowingRedirects(
+    private func executeCancellable(
         _ request: HTTPClientRequest.Prepared,
         deadline: NIODeadline,
         logger: Logger
