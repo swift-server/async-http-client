@@ -220,7 +220,7 @@ public class HTTPClient {
             return
         }
 
-        let promise = self.eventLoopGroup.next().makePromise(of: Bool.self)
+        let promise = self.eventLoopGroup.any().makePromise(of: Bool.self)
         self.poolManager.shutdown(promise: promise)
         promise.futureResult.whenComplete { result in
             switch result {
@@ -358,7 +358,7 @@ public class HTTPClient {
             let request = try Request(url: url, method: method, body: body)
             return self.execute(request: request, deadline: deadline, logger: logger ?? HTTPClient.loggingDisabled)
         } catch {
-            return self.eventLoopGroup.next().makeFailedFuture(error)
+            return self.eventLoopGroup.any().makeFailedFuture(error)
         }
     }
 
@@ -379,7 +379,7 @@ public class HTTPClient {
             let request = try Request(url: url, method: method, body: body)
             return self.execute(request: request, deadline: deadline, logger: logger ?? HTTPClient.loggingDisabled)
         } catch {
-            return self.eventLoopGroup.next().makeFailedFuture(error)
+            return self.eventLoopGroup.any().makeFailedFuture(error)
         }
     }
 
@@ -400,7 +400,7 @@ public class HTTPClient {
             let request = try Request(url: url, method: method, body: body)
             return self.execute(request: request, deadline: deadline, logger: logger ?? HTTPClient.loggingDisabled)
         } catch {
-            return self.eventLoopGroup.next().makeFailedFuture(error)
+            return self.eventLoopGroup.any().makeFailedFuture(error)
         }
     }
 
