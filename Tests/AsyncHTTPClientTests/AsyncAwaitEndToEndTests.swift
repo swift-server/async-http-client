@@ -319,7 +319,10 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testCanceling() throws {
-        try XCTSkipIf(true, "test times out because of a swift concurrency bug: https://bugs.swift.org/browse/SR-15592")
+        #if os(Linux)
+        #else
+        try XCTSkipIf(true, "test times out because of a swift concurrency bug on macOS: https://bugs.swift.org/browse/SR-15592")
+        #endif
         #if compiler(>=5.5) && canImport(_Concurrency)
         guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
