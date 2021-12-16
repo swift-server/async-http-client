@@ -15,6 +15,7 @@
 @testable import AsyncHTTPClient
 import NIOCore
 import NIOEmbedded
+import NIOHTTP1
 import XCTest
 
 final class Transaction_StateMachineTests: XCTestCase {
@@ -64,6 +65,87 @@ final class Transaction_StateMachineTests: XCTestCase {
                 XCTAssertEqual(state.writeNextRequestPart(), .writeAndWait(executor))
 
                 continuation.resume(throwing: HTTPClientError.cancelled)
+            }
+
+            await XCTAssertThrowsError(try await withCheckedThrowingContinuation(workaround))
+        }
+        #endif
+    }
+
+    func testQueuedRequestGetsRemovedWhenDeadlineExceeded() {
+        #if compiler(>=5.5) && canImport(_Concurrency)
+        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        XCTAsyncTest {
+            func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
+                var state = Transaction.StateMachine(continuation)
+                let queuer = MockTaskQueuer()
+
+                state.requestWasQueued(queuer)
+
+                let failAction = state.deadlineExceeded()
+                guard case .cancel(let continuation, let scheduler, nil, nil) = failAction else {
+                    return XCTFail("Unexpected fail action: \(failAction)")
+                }
+                XCTAssertIdentical(scheduler as? MockTaskQueuer, queuer)
+
+                continuation.resume(throwing: HTTPClientError.deadlineExceeded)
+            }
+
+            await XCTAssertThrowsError(try await withCheckedThrowingContinuation(workaround))
+        }
+        #endif
+    }
+
+    func testScheduledRequestGetsRemovedWhenDeadlineExceeded() {
+        #if compiler(>=5.5) && canImport(_Concurrency)
+        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        let eventLoop = EmbeddedEventLoop()
+        XCTAsyncTest {
+            func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
+                var state = Transaction.StateMachine(continuation)
+                let executor = MockRequestExecutor(eventLoop: eventLoop)
+                let queuer = MockTaskQueuer()
+
+                XCTAssertEqual(state.willExecuteRequest(executor), .none)
+                state.requestWasQueued(queuer)
+
+                let failAction = state.deadlineExceeded()
+                guard case .cancel(let continuation, nil, let rexecutor, nil) = failAction else {
+                    return XCTFail("Unexpected fail action: \(failAction)")
+                }
+                XCTAssertIdentical(rexecutor as? MockRequestExecutor, executor)
+
+                continuation.resume(throwing: HTTPClientError.deadlineExceeded)
+            }
+
+            await XCTAssertThrowsError(try await withCheckedThrowingContinuation(workaround))
+        }
+        #endif
+    }
+
+    func testRequestWithHeadReceivedGetNotCancelledWhenDeadlineExceeded() {
+        #if compiler(>=5.5) && canImport(_Concurrency)
+        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        let eventLoop = EmbeddedEventLoop()
+        XCTAsyncTest {
+            func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
+                var state = Transaction.StateMachine(continuation)
+                let executor = MockRequestExecutor(eventLoop: eventLoop)
+                let queuer = MockTaskQueuer()
+
+                XCTAssertEqual(state.willExecuteRequest(executor), .none)
+                state.requestWasQueued(queuer)
+                let head = HTTPResponseHead(version: .http1_1, status: .ok)
+                let receiveResponseHeadAction = state.receiveResponseHead(head)
+                guard case .succeedResponseHead(head, let continuation) = receiveResponseHeadAction else {
+                    return XCTFail("Unexpected action: \(receiveResponseHeadAction)")
+                }
+
+                let failAction = state.deadlineExceeded()
+                guard case .none = failAction else {
+                    return XCTFail("Unexpected fail action: \(failAction)")
+                }
+                continuation.resume(throwing: HTTPClientError.deadlineExceeded)
             }
 
             await XCTAssertThrowsError(try await withCheckedThrowingContinuation(workaround))

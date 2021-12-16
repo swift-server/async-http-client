@@ -27,6 +27,9 @@ extension Transaction_StateMachineTests {
         return [
             ("testRequestWasQueuedAfterWillExecuteRequestWasCalled", testRequestWasQueuedAfterWillExecuteRequestWasCalled),
             ("testRequestBodyStreamWasPaused", testRequestBodyStreamWasPaused),
+            ("testQueuedRequestGetsRemovedWhenDeadlineExceeded", testQueuedRequestGetsRemovedWhenDeadlineExceeded),
+            ("testScheduledRequestGetsRemovedWhenDeadlineExceeded", testScheduledRequestGetsRemovedWhenDeadlineExceeded),
+            ("testRequestWithHeadReceivedGetNotCancelledWhenDeadlineExceeded", testRequestWithHeadReceivedGetNotCancelledWhenDeadlineExceeded),
         ]
     }
 }

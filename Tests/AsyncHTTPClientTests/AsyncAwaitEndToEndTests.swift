@@ -318,18 +318,16 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         #endif
     }
 
-    func testCanceling() throws {
-        #if os(Linux)
-        #else
-        try XCTSkipIf(true, "test times out because of a swift concurrency bug on macOS: https://bugs.swift.org/browse/SR-15592")
-        #endif
+    func testCanceling() {
         #if compiler(>=5.5) && canImport(_Concurrency)
         guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
+            let bin = HTTPBin()
+            defer { XCTAssertNoThrow(try bin.shutdown()) }
             let client = makeDefaultHTTPClient()
             defer { XCTAssertNoThrow(try client.syncShutdown()) }
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
-            var request = HTTPClientRequest(url: "https://localhost:45678/offline")
+            var request = HTTPClientRequest(url: "http://localhost:\(bin.port)/offline")
             request.method = .POST
             let streamWriter = AsyncSequenceWriter<ByteBuffer>()
             request.body = .stream(length: nil, streamWriter)
@@ -345,7 +343,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         #endif
     }
 
-    func testDeadline() throws {
+    func testDeadline() {
         #if compiler(>=5.5) && canImport(_Concurrency)
         guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
@@ -366,18 +364,16 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         #endif
     }
 
-    func testImmediateDeadline() throws {
-        // does not work on nether Linux nor Darwin
-        try XCTSkipIf(true, "test times out because of a swift concurrency bug: https://bugs.swift.org/browse/SR-15592")
+    func testImmediateDeadline() {
         #if compiler(>=5.5) && canImport(_Concurrency)
         guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
-            let bin = HTTPBin(.http2(compress: false))
+            let bin = HTTPBin()
             defer { XCTAssertNoThrow(try bin.shutdown()) }
             let client = makeDefaultHTTPClient()
             defer { XCTAssertNoThrow(try client.syncShutdown()) }
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
-            let request = HTTPClientRequest(url: "https://localhost:\(bin.port)/wait")
+            let request = HTTPClientRequest(url: "http://localhost:\(bin.port)/wait")
 
             let task = Task<HTTPClientResponse, Error> { [request] in
                 try await client.execute(request, deadline: .now(), logger: logger)
@@ -409,7 +405,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
 #if compiler(>=5.5) && canImport(_Concurrency)
 extension AsyncSequence where Element == ByteBuffer {
-    func collect() async throws -> ByteBuffer {
+    func collect() async rethrows -> ByteBuffer {
         try await self.reduce(into: ByteBuffer()) { accumulatingBuffer, nextBuffer in
             var nextBuffer = nextBuffer
             accumulatingBuffer.writeBuffer(&nextBuffer)
