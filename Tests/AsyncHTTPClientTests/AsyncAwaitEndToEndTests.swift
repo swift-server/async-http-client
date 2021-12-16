@@ -383,8 +383,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 .wait()
             )
             guard let server = maybeServer else { return }
-
-            defer { XCTAssertNoThrow(try server.close().wait()) }
+            let port = server.localAddress!.port!
+            XCTAssertNoThrow(try server.close().wait())
 
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
             var config = HTTPClient.Configuration()
@@ -395,7 +395,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 backgroundActivityLogger: logger
             )
             defer { XCTAssertNoThrow(try client.syncShutdown()) }
-            let port = server.localAddress!.port!
 
             let request = HTTPClientRequest(url: "https://localhost:\(port)")
 
@@ -403,10 +402,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 guard let httpError = error as? HTTPClientError else {
                     return XCTFail("wrong error \(error)")
                 }
-                XCTAssertTrue(
-                    [HTTPClientError.connectTimeout, .tlsHandshakeTimeout].contains(httpError),
-                    "wrong http error \(httpError)"
-                )
+                XCTAssertEqual(httpError, .connectTimeout)
             }
         }
         #endif
