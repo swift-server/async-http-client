@@ -94,13 +94,20 @@ extension HTTPClient {
         let cancelHandler = TransactionCancelHandler()
 
         return try await withTaskCancellationHandler(operation: { () async throws -> HTTPClientResponse in
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<HTTPClientResponse, Swift.Error>) -> Void in
+            let eventLoop = self.eventLoopGroup.any()
+            let deadlineTask = eventLoop.scheduleTask(deadline: deadline) {
+                cancelHandler.cancel(reason: .deadlineExceeded)
+            }
+            defer {
+                deadlineTask.cancel()
+            }
+            return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<HTTPClientResponse, Swift.Error>) -> Void in
                 let transaction = Transaction(
                     request: request,
                     requestOptions: .init(idleReadTimeout: nil),
                     logger: logger,
                     connectionDeadline: deadline,
-                    preferredEventLoop: self.eventLoopGroup.next(),
+                    preferredEventLoop: eventLoop,
                     responseContinuation: continuation
                 )
 
@@ -109,7 +116,7 @@ extension HTTPClient {
                 self.poolManager.executeRequest(transaction)
             }
         }, onCancel: {
-            cancelHandler.cancel()
+            cancelHandler.cancel(reason: .taskCanceled)
         })
     }
 }
@@ -119,22 +126,38 @@ extension HTTPClient {
 /// in the `body` closure and cancelation from the `onCancel` closure  of `withTaskCancellationHandler`.
 @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
 private actor TransactionCancelHandler {
+    enum CancelReason {
+        /// swift concurrency task was canceled
+        case taskCanceled
+        /// deadline timeout
+        case deadlineExceeded
+    }
+
     private enum State {
         case initialised
         case register(Transaction)
-        case cancelled
+        case cancelled(CancelReason)
     }
 
     private var state: State = .initialised
 
     init() {}
 
+    private func cancelTransaction(_ transaction: Transaction, for reason: CancelReason) {
+        switch reason {
+        case .taskCanceled:
+            transaction.cancel()
+        case .deadlineExceeded:
+            transaction.deadlineExceeded()
+        }
+    }
+
     private func _registerTransaction(_ transaction: Transaction) {
         switch self.state {
         case .initialised:
             self.state = .register(transaction)
-        case .cancelled:
-            transaction.cancel()
+        case .cancelled(let reason):
+            self.cancelTransaction(transaction, for: reason)
         case .register:
             preconditionFailure("transaction already set")
         }
@@ -146,21 +169,21 @@ private actor TransactionCancelHandler {
         }
     }
 
-    private func _cancel() {
+    private func _cancel(reason: CancelReason) {
         switch self.state {
-        case .register(let bag):
-            self.state = .cancelled
-            bag.cancel()
+        case .register(let transaction):
+            self.state = .cancelled(reason)
+            self.cancelTransaction(transaction, for: reason)
         case .cancelled:
             break
         case .initialised:
-            self.state = .cancelled
+            self.state = .cancelled(reason)
         }
     }
 
-    nonisolated func cancel() {
+    nonisolated func cancel(reason: CancelReason) {
         Task {
-            await self._cancel()
+            await self._cancel(reason: reason)
         }
     }
 }

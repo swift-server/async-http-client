@@ -294,6 +294,26 @@ extension Transaction: HTTPExecutableRequest {
             bodyStreamContinuation.resume(throwing: error)
         }
     }
+
+    func deadlineExceeded() {
+        let action = self.stateLock.withLock {
+            self.state.deadlineExceeded()
+        }
+        self.performDeadlineExceededAction(action)
+    }
+
+    private func performDeadlineExceededAction(_ action: StateMachine.DeadlineExceededAction) {
+        switch action {
+        case .cancel(let requestContinuation, let scheduler, let executor, let bodyStreamContinuation):
+            requestContinuation.resume(throwing: HTTPClientError.deadlineExceeded)
+            scheduler?.cancelRequest(self)
+            executor?.cancelRequest(self)
+            bodyStreamContinuation?.resume(throwing: HTTPClientError.deadlineExceeded)
+
+        case .none:
+            break
+        }
+    }
 }
 
 @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
