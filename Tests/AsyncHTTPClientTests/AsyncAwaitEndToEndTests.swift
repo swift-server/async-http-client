@@ -385,8 +385,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             guard let server = maybeServer else { return }
 
             defer { XCTAssertNoThrow(try server.close().wait()) }
-            
-            
+
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
             var config = HTTPClient.Configuration()
             config.timeout.connect = .milliseconds(200)
