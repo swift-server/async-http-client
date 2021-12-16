@@ -367,47 +367,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         #endif
     }
 
-    func testConnectTimeout() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
-        XCTAsyncTest(timeout: 5) {
-            let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-            defer { XCTAssertNoThrow(try group.syncShutdownGracefully()) }
-
-            var maybeServer: Channel?
-            XCTAssertNoThrow(maybeServer = try ServerBootstrap(group: group)
-                .childChannelInitializer { channel in
-                    channel.pipeline.addHandler(NeverrespondServerHandler())
-                }
-                .bind(to: .init(ipAddress: "127.0.0.1", port: 0))
-                .wait()
-            )
-            guard let server = maybeServer else { return }
-            let port = server.localAddress!.port!
-            XCTAssertNoThrow(try server.close().wait())
-
-            let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
-            var config = HTTPClient.Configuration()
-            config.timeout.connect = .milliseconds(200)
-            let client = HTTPClient(
-                eventLoopGroupProvider: .createNew,
-                configuration: config,
-                backgroundActivityLogger: logger
-            )
-            defer { XCTAssertNoThrow(try client.syncShutdown()) }
-
-            let request = HTTPClientRequest(url: "https://localhost:\(port)")
-
-            await XCTAssertThrowsError(try await client.execute(request, deadline: .now() + .seconds(1), logger: logger)) { error in
-                guard let httpError = error as? HTTPClientError else {
-                    return XCTFail("wrong error \(error)")
-                }
-                XCTAssertEqual(httpError, .connectTimeout)
-            }
-        }
-        #endif
-    }
-
     func testInvalidURL() {
         #if compiler(>=5.5) && canImport(_Concurrency)
         guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
