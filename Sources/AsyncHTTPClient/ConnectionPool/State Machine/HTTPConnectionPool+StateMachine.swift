@@ -66,6 +66,12 @@ extension HTTPConnectionPool {
             case none
         }
 
+        enum LifecycleState: Equatable {
+            case running
+            case shuttingDown(unclean: Bool)
+            case shutDown
+        }
+
         enum HTTPVersionState {
             case http1(HTTP1StateMachine)
             case http2(HTTP2StateMachine)
@@ -88,7 +94,6 @@ extension HTTPConnectionPool {
         }
 
         var state: HTTPVersionState
-        var isShuttingDown: Bool = false
 
         let idGenerator: Connection.ID.Generator
         let maximumConcurrentHTTP1Connections: Int
@@ -98,7 +103,8 @@ extension HTTPConnectionPool {
             self.idGenerator = idGenerator
             let http1State = HTTP1StateMachine(
                 idGenerator: idGenerator,
-                maximumConcurrentConnections: maximumConcurrentHTTP1Connections
+                maximumConcurrentConnections: maximumConcurrentHTTP1Connections,
+                lifecycleState: .running
             )
             self.state = .http1(http1State)
         }
@@ -121,7 +127,8 @@ extension HTTPConnectionPool {
             case .http2(let http2StateMachine):
                 var http1StateMachine = HTTP1StateMachine(
                     idGenerator: self.idGenerator,
-                    maximumConcurrentConnections: self.maximumConcurrentHTTP1Connections
+                    maximumConcurrentConnections: self.maximumConcurrentHTTP1Connections,
+                    lifecycleState: http2StateMachine.lifecycleState
                 )
 
                 let newConnectionAction = http1StateMachine.migrateFromHTTP2(
@@ -140,7 +147,8 @@ extension HTTPConnectionPool {
             case .http1(let http1StateMachine):
 
                 var http2StateMachine = HTTP2StateMachine(
-                    idGenerator: self.idGenerator
+                    idGenerator: self.idGenerator,
+                    lifecycleState: http1StateMachine.lifecycleState
                 )
                 let migrationAction = http2StateMachine.migrateFromHTTP1(
                     http1Connections: http1StateMachine.connections,
@@ -263,10 +271,6 @@ extension HTTPConnectionPool {
         }
 
         mutating func shutdown() -> Action {
-            precondition(!self.isShuttingDown, "Shutdown must only be called once")
-
-            self.isShuttingDown = true
-
             return self.state.modify(http1: { http1 in
                 http1.shutdown()
             }, http2: { http2 in
