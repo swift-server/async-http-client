@@ -27,7 +27,7 @@ extension HTTPClient {
     ///   - deadline: Point in time by which the request must complete.
     ///   - logger: The logger to use for this request.
     /// - Returns: The response to the request. Note that the `body` of the response may not yet have been fully received.
-    func execute(
+    public func execute(
         _ request: HTTPClientRequest,
         deadline: NIODeadline,
         logger: Logger

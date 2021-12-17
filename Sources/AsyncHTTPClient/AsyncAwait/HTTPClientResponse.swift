@@ -17,13 +17,13 @@ import NIOCore
 import NIOHTTP1
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-struct HTTPClientResponse {
-    var version: HTTPVersion
-    var status: HTTPResponseStatus
-    var headers: HTTPHeaders
-    var body: Body
+public struct HTTPClientResponse {
+    public var version: HTTPVersion
+    public var status: HTTPResponseStatus
+    public var headers: HTTPHeaders
+    public var body: Body
 
-    struct Body {
+    public struct Body {
         private let bag: Transaction
         private let reference: ResponseRef
 
@@ -48,25 +48,22 @@ struct HTTPClientResponse {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body: AsyncSequence {
-    typealias Element = ByteBuffer
-    typealias AsyncIterator = Iterator
+    public typealias Element = AsyncIterator.Element
 
-    struct Iterator: AsyncIteratorProtocol {
-        typealias Element = ByteBuffer
-
+    public struct AsyncIterator: AsyncIteratorProtocol {
         private let stream: IteratorStream
 
         fileprivate init(stream: IteratorStream) {
             self.stream = stream
         }
 
-        func next() async throws -> ByteBuffer? {
+        public func next() async throws -> ByteBuffer? {
             try await self.stream.next()
         }
     }
 
-    func makeAsyncIterator() -> Iterator {
-        Iterator(stream: IteratorStream(bag: self.bag))
+    public func makeAsyncIterator() -> AsyncIterator {
+        AsyncIterator(stream: IteratorStream(bag: self.bag))
     }
 }
 
