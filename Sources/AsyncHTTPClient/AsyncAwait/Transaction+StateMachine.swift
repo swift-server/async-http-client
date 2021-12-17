@@ -674,6 +674,67 @@ extension Transaction {
                 preconditionFailure("Already received an eof or error before. Must not receive further events. Invalid state: \(self.state)")
             }
         }
+
+        enum DeadlineExceededAction {
+            case none
+            /// fail response before head received. scheduler and executor are exclusive here.
+            case cancel(
+                requestContinuation: CheckedContinuation<HTTPClientResponse, Error>,
+                scheduler: HTTPRequestScheduler?,
+                executor: HTTPRequestExecutor?,
+                bodyStreamContinuation: CheckedContinuation<Void, Error>?
+            )
+        }
+
+        mutating func deadlineExceeded() -> DeadlineExceededAction {
+            let error = HTTPClientError.deadlineExceeded
+            switch self.state {
+            case .initialized(let continuation):
+                self.state = .finished(error: error, nil)
+                return .cancel(
+                    requestContinuation: continuation,
+                    scheduler: nil,
+                    executor: nil,
+                    bodyStreamContinuation: nil
+                )
+
+            case .queued(let continuation, let scheduler):
+                self.state = .finished(error: error, nil)
+                return .cancel(
+                    requestContinuation: continuation,
+                    scheduler: scheduler,
+                    executor: nil,
+                    bodyStreamContinuation: nil
+                )
+
+            case .executing(let context, let requestStreamState, .waitingForResponseHead):
+                switch requestStreamState {
+                case .paused(continuation: .some(let continuation)):
+                    self.state = .finished(error: error, nil)
+                    return .cancel(
+                        requestContinuation: context.continuation,
+                        scheduler: nil,
+                        executor: context.executor,
+                        bodyStreamContinuation: continuation
+                    )
+                case .requestHeadSent, .finished, .producing, .paused(continuation: .none):
+                    self.state = .finished(error: error, nil)
+                    return .cancel(
+                        requestContinuation: context.continuation,
+                        scheduler: nil,
+                        executor: context.executor,
+                        bodyStreamContinuation: nil
+                    )
+                }
+
+            case .executing, .finished:
+                // The user specified deadline is only used until we received the response head.
+                // If we already received the head, we have also resumed the continuation and
+                // therefore return the HTTPClientResponse to the user. We do not want to cancel
+                // the request body streaming nor the response body streaming afterwards.
+                return .none
+            }
+        }
     }
 }
 

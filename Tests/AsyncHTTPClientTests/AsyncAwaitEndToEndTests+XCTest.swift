@@ -37,6 +37,7 @@ extension AsyncAwaitEndToEndTests {
             ("testPostWithFragmentedAsyncSequenceOfLargeByteBuffers", testPostWithFragmentedAsyncSequenceOfLargeByteBuffers),
             ("testCanceling", testCanceling),
             ("testDeadline", testDeadline),
+            ("testImmediateDeadline", testImmediateDeadline),
             ("testInvalidURL", testInvalidURL),
         ]
     }
