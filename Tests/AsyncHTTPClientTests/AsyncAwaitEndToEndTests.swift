@@ -90,7 +90,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
             var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/")
             request.method = .POST
-            request.body = .byteBuffer(ByteBuffer(string: "1234"))
+            request.body = .bytes(ByteBuffer(string: "1234"))
 
             guard let response = await XCTAssertNoThrowWithResult(
                 try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)

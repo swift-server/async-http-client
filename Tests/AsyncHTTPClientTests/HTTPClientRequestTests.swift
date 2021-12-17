@@ -225,7 +225,7 @@ class HTTPClientRequestTests: XCTestCase {
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
-            request.body = .byteBuffer(ByteBuffer())
+            request.body = .bytes(ByteBuffer())
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }
@@ -261,7 +261,7 @@ class HTTPClientRequestTests: XCTestCase {
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
-            request.body = .byteBuffer(.init(string: "post body"))
+            request.body = .bytes(.init(string: "post body"))
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }

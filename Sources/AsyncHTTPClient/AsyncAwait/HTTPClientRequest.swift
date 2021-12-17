@@ -54,38 +54,9 @@ extension HTTPClientRequest {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest.Body {
-    public static func byteBuffer(_ byteBuffer: ByteBuffer) -> Self {
+    
+    public static func bytes(_ byteBuffer: ByteBuffer) -> Self {
         self.init(.byteBuffer(byteBuffer))
-    }
-
-    @inlinable
-    public static func bytes<Bytes: Sequence>(
-        length: Int?,
-        _ bytes: Bytes
-    ) -> Self where Bytes.Element == UInt8 {
-        self.init(.sequence(length: length, canBeConsumedMultipleTimes: false) { allocator in
-            if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
-                // fastpath
-                return buffer
-            }
-            // potentially really slow path
-            return allocator.buffer(bytes: bytes)
-        })
-    }
-
-    @inlinable
-    public static func bytes<Bytes: Collection>(
-        length: Int?,
-        _ bytes: Bytes
-    ) -> Self where Bytes.Element == UInt8 {
-        self.init(.sequence(length: length, canBeConsumedMultipleTimes: true) { allocator in
-            if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
-                // fastpath
-                return buffer
-            }
-            // potentially really slow path
-            return allocator.buffer(bytes: bytes)
-        })
     }
 
     @inlinable
@@ -93,6 +64,21 @@ extension HTTPClientRequest.Body {
         _ bytes: Bytes
     ) -> Self where Bytes.Element == UInt8 {
         self.init(.sequence(length: bytes.count, canBeConsumedMultipleTimes: true) { allocator in
+            if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
+                // fastpath
+                return buffer
+            }
+            // potentially really slow path
+            return allocator.buffer(bytes: bytes)
+        })
+    }
+    
+    @inlinable
+    public static func bytes<Bytes: Sequence>(
+        length: Int?,
+        _ bytes: Bytes
+    ) -> Self where Bytes.Element == UInt8 {
+        self.init(.sequence(length: length, canBeConsumedMultipleTimes: bytes is Collection) { allocator in
             if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
                 // fastpath
                 return buffer
