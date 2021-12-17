@@ -1226,8 +1226,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
     }
 }
 
-/// Should be used if you have a value of statically unknown type and want to compare its value to an `Equatable` type.
-/// The assert will fail if the boths
+/// Should be used if you have a value of statically unknown type and want to compare its value to another `Equatable` value.
+/// The assert will fail if both values don't have the same type or don't have the same value.
 /// - Note: if the type of both values are statically know, prefer `XCTAssertEqual`.
 /// - Parameters:
 ///   - lhs: value of a statically unknown type
