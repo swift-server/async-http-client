@@ -22,12 +22,6 @@ extension HTTPConnectionPool {
         typealias EstablishedAction = HTTPConnectionPool.StateMachine.EstablishedAction
         typealias EstablishedConnectionAction = HTTPConnectionPool.StateMachine.EstablishedConnectionAction
 
-        private enum State: Equatable {
-            case running
-            case shuttingDown(unclean: Bool)
-            case shutDown
-        }
-
         private var lastConnectFailure: Error?
         private var failedConsecutiveConnectionAttempts = 0
 
@@ -38,15 +32,17 @@ extension HTTPConnectionPool {
 
         private let idGenerator: Connection.ID.Generator
 
-        private var state: State = .running
+        private(set) var lifecycleState: StateMachine.LifecycleState
 
         init(
-            idGenerator: Connection.ID.Generator
+            idGenerator: Connection.ID.Generator,
+            lifecycleState: StateMachine.LifecycleState
         ) {
             self.idGenerator = idGenerator
             self.requests = RequestQueue()
 
             self.connections = HTTP2Connections(generator: idGenerator)
+            self.lifecycleState = lifecycleState
         }
 
         mutating func migrateFromHTTP1(
@@ -112,7 +108,7 @@ extension HTTPConnectionPool {
         }
 
         mutating func executeRequest(_ request: Request) -> Action {
-            switch self.state {
+            switch self.lifecycleState {
             case .running:
                 if let eventLoop = request.requiredEventLoop {
                     return self.executeRequest(request, onRequired: eventLoop)
@@ -236,7 +232,7 @@ extension HTTPConnectionPool {
             at index: Int,
             context: HTTP2Connections.EstablishedConnectionContext
         ) -> EstablishedAction {
-            switch self.state {
+            switch self.lifecycleState {
             case .running:
                 // We prioritise requests with a required event loop over those without a requirement.
                 // This can cause starvation for request without a required event loop.
@@ -323,7 +319,7 @@ extension HTTPConnectionPool {
         }
 
         private mutating func nextActionForFailedConnection(at index: Int, on eventLoop: EventLoop) -> Action {
-            switch self.state {
+            switch self.lifecycleState {
             case .running:
                 // we do not know if we have created this connection for a request with a required
                 // event loop or not. However, we do not need this information and can infer
@@ -378,7 +374,7 @@ extension HTTPConnectionPool {
         }
 
         private mutating func nextActionForClosingConnection(on eventLoop: EventLoop) -> Action {
-            switch self.state {
+            switch self.lifecycleState {
             case .running:
                 let hasPendingRequest = !self.requests.isEmpty(for: eventLoop) || !self.requests.isEmpty(for: nil)
                 guard hasPendingRequest else {
@@ -463,7 +459,7 @@ extension HTTPConnectionPool {
                 return .none
             }
 
-            precondition(self.state == .running, "If we are shutting down, we must not have any idle connections")
+            precondition(self.lifecycleState == .running, "If we are shutting down, we must not have any idle connections")
 
             return .init(
                 request: .none,
@@ -479,7 +475,7 @@ extension HTTPConnectionPool {
             if self.http1Connections!.isEmpty {
                 self.http1Connections = nil
             }
-            switch self.state {
+            switch self.lifecycleState {
             case .running:
                 return .none
             case .shuttingDown(let unclean):
@@ -510,7 +506,7 @@ extension HTTPConnectionPool {
             self.http1Connections = nil
 
             // we must also check, if we are shutting down. Was this maybe out last connection?
-            switch self.state {
+            switch self.lifecycleState {
             case .running:
                 return .init(request: .none, connection: .closeConnection(connection, isShutdown: .no))
             case .shuttingDown(let unclean):
@@ -543,10 +539,10 @@ extension HTTPConnectionPool {
             let unclean = !(cleanupContext.cancel.isEmpty && waitingRequests.isEmpty && self.http1Connections == nil)
             if self.connections.isEmpty && self.http1Connections == nil {
                 isShutdown = .yes(unclean: unclean)
-                self.state = .shutDown
+                self.lifecycleState = .shutDown
             } else {
                 isShutdown = .no
-                self.state = .shuttingDown(unclean: unclean)
+                self.lifecycleState = .shuttingDown(unclean: unclean)
             }
             return .init(
                 request: requestAction,

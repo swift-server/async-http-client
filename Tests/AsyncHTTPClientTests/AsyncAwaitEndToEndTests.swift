@@ -322,7 +322,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         #if compiler(>=5.5) && canImport(_Concurrency)
         guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
-            let bin = HTTPBin()
+            let bin = HTTPBin(.http2(compress: false))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
             let client = makeDefaultHTTPClient()
             defer { XCTAssertNoThrow(try client.syncShutdown()) }
@@ -368,7 +368,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         #if compiler(>=5.5) && canImport(_Concurrency)
         guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
-            let bin = HTTPBin()
+            let bin = HTTPBin(.http2(compress: false))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
             let client = makeDefaultHTTPClient()
             defer { XCTAssertNoThrow(try client.syncShutdown()) }
@@ -381,7 +381,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             await XCTAssertThrowsError(try await task.value) {
                 XCTAssertEqual($0 as? HTTPClientError, HTTPClientError.deadlineExceeded)
             }
-            print("done")
         }
         #endif
     }

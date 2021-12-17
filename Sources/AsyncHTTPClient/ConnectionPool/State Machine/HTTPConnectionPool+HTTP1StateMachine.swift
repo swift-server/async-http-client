@@ -16,12 +16,6 @@ import NIOCore
 
 extension HTTPConnectionPool {
     struct HTTP1StateMachine {
-        enum State: Equatable {
-            case running
-            case shuttingDown(unclean: Bool)
-            case shutDown
-        }
-
         typealias Action = HTTPConnectionPool.StateMachine.Action
         typealias ConnectionMigrationAction = HTTPConnectionPool.StateMachine.ConnectionMigrationAction
         typealias EstablishedAction = HTTPConnectionPool.StateMachine.EstablishedAction
@@ -34,15 +28,20 @@ extension HTTPConnectionPool {
         private var lastConnectFailure: Error?
 
         private(set) var requests: RequestQueue
-        private var state: State = .running
+        private(set) var lifecycleState: StateMachine.LifecycleState
 
-        init(idGenerator: Connection.ID.Generator, maximumConcurrentConnections: Int) {
+        init(
+            idGenerator: Connection.ID.Generator,
+            maximumConcurrentConnections: Int,
+            lifecycleState: StateMachine.LifecycleState
+        ) {
             self.connections = HTTP1Connections(
                 maximumConcurrentConnections: maximumConcurrentConnections,
                 generator: idGenerator
             )
 
             self.requests = RequestQueue()
+            self.lifecycleState = lifecycleState
         }
 
         mutating func migrateFromHTTP2(
@@ -111,7 +110,7 @@ extension HTTPConnectionPool {
         // MARK: - Events -
 
         mutating func executeRequest(_ request: Request) -> Action {
-            switch self.state {
+            switch self.lifecycleState {
             case .running:
                 if let eventLoop = request.requiredEventLoop {
                     return self.executeRequestOnRequiredEventLoop(request, eventLoop: eventLoop)
@@ -218,7 +217,7 @@ extension HTTPConnectionPool {
             self.failedConsecutiveConnectionAttempts += 1
             self.lastConnectFailure = error
 
-            switch self.state {
+            switch self.lifecycleState {
             case .running:
                 // We don't care how many waiting requests we have at this point, we will schedule a
                 // retry. More tasks, may appear until the backoff has completed. The final
@@ -243,7 +242,7 @@ extension HTTPConnectionPool {
         }
 
         mutating func connectionCreationBackoffDone(_ connectionID: Connection.ID) -> Action {
-            switch self.state {
+            switch self.lifecycleState {
             case .running:
                 // The naming of `failConnection` is a little confusing here. All it does is moving the
                 // connection state from `.backingOff` to `.closed` here. It also returns the
@@ -271,7 +270,7 @@ extension HTTPConnectionPool {
                 return .none
             }
 
-            precondition(self.state == .running, "If we are shutting down, we must not have any idle connections")
+            precondition(self.lifecycleState == .running, "If we are shutting down, we must not have any idle connections")
 
             return .init(
                 request: .none,
@@ -332,7 +331,7 @@ extension HTTPConnectionPool {
         }
 
         mutating func shutdown() -> Action {
-            precondition(self.state == .running, "Shutdown must only be called once")
+            precondition(self.lifecycleState == .running, "Shutdown must only be called once")
 
             // If we have remaining request queued, we should fail all of them with a cancelled
             // error.
@@ -350,10 +349,10 @@ extension HTTPConnectionPool {
             let isShutdown: StateMachine.ConnectionAction.IsShutdown
             let unclean = !(cleanupContext.cancel.isEmpty && waitingRequests.isEmpty)
             if self.connections.isEmpty && self.http2Connections == nil {
-                self.state = .shutDown
+                self.lifecycleState = .shutDown
                 isShutdown = .yes(unclean: unclean)
             } else {
-                self.state = .shuttingDown(unclean: unclean)
+                self.lifecycleState = .shuttingDown(unclean: unclean)
                 isShutdown = .no
             }
 
@@ -371,7 +370,7 @@ extension HTTPConnectionPool {
             at index: Int,
             context: HTTP1Connections.IdleConnectionContext
         ) -> EstablishedAction {
-            switch self.state {
+            switch self.lifecycleState {
             case .running:
                 switch context.use {
                 case .generalPurpose:
@@ -457,7 +456,7 @@ extension HTTPConnectionPool {
             at index: Int,
             context: HTTP1Connections.FailedConnectionContext
         ) -> Action {
-            switch self.state {
+            switch self.lifecycleState {
             case .running:
                 switch context.use {
                 case .generalPurpose:
@@ -537,7 +536,7 @@ extension HTTPConnectionPool {
         }
 
         mutating func http2ConnectionClosed(_ connectionID: Connection.ID) -> Action {
-            switch self.state {
+            switch self.lifecycleState {
             case .running:
                 _ = self.http2Connections?.failConnection(connectionID)
                 if self.http2Connections?.isEmpty == true {
@@ -570,7 +569,7 @@ extension HTTPConnectionPool {
         mutating func http2ConnectionStreamClosed(_ connectionID: Connection.ID) -> Action {
             // It is save to bang the http2Connections here. If we get this callback but we don't have
             // http2 connections something has gone terribly wrong.
-            switch self.state {
+            switch self.lifecycleState {
             case .running:
                 let (index, context) = self.http2Connections!.releaseStream(connectionID)
                 guard context.isIdle else {
