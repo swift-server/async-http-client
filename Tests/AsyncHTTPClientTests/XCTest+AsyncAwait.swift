@@ -26,7 +26,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#if compiler(>=5.5)
+#if compiler(>=5.5.2) && canImport(_Concurrency)
 import XCTest
 
 extension XCTestCase {
@@ -90,4 +90,4 @@ internal func XCTAssertNoThrowWithResult<Result>(
     return nil
 }
 
-#endif // compiler(>=5.5)
+#endif
