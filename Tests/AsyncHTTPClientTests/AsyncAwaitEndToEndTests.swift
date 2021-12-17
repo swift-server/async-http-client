@@ -34,8 +34,8 @@ private func makeDefaultHTTPClient(
 
 final class AsyncAwaitEndToEndTests: XCTestCase {
     func testSimpleGet() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -57,8 +57,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testSimplePost() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -80,8 +80,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testPostWithByteBuffer() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -105,8 +105,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testPostWithSequenceOfUInt8() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -130,8 +130,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testPostWithCollectionOfUInt8() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -155,8 +155,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testPostWithRandomAccessCollectionOfUInt8() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -180,8 +180,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testPostWithAsyncSequenceOfByteBuffers() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -209,8 +209,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testPostWithAsyncSequenceOfUInt8() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -234,8 +234,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testPostWithFragmentedAsyncSequenceOfByteBuffers() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -276,8 +276,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testPostWithFragmentedAsyncSequenceOfLargeByteBuffers() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -319,8 +319,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testCanceling() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
             let bin = HTTPBin(.http2(compress: false))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -344,8 +344,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testDeadline() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
             let bin = HTTPBin(.http2(compress: false))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -365,8 +365,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testImmediateDeadline() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
             let bin = HTTPBin(.http2(compress: false))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -386,8 +386,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testInvalidURL() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
             let client = makeDefaultHTTPClient()
             defer { XCTAssertNoThrow(try client.syncShutdown()) }
@@ -402,7 +402,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 }
 
-#if compiler(>=5.5) && canImport(_Concurrency)
+#if compiler(>=5.5.2) && canImport(_Concurrency)
 extension AsyncSequence where Element == ByteBuffer {
     func collect() async rethrows -> ByteBuffer {
         try await self.reduce(into: ByteBuffer()) { accumulatingBuffer, nextBuffer in

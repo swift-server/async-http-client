@@ -21,15 +21,15 @@ import NIOHTTP1
 import NIOPosix
 import XCTest
 
-#if compiler(>=5.5) && canImport(_Concurrency)
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+#if compiler(>=5.5.2) && canImport(_Concurrency)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 typealias PreparedRequest = HTTPClientRequest.Prepared
 #endif
 
 final class TransactionTests: XCTestCase {
     func testCancelAsyncRequest() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let embeddedEventLoop = EmbeddedEventLoop()
             defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
@@ -64,8 +64,8 @@ final class TransactionTests: XCTestCase {
     }
 
     func testResponseStreamingWorks() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let embeddedEventLoop = EmbeddedEventLoop()
             defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
@@ -127,8 +127,8 @@ final class TransactionTests: XCTestCase {
     }
 
     func testIgnoringResponseBodyWorks() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let embeddedEventLoop = EmbeddedEventLoop()
             defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
@@ -178,8 +178,8 @@ final class TransactionTests: XCTestCase {
     }
 
     func testWriteBackpressureWorks() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let embeddedEventLoop = EmbeddedEventLoop()
             defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
@@ -252,8 +252,8 @@ final class TransactionTests: XCTestCase {
     }
 
     func testSimpleGetRequest() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
             let eventLoop = eventLoopGroup.next()
@@ -310,8 +310,8 @@ final class TransactionTests: XCTestCase {
     }
 
     func testSimplePostRequest() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let embeddedEventLoop = EmbeddedEventLoop()
             defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
@@ -350,8 +350,8 @@ final class TransactionTests: XCTestCase {
     }
 
     func testPostStreamFails() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let embeddedEventLoop = EmbeddedEventLoop()
             defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
@@ -395,8 +395,8 @@ final class TransactionTests: XCTestCase {
     }
 
     func testResponseStreamFails() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let embeddedEventLoop = EmbeddedEventLoop()
             defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
@@ -458,8 +458,8 @@ final class TransactionTests: XCTestCase {
     }
 
     func testBiDirectionalStreamingHTTP2() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
             let eventLoop = eventLoopGroup.next()
@@ -533,12 +533,12 @@ final class TransactionTests: XCTestCase {
     }
 }
 
-#if compiler(>=5.5) && canImport(_Concurrency)
+#if compiler(>=5.5.2) && canImport(_Concurrency)
 
 // This needs a small explanation. If an iterator is a struct, it can't be used across multiple
 // tasks. Since we want to wait for things to happen in tests, we need to `async let`, which creates
 // implicit tasks. Therefore we need to wrap our iterator struct.
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 actor SharedIterator<Iterator: AsyncIteratorProtocol> {
     private var iterator: Iterator
 
@@ -553,7 +553,7 @@ actor SharedIterator<Iterator: AsyncIteratorProtocol> {
     }
 }
 
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension Transaction {
     fileprivate static func makeWithResultTask(
         request: PreparedRequest,

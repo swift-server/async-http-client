@@ -20,8 +20,8 @@ import XCTest
 
 final class Transaction_StateMachineTests: XCTestCase {
     func testRequestWasQueuedAfterWillExecuteRequestWasCalled() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
@@ -50,8 +50,8 @@ final class Transaction_StateMachineTests: XCTestCase {
     }
 
     func testRequestBodyStreamWasPaused() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
@@ -73,8 +73,8 @@ final class Transaction_StateMachineTests: XCTestCase {
     }
 
     func testQueuedRequestGetsRemovedWhenDeadlineExceeded() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
                 var state = Transaction.StateMachine(continuation)
@@ -97,8 +97,8 @@ final class Transaction_StateMachineTests: XCTestCase {
     }
 
     func testScheduledRequestGetsRemovedWhenDeadlineExceeded() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
@@ -124,8 +124,8 @@ final class Transaction_StateMachineTests: XCTestCase {
     }
 
     func testRequestWithHeadReceivedGetNotCancelledWhenDeadlineExceeded() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
@@ -154,8 +154,8 @@ final class Transaction_StateMachineTests: XCTestCase {
     }
 }
 
-#if compiler(>=5.5) && canImport(_Concurrency)
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+#if compiler(>=5.5.2) && canImport(_Concurrency)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension Transaction.StateMachine.StartExecutionAction: Equatable {
     public static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
@@ -172,7 +172,7 @@ extension Transaction.StateMachine.StartExecutionAction: Equatable {
     }
 }
 
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension Transaction.StateMachine.ResumeProducingAction: Equatable {
     public static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
@@ -188,7 +188,7 @@ extension Transaction.StateMachine.ResumeProducingAction: Equatable {
     }
 }
 
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension Transaction.StateMachine.NextWriteAction: Equatable {
     public static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {

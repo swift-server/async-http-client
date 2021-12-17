@@ -17,17 +17,17 @@ import NIOCore
 import XCTest
 
 class HTTPClientRequestTests: XCTestCase {
-    #if compiler(>=5.5) && canImport(_Concurrency)
-    @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+    #if compiler(>=5.5.2) && canImport(_Concurrency)
+    @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
     private typealias Request = HTTPClientRequest
 
-    @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+    @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
     private typealias PreparedRequest = HTTPClientRequest.Prepared
     #endif
 
     func testCustomHeadersAreRespected() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "https://example.com/get")
             request.headers = [
@@ -62,8 +62,8 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testUnixScheme() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "unix://%2Fexample%2Ffolder.sock/some_path")
             request.headers = ["custom-header": "custom-value"]
@@ -93,8 +93,8 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testHTTPUnixScheme() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http+unix://%2Fexample%2Ffolder.sock/some_path")
             request.headers = ["custom-header": "custom-value"]
@@ -124,8 +124,8 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testHTTPSUnixScheme() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "https+unix://%2Fexample%2Ffolder.sock/some_path")
             request.headers = ["custom-header": "custom-value"]
@@ -155,8 +155,8 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testGetWithoutBody() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let request = Request(url: "https://example.com/get")
             var preparedRequest: PreparedRequest?
@@ -185,8 +185,8 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testPostWithoutBody() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
@@ -220,8 +220,8 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testPostWithEmptyByteBuffer() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
@@ -256,8 +256,8 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testPostWithByteBuffer() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
@@ -291,8 +291,8 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testPostWithSequenceOfUnknownLength() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
@@ -327,8 +327,8 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testPostWithSequenceWithFixedLength() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
@@ -364,8 +364,8 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testPostWithRandomAccessCollection() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
@@ -400,8 +400,8 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testPostWithAsyncSequenceOfUnknownLength() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
@@ -441,8 +441,8 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testPostWithAsyncSequenceWithKnownLength() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
@@ -482,13 +482,13 @@ class HTTPClientRequestTests: XCTestCase {
     }
 }
 
-#if compiler(>=5.5) && canImport(_Concurrency)
+#if compiler(>=5.5.2) && canImport(_Concurrency)
 private struct LengthMismatch: Error {
     var announcedLength: Int
     var actualLength: Int
 }
 
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension Optional where Wrapped == HTTPClientRequest.Body {
     /// Accumulates all data from `self` into a single `ByteBuffer` and checks that the user specified length matches
     /// the length of the accumulated data.
@@ -549,7 +549,7 @@ extension Collection {
     }
 }
 
-@available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 struct AsyncSequenceFromSyncSequence<Wrapped: Sequence>: AsyncSequence {
     typealias Element = Wrapped.Element
     struct AsyncIterator: AsyncIteratorProtocol {
@@ -566,7 +566,7 @@ struct AsyncSequenceFromSyncSequence<Wrapped: Sequence>: AsyncSequence {
     }
 }
 
-@available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension Sequence {
     /// Turns `self` into an `AsyncSequence` by wending each element of `self` asynchronously.
     func asAsyncSequence() -> AsyncSequenceFromSyncSequence<Self> {
