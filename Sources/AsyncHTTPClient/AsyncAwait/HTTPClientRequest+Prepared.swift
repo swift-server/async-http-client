@@ -12,11 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if compiler(>=5.5) && canImport(_Concurrency)
+#if compiler(>=5.5.2) && canImport(_Concurrency)
 import struct Foundation.URL
 import NIOHTTP1
 
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest {
     struct Prepared {
         var url: URL
@@ -27,7 +27,7 @@ extension HTTPClientRequest {
     }
 }
 
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest.Prepared {
     init(_ request: HTTPClientRequest) throws {
         guard let url = URL(string: request.url) else {
@@ -58,7 +58,7 @@ extension HTTPClientRequest.Prepared {
     }
 }
 
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension RequestBodyLength {
     init(_ body: HTTPClientRequest.Body?) {
         switch body?.mode {
@@ -74,7 +74,7 @@ extension RequestBodyLength {
     }
 }
 
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest.Prepared {
     func followingRedirect(to redirectURL: URL, status: HTTPResponseStatus) -> HTTPClientRequest {
         let (method, headers, body) = transformRequestForRedirect(

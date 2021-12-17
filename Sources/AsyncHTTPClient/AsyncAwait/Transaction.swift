@@ -12,14 +12,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if compiler(>=5.5) && canImport(_Concurrency)
+#if compiler(>=5.5.2) && canImport(_Concurrency)
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
 import NIOSSL
 
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 final class Transaction: @unchecked Sendable {
     let logger: Logger
 
@@ -145,7 +145,7 @@ final class Transaction: @unchecked Sendable {
 
 // MARK: - Protocol Methods -
 
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension Transaction: HTTPSchedulableRequest {
     var poolKey: ConnectionPool.Key { self.request.poolKey }
     var tlsConfiguration: TLSConfiguration? { return nil }
@@ -158,7 +158,7 @@ extension Transaction: HTTPSchedulableRequest {
     }
 }
 
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension Transaction: HTTPExecutableRequest {
     var requestHead: HTTPRequestHead { self.request.head }
 
@@ -316,7 +316,7 @@ extension Transaction: HTTPExecutableRequest {
     }
 }
 
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension Transaction {
     func responseBodyDeinited() {
         let deinitedAction = self.stateLock.withLock {

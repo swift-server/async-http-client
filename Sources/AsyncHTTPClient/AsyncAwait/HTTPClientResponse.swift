@@ -12,11 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if compiler(>=5.5) && canImport(_Concurrency)
+#if compiler(>=5.5.2) && canImport(_Concurrency)
 import NIOCore
 import NIOHTTP1
 
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 struct HTTPClientResponse {
     var version: HTTPVersion
     var status: HTTPResponseStatus
@@ -46,7 +46,7 @@ struct HTTPClientResponse {
     }
 }
 
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body: AsyncSequence {
     typealias Element = ByteBuffer
     typealias AsyncIterator = Iterator
@@ -70,7 +70,7 @@ extension HTTPClientResponse.Body: AsyncSequence {
     }
 }
 
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body {
     /// The purpose of this object is to inform the transaction about the response body being deinitialized.
     /// If the users has not called `makeAsyncIterator` on the body, before it is deinited, the http
@@ -88,7 +88,7 @@ extension HTTPClientResponse.Body {
     }
 }
 
-@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body {
     internal class IteratorStream {
         struct ID: Hashable {
