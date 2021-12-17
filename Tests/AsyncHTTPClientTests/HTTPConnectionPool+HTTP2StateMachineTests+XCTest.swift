@@ -40,6 +40,7 @@ extension HTTPConnectionPool_HTTP2StateMachineTests {
             ("testMigrationFromHTTP1ToHTTP2WhileShuttingDown", testMigrationFromHTTP1ToHTTP2WhileShuttingDown),
             ("testMigrationFromHTTP1ToHTTP2WithAlreadyStartedHTTP1Connections", testMigrationFromHTTP1ToHTTP2WithAlreadyStartedHTTP1Connections),
             ("testHTTP2toHTTP1Migration", testHTTP2toHTTP1Migration),
+            ("testHTTP2toHTTP1MigrationDuringShutdown", testHTTP2toHTTP1MigrationDuringShutdown),
             ("testConnectionIsImmediatelyCreatedAfterBackoffTimerFires", testConnectionIsImmediatelyCreatedAfterBackoffTimerFires),
             ("testMaxConcurrentStreamsIsRespected", testMaxConcurrentStreamsIsRespected),
             ("testEventsAfterConnectionIsClosed", testEventsAfterConnectionIsClosed),
