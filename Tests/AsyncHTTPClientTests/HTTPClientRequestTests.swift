@@ -500,7 +500,7 @@ extension Optional where Wrapped == HTTPClientRequest.Body {
             return buffer
         case .sequence(let announcedLength, _, let generate):
             let buffer = generate(ByteBufferAllocator())
-            if case let .fixed(announcedLength) = announcedLength,
+            if case .fixed(let announcedLength) = announcedLength,
                announcedLength != buffer.readableBytes {
                 throw LengthMismatch(announcedLength: announcedLength, actualLength: buffer.readableBytes)
             }
@@ -510,7 +510,7 @@ extension Optional where Wrapped == HTTPClientRequest.Body {
             while var buffer = try await generate(ByteBufferAllocator()) {
                 accumulatedBuffer.writeBuffer(&buffer)
             }
-            if case let .fixed(announcedLength) = announcedLength,
+            if case .fixed(let announcedLength) = announcedLength,
                announcedLength != accumulatedBuffer.readableBytes {
                 throw LengthMismatch(announcedLength: announcedLength, actualLength: accumulatedBuffer.readableBytes)
             }

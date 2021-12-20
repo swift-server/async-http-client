@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-
 /// - Note: use `HTTPClientRequest.Body.Length` if you want to expose `RequestBodyLength` publicly
 @usableFromInline
 internal enum RequestBodyLength: Hashable {

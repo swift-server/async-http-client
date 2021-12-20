@@ -74,7 +74,7 @@ extension HTTPClientRequest.Body {
             return allocator.buffer(bytes: bytes)
         })
     }
-    
+
     @inlinable
     public static func bytes<Bytes: Sequence>(
         length: Length,
@@ -92,7 +92,7 @@ extension HTTPClientRequest.Body {
             return allocator.buffer(bytes: bytes)
         })
     }
-    
+
     @inlinable
     public static func bytes<Bytes: Collection>(
         length: Length,
@@ -164,7 +164,7 @@ extension HTTPClientRequest.Body {
         public static func fixed(_ count: Int) -> Self {
             .init(storage: .fixed(count))
         }
-        
+
         @usableFromInline
         internal var storage: RequestBodyLength
     }

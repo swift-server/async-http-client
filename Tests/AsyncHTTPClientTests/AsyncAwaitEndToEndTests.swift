@@ -257,7 +257,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 ByteBuffer(string: "2"),
                 ByteBuffer(string: "34"),
             ]
-            let bodyIterator = response.body.makeAsyncIterator()
+            var bodyIterator = response.body.makeAsyncIterator()
             for expectedFragment in fragments {
                 streamWriter.write(expectedFragment)
                 guard let actualFragment = await XCTAssertNoThrowWithResult(
@@ -300,7 +300,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 ByteBuffer(string: String(repeating: "c", count: 4000)),
                 ByteBuffer(string: String(repeating: "d", count: 4000)),
             ]
-            let bodyIterator = response.body.makeAsyncIterator()
+            var bodyIterator = response.body.makeAsyncIterator()
             for expectedFragment in fragments {
                 streamWriter.write(expectedFragment)
                 guard let actualFragment = await XCTAssertNoThrowWithResult(
