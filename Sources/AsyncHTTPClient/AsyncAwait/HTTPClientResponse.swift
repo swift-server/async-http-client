@@ -57,7 +57,7 @@ extension HTTPClientResponse.Body: AsyncSequence {
             self.stream = stream
         }
 
-        public func next() async throws -> ByteBuffer? {
+        public mutating func next() async throws -> ByteBuffer? {
             try await self.stream.next()
         }
     }
