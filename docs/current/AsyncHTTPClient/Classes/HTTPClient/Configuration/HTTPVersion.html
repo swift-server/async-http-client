@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <title>StreamWriter Structure Reference</title>
+    <title>HTTPVersion Structure Reference</title>
     <link rel="stylesheet" type="text/css" href="../../../css/jazzy.css" />
     <link rel="stylesheet" type="text/css" href="../../../css/highlight.css" />
     <meta charset="utf-8">
@@ -14,9 +14,9 @@
   </head>
   <body>
 
-    <a name="//apple_ref/swift/Struct/StreamWriter" class="dashAnchor"></a>
+    <a name="//apple_ref/swift/Struct/HTTPVersion" class="dashAnchor"></a>
 
-    <a title="StreamWriter Structure Reference"></a>
+    <a title="HTTPVersion Structure Reference"></a>
 
     <header class="header">
       <p class="header-col header-col--primary">
@@ -50,7 +50,7 @@
     <p class="breadcrumbs">
       <a class="breadcrumb" href="../../../index.html">AsyncHTTPClient Reference</a>
       <img class="carat" src="../../../img/carat.png" alt=""/>
-      StreamWriter Structure Reference
+      HTTPVersion Structure Reference
     </p>
 
     <div class="content-wrapper">
@@ -142,18 +142,18 @@
 
         <section class="section">
           <div class="section-content top-matter">
-            <h1>StreamWriter</h1>
+            <h1>HTTPVersion</h1>
               <div class="declaration">
                 <div class="language">
                   
-                  <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">struct</span> <span class="kt">StreamWriter</span></code></pre>
+                  <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">struct</span> <span class="kt">HTTPVersion</span></code></pre>
 
                 </div>
               </div>
-            <p>Chunk provider.</p>
+            <p>Undocumented</p>
 
               <div class="slightly-smaller">
-                <a href="https://github.com/swift-server/async-http-client/tree/1.8.1/Sources/AsyncHTTPClient/HTTPHandler.swift#L26-L44">Show on GitHub</a>
+                <a href="https://github.com/swift-server/async-http-client/tree/1.8.1/Sources/AsyncHTTPClient/HTTPClient.swift#L888-L901">Show on GitHub</a>
               </div>
           </div>
         </section>
@@ -165,9 +165,9 @@
                 <li class="item">
                   <div>
                     <code>
-                    <a name="/s:15AsyncHTTPClient0B0C4BodyV12StreamWriterV7closureAG7NIOCore15EventLoopFutureCyytGAI6IODataOc_tcfc"></a>
-                    <a name="//apple_ref/swift/Method/init(closure:)" class="dashAnchor"></a>
-                    <a class="token" href="#/s:15AsyncHTTPClient0B0C4BodyV12StreamWriterV7closureAG7NIOCore15EventLoopFutureCyytGAI6IODataOc_tcfc">init(closure:<wbr>)</a>
+                    <a name="/s:15AsyncHTTPClient0B0C13ConfigurationV11HTTPVersionV9http1OnlyAGvpZ"></a>
+                    <a name="//apple_ref/swift/Variable/http1Only" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B0C13ConfigurationV11HTTPVersionV9http1OnlyAGvpZ">http1Only</a>
                     </code>
                   </div>
                   <div class="height-container">
@@ -175,38 +175,19 @@
                     <section class="section">
                       <div class="pointer"></div>
                       <div class="abstract">
-                        <p>Create new StreamWriter</p>
+                        <p>we only use HTTP/1, even if the server would supports HTTP/2</p>
 
                       </div>
                       <div class="declaration">
                         <h4>Declaration</h4>
                         <div class="language">
                           <p class="aside-title">Swift</p>
-                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="nf">init</span><span class="p">(</span><span class="nv">closure</span><span class="p">:</span> <span class="kd">@escaping</span> <span class="p">(</span><span class="kt">IOData</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">EventLoopFuture</span><span class="o">&lt;</span><span class="kt">Void</span><span class="o">&gt;</span><span class="p">)</span></code></pre>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">static</span> <span class="k">let</span> <span class="nv">http1Only</span><span class="p">:</span> <span class="p">`</span><span class="nv">Self</span><span class="p">`</span></code></pre>
 
                         </div>
                       </div>
-                      <div>
-                        <h4>Parameters</h4>
-                        <table class="graybox">
-                          <tbody>
-                            <tr>
-                              <td>
-                                <code>
-                                <em>closure</em>
-                                </code>
-                              </td>
-                              <td>
-                                <div>
-                                  <p>function that will be called to write actual bytes to the channel.</p>
-                                </div>
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
                       <div class="slightly-smaller">
-                        <a href="https://github.com/swift-server/async-http-client/tree/1.8.1/Sources/AsyncHTTPClient/HTTPHandler.swift#L33-L35">Show on GitHub</a>
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.8.1/Sources/AsyncHTTPClient/HTTPClient.swift#L895">Show on GitHub</a>
                       </div>
                     </section>
                   </div>
@@ -214,9 +195,9 @@
                 <li class="item">
                   <div>
                     <code>
-                    <a name="/s:15AsyncHTTPClient0B0C4BodyV12StreamWriterV5writey7NIOCore15EventLoopFutureCyytGAI6IODataOF"></a>
-                    <a name="//apple_ref/swift/Method/write(_:)" class="dashAnchor"></a>
-                    <a class="token" href="#/s:15AsyncHTTPClient0B0C4BodyV12StreamWriterV5writey7NIOCore15EventLoopFutureCyytGAI6IODataOF">write(_:<wbr>)</a>
+                    <a name="/s:15AsyncHTTPClient0B0C13ConfigurationV11HTTPVersionV9automaticAGvpZ"></a>
+                    <a name="//apple_ref/swift/Variable/automatic" class="dashAnchor"></a>
+                    <a class="token" href="#/s:15AsyncHTTPClient0B0C13ConfigurationV11HTTPVersionV9automaticAGvpZ">automatic</a>
                     </code>
                   </div>
                   <div class="height-container">
@@ -224,38 +205,19 @@
                     <section class="section">
                       <div class="pointer"></div>
                       <div class="abstract">
-                        <p>Write data to server.</p>
+                        <p>HTTP/2 is used if we connect to a server with HTTPS and the server supports HTTP/2, otherwise we use HTTP/1</p>
 
                       </div>
                       <div class="declaration">
                         <h4>Declaration</h4>
                         <div class="language">
                           <p class="aside-title">Swift</p>
-                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">func</span> <span class="nf">write</span><span class="p">(</span><span class="n">_</span> <span class="nv">data</span><span class="p">:</span> <span class="kt">IOData</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">EventLoopFuture</span><span class="o">&lt;</span><span class="kt">Void</span><span class="o">&gt;</span></code></pre>
+                          <pre class="highlight swift"><code><span class="kd">public</span> <span class="kd">static</span> <span class="k">let</span> <span class="nv">automatic</span><span class="p">:</span> <span class="p">`</span><span class="nv">Self</span><span class="p">`</span></code></pre>
 
                         </div>
                       </div>
-                      <div>
-                        <h4>Parameters</h4>
-                        <table class="graybox">
-                          <tbody>
-                            <tr>
-                              <td>
-                                <code>
-                                <em>data</em>
-                                </code>
-                              </td>
-                              <td>
-                                <div>
-                                  <p><code>IOData</code> to write.</p>
-                                </div>
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
                       <div class="slightly-smaller">
-                        <a href="https://github.com/swift-server/async-http-client/tree/1.8.1/Sources/AsyncHTTPClient/HTTPHandler.swift#L41-L43">Show on GitHub</a>
+                        <a href="https://github.com/swift-server/async-http-client/tree/1.8.1/Sources/AsyncHTTPClient/HTTPClient.swift#L898">Show on GitHub</a>
                       </div>
                     </section>
                   </div>
