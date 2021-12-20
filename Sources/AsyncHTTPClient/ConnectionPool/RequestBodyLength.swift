@@ -12,9 +12,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-public enum RequestBodyLength: Hashable {
+public struct RequestBodyLength {
     /// size of the request body is not known before starting the request
-    case dynamic
+    public static let dynamic: Self = .init(storage: .dynamic)
     /// size of the request body is fixed and exactly `count` bytes
-    case fixed(_ count: Int)
+    public static func fixed(_ count: Int) -> Self {
+        .init(storage: .fixed(count))
+    }
+    internal enum Storage: Hashable {
+        case dynamic
+        case fixed(_ count: Int)
+    }
+    internal var storage: Storage
 }

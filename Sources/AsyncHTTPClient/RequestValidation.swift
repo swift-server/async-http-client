@@ -23,7 +23,7 @@ extension HTTPHeaders {
         try self.validateFieldNames()
 
         if case .TRACE = method {
-            switch bodyLength {
+            switch bodyLength.storage {
             case .fixed(0):
                 break
             case .dynamic, .fixed:
@@ -36,7 +36,7 @@ extension HTTPHeaders {
         self.setTransportFraming(method: method, bodyLength: bodyLength)
 
         let connectionClose = self[canonicalForm: "connection"].lazy.map { $0.lowercased() }.contains("close")
-        switch bodyLength {
+        switch bodyLength.storage {
         case .dynamic:
             return .init(connectionClose: connectionClose, body: .stream)
         case .fixed(let length):
@@ -87,7 +87,7 @@ extension HTTPHeaders {
         self.remove(name: "Content-Length")
         self.remove(name: "Transfer-Encoding")
 
-        switch bodyLength {
+        switch bodyLength.storage {
         case .fixed(0):
             // if we don't have a body we might not need to send the Content-Length field
             // https://tools.ietf.org/html/rfc7230#section-3.3.2

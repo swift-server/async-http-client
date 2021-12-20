@@ -82,7 +82,25 @@ extension HTTPClientRequest.Body {
     ) -> Self where Bytes.Element == UInt8 {
         self.init(.sequence(
             length: length,
-            canBeConsumedMultipleTimes: bytes is Collection
+            canBeConsumedMultipleTimes: false
+        ) { allocator in
+            if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
+                // fastpath
+                return buffer
+            }
+            // potentially really slow path
+            return allocator.buffer(bytes: bytes)
+        })
+    }
+    
+    @inlinable
+    public static func bytes<Bytes: Collection>(
+        length: RequestBodyLength,
+        _ bytes: Bytes
+    ) -> Self where Bytes.Element == UInt8 {
+        self.init(.sequence(
+            length: length,
+            canBeConsumedMultipleTimes: true
         ) { allocator in
             if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
                 // fastpath
