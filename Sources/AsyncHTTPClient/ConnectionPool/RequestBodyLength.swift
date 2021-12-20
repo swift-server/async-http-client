@@ -12,16 +12,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-public struct RequestBodyLength {
+
+/// - Note: use `HTTPClientRequest.Body.Length` if you want to expose `RequestBodyLength` publicly
+@usableFromInline
+internal enum RequestBodyLength: Hashable {
     /// size of the request body is not known before starting the request
-    public static let dynamic: Self = .init(storage: .dynamic)
+    case dynamic
     /// size of the request body is fixed and exactly `count` bytes
-    public static func fixed(_ count: Int) -> Self {
-        .init(storage: .fixed(count))
-    }
-    internal enum Storage: Hashable {
-        case dynamic
-        case fixed(_ count: Int)
-    }
-    internal var storage: Storage
+    case fixed(_ count: Int)
 }
