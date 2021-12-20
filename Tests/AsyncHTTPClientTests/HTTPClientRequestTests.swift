@@ -297,7 +297,7 @@ class HTTPClientRequestTests: XCTestCase {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
             let sequence = AnySequence(ByteBuffer(string: "post body").readableBytesView)
-            request.body = .bytes(length: nil, sequence)
+            request.body = .bytes(length: .dynamic, sequence)
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }
@@ -334,7 +334,7 @@ class HTTPClientRequestTests: XCTestCase {
             request.method = .POST
 
             let sequence = AnySequence(ByteBuffer(string: "post body").readableBytesView)
-            request.body = .bytes(length: 9, sequence)
+            request.body = .bytes(length: .fixed(9), sequence)
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }
@@ -411,7 +411,7 @@ class HTTPClientRequestTests: XCTestCase {
                 .asAsyncSequence()
                 .map { ByteBuffer($0) }
 
-            request.body = .stream(length: nil, asyncSequence)
+            request.body = .stream(length: .dynamic, asyncSequence)
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }
@@ -452,7 +452,7 @@ class HTTPClientRequestTests: XCTestCase {
                 .asAsyncSequence()
                 .map { ByteBuffer($0) }
 
-            request.body = .stream(length: 9, asyncSequence)
+            request.body = .stream(length: .fixed(9), asyncSequence)
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }
@@ -500,7 +500,7 @@ extension Optional where Wrapped == HTTPClientRequest.Body {
             return buffer
         case .sequence(let announcedLength, _, let generate):
             let buffer = generate(ByteBufferAllocator())
-            if let announcedLength = announcedLength,
+            if case let .fixed(announcedLength) = announcedLength,
                announcedLength != buffer.readableBytes {
                 throw LengthMismatch(announcedLength: announcedLength, actualLength: buffer.readableBytes)
             }
@@ -510,7 +510,7 @@ extension Optional where Wrapped == HTTPClientRequest.Body {
             while var buffer = try await generate(ByteBufferAllocator()) {
                 accumulatedBuffer.writeBuffer(&buffer)
             }
-            if let announcedLength = announcedLength,
+            if case let .fixed(announcedLength) = announcedLength,
                announcedLength != accumulatedBuffer.readableBytes {
                 throw LengthMismatch(announcedLength: announcedLength, actualLength: accumulatedBuffer.readableBytes)
             }

@@ -12,9 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-enum RequestBodyLength: Hashable {
+public enum RequestBodyLength: Hashable {
     /// size of the request body is not known before starting the request
     case dynamic
-    /// size of the request body is fixed and exactly `length` bytes
-    case fixed(length: Int)
+    /// size of the request body is fixed and exactly `count` bytes
+    case fixed(_ count: Int)
 }

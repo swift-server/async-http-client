@@ -189,7 +189,7 @@ final class TransactionTests: XCTestCase {
 
             var request = HTTPClientRequest(url: "https://localhost/")
             request.method = .POST
-            request.body = .stream(length: nil, streamWriter)
+            request.body = .stream(length: .dynamic, streamWriter)
 
             var maybePreparedRequest: PreparedRequest?
             XCTAssertNoThrow(maybePreparedRequest = try PreparedRequest(request))
@@ -318,7 +318,7 @@ final class TransactionTests: XCTestCase {
 
             var request = HTTPClientRequest(url: "https://localhost/")
             request.method = .POST
-            request.body = .bytes(length: nil, "Hello world!".utf8)
+            request.body = .bytes(length: .dynamic, "Hello world!".utf8)
             var maybePreparedRequest: PreparedRequest?
             XCTAssertNoThrow(maybePreparedRequest = try PreparedRequest(request))
             guard let preparedRequest = maybePreparedRequest else {
@@ -360,7 +360,7 @@ final class TransactionTests: XCTestCase {
 
             var request = HTTPClientRequest(url: "https://localhost/")
             request.method = .POST
-            request.body = .stream(length: nil, writer)
+            request.body = .stream(length: .dynamic, writer)
             var maybePreparedRequest: PreparedRequest?
             XCTAssertNoThrow(maybePreparedRequest = try PreparedRequest(request))
             guard let preparedRequest = maybePreparedRequest else {
@@ -486,7 +486,7 @@ final class TransactionTests: XCTestCase {
             var request = HTTPClientRequest(url: "https://localhost:\(httpBin.port)/")
             request.method = .POST
             request.headers = ["host": "localhost:\(httpBin.port)"]
-            request.body = .stream(length: 800, streamWriter)
+            request.body = .stream(length: .fixed(800), streamWriter)
 
             var maybePreparedRequest: PreparedRequest?
             XCTAssertNoThrow(maybePreparedRequest = try PreparedRequest(request))

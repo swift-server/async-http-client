@@ -24,7 +24,7 @@ extension HTTPHeaders {
 
         if case .TRACE = method {
             switch bodyLength {
-            case .fixed(length: 0):
+            case .fixed(0):
                 break
             case .dynamic, .fixed:
                 // A client MUST NOT send a message body in a TRACE request.
