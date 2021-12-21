@@ -63,7 +63,7 @@ extension HTTPClientRequest.Body {
         _ bytes: Bytes
     ) -> Self where Bytes.Element == UInt8 {
         self.init(.sequence(
-            length: .fixed(bytes.count),
+            length: .known(bytes.count),
             canBeConsumedMultipleTimes: true
         ) { allocator in
             if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
@@ -161,8 +161,8 @@ extension HTTPClientRequest.Body {
         /// size of the request body is not known before starting the request
         public static let unknown: Self = .init(storage: .unknown)
         /// size of the request body is fixed and exactly `count` bytes
-        public static func fixed(_ count: Int) -> Self {
-            .init(storage: .fixed(count))
+        public static func known(_ count: Int) -> Self {
+            .init(storage: .known(count))
         }
 
         @usableFromInline

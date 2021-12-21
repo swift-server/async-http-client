@@ -18,5 +18,5 @@ internal enum RequestBodyLength: Hashable {
     /// size of the request body is not known before starting the request
     case unknown
     /// size of the request body is fixed and exactly `count` bytes
-    case fixed(_ count: Int)
+    case known(_ count: Int)
 }

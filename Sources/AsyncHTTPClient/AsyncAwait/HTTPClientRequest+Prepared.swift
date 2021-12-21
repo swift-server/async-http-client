@@ -63,9 +63,9 @@ extension RequestBodyLength {
     init(_ body: HTTPClientRequest.Body?) {
         switch body?.mode {
         case .none:
-            self = .fixed(0)
+            self = .known(0)
         case .byteBuffer(let buffer):
-            self = .fixed(buffer.readableBytes)
+            self = .known(buffer.readableBytes)
         case .sequence(let length, _, _), .asyncSequence(let length, _):
             self = length
         }

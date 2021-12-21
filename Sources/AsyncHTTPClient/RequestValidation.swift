@@ -24,9 +24,9 @@ extension HTTPHeaders {
 
         if case .TRACE = method {
             switch bodyLength {
-            case .fixed(0):
+            case .known(0):
                 break
-            case .unknown, .fixed:
+            case .unknown, .known:
                 // A client MUST NOT send a message body in a TRACE request.
                 // https://tools.ietf.org/html/rfc7230#section-4.3.8
                 throw HTTPClientError.traceRequestWithBody
@@ -39,7 +39,7 @@ extension HTTPHeaders {
         switch bodyLength {
         case .unknown:
             return .init(connectionClose: connectionClose, body: .stream)
-        case .fixed(let length):
+        case .known(let length):
             return .init(connectionClose: connectionClose, body: .fixedSize(length))
         }
     }
@@ -88,7 +88,7 @@ extension HTTPHeaders {
         self.remove(name: "Transfer-Encoding")
 
         switch bodyLength {
-        case .fixed(0):
+        case .known(0):
             // if we don't have a body we might not need to send the Content-Length field
             // https://tools.ietf.org/html/rfc7230#section-3.3.2
             switch method {
@@ -103,7 +103,7 @@ extension HTTPHeaders {
                 // for an enclosed payload body.
                 self.add(name: "Content-Length", value: "0")
             }
-        case .fixed(let length):
+        case .known(let length):
             self.add(name: "Content-Length", value: String(length))
         case .unknown:
             self.add(name: "Transfer-Encoding", value: "chunked")
