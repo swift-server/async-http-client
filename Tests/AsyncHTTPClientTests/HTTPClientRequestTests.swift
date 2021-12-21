@@ -297,7 +297,7 @@ class HTTPClientRequestTests: XCTestCase {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
             let sequence = AnySequence(ByteBuffer(string: "post body").readableBytesView)
-            request.body = .bytes(length: .unknown, sequence)
+            request.body = .bytes(sequence, length: .unknown)
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }
@@ -334,7 +334,7 @@ class HTTPClientRequestTests: XCTestCase {
             request.method = .POST
 
             let sequence = AnySequence(ByteBuffer(string: "post body").readableBytesView)
-            request.body = .bytes(length: .known(9), sequence)
+            request.body = .bytes(sequence, length: .known(9))
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }
@@ -411,7 +411,7 @@ class HTTPClientRequestTests: XCTestCase {
                 .asAsyncSequence()
                 .map { ByteBuffer($0) }
 
-            request.body = .stream(length: .unknown, asyncSequence)
+            request.body = .stream(asyncSequence, length: .unknown)
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }
@@ -452,7 +452,7 @@ class HTTPClientRequestTests: XCTestCase {
                 .asAsyncSequence()
                 .map { ByteBuffer($0) }
 
-            request.body = .stream(length: .known(9), asyncSequence)
+            request.body = .stream(asyncSequence, length: .known(9))
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }

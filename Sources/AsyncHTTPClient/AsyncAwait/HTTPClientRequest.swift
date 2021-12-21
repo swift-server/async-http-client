@@ -77,8 +77,8 @@ extension HTTPClientRequest.Body {
 
     @inlinable
     public static func bytes<Bytes: Sequence>(
-        length: Length,
-        _ bytes: Bytes
+        _ bytes: Bytes,
+        length: Length
     ) -> Self where Bytes.Element == UInt8 {
         self.init(.sequence(
             length: length.storage,
@@ -95,8 +95,8 @@ extension HTTPClientRequest.Body {
 
     @inlinable
     public static func bytes<Bytes: Collection>(
-        length: Length,
-        _ bytes: Bytes
+        _ bytes: Bytes,
+        length: Length
     ) -> Self where Bytes.Element == UInt8 {
         self.init(.sequence(
             length: length.storage,
@@ -113,8 +113,8 @@ extension HTTPClientRequest.Body {
 
     @inlinable
     public static func stream<SequenceOfBytes: AsyncSequence>(
-        length: Length,
-        _ sequenceOfBytes: SequenceOfBytes
+        _ sequenceOfBytes: SequenceOfBytes,
+        length: Length
     ) -> Self where SequenceOfBytes.Element == ByteBuffer {
         var iterator = sequenceOfBytes.makeAsyncIterator()
         let body = self.init(.asyncSequence(length: length.storage) { _ -> ByteBuffer? in
@@ -125,8 +125,8 @@ extension HTTPClientRequest.Body {
 
     @inlinable
     public static func stream<Bytes: AsyncSequence>(
-        length: Length,
-        _ bytes: Bytes
+        _ bytes: Bytes,
+        length: Length
     ) -> Self where Bytes.Element == UInt8 {
         var iterator = bytes.makeAsyncIterator()
         let body = self.init(.asyncSequence(length: length.storage) { allocator -> ByteBuffer? in
