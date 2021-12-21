@@ -357,8 +357,12 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let task = Task<HTTPClientResponse, Error> { [request] in
                 try await client.execute(request, deadline: .now() + .milliseconds(100), logger: logger)
             }
-            await XCTAssertThrowsError(try await task.value) {
-                XCTAssertEqual($0 as? HTTPClientError, HTTPClientError.deadlineExceeded)
+            await XCTAssertThrowsError(try await task.value) { error in
+                guard let error = error as? HTTPClientError else {
+                    return XCTFail("unexpected error \(error)")
+                }
+                // a race between deadline and connect timer can result in either error
+                XCTAssertTrue([.deadlineExceeded, .connectTimeout].contains(error))
             }
         }
         #endif
@@ -378,8 +382,12 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let task = Task<HTTPClientResponse, Error> { [request] in
                 try await client.execute(request, deadline: .now(), logger: logger)
             }
-            await XCTAssertThrowsError(try await task.value) {
-                XCTAssertEqual($0 as? HTTPClientError, HTTPClientError.deadlineExceeded)
+            await XCTAssertThrowsError(try await task.value) { error in
+                guard let error = error as? HTTPClientError else {
+                    return XCTFail("unexpected error \(error)")
+                }
+                // a race between deadline and connect timer can result in either error
+                XCTAssertTrue([.deadlineExceeded, .connectTimeout].contains(error))
             }
         }
         #endif
