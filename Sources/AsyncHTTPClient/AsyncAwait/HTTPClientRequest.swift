@@ -159,7 +159,7 @@ extension Optional where Wrapped == HTTPClientRequest.Body {
 extension HTTPClientRequest.Body {
     public struct Length {
         /// size of the request body is not known before starting the request
-        public static let dynamic: Self = .init(storage: .dynamic)
+        public static let unknown: Self = .init(storage: .unknown)
         /// size of the request body is fixed and exactly `count` bytes
         public static func fixed(_ count: Int) -> Self {
             .init(storage: .fixed(count))

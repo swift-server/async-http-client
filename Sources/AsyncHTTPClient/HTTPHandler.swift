@@ -694,7 +694,7 @@ extension RequestBodyLength {
             return
         }
         guard let length = body.length else {
-            self = .dynamic
+            self = .unknown
             return
         }
         self = .fixed(length)

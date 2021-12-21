@@ -115,7 +115,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
             var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/")
             request.method = .POST
-            request.body = .bytes(length: .dynamic, AnySequence("1234".utf8))
+            request.body = .bytes(length: .unknown, AnySequence("1234".utf8))
 
             guard let response = await XCTAssertNoThrowWithResult(
                 try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
@@ -140,7 +140,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
             var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/")
             request.method = .POST
-            request.body = .bytes(length: .dynamic, AnyCollection("1234".utf8))
+            request.body = .bytes(length: .unknown, AnyCollection("1234".utf8))
 
             guard let response = await XCTAssertNoThrowWithResult(
                 try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
@@ -190,7 +190,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
             var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/")
             request.method = .POST
-            request.body = .stream(length: .dynamic, [
+            request.body = .stream(length: .unknown, [
                 ByteBuffer(string: "1"),
                 ByteBuffer(string: "2"),
                 ByteBuffer(string: "34"),
@@ -219,7 +219,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
             var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/")
             request.method = .POST
-            request.body = .stream(length: .dynamic, "1234".utf8.asAsyncSequence())
+            request.body = .stream(length: .unknown, "1234".utf8.asAsyncSequence())
 
             guard let response = await XCTAssertNoThrowWithResult(
                 try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
@@ -245,7 +245,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/")
             request.method = .POST
             let streamWriter = AsyncSequenceWriter<ByteBuffer>()
-            request.body = .stream(length: .dynamic, streamWriter)
+            request.body = .stream(length: .unknown, streamWriter)
 
             guard let response = await XCTAssertNoThrowWithResult(
                 try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
@@ -287,7 +287,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/")
             request.method = .POST
             let streamWriter = AsyncSequenceWriter<ByteBuffer>()
-            request.body = .stream(length: .dynamic, streamWriter)
+            request.body = .stream(length: .unknown, streamWriter)
 
             guard let response = await XCTAssertNoThrowWithResult(
                 try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
@@ -330,7 +330,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             var request = HTTPClientRequest(url: "http://localhost:\(bin.port)/offline")
             request.method = .POST
             let streamWriter = AsyncSequenceWriter<ByteBuffer>()
-            request.body = .stream(length: .dynamic, streamWriter)
+            request.body = .stream(length: .unknown, streamWriter)
 
             let task = Task<HTTPClientResponse, Error> { [request] in
                 try await client.execute(request, deadline: .now() + .seconds(2), logger: logger)

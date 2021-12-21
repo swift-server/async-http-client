@@ -297,7 +297,7 @@ class HTTPClientRequestTests: XCTestCase {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
             let sequence = AnySequence(ByteBuffer(string: "post body").readableBytesView)
-            request.body = .bytes(length: .dynamic, sequence)
+            request.body = .bytes(length: .unknown, sequence)
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }
@@ -411,7 +411,7 @@ class HTTPClientRequestTests: XCTestCase {
                 .asAsyncSequence()
                 .map { ByteBuffer($0) }
 
-            request.body = .stream(length: .dynamic, asyncSequence)
+            request.body = .stream(length: .unknown, asyncSequence)
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }

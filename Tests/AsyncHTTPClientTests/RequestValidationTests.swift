@@ -149,7 +149,7 @@ class RequestValidationTests: XCTestCase {
         for method: HTTPMethod in [.GET, .HEAD, .DELETE, .CONNECT] {
             var headers: HTTPHeaders = .init()
             var metadata: RequestFramingMetadata?
-            XCTAssertNoThrow(metadata = try headers.validateAndSetTransportFraming(method: method, bodyLength: .dynamic))
+            XCTAssertNoThrow(metadata = try headers.validateAndSetTransportFraming(method: method, bodyLength: .unknown))
             XCTAssertTrue(headers["content-length"].isEmpty)
             XCTAssertTrue(headers["transfer-encoding"].contains("chunked"))
             XCTAssertEqual(metadata?.body, .stream)
@@ -169,7 +169,7 @@ class RequestValidationTests: XCTestCase {
         for method: HTTPMethod in [.POST, .PUT] {
             var headers: HTTPHeaders = .init()
             var metadata: RequestFramingMetadata?
-            XCTAssertNoThrow(metadata = try headers.validateAndSetTransportFraming(method: method, bodyLength: .dynamic))
+            XCTAssertNoThrow(metadata = try headers.validateAndSetTransportFraming(method: method, bodyLength: .unknown))
             XCTAssertTrue(headers["content-length"].isEmpty)
             XCTAssertTrue(headers["transfer-encoding"].contains("chunked"))
             XCTAssertEqual(metadata?.body, .stream)
@@ -330,7 +330,7 @@ class RequestValidationTests: XCTestCase {
 
     func testTraceMethodIsNotAllowedToHaveADynamicLengthBody() {
         var headers = HTTPHeaders()
-        XCTAssertThrowsError(try headers.validateAndSetTransportFraming(method: .TRACE, bodyLength: .dynamic)) {
+        XCTAssertThrowsError(try headers.validateAndSetTransportFraming(method: .TRACE, bodyLength: .unknown)) {
             XCTAssertEqual($0 as? HTTPClientError, .traceRequestWithBody)
         }
     }
@@ -349,7 +349,7 @@ class RequestValidationTests: XCTestCase {
         var headers: HTTPHeaders = [
             "Transfer-Encoding": "gzip, chunked",
         ]
-        XCTAssertNoThrow(try headers.validateAndSetTransportFraming(method: .POST, bodyLength: .dynamic))
+        XCTAssertNoThrow(try headers.validateAndSetTransportFraming(method: .POST, bodyLength: .unknown))
         XCTAssertEqual(headers, [
             "Transfer-Encoding": "chunked",
         ])

@@ -26,7 +26,7 @@ extension HTTPHeaders {
             switch bodyLength {
             case .fixed(0):
                 break
-            case .dynamic, .fixed:
+            case .unknown, .fixed:
                 // A client MUST NOT send a message body in a TRACE request.
                 // https://tools.ietf.org/html/rfc7230#section-4.3.8
                 throw HTTPClientError.traceRequestWithBody
@@ -37,7 +37,7 @@ extension HTTPHeaders {
 
         let connectionClose = self[canonicalForm: "connection"].lazy.map { $0.lowercased() }.contains("close")
         switch bodyLength {
-        case .dynamic:
+        case .unknown:
             return .init(connectionClose: connectionClose, body: .stream)
         case .fixed(let length):
             return .init(connectionClose: connectionClose, body: .fixedSize(length))
@@ -105,7 +105,7 @@ extension HTTPHeaders {
             }
         case .fixed(let length):
             self.add(name: "Content-Length", value: String(length))
-        case .dynamic:
+        case .unknown:
             self.add(name: "Transfer-Encoding", value: "chunked")
         }
     }
