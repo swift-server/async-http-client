@@ -75,7 +75,11 @@ extension HTTPClient {
             try redirectState.redirect(to: redirectURL.absoluteString)
             currentRedirectState = redirectState
 
-            let newRequest = preparedRequest.followingRedirect(to: redirectURL, status: response.status)
+            let newRequest = currentRequest.followingRedirect(
+                from: preparedRequest.url,
+                to: redirectURL,
+                status: response.status
+            )
 
             guard newRequest.body.canBeConsumedMultipleTimes else {
                 // we already send the request body and it cannot be send again

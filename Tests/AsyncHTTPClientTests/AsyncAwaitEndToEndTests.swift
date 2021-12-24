@@ -400,6 +400,35 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         }
         #endif
     }
+
+    func testRedirectChangesHostHeader() {
+        #if compiler(>=5.5) && canImport(_Concurrency)
+        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        XCTAsyncTest {
+            let bin = HTTPBin(.http2(compress: false))
+            defer { XCTAssertNoThrow(try bin.shutdown()) }
+            let client = makeDefaultHTTPClient()
+            defer { XCTAssertNoThrow(try client.syncShutdown()) }
+            let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+            var request = HTTPClientRequest(url: "https://127.0.0.1:\(bin.port)/redirect/target")
+            request.headers.replaceOrAdd(name: "X-Target-Redirect-URL", value: "https://localhost:\(bin.port)/echohostheader")
+
+            guard let response = await XCTAssertNoThrowWithResult(
+                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+            ) else {
+                return
+            }
+            guard let body = await XCTAssertNoThrowWithResult(try await response.body.collect()) else { return }
+            var maybeRequestInfo: RequestInfo?
+            XCTAssertNoThrow(maybeRequestInfo = try JSONDecoder().decode(RequestInfo.self, from: body))
+            guard let requestInfo = maybeRequestInfo else { return }
+
+            XCTAssertEqual(response.status, .ok)
+            XCTAssertEqual(response.version, .http2)
+            XCTAssertEqual(requestInfo.data, "localhost:\(bin.port)")
+        }
+        #endif
+    }
 }
 
 #if compiler(>=5.5.2) && canImport(_Concurrency)

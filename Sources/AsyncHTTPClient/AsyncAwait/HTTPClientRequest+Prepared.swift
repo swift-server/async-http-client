@@ -75,12 +75,16 @@ extension RequestBodyLength {
 }
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-extension HTTPClientRequest.Prepared {
-    func followingRedirect(to redirectURL: URL, status: HTTPResponseStatus) -> HTTPClientRequest {
+extension HTTPClientRequest {
+    func followingRedirect(
+        from originalURL: URL,
+        to redirectURL: URL,
+        status: HTTPResponseStatus
+    ) -> HTTPClientRequest {
         let (method, headers, body) = transformRequestForRedirect(
-            from: self.url,
-            method: self.head.method,
-            headers: self.head.headers,
+            from: originalURL,
+            method: self.method,
+            headers: self.headers,
             body: self.body,
             to: redirectURL,
             status: status
