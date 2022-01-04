@@ -41,3 +41,23 @@ public final class HTTPClientCopyingDelegate: HTTPClientResponseDelegate {
 internal func debugOnly(_ body: () -> Void) {
     assert({ body(); return true }())
 }
+
+extension BidirectionalCollection where Element: Equatable {
+    /// Returns a Boolean value indicating whether the collection ends with the specified suffix.
+    ///
+    /// If `suffix` is empty, this function returns `true`.
+    /// If all elements of the collections are equal, this function also returns `true`.
+    func hasSuffix<Suffix>(_ suffix: Suffix) -> Bool where Suffix: BidirectionalCollection, Suffix.Element == Element {
+        var ourIdx = self.endIndex
+        var suffixIdx = suffix.endIndex
+        while ourIdx > self.startIndex, suffixIdx > suffix.startIndex {
+            self.formIndex(before: &ourIdx)
+            suffix.formIndex(before: &suffixIdx)
+            guard self[ourIdx] == suffix[suffixIdx] else { return false }
+        }
+        guard suffixIdx == suffix.startIndex else {
+            return false // Exhausted self, but 'suffix' has elements remaining.
+        }
+        return true // Exhausted 'other' without finding a mismatch.
+    }
+}

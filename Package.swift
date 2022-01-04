@@ -29,9 +29,11 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.4.0"),
     ],
     targets: [
+        .target(name: "CAsyncHTTPClient"),
         .target(
             name: "AsyncHTTPClient",
             dependencies: [
+                .target(name: "CAsyncHTTPClient"),
                 .product(name: "NIO", package: "swift-nio"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),

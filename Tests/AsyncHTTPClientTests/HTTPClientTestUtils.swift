@@ -27,6 +27,11 @@ import NIOSSL
 import NIOTLS
 import NIOTransportServices
 import XCTest
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 /// Are we testing NIO Transport services
 func isTestingNIOTS() -> Bool {
@@ -58,6 +63,24 @@ let canBindIPv6Loopback: Bool = {
     try! serverChannel?.close().wait()
     return didBind
 }()
+
+/// Runs the given block in the context of a non-English C locale (in this case, German).
+/// Throws an XCTSkip error if the locale is not supported by the system.
+func withCLocaleSetToGerman(_ body: () throws -> Void) throws {
+    guard let germanLocale = newlocale(LC_TIME_MASK | LC_NUMERIC_MASK, "de_DE", nil) else {
+        if errno == ENOENT {
+            throw XCTSkip("System does not support locale de_DE")
+        } else {
+            XCTFail("Failed to create locale de_DE")
+            return
+        }
+    }
+    defer { freelocale(germanLocale) }
+
+    let oldLocale = uselocale(germanLocale)
+    defer { _ = uselocale(oldLocale) }
+    try body()
+}
 
 class TestHTTPDelegate: HTTPClientResponseDelegate {
     typealias Response = Void

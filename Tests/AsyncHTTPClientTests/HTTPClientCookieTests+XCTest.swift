@@ -32,6 +32,7 @@ extension HTTPClientCookieTests {
             ("testMalformedCookies", testMalformedCookies),
             ("testCookieExpiresDateParsing", testCookieExpiresDateParsing),
             ("testQuotedCookies", testQuotedCookies),
+            ("testCookieExpiresDateParsingWithNonEnglishLocale", testCookieExpiresDateParsingWithNonEnglishLocale),
         ]
     }
 }

@@ -519,4 +519,37 @@ class HTTPClientInternalTests: XCTestCase {
         ))
         XCTAssertEqual(request11.deconstructedURL.uri, "/foo/bar?baz")
     }
+
+    func testHasSuffix() {
+        // Simple collection.
+        do {
+            let elements = (0...10)
+            XCTAssertTrue(elements.hasSuffix([8, 9, 10]))
+            XCTAssertTrue(elements.hasSuffix([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))
+            XCTAssertTrue(elements.hasSuffix([10]))
+            XCTAssertTrue(elements.hasSuffix([]))
+
+            XCTAssertFalse(elements.hasSuffix([8, 9, 10, 11]))
+            XCTAssertFalse(elements.hasSuffix([0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))
+            XCTAssertFalse(elements.hasSuffix([9]))
+            XCTAssertFalse(elements.hasSuffix([0]))
+        }
+        // Single-element collection.
+        do {
+            let elements = [99]
+            XCTAssertTrue(elements.hasSuffix(["99"].lazy.map { Int($0)! }))
+            XCTAssertTrue(elements.hasSuffix([]))
+            XCTAssertFalse(elements.hasSuffix([98, 99]))
+            XCTAssertFalse(elements.hasSuffix([99, 99]))
+            XCTAssertFalse(elements.hasSuffix([99, 100]))
+        }
+        // Empty collection.
+        do {
+            let elements: Array<Int> = []
+            XCTAssertTrue(elements.hasSuffix([]))
+            XCTAssertFalse(elements.hasSuffix([0]))
+            XCTAssertFalse(elements.hasSuffix([42]))
+            XCTAssertFalse(elements.hasSuffix([0, 0, 0]))
+        }
+    }
 }
