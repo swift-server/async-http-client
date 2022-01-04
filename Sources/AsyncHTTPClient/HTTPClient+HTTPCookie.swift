@@ -57,10 +57,11 @@ extension HTTPClient {
             guard !trimmedName.isEmpty else {
                 return nil
             }
+
             // FIXME: The parsed values should be validated to ensure they only contain ASCII characters allowed by RFC-6265.
             // https://datatracker.ietf.org/doc/html/rfc6265#section-4.1.1
-            self.name = String(utf8Slice: trimmedName, in: header)
-            self.value = String(utf8Slice: trimmedValue.trimmingPairedASCIIQuote(), in: header)
+            self.name = String(aligningUTF8: trimmedName)
+            self.value = String(aligningUTF8: trimmedValue.trimmingPairedASCIIQuote())
             self.path = "/"
             self.domain = defaultDomain
             self.expires_timestamp = nil
@@ -71,11 +72,11 @@ extension HTTPClient {
             for component in components {
                 switch component.parseCookieComponent() {
                 case ("path", .some(let value))?:
-                    self.path = String(utf8Slice: value, in: header)
+                    self.path = String(aligningUTF8: value)
                 case ("domain", .some(let value))?:
-                    self.domain = String(utf8Slice: value, in: header)
+                    self.domain = String(aligningUTF8: value)
                 case ("expires", .some(let value))?:
-                    self.expires_timestamp = parseCookieTime(value, in: header)
+                    self.expires_timestamp = parseCookieTime(value)
                 case ("max-age", .some(let value))?:
                     self.maxAge = Int(Substring(value))
                 case ("secure", nil)?:
@@ -121,8 +122,8 @@ extension HTTPClient.Response {
 
 extension String {
     /// Creates a String from a slice of UTF8 code-units, aligning the bounds to unicode scalar boundaries if needed.
-    fileprivate init(utf8Slice: String.UTF8View.SubSequence, in base: String) {
-        self.init(base[utf8Slice.startIndex..<utf8Slice.endIndex])
+    fileprivate init(aligningUTF8 utf8Slice: String.UTF8View.SubSequence) {
+        self.init(Substring(utf8Slice))
     }
 }
 
@@ -176,33 +177,30 @@ private let posixLocale: UnsafeMutableRawPointer = {
     return UnsafeMutableRawPointer(_posixLocale)
 }()
 
-private func parseTimestamp(_ string: String, format: String) -> tm? {
+private func parseTimestamp(_ utf8: String.UTF8View.SubSequence, format: String) -> tm? {
     var timeComponents = tm()
-    guard swiftahc_cshims_strptime_l(string, format, &timeComponents, posixLocale) else {
-        return nil
+    let success = Substring(utf8).withCString { cString in
+        swiftahc_cshims_strptime_l(cString, format, &timeComponents, posixLocale)
     }
-    return timeComponents
+    return success ? timeComponents : nil
 }
 
-private func parseCookieTime(_ timestampUTF8: String.UTF8View.SubSequence, in header: String) -> Int64? {
+private func parseCookieTime(_ timestampUTF8: String.UTF8View.SubSequence) -> Int64? {
     if timestampUTF8.contains(where: { $0 < 0x20 /* Control characters */ || $0 == 0x7F /* DEL */ }) {
         return nil
     }
-    let timestampString: String
+    var timestampUTF8 = timestampUTF8
     if timestampUTF8.hasSuffix("GMT".utf8) {
         let timezoneStart = timestampUTF8.index(timestampUTF8.endIndex, offsetBy: -3)
-        let trimmedTimestampUTF8 = timestampUTF8[..<timezoneStart].trimmingASCIISpaces()
-        guard trimmedTimestampUTF8.endIndex != timezoneStart else {
+        timestampUTF8 = timestampUTF8[..<timezoneStart].trimmingASCIISpaces()
+        guard timestampUTF8.endIndex != timezoneStart else {
             return nil
         }
-        timestampString = String(utf8Slice: trimmedTimestampUTF8, in: header)
-    } else {
-        timestampString = String(utf8Slice: timestampUTF8, in: header)
     }
     guard
-        var timeComponents = parseTimestamp(timestampString, format: "%a, %d %b %Y %H:%M:%S")
-        ?? parseTimestamp(timestampString, format: "%a, %d-%b-%y %H:%M:%S")
-        ?? parseTimestamp(timestampString, format: "%a %b %d %H:%M:%S %Y")
+        var timeComponents = parseTimestamp(timestampUTF8, format: "%a, %d %b %Y %H:%M:%S")
+        ?? parseTimestamp(timestampUTF8, format: "%a, %d-%b-%y %H:%M:%S")
+        ?? parseTimestamp(timestampUTF8, format: "%a %b %d %H:%M:%S %Y")
     else {
         return nil
     }
