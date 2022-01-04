@@ -40,7 +40,8 @@ extension HTTPClient.Cookie {
     ///     - httpOnly: Whether this cookie should be used by HTTP servers only, defaults to false.
     ///     - secure: Whether this cookie should only be sent using secure channels, defaults to false.
     public init(name: String, value: String, path: String = "/", domain: String? = nil, expires: Date? = nil, maxAge: Int? = nil, httpOnly: Bool = false, secure: Bool = false) {
-        // FIXME: This should be failable (for example, if the strings contain non-ASCII characters).
+        // FIXME: This should be failable and validate the inputs
+        // (for example, checking that the strings are ASCII, path begins with "/", domain is not empty, etc).
         self.init(
             name: name,
             value: value,

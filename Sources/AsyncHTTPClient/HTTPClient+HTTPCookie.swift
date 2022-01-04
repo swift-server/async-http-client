@@ -47,6 +47,8 @@ extension HTTPClient {
         ///     - defaultDomain: Default domain to use if cookie was sent without one.
         /// - returns: nil if the header is invalid.
         public init?(header: String, defaultDomain: String) {
+            // The parsing of "Set-Cookie" headers is defined by Section 5.2, RFC-6265:
+            // https://datatracker.ietf.org/doc/html/rfc6265#section-5.2
             var components = header.utf8.split(separator: UInt8(ascii: ";"), omittingEmptySubsequences: false)[...]
             guard let keyValuePair = components.popFirst()?.trimmingASCIISpaces() else {
                 return nil
@@ -58,35 +60,59 @@ extension HTTPClient {
                 return nil
             }
 
-            // FIXME: The parsed values should be validated to ensure they only contain ASCII characters allowed by RFC-6265.
-            // https://datatracker.ietf.org/doc/html/rfc6265#section-4.1.1
             self.name = String(aligningUTF8: trimmedName)
             self.value = String(aligningUTF8: trimmedValue.trimmingPairedASCIIQuote())
-            self.path = "/"
-            self.domain = defaultDomain
             self.expires_timestamp = nil
             self.maxAge = nil
             self.httpOnly = false
             self.secure = false
 
+            var parsedPath: String.UTF8View.SubSequence?
+            var parsedDomain: String.UTF8View.SubSequence?
+
             for component in components {
                 switch component.parseCookieComponent() {
-                case ("path", .some(let value))?:
-                    self.path = String(aligningUTF8: value)
-                case ("domain", .some(let value))?:
-                    self.domain = String(aligningUTF8: value)
-                case ("expires", .some(let value))?:
-                    self.expires_timestamp = parseCookieTime(value)
-                case ("max-age", .some(let value))?:
-                    self.maxAge = Int(Substring(value))
-                case ("secure", nil)?:
+                case ("path", let value)?:
+                    // Unlike other values, unspecified, empty, and invalid paths reset to the default path.
+                    // https://datatracker.ietf.org/doc/html/rfc6265#section-5.2.4
+                    guard let value = value, value.first == UInt8(ascii: "/") else {
+                        parsedPath = nil
+                        continue
+                    }
+                    parsedPath = value
+                case ("domain", let value)?:
+                    guard var value = value, !value.isEmpty else {
+                        continue
+                    }
+                    if value.first == UInt8(ascii: ".") {
+                        value.removeFirst()
+                    }
+                    guard !value.isEmpty else {
+                        parsedDomain = nil
+                        continue
+                    }
+                    parsedDomain = value
+                case ("expires", let value)?:
+                    guard let value = value, let timestamp = parseCookieTime(value) else {
+                        continue
+                    }
+                    self.expires_timestamp = timestamp
+                case ("max-age", let value)?:
+                    guard let value = value, let age = Int(Substring(value)) else {
+                        continue
+                    }
+                    self.maxAge = age
+                case ("secure", _)?:
                     self.secure = true
-                case ("httponly", nil)?:
+                case ("httponly", _)?:
                     self.httpOnly = true
                 default:
                     continue
                 }
             }
+
+            self.domain = parsedDomain.map { Substring($0).lowercased() } ?? defaultDomain.lowercased()
+            self.path = parsedPath.map { String(aligningUTF8: $0) } ?? "/"
         }
 
         /// Create HTTP cookie.
