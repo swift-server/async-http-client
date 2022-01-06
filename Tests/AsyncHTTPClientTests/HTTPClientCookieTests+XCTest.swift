@@ -30,8 +30,15 @@ extension HTTPClientCookieTests {
             ("testCookieDefaults", testCookieDefaults),
             ("testCookieInit", testCookieInit),
             ("testMalformedCookies", testMalformedCookies),
+            ("testExpires", testExpires),
+            ("testMaxAge", testMaxAge),
+            ("testDomain", testDomain),
+            ("testPath", testPath),
+            ("testSecure", testSecure),
+            ("testHttpOnly", testHttpOnly),
             ("testCookieExpiresDateParsing", testCookieExpiresDateParsing),
             ("testQuotedCookies", testQuotedCookies),
+            ("testCookieExpiresDateParsingWithNonEnglishLocale", testCookieExpiresDateParsingWithNonEnglishLocale),
         ]
     }
 }

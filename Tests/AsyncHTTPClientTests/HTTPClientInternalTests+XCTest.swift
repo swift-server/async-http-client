@@ -35,6 +35,7 @@ extension HTTPClientInternalTests {
             ("testTaskPromiseBoundToEL", testTaskPromiseBoundToEL),
             ("testConnectErrorCalloutOnCorrectEL", testConnectErrorCalloutOnCorrectEL),
             ("testInternalRequestURI", testInternalRequestURI),
+            ("testHasSuffix", testHasSuffix),
         ]
     }
 }
