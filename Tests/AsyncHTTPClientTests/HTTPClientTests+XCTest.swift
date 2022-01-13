@@ -36,6 +36,8 @@ extension HTTPClientTests {
             ("testGet", testGet),
             ("testGetWithDifferentEventLoopBackpressure", testGetWithDifferentEventLoopBackpressure),
             ("testPost", testPost),
+            ("testPostWithGenericBody", testPostWithGenericBody),
+            ("testPostWithFoundationDataBody", testPostWithFoundationDataBody),
             ("testGetHttps", testGetHttps),
             ("testGetHttpsWithIP", testGetHttpsWithIP),
             ("testGetHTTPSWorksOnMTELGWithIP", testGetHTTPSWorksOnMTELGWithIP),

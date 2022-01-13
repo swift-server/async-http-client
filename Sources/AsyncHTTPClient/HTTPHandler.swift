@@ -49,6 +49,12 @@ extension HTTPClient {
         /// Body chunk provider.
         public var stream: (StreamWriter) -> EventLoopFuture<Void>
 
+        @inlinable
+        init(length: Int?, stream: @escaping (StreamWriter) -> EventLoopFuture<Void>) {
+            self.length = length
+            self.stream = stream
+        }
+
         /// Create and stream body using `ByteBuffer`.
         ///
         /// - parameters:
@@ -69,13 +75,14 @@ extension HTTPClient {
             return Body(length: length, stream: stream)
         }
 
-        /// Create and stream body using `Data`.
+        /// Create and stream body using a collection of bytes.
         ///
         /// - parameters:
-        ///     - data: Body `Data` representation.
-        public static func data(_ data: Data) -> Body {
-            return Body(length: data.count) { writer in
-                writer.write(.byteBuffer(ByteBuffer(bytes: data)))
+        ///     - data: Body binary representation.
+        @inlinable
+        public static func bytes<Bytes>(_ bytes: Bytes) -> Body where Bytes: RandomAccessCollection, Bytes.Element == UInt8 {
+            return Body(length: bytes.count) { writer in
+                writer.write(.byteBuffer(ByteBuffer(bytes: bytes)))
             }
         }
 

@@ -296,6 +296,29 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual("1234", data.data)
     }
 
+    func testPostWithGenericBody() throws {
+        let bodyData = Array("hello, world!").lazy.map { $0.uppercased().first!.asciiValue! }
+        let erasedData = AnyRandomAccessCollection(bodyData)
+
+        let response = try self.defaultClient.post(url: self.defaultHTTPBinURLPrefix + "post", body: .bytes(erasedData)).wait()
+        let bytes = response.body.flatMap { $0.getData(at: 0, length: $0.readableBytes) }
+        let data = try JSONDecoder().decode(RequestInfo.self, from: bytes!)
+
+        XCTAssertEqual(.ok, response.status)
+        XCTAssertEqual("HELLO, WORLD!", data.data)
+    }
+
+    func testPostWithFoundationDataBody() throws {
+        let bodyData = Data("hello, world!".utf8)
+
+        let response = try self.defaultClient.post(url: self.defaultHTTPBinURLPrefix + "post", body: .data(bodyData)).wait()
+        let bytes = response.body.flatMap { $0.getData(at: 0, length: $0.readableBytes) }
+        let data = try JSONDecoder().decode(RequestInfo.self, from: bytes!)
+
+        XCTAssertEqual(.ok, response.status)
+        XCTAssertEqual("hello, world!", data.data)
+    }
+
     func testGetHttps() throws {
         let localHTTPBin = HTTPBin(.http1_1(ssl: true))
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
