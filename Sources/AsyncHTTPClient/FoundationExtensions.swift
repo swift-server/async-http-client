@@ -54,3 +54,13 @@ extension HTTPClient.Cookie {
         )
     }
 }
+
+extension HTTPClient.Body {
+    /// Create and stream body using `Data`.
+    ///
+    /// - parameters:
+    ///     - bytes: Body `Data` representation.
+    public static func data(_ data: Data) -> HTTPClient.Body {
+        return self.bytes(data)
+    }
+}
