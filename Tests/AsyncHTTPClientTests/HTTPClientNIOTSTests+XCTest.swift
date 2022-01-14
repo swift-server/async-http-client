@@ -29,6 +29,7 @@ extension HTTPClientNIOTSTests {
             ("testTLSFailError", testTLSFailError),
             ("testConnectionFailError", testConnectionFailError),
             ("testTLSVersionError", testTLSVersionError),
+            ("testTrustRootCertificateLoadFail", testTrustRootCertificateLoadFail),
         ]
     }
 }

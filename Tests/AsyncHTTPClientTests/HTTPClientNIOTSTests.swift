@@ -51,14 +51,15 @@ class HTTPClientNIOTSTests: XCTestCase {
 
     func testTLSFailError() {
         guard isTestingNIOTS() else { return }
-        #if canImport(Network)
-            let httpBin = HTTPBin(ssl: true)
-            let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
-            defer {
-                XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
-                XCTAssertNoThrow(try httpBin.shutdown())
-            }
 
+        let httpBin = HTTPBin(ssl: true)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        #if canImport(Network)
             do {
                 _ = try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()
                 XCTFail("This should have failed")
@@ -68,6 +69,8 @@ class HTTPClientNIOTSTests: XCTestCase {
             } catch {
                 XCTFail("Error should have been NWTLSError not \(type(of: error))")
             }
+        #else
+            XCTFail("wrong OS")
         #endif
     }
 
@@ -105,6 +108,26 @@ class HTTPClientNIOTSTests: XCTestCase {
 
             XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()) { error in
                 XCTAssertEqual((error as? HTTPClient.NWTLSError)?.status, errSSLHandshakeFail)
+            }
+        #endif
+    }
+
+    func testTrustRootCertificateLoadFail() {
+        guard isTestingNIOTS() else { return }
+        #if canImport(Network)
+            if #available(macOS 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
+                let tlsConfig = TLSConfiguration.forClient(trustRoots: .file("not/a/certificate"))
+
+                XCTAssertThrowsError(try tlsConfig.getNWProtocolTLSOptions()) { error in
+                    switch error {
+                    case let error as NIOSSL.NIOSSLError where error == .failedToLoadCertificate:
+                        break
+                    default:
+                        XCTFail("\(error)")
+                    }
+                }
+            } else {
+                XCTFail("should be impossible")
             }
         #endif
     }

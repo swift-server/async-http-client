@@ -24,7 +24,7 @@ Add the following entry in your <code>Package.swift</code> to start using <code>
 ```
 and  `AsyncHTTPClient` dependency to your target:
 ```swift
-.target(name: "MyApp", dependencies: ["AsyncHTTPClient"]),
+.target(name: "MyApp", dependencies: [.product(name: "AsyncHTTPClient", package: "async-http-client")]),
 ```
 
 #### Request-Response API
@@ -94,7 +94,7 @@ let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
 ### Timeouts
 Timeouts (connect and read) can also be set using the client configuration:
 ```swift
-let timeout = HTTPClient.Timeout(connect: .seconds(1), read: .seconds(1))
+let timeout = HTTPClient.Configuration.Timeout(connect: .seconds(1), read: .seconds(1))
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
                             configuration: HTTPClient.Configuration(timeout: timeout))
 ```

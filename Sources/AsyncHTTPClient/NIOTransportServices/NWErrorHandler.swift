@@ -13,13 +13,14 @@
 //===----------------------------------------------------------------------===//
 
 #if canImport(Network)
-
     import Network
-    import NIO
-    import NIOHTTP1
-    import NIOTransportServices
+#endif
+import NIO
+import NIOHTTP1
+import NIOTransportServices
 
-    extension HTTPClient {
+extension HTTPClient {
+    #if canImport(Network)
         public struct NWPOSIXError: Error, CustomStringConvertible {
             /// POSIX error code (enum)
             public let errorCode: POSIXErrorCode
@@ -57,28 +58,35 @@
 
             public var description: String { return self.reason }
         }
+    #endif
 
-        @available(macOS 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *)
-        class NWErrorHandler: ChannelInboundHandler {
-            typealias InboundIn = HTTPClientResponsePart
+    class NWErrorHandler: ChannelInboundHandler {
+        typealias InboundIn = HTTPClientResponsePart
 
-            func errorCaught(context: ChannelHandlerContext, error: Error) {
-                context.fireErrorCaught(NWErrorHandler.translateError(error))
-            }
+        func errorCaught(context: ChannelHandlerContext, error: Error) {
+            context.fireErrorCaught(NWErrorHandler.translateError(error))
+        }
 
-            static func translateError(_ error: Error) -> Error {
-                if let error = error as? NWError {
-                    switch error {
-                    case .tls(let status):
-                        return NWTLSError(status, reason: error.localizedDescription)
-                    case .posix(let errorCode):
-                        return NWPOSIXError(errorCode, reason: error.localizedDescription)
-                    default:
-                        return error
+        static func translateError(_ error: Error) -> Error {
+            #if canImport(Network)
+                if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
+                    if let error = error as? NWError {
+                        switch error {
+                        case .tls(let status):
+                            return NWTLSError(status, reason: error.localizedDescription)
+                        case .posix(let errorCode):
+                            return NWPOSIXError(errorCode, reason: error.localizedDescription)
+                        default:
+                            return error
+                        }
                     }
+                    return error
+                } else {
+                    preconditionFailure("\(self) used on a non-NIOTS Channel")
                 }
-                return error
-            }
+            #else
+                preconditionFailure("\(self) used on a non-NIOTS Channel")
+            #endif
         }
     }
-#endif
+}

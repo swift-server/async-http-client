@@ -37,6 +37,7 @@ extension HTTPClientTests {
             ("testPost", testPost),
             ("testGetHttps", testGetHttps),
             ("testGetHttpsWithIP", testGetHttpsWithIP),
+            ("testGetHTTPSWorksOnMTELGWithIP", testGetHTTPSWorksOnMTELGWithIP),
             ("testPostHttps", testPostHttps),
             ("testHttpRedirect", testHttpRedirect),
             ("testHttpHostRedirect", testHttpHostRedirect),
@@ -116,6 +117,7 @@ extension HTTPClientTests {
             ("testLoggingCorrectlyAttachesRequestInformation", testLoggingCorrectlyAttachesRequestInformation),
             ("testNothingIsLoggedAtInfoOrHigher", testNothingIsLoggedAtInfoOrHigher),
             ("testAllMethodsLog", testAllMethodsLog),
+            ("testRequestWithBaggage", testRequestWithBaggage),
             ("testClosingIdleConnectionsInPoolLogsInTheBackground", testClosingIdleConnectionsInPoolLogsInTheBackground),
             ("testUploadStreamingNoLength", testUploadStreamingNoLength),
             ("testConnectErrorPropagatedToDelegate", testConnectErrorPropagatedToDelegate),
@@ -126,6 +128,14 @@ extension HTTPClientTests {
             ("testNoBytesSentOverBodyLimit", testNoBytesSentOverBodyLimit),
             ("testDoubleError", testDoubleError),
             ("testSSLHandshakeErrorPropagation", testSSLHandshakeErrorPropagation),
+            ("testSSLHandshakeErrorPropagationDelayedClose", testSSLHandshakeErrorPropagationDelayedClose),
+            ("testWeCloseConnectionsWhenConnectionCloseSetByServer", testWeCloseConnectionsWhenConnectionCloseSetByServer),
+            ("testBiDirectionalStreaming", testBiDirectionalStreaming),
+            ("testSynchronousHandshakeErrorReporting", testSynchronousHandshakeErrorReporting),
+            ("testFileDownloadChunked", testFileDownloadChunked),
+            ("testCloseWhileBackpressureIsExertedIsFine", testCloseWhileBackpressureIsExertedIsFine),
+            ("testErrorAfterCloseWhileBackpressureExerted", testErrorAfterCloseWhileBackpressureExerted),
+            ("testRequestSpecificTLS", testRequestSpecificTLS),
         ]
     }
 }
