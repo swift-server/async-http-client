@@ -27,13 +27,14 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.5.1"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.4.0"),
         .package(url: "https://github.com/apple/swift-distributed-tracing.git", from: "0.1.1"),
+        .package(url: "https://github.com/apple/swift-distributed-tracing-baggage", .upToNextMinor(from: "0.1.1")),
     ],
     targets: [
         .target(
             name: "AsyncHTTPClient",
             dependencies: ["NIO", "NIOHTTP1", "NIOSSL", "NIOConcurrencyHelpers", "NIOHTTPCompression",
                            "NIOFoundationCompat", "NIOTransportServices", "Logging", "Instrumentation",
-                           "Tracing", "TracingOpenTelemetrySupport"]
+                           "Tracing", "TracingOpenTelemetrySupport", "Baggage"]
         ),
         .testTarget(
             name: "AsyncHTTPClientTests",
