@@ -35,15 +35,18 @@ struct HTTPClientRequest {
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest {
     struct Body {
+        @usableFromInline
         internal enum Mode {
-            case asyncSequence(length: Int?, (ByteBufferAllocator) async throws -> ByteBuffer?)
-            case sequence(length: Int?, canBeConsumedMultipleTimes: Bool, (ByteBufferAllocator) -> ByteBuffer)
+            case asyncSequence(length: RequestBodyLength, (ByteBufferAllocator) async throws -> ByteBuffer?)
+            case sequence(length: RequestBodyLength, canBeConsumedMultipleTimes: Bool, (ByteBufferAllocator) -> ByteBuffer)
             case byteBuffer(ByteBuffer)
         }
 
-        var mode: Mode
+        @usableFromInline
+        internal var mode: Mode
 
-        private init(_ mode: Mode) {
+        @inlinable
+        internal init(_ mode: Mode) {
             self.mode = mode
         }
     }
@@ -51,16 +54,36 @@ extension HTTPClientRequest {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest.Body {
-    static func byteBuffer(_ byteBuffer: ByteBuffer) -> Self {
+    static func bytes(_ byteBuffer: ByteBuffer) -> Self {
         self.init(.byteBuffer(byteBuffer))
     }
 
     @inlinable
-    static func bytes<Bytes: Sequence>(
-        length: Int?,
+    static func bytes<Bytes: RandomAccessCollection>(
         _ bytes: Bytes
     ) -> Self where Bytes.Element == UInt8 {
-        self.init(.sequence(length: length, canBeConsumedMultipleTimes: false) { allocator in
+        self.init(.sequence(
+            length: .known(bytes.count),
+            canBeConsumedMultipleTimes: true
+        ) { allocator in
+            if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
+                // fastpath
+                return buffer
+            }
+            // potentially really slow path
+            return allocator.buffer(bytes: bytes)
+        })
+    }
+
+    @inlinable
+    static func bytes<Bytes: Sequence>(
+        _ bytes: Bytes,
+        length: Length
+    ) -> Self where Bytes.Element == UInt8 {
+        self.init(.sequence(
+            length: length.storage,
+            canBeConsumedMultipleTimes: false
+        ) { allocator in
             if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
                 // fastpath
                 return buffer
@@ -72,24 +95,13 @@ extension HTTPClientRequest.Body {
 
     @inlinable
     static func bytes<Bytes: Collection>(
-        length: Int?,
-        _ bytes: Bytes
+        _ bytes: Bytes,
+        length: Length
     ) -> Self where Bytes.Element == UInt8 {
-        self.init(.sequence(length: length, canBeConsumedMultipleTimes: true) { allocator in
-            if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
-                // fastpath
-                return buffer
-            }
-            // potentially really slow path
-            return allocator.buffer(bytes: bytes)
-        })
-    }
-
-    @inlinable
-    static func bytes<Bytes: RandomAccessCollection>(
-        _ bytes: Bytes
-    ) -> Self where Bytes.Element == UInt8 {
-        self.init(.sequence(length: bytes.count, canBeConsumedMultipleTimes: true) { allocator in
+        self.init(.sequence(
+            length: length.storage,
+            canBeConsumedMultipleTimes: true
+        ) { allocator in
             if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
                 // fastpath
                 return buffer
@@ -101,11 +113,11 @@ extension HTTPClientRequest.Body {
 
     @inlinable
     static func stream<SequenceOfBytes: AsyncSequence>(
-        length: Int?,
-        _ sequenceOfBytes: SequenceOfBytes
+        _ sequenceOfBytes: SequenceOfBytes,
+        length: Length
     ) -> Self where SequenceOfBytes.Element == ByteBuffer {
         var iterator = sequenceOfBytes.makeAsyncIterator()
-        let body = self.init(.asyncSequence(length: length) { _ -> ByteBuffer? in
+        let body = self.init(.asyncSequence(length: length.storage) { _ -> ByteBuffer? in
             try await iterator.next()
         })
         return body
@@ -113,11 +125,11 @@ extension HTTPClientRequest.Body {
 
     @inlinable
     static func stream<Bytes: AsyncSequence>(
-        length: Int?,
-        _ bytes: Bytes
+        _ bytes: Bytes,
+        length: Length
     ) -> Self where Bytes.Element == UInt8 {
         var iterator = bytes.makeAsyncIterator()
-        let body = self.init(.asyncSequence(length: length) { allocator -> ByteBuffer? in
+        let body = self.init(.asyncSequence(length: length.storage) { allocator -> ByteBuffer? in
             var buffer = allocator.buffer(capacity: 1024) // TODO: Magic number
             while buffer.writableBytes > 0, let byte = try await iterator.next() {
                 buffer.writeInteger(byte)
@@ -140,6 +152,21 @@ extension Optional where Wrapped == HTTPClientRequest.Body {
         case .sequence(_, let canBeConsumedMultipleTimes, _): return canBeConsumedMultipleTimes
         case .asyncSequence: return false
         }
+    }
+}
+
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+extension HTTPClientRequest.Body {
+    struct Length {
+        /// size of the request body is not known before starting the request
+        static let unknown: Self = .init(storage: .unknown)
+        /// size of the request body is fixed and exactly `count` bytes
+        static func known(_ count: Int) -> Self {
+            .init(storage: .known(count))
+        }
+
+        @usableFromInline
+        internal var storage: RequestBodyLength
     }
 }
 

@@ -690,13 +690,13 @@ internal struct RedirectHandler<ResponseType> {
 extension RequestBodyLength {
     init(_ body: HTTPClient.Body?) {
         guard let body = body else {
-            self = .fixed(length: 0)
+            self = .known(0)
             return
         }
         guard let length = body.length else {
-            self = .dynamic
+            self = .unknown
             return
         }
-        self = .fixed(length: length)
+        self = .known(length)
     }
 }

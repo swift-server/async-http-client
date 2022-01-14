@@ -12,9 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-enum RequestBodyLength: Hashable {
+/// - Note: use `HTTPClientRequest.Body.Length` if you want to expose `RequestBodyLength` publicly
+@usableFromInline
+internal enum RequestBodyLength: Hashable {
     /// size of the request body is not known before starting the request
-    case dynamic
-    /// size of the request body is fixed and exactly `length` bytes
-    case fixed(length: Int)
+    case unknown
+    /// size of the request body is fixed and exactly `count` bytes
+    case known(_ count: Int)
 }

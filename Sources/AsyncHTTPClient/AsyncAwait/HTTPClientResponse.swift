@@ -48,25 +48,22 @@ struct HTTPClientResponse {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body: AsyncSequence {
-    typealias Element = ByteBuffer
-    typealias AsyncIterator = Iterator
+    typealias Element = AsyncIterator.Element
 
-    struct Iterator: AsyncIteratorProtocol {
-        typealias Element = ByteBuffer
-
+    struct AsyncIterator: AsyncIteratorProtocol {
         private let stream: IteratorStream
 
         fileprivate init(stream: IteratorStream) {
             self.stream = stream
         }
 
-        func next() async throws -> ByteBuffer? {
+        mutating func next() async throws -> ByteBuffer? {
             try await self.stream.next()
         }
     }
 
-    func makeAsyncIterator() -> Iterator {
-        Iterator(stream: IteratorStream(bag: self.bag))
+    func makeAsyncIterator() -> AsyncIterator {
+        AsyncIterator(stream: IteratorStream(bag: self.bag))
     }
 }
 
