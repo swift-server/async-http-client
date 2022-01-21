@@ -17,7 +17,6 @@ import Network
 #endif
 import NIOCore
 import NIOHTTP1
-import NIOTransportServices
 
 extension HTTPClient {
     #if canImport(Network)
