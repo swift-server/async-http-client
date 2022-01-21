@@ -286,7 +286,7 @@ extension HTTPClient {
         }
 
         public static func basic(username: String, password: String) -> HTTPClient.Authorization {
-            return .basic(credentials: Data("\(username):\(password)".utf8).base64EncodedString())
+            return .basic(credentials: Base64.encode(bytes: "\(username):\(password)".utf8))
         }
 
         public static func basic(credentials: String) -> HTTPClient.Authorization {

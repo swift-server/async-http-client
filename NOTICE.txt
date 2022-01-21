@@ -53,3 +53,10 @@ This product contains a derivation of the Tony Stone's 'process_test_files.rb'.
     * https://github.com/tonystone/build-tools/blob/master/source/xctest_tool.rb
 
 ---
+
+This product contains a derivation of Fabian Fett's 'Base64.swift'.
+
+  * LICENSE (Apache License 2.0):
+    * https://github.com/fabianfett/swift-base64-kit/blob/master/LICENSE
+  * HOMEPAGE:
+    * https://github.com/fabianfett/swift-base64-kit
