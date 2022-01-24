@@ -127,10 +127,10 @@ extension RequestBag.StateMachine {
             return .none
 
         case .finished:
-            preconditionFailure("Invalid state")
+            preconditionFailure("Invalid state: \(self.state)")
 
         case .modifying:
-            preconditionFailure("Invalid state")
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
@@ -158,7 +158,7 @@ extension RequestBag.StateMachine {
             // the request is already finished nothing further to do
             break
         case .modifying:
-            preconditionFailure("Invalid state")
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
@@ -205,7 +205,7 @@ extension RequestBag.StateMachine {
         case .finished(error: .none):
             return .failFuture(HTTPClientError.requestStreamCancelled)
         case .modifying:
-            preconditionFailure("Invalid state")
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
@@ -251,7 +251,7 @@ extension RequestBag.StateMachine {
         case .finished(error: _):
             return .none
         case .modifying:
-            preconditionFailure("Invalid state")
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
@@ -282,7 +282,7 @@ extension RequestBag.StateMachine {
         case .finished(error: .none):
             preconditionFailure("How can the request be finished without error, before receiving response head?")
         case .modifying:
-            preconditionFailure("Invalid state")
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
@@ -319,7 +319,7 @@ extension RequestBag.StateMachine {
         case .finished(error: .none):
             preconditionFailure("How can the request be finished without error, before receiving response head?")
         case .modifying:
-            preconditionFailure("Invalid state")
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
@@ -371,7 +371,7 @@ extension RequestBag.StateMachine {
         case .finished(error: .none):
             preconditionFailure("How can the request be finished without error, before receiving response head?")
         case .modifying:
-            preconditionFailure("Invalid state")
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
@@ -395,7 +395,7 @@ extension RequestBag.StateMachine {
     private mutating func failWithConsumptionError(_ error: Error) -> ConsumeAction {
         switch self.state {
         case .initialized, .queued:
-            preconditionFailure("Invalid state")
+            preconditionFailure("Invalid state: \(self.state)")
         case .executing(_, _, .initialized):
             preconditionFailure("Invalid state: Must have received response head, before this method is called for the first time")
 
@@ -518,7 +518,7 @@ extension RequestBag.StateMachine {
             // this might happen, if the stream consumer has failed... let's just drop the data
             return .none
         case .modifying:
-            preconditionFailure("Invalid state")
+            preconditionFailure("Invalid state: \(self.state)")
         }
     }
 }

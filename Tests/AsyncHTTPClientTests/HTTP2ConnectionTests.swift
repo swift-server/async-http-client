@@ -352,7 +352,7 @@ extension TestConnectionCreator: HTTPConnectionRequester {
                 return .fail(promise, Error.wantedHTTP2ConnectionButGotHTTP1)
 
             case .idle:
-                preconditionFailure("Invalid state")
+                preconditionFailure("Invalid state: \(self.state)")
             }
         }
         wrapper.complete()
@@ -369,7 +369,7 @@ extension TestConnectionCreator: HTTPConnectionRequester {
                 return .succeed(promise, connection)
 
             case .idle:
-                preconditionFailure("Invalid state")
+                preconditionFailure("Invalid state: \(self.state)")
             }
         }
         wrapper.complete()
@@ -400,7 +400,7 @@ extension TestConnectionCreator: HTTPConnectionRequester {
                 return .type2(promise)
 
             case .idle:
-                preconditionFailure("Invalid state")
+                preconditionFailure("Invalid state: \(self.state)")
             }
         }
         wrapper.fail(error)
