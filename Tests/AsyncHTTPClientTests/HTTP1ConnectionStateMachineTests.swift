@@ -267,6 +267,20 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelRead(.head(responseHead)), .wait)
         XCTAssertEqual(state.channelInactive(), .failRequest(HTTPClientError.remoteConnectionClosed, .none))
     }
+
+    func testWeDontCrashInRaceBetweenSchedulingNewRequestAndConnectionClose() {
+        var state = HTTP1ConnectionStateMachine()
+        XCTAssertEqual(state.channelActive(isWritable: true), .fireChannelActive)
+        XCTAssertEqual(state.channelInactive(), .fireChannelInactive)
+
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
+        let newRequestAction = state.runNewRequest(head: requestHead, metadata: metadata)
+        guard case .failRequest(let error, .none) = newRequestAction else {
+            return XCTFail("Unexpected test case")
+        }
+        XCTAssertEqual(error as? HTTPClientError, .remoteConnectionClosed)
+    }
 }
 
 extension HTTP1ConnectionStateMachine.Action: Equatable {
