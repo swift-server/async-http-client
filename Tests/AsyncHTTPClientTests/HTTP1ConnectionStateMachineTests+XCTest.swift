@@ -42,6 +42,7 @@ extension HTTP1ConnectionStateMachineTests {
             ("testConnectionIsClosedIfErrorHappensWhileInRequest", testConnectionIsClosedIfErrorHappensWhileInRequest),
             ("testConnectionIsClosedAfterSwitchingProtocols", testConnectionIsClosedAfterSwitchingProtocols),
             ("testWeDontCrashAfterEarlyHintsAndConnectionClose", testWeDontCrashAfterEarlyHintsAndConnectionClose),
+            ("testWeDontCrashInRaceBetweenSchedulingNewRequestAndConnectionClose", testWeDontCrashInRaceBetweenSchedulingNewRequestAndConnectionClose),
         ]
     }
 }
