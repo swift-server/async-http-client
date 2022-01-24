@@ -158,17 +158,35 @@ struct HTTP1ConnectionStateMachine {
         head: HTTPRequestHead,
         metadata: RequestFramingMetadata
     ) -> Action {
-        guard case .idle = self.state else {
+        switch self.state {
+        case .initialized, .closing, .inRequest:
+            // These states are unreachable as the connection pool state machine has put the
+            // connection into these states. In other words the connection pool state machine must
+            // be aware about these states before the connection itself. For this reason the
+            // connection pool state machine must not send a new request to the connection, if the
+            // connection is `.initialized`, `.closing` or `.inRequest`
+            preconditionFailure("Invalid state: \(self.state)")
+
+        case .closed:
+            // The remote may have closed the connection and the connection pool state machine
+            // was not updated yet because of a race condition. New request vs. marking connection
+            // as closed.
+            //
+            // TODO: AHC should support a fast rescheduling mechanism here.
+            return .failRequest(HTTPClientError.remoteConnectionClosed, .none)
+
+        case .idle:
+            var requestStateMachine = HTTPRequestStateMachine(isChannelWritable: self.isChannelWritable)
+            let action = requestStateMachine.startRequest(head: head, metadata: metadata)
+
+            // by default we assume a persistent connection. however in `requestVerified`, we read the
+            // "connection" header.
+            self.state = .inRequest(requestStateMachine, close: metadata.connectionClose)
+            return self.state.modify(with: action)
+
+        case .modifying:
             preconditionFailure("Invalid state: \(self.state)")
         }
-
-        var requestStateMachine = HTTPRequestStateMachine(isChannelWritable: self.isChannelWritable)
-        let action = requestStateMachine.startRequest(head: head, metadata: metadata)
-
-        // by default we assume a persistent connection. however in `requestVerified`, we read the
-        // "connection" header.
-        self.state = .inRequest(requestStateMachine, close: metadata.connectionClose)
-        return self.state.modify(with: action)
     }
 
     mutating func requestStreamPartReceived(_ part: IOData) -> Action {
