@@ -30,13 +30,37 @@ extension HTTPClient {
     func execute(
         _ request: HTTPClientRequest,
         deadline: NIODeadline,
-        logger: Logger
+        logger: Logger? = nil
     ) async throws -> HTTPClientResponse {
         try await self.executeAndFollowRedirectsIfNeeded(
             request,
             deadline: deadline,
-            logger: logger,
+            logger: logger ?? Self.loggingDisabled,
             redirectState: RedirectState(self.configuration.redirectConfiguration.mode, initialURL: request.url)
+        )
+    }
+}
+
+// MARK: Connivence methods
+
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+extension HTTPClient {
+    /// Execute arbitrary HTTP requests.
+    ///
+    /// - Parameters:
+    ///   - request: HTTP request to execute.
+    ///   - timeout: time the the request has to complete.
+    ///   - logger: The logger to use for this request.
+    /// - Returns: The response to the request. Note that the `body` of the response may not yet have been fully received.
+    func execute(
+        _ request: HTTPClientRequest,
+        timeout: TimeAmount,
+        logger: Logger? = nil
+    ) async throws -> HTTPClientResponse {
+        try await self.execute(
+            request,
+            deadline: .now() + timeout,
+            logger: logger
         )
     }
 }
