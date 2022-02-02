@@ -410,8 +410,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testRedirectChangesHostHeader() {
-        #if compiler(>=5.5) && canImport(_Concurrency)
-        guard #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) else { return }
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
