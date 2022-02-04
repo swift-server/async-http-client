@@ -437,6 +437,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         }
         #endif
     }
+
     func testShutdown() {
         #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
