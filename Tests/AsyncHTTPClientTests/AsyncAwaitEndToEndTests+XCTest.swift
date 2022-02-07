@@ -40,6 +40,7 @@ extension AsyncAwaitEndToEndTests {
             ("testImmediateDeadline", testImmediateDeadline),
             ("testInvalidURL", testInvalidURL),
             ("testRedirectChangesHostHeader", testRedirectChangesHostHeader),
+            ("testShutdown", testShutdown),
         ]
     }
 }
