@@ -17,7 +17,7 @@
 extension HTTPClient {
     /// Shuts down the client and `EventLoopGroup` if it was created by the client.
     @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-    func shutdown() async throws {
+    public func shutdown() async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             self.shutdown { error in
                 switch error {
