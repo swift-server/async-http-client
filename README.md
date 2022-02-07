@@ -2,6 +2,7 @@
 This package provides simple HTTP Client library built on top of SwiftNIO.
 
 This library provides the following:
+- First class support for Swift Concurrency (since version 1.9.0)
 - Asynchronous and non-blocking request methods
 - Simple follow-redirects (cookie headers are dropped)
 - Streaming body download
@@ -11,7 +12,7 @@ This library provides the following:
 
 ---
 
-**NOTE**: You will need [Xcode 11.4](https://apps.apple.com/gb/app/xcode/id497799835?mt=12) or [Swift 5.2](https://swift.org/download/#swift-52) to try out `AsyncHTTPClient`.
+**NOTE**: You will need [Xcode 13.2](https://apps.apple.com/gb/app/xcode/id497799835?mt=12) or [Swift 5.5.2](https://swift.org/download/#swift-552) to try out `AsyncHTTPClient`s new async/await APIs.
 
 ---
 
@@ -21,7 +22,7 @@ This library provides the following:
 Add the following entry in your <code>Package.swift</code> to start using <code>HTTPClient</code>:
 
 ```swift
-.package(url: "https://github.com/swift-server/async-http-client.git", from: "1.0.0")
+.package(url: "https://github.com/swift-server/async-http-client.git", from: "1.9.0")
 ```
 and  `AsyncHTTPClient` dependency to your target:
 ```swift
@@ -40,7 +41,21 @@ If your application does not use SwiftNIO yet, it is acceptable to use `eventLoo
 import AsyncHTTPClient
 
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
-httpClient.get(url: "https://swift.org").whenComplete { result in
+
+/// MARK: - Using Swift Concurrency
+let request = HTTPClientRequest(url: "https://apple.com/")
+let response = try await httpClient.execute(request, timeout: .seconds(30))
+print("HTTP head", response)
+if response.status == .ok {
+    let body = try await response.body.collect(upTo: 1024 * 1024) // 1 MB
+    // handle body
+} else {
+    // handle remote error
+}
+
+
+/// MARK: - Using SwiftNIO EventLoopFuture
+httpClient.get(url: "https://apple.com/").whenComplete { result in
     switch result {
     case .failure(let error):
         // process error
@@ -58,7 +73,32 @@ You should always shut down `HTTPClient` instances you created using `try httpCl
 
 ## Usage guide
 
-Most common HTTP methods are supported out of the box. In case you need to have more control over the method, or you want to add headers or body, use the `HTTPRequest` struct:
+The default HTTP Method is `GET`. In case you need to have more control over the method, or you want to add headers or body, use the `HTTPClientRequest` struct:
+#### Using Swift Concurrency
+```swift
+import AsyncHTTPClient
+
+let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+do {
+    var request = HTTPClientRequest(url: "https://apple.com/")
+    request.method = .POST
+    request.headers.add(name: "User-Agent", value: "Swift HTTPClient")
+    request.body = .bytes(ByteBuffer(string: "some data"))
+
+    let response = try await httpClient.execute(request, timeout: .seconds(30))
+    if response.status == .ok {
+        // handle response
+    } else {
+        // handle remote error
+    }
+} catch {
+    // handle error
+}
+// it's important to shutdown the httpClient after all requests are done, even if one failed
+try await httpClient.shutdown()
+```
+
+#### Using SwiftNIO EventLoopFuture
 ```swift
 import AsyncHTTPClient
 
@@ -67,7 +107,7 @@ defer {
     try? httpClient.syncShutdown()
 }
 
-var request = try HTTPClient.Request(url: "https://swift.org", method: .POST)
+var request = try HTTPClient.Request(url: "https://apple.com/", method: .POST)
 request.headers.add(name: "User-Agent", value: "Swift HTTPClient")
 request.body = .string("some-body")
 
@@ -105,7 +145,38 @@ httpClient.execute(request: request, deadline: .now() + .milliseconds(1))
 ```
 
 ### Streaming
-When dealing with larger amount of data, it's critical to stream the response body instead of aggregating in-memory. Handling a response stream is done using a delegate protocol. The following example demonstrates how to count the number of bytes in a streaming response body:
+When dealing with larger amount of data, it's critical to stream the response body instead of aggregating in-memory. 
+The following example demonstrates how to count the number of bytes in a streaming response body:
+
+#### Using Swift Concurrency
+```swift
+let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+
+let request = HTTPClientRequest(url: "https://apple.com/")
+let response = try await httpClient.execute(request, timeout: .seconds(30))
+print("HTTP head", response)
+
+// if defined, the content-length headers announces the size of the body
+let expectedBytes = response.headers.first(name: "content-length").flatMap(Int.init)
+
+var receivedBytes = 0
+// asynchronously iterates over all body fragments.
+for try await buffer in response.body {
+    // For this example, we are just interested in the size of the fragment
+    receivedBytes += buffer.readableBytes
+    
+    if let expectedBytes = expectedBytes {
+        // if the body size is known, we calculate a progress indicator
+        let progress = Double(receivedBytes)/Double(expectedBytes)
+        print("progress: \(Int(progress * 100))%")
+    }
+    // in case backpressure is needed, all reads will be paused until the end of the for loop.
+}
+print("did receive \(receivedBytes) bytes")
+```
+
+#### Using HTTPClientResponseDelegate and SwiftNIO EventLoopFuture
+
 ```swift
 import NIOCore
 import NIOHTTP1
@@ -158,7 +229,7 @@ class CountingDelegate: HTTPClientResponseDelegate {
     }
 }
 
-let request = try HTTPClient.Request(url: "https://swift.org")
+let request = try HTTPClient.Request(url: "https://apple.com/")
 let delegate = CountingDelegate()
 
 httpClient.execute(request: request, delegate: delegate).futureResult.whenSuccess { count in
