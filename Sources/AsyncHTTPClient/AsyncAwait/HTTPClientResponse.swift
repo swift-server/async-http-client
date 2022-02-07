@@ -47,6 +47,13 @@ public struct HTTPClientResponse {
 }
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+extension HTTPClientResponse: CustomStringConvertible {
+    public var description: String {
+        return "HTTPClientResponse(version: \(self.version), status: \(self.status), headers: \(self.headers))"
+    }
+}
+
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body: AsyncSequence {
     public typealias Element = AsyncIterator.Element
 
