@@ -27,20 +27,20 @@ struct StreamingByteCounter {
             let request = HTTPClientRequest(url: "https://apple.com")
             let response = try await httpClient.execute(request, timeout: .seconds(30))
             print("HTTP head", response)
-            
+
             // if defined, the content-length headers announces the size of the body
             let expectedBytes = response.headers.first(name: "content-length").flatMap(Int.init)
-            
+
             var receivedBytes = 0
             // asynchronously iterates over all body fragments
             // this loop will automatically propagate backpressure correctly
             for try await buffer in response.body {
                 // For this example, we are just interested in the size of the fragment
                 receivedBytes += buffer.readableBytes
-                
+
                 if let expectedBytes = expectedBytes {
                     // if the body size is known, we calculate a progress indicator
-                    let progress = Double(receivedBytes)/Double(expectedBytes)
+                    let progress = Double(receivedBytes) / Double(expectedBytes)
                     print("progress: \(Int(progress * 100))%")
                 }
                 // in case backpressure is needed, all reads will be paused until returned future is resolved

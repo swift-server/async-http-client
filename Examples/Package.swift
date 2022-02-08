@@ -24,13 +24,14 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", .branch("main")),
-        
+
         // in real-world projects this would be
         // .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.9.0")
         .package(name: "async-http-client", path: "../"),
     ],
     targets: [
         // MARK: - Examples
+
         .executableTarget(
             name: "GetHTML",
             dependencies: [

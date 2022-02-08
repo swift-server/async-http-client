@@ -14,8 +14,8 @@
 
 // TODO: remove @testable after async/await API is public
 @testable import AsyncHTTPClient
-import NIOCore
 import Foundation
+import NIOCore
 import NIOFoundationCompat
 
 #if compiler(>=5.5.2) && canImport(_Concurrency)
