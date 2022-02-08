@@ -74,7 +74,9 @@ You should always shut down `HTTPClient` instances you created using `try httpCl
 ## Usage guide
 
 The default HTTP Method is `GET`. In case you need to have more control over the method, or you want to add headers or body, use the `HTTPClientRequest` struct:
+
 #### Using Swift Concurrency
+
 ```swift
 import AsyncHTTPClient
 
@@ -99,6 +101,7 @@ try await httpClient.shutdown()
 ```
 
 #### Using SwiftNIO EventLoopFuture
+
 ```swift
 import AsyncHTTPClient
 
@@ -151,28 +154,33 @@ The following example demonstrates how to count the number of bytes in a streami
 #### Using Swift Concurrency
 ```swift
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+do {
+    let request = HTTPClientRequest(url: "https://apple.com/")
+    let response = try await httpClient.execute(request, timeout: .seconds(30))
+    print("HTTP head", response)
 
-let request = HTTPClientRequest(url: "https://apple.com/")
-let response = try await httpClient.execute(request, timeout: .seconds(30))
-print("HTTP head", response)
+    // if defined, the content-length headers announces the size of the body
+    let expectedBytes = response.headers.first(name: "content-length").flatMap(Int.init)
 
-// if defined, the content-length headers announces the size of the body
-let expectedBytes = response.headers.first(name: "content-length").flatMap(Int.init)
-
-var receivedBytes = 0
-// asynchronously iterates over all body fragments.
-for try await buffer in response.body {
-    // For this example, we are just interested in the size of the fragment
-    receivedBytes += buffer.readableBytes
-    
-    if let expectedBytes = expectedBytes {
-        // if the body size is known, we calculate a progress indicator
-        let progress = Double(receivedBytes)/Double(expectedBytes)
-        print("progress: \(Int(progress * 100))%")
+    var receivedBytes = 0
+    // asynchronously iterates over all body fragments
+    // this loop will automatically propagate backpressure correctly
+    for try await buffer in response.body {
+        // for this example, we are just interested in the size of the fragment
+        receivedBytes += buffer.readableBytes
+        
+        if let expectedBytes = expectedBytes {
+            // if the body size is known, we calculate a progress indicator
+            let progress = Double(receivedBytes)/Double(expectedBytes)
+            print("progress: \(Int(progress * 100))%")
+        }
     }
-    // in case backpressure is needed, all reads will be paused until the end of the for loop.
+    print("did receive \(receivedBytes) bytes")
+} catch {
+    print("request failed:", error) 
 }
-print("did receive \(receivedBytes) bytes")
+// it is important to shutdown the httpClient after all requests are done, even if one failed 
+try await httpClient.shutdown()
 ```
 
 #### Using HTTPClientResponseDelegate and SwiftNIO EventLoopFuture
