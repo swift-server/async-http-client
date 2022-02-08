@@ -17,14 +17,14 @@ import NIOCore
 import NIOHTTP1
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-struct HTTPClientRequest {
-    var url: String
-    var method: HTTPMethod
-    var headers: HTTPHeaders
+public struct HTTPClientRequest {
+    public var url: String
+    public var method: HTTPMethod
+    public var headers: HTTPHeaders
 
-    var body: Body?
+    public var body: Body?
 
-    init(url: String) {
+    public init(url: String) {
         self.url = url
         self.method = .GET
         self.headers = .init()
@@ -34,7 +34,7 @@ struct HTTPClientRequest {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest {
-    struct Body {
+    public struct Body {
         @usableFromInline
         internal enum Mode {
             case asyncSequence(length: RequestBodyLength, (ByteBufferAllocator) async throws -> ByteBuffer?)
@@ -54,12 +54,12 @@ extension HTTPClientRequest {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest.Body {
-    static func bytes(_ byteBuffer: ByteBuffer) -> Self {
+    public static func bytes(_ byteBuffer: ByteBuffer) -> Self {
         self.init(.byteBuffer(byteBuffer))
     }
 
     @inlinable
-    static func bytes<Bytes: RandomAccessCollection>(
+    public static func bytes<Bytes: RandomAccessCollection>(
         _ bytes: Bytes
     ) -> Self where Bytes.Element == UInt8 {
         self.init(.sequence(
@@ -76,7 +76,7 @@ extension HTTPClientRequest.Body {
     }
 
     @inlinable
-    static func bytes<Bytes: Sequence>(
+    public static func bytes<Bytes: Sequence>(
         _ bytes: Bytes,
         length: Length
     ) -> Self where Bytes.Element == UInt8 {
@@ -94,7 +94,7 @@ extension HTTPClientRequest.Body {
     }
 
     @inlinable
-    static func bytes<Bytes: Collection>(
+    public static func bytes<Bytes: Collection>(
         _ bytes: Bytes,
         length: Length
     ) -> Self where Bytes.Element == UInt8 {
@@ -112,7 +112,7 @@ extension HTTPClientRequest.Body {
     }
 
     @inlinable
-    static func stream<SequenceOfBytes: AsyncSequence>(
+    public static func stream<SequenceOfBytes: AsyncSequence>(
         _ sequenceOfBytes: SequenceOfBytes,
         length: Length
     ) -> Self where SequenceOfBytes.Element == ByteBuffer {
@@ -124,7 +124,7 @@ extension HTTPClientRequest.Body {
     }
 
     @inlinable
-    static func stream<Bytes: AsyncSequence>(
+    public static func stream<Bytes: AsyncSequence>(
         _ bytes: Bytes,
         length: Length
     ) -> Self where Bytes.Element == UInt8 {
@@ -157,11 +157,11 @@ extension Optional where Wrapped == HTTPClientRequest.Body {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest.Body {
-    struct Length {
+    public struct Length {
         /// size of the request body is not known before starting the request
-        static let unknown: Self = .init(storage: .unknown)
+        public static let unknown: Self = .init(storage: .unknown)
         /// size of the request body is fixed and exactly `count` bytes
-        static func known(_ count: Int) -> Self {
+        public static func known(_ count: Int) -> Self {
             .init(storage: .known(count))
         }
 
