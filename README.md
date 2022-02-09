@@ -171,7 +171,7 @@ do {
         
         if let expectedBytes = expectedBytes {
             // if the body size is known, we calculate a progress indicator
-            let progress = Double(receivedBytes)/Double(expectedBytes)
+            let progress = Double(receivedBytes) / Double(expectedBytes)
             print("progress: \(Int(progress * 100))%")
         }
     }
