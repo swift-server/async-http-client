@@ -17,6 +17,12 @@ import PackageDescription
 
 let package = Package(
     name: "async-http-client-examples",
+    platforms: [
+        .macOS(.v10_15),
+        .iOS(.v13),
+        .tvOS(.v13),
+        .watchOS(.v6),
+    ],
     products: [
         .executable(name: "GetHTML", targets: ["GetHTML"]),
         .executable(name: "GetJSON", targets: ["GetJSON"]),

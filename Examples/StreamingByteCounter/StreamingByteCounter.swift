@@ -12,14 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-// TODO: remove @testable after async/await API is public
-@testable import AsyncHTTPClient
+import AsyncHTTPClient
 import NIOCore
 
-#if compiler(>=5.5.2) && canImport(_Concurrency)
-
 @main
-@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 struct StreamingByteCounter {
     static func main() async throws {
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
@@ -53,5 +49,3 @@ struct StreamingByteCounter {
         try await httpClient.shutdown()
     }
 }
-
-#endif

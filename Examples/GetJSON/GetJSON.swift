@@ -12,13 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-// TODO: remove @testable after async/await API is public
-@testable import AsyncHTTPClient
+import AsyncHTTPClient
 import Foundation
 import NIOCore
 import NIOFoundationCompat
-
-#if compiler(>=5.5.2) && canImport(_Concurrency)
 
 struct Comic: Codable {
     var num: Int
@@ -34,7 +31,6 @@ struct Comic: Codable {
 }
 
 @main
-@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 struct GetJSON {
     static func main() async throws {
         let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
@@ -43,6 +39,8 @@ struct GetJSON {
             let response = try await httpClient.execute(request, timeout: .seconds(30))
             print("HTTP head", response)
             let body = try await response.body.collect(upTo: 1024 * 1024) // 1 MB
+            // we use an overload defined in `NIOFoundationCompat` for `decode(_:from:)` to
+            // efficiently decode from a `ByteBuffer`
             let comic = try JSONDecoder().decode(Comic.self, from: body)
             dump(comic)
         } catch {
@@ -52,5 +50,3 @@ struct GetJSON {
         try await httpClient.shutdown()
     }
 }
-
-#endif
