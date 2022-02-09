@@ -39,7 +39,6 @@ struct StreamingByteCounter {
                     let progress = Double(receivedBytes) / Double(expectedBytes)
                     print("progress: \(Int(progress * 100))%")
                 }
-                // in case backpressure is needed, all reads will be paused until returned future is resolved
             }
             print("did receive \(receivedBytes) bytes")
         } catch {
