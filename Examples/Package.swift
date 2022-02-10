@@ -29,7 +29,7 @@ let package = Package(
         .executable(name: "StreamingByteCounter", targets: ["StreamingByteCounter"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", .branch("main")),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.38.0"),
 
         // in real-world projects this would be
         // .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.9.0")
