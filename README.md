@@ -71,6 +71,10 @@ httpClient.get(url: "https://apple.com/").whenComplete { result in
 
 You should always shut down `HTTPClient` instances you created using `try httpClient.syncShutdown()`. Please note that you must not call `httpClient.syncShutdown` before all requests of the HTTP client have finished, or else the in-flight requests will likely fail because their network connections are interrupted.
 
+### async/await examples
+
+Examples for the async/await API can be found in the [`Examples` folder](./Examples) in this Repository.
+
 ## Usage guide
 
 The default HTTP Method is `GET`. In case you need to have more control over the method, or you want to add headers or body, use the `HTTPClientRequest` struct:
