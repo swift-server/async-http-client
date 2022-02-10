@@ -313,6 +313,32 @@ class HTTP2ClientTests: XCTestCase {
         }
     }
 
+    func testH2CanHandleRequestsThatHaveAlreadyHitTheDeadline() {
+        let bin = HTTPBin(.http2(compress: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+        var config = HTTPClient.Configuration()
+        var tlsConfig = TLSConfiguration.makeClientConfiguration()
+        tlsConfig.certificateVerification = .none
+        config.tlsConfiguration = tlsConfig
+        config.httpVersion = .automatic
+        let client = HTTPClient(
+            eventLoopGroupProvider: .createNew,
+            configuration: config,
+            backgroundActivityLogger: Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+        )
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        var request: HTTPClient.Request?
+        XCTAssertNoThrow(request = try HTTPClient.Request(url: "https://localhost:\(bin.port)"))
+
+        // just to establish an existing connection
+        XCTAssertNoThrow(try client.execute(request: XCTUnwrap(request)).wait())
+
+        XCTAssertThrowsError(try client.execute(request: XCTUnwrap(request), deadline: .now() - .seconds(2)).wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .deadlineExceeded)
+        }
+    }
+
     func testStressCancelingRunningRequestFromDifferentThreads() {
         let bin = HTTPBin(.http2(compress: false)) { _ in SendHeaderAndWaitChannelHandler() }
         defer { XCTAssertNoThrow(try bin.shutdown()) }

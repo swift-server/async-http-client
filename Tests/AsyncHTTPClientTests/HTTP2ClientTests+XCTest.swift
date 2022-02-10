@@ -34,6 +34,7 @@ extension HTTP2ClientTests {
             ("testUncleanShutdownCancelsExecutingAndQueuedTasks", testUncleanShutdownCancelsExecutingAndQueuedTasks),
             ("testCancelingRunningRequest", testCancelingRunningRequest),
             ("testReadTimeout", testReadTimeout),
+            ("testH2CanHandleRequestsThatHaveAlreadyHitTheDeadline", testH2CanHandleRequestsThatHaveAlreadyHitTheDeadline),
             ("testStressCancelingRunningRequestFromDifferentThreads", testStressCancelingRunningRequestFromDifferentThreads),
             ("testPlatformConnectErrorIsForwardedOnTimeout", testPlatformConnectErrorIsForwardedOnTimeout),
         ]
