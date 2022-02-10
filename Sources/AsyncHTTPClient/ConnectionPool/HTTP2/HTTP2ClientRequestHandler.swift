@@ -198,7 +198,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             self.request = nil
             self.runTimeoutAction(.clearIdleReadTimeoutTimer, context: context)
             // No matter the error reason, we must always make sure the h2 stream is closed. Only
-            // once the h2 stream is closed, it is released form the h2 multiplexer. The
+            // once the h2 stream is closed, it is released from the h2 multiplexer. The
             // HTTPRequestStateMachine may signal finalAction: .none in the error case (as this is
             // the right result for HTTP/1). In the h2 case we MUST always close.
             self.runFinalAction(.close, context: context)

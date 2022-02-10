@@ -390,7 +390,7 @@ struct HTTPRequestStateMachine {
             let error = HTTPClientError.cancelled
             self.state = .failed(error)
             // Okay, this has different semantics for HTTP/1 and HTTP/2. In HTTP/1 we don't want to
-            // close the connection, if we haven't send anything yet, to reuse the connection for
+            // close the connection, if we haven't sent anything yet, to reuse the connection for
             // another request. In HTTP/2 we must close the channel to ensure it is released from
             // HTTP/2 multiplexer.
             return .failRequest(error, .none)
