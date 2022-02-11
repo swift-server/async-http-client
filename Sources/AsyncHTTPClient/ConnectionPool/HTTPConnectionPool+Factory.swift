@@ -104,39 +104,6 @@ extension HTTPConnectionPool.ConnectionFactory {
         case http2(Channel)
     }
 
-    func makeHTTP1Channel(
-        connectionID: HTTPConnectionPool.Connection.ID,
-        deadline: NIODeadline,
-        eventLoop: EventLoop,
-        logger: Logger
-    ) -> EventLoopFuture<Channel> {
-        self.makeChannel(
-            connectionID: connectionID,
-            deadline: deadline,
-            eventLoop: eventLoop,
-            logger: logger
-        ).flatMapThrowing { negotiated -> Channel in
-
-            guard case .http1_1(let channel) = negotiated else {
-                preconditionFailure("Expected to create http/1.1 connections only for now")
-            }
-
-            // add the http1.1 channel handlers
-            let syncOperations = channel.pipeline.syncOperations
-            try syncOperations.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes)
-
-            switch self.clientConfiguration.decompression {
-            case .disabled:
-                ()
-            case .enabled(let limit):
-                let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
-                try syncOperations.addHandler(decompressHandler)
-            }
-
-            return channel
-        }
-    }
-
     func makeChannel(
         connectionID: HTTPConnectionPool.Connection.ID,
         deadline: NIODeadline,
