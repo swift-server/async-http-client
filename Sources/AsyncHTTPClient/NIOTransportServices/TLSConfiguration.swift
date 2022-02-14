@@ -37,18 +37,31 @@ extension TLSVersion {
     }
 }
 
+/* Only use this in code that is used for compatibility with old OSes. */
+protocol SSLProtocolDeprecationWarningsSilenced {
+    static var tlsProtocol1: SSLProtocol { get }
+    static var tlsProtocol11: SSLProtocol { get }
+    static var tlsProtocol12: SSLProtocol { get }
+    static var tlsProtocol13: SSLProtocol { get }
+}
+
+extension SSLProtocol: SSLProtocolDeprecationWarningsSilenced {}
+
 extension TLSVersion {
     /// return as SSL protocol
-    var sslProtocol: SSLProtocol {
+    var sslProtocolDeprecatedOnlyUseCompatibilityCode: SSLProtocol {
+        if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
+            fatalError("please use this code only on old OS versions")
+        }
         switch self {
         case .tlsv1:
-            return .tlsProtocol1
+            return (SSLProtocol.self as SSLProtocolDeprecationWarningsSilenced.Type).tlsProtocol1
         case .tlsv11:
-            return .tlsProtocol11
+            return (SSLProtocol.self as SSLProtocolDeprecationWarningsSilenced.Type).tlsProtocol11
         case .tlsv12:
-            return .tlsProtocol12
+            return (SSLProtocol.self as SSLProtocolDeprecationWarningsSilenced.Type).tlsProtocol12
         case .tlsv13:
-            return .tlsProtocol13
+            return (SSLProtocol.self as SSLProtocolDeprecationWarningsSilenced.Type).tlsProtocol13
         }
     }
 }
@@ -90,17 +103,19 @@ extension TLSConfiguration {
 
         // minimum TLS protocol
         if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
-            sec_protocol_options_set_min_tls_protocol_version(options.securityProtocolOptions, self.minimumTLSVersion.nwTLSProtocolVersion)
+            sec_protocol_options_set_min_tls_protocol_version(options.securityProtocolOptions,
+                                                              self.minimumTLSVersion.nwTLSProtocolVersion)
         } else {
-            sec_protocol_options_set_tls_min_version(options.securityProtocolOptions, self.minimumTLSVersion.sslProtocol)
+            sec_protocol_options_set_tls_min_version(options.securityProtocolOptions, self.minimumTLSVersion.sslProtocolDeprecatedOnlyUseCompatibilityCode)
         }
 
         // maximum TLS protocol
         if let maximumTLSVersion = self.maximumTLSVersion {
             if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
-                sec_protocol_options_set_max_tls_protocol_version(options.securityProtocolOptions, maximumTLSVersion.nwTLSProtocolVersion)
+                sec_protocol_options_set_max_tls_protocol_version(options.securityProtocolOptions,
+                                                                  maximumTLSVersion.nwTLSProtocolVersion)
             } else {
-                sec_protocol_options_set_tls_max_version(options.securityProtocolOptions, maximumTLSVersion.sslProtocol)
+                sec_protocol_options_set_tls_max_version(options.securityProtocolOptions, maximumTLSVersion.sslProtocolDeprecatedOnlyUseCompatibilityCode)
             }
         }
 
