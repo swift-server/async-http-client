@@ -285,4 +285,64 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
         // therefore advancing the time should not trigger a crash
         embedded.embeddedEventLoop.advanceTime(by: .milliseconds(250))
     }
+
+    func testWriteHTTPHeadFails() {
+        struct WriteError: Error, Equatable {}
+
+        class FailWriteHandler: ChannelOutboundHandler {
+            typealias OutboundIn = HTTPClientRequestPart
+            typealias OutboundOut = HTTPClientRequestPart
+
+            func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
+                let error = WriteError()
+                promise?.fail(error)
+                context.fireErrorCaught(error)
+            }
+        }
+
+        let bodies: [HTTPClient.Body?] = [
+            .none,
+            .some(.byteBuffer(ByteBuffer(string: "hello world"))),
+        ]
+
+        for body in bodies {
+            let embeddedEventLoop = EmbeddedEventLoop()
+            let requestHandler = HTTP2ClientRequestHandler(eventLoop: embeddedEventLoop)
+            let embedded = EmbeddedChannel(handlers: [FailWriteHandler(), requestHandler], loop: embeddedEventLoop)
+
+            let logger = Logger(label: "test")
+
+            var maybeRequest: HTTPClient.Request?
+            XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: body))
+            guard let request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
+
+            let delegate = ResponseAccumulator(request: request)
+            var maybeRequestBag: RequestBag<ResponseAccumulator>?
+            XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embedded.eventLoop),
+                task: .init(eventLoop: embedded.eventLoop, logger: logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(idleReadTimeout: .milliseconds(200)),
+                delegate: delegate
+            ))
+            guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
+
+            embedded.isWritable = false
+            XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
+            embedded.write(requestBag, promise: nil)
+
+            // the handler only writes once the channel is writable
+            XCTAssertEqual(try embedded.readOutbound(as: HTTPClientRequestPart.self), .none)
+            embedded.isWritable = true
+            embedded.pipeline.fireChannelWritabilityChanged()
+
+            XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
+                XCTAssertEqual($0 as? WriteError, WriteError())
+            }
+
+            XCTAssertEqual(embedded.isActive, false)
+        }
+    }
 }
