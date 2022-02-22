@@ -39,6 +39,10 @@ extension TLSVersion {
 
 extension TLSVersion {
     /// return as SSL protocol
+    @available(macOS, deprecated: 10.15, message: "legacy functionality")
+    @available(iOS, deprecated: 13.0, message: "legacy functionality")
+    @available(tvOS, deprecated: 13.0, message: "legacy functionality")
+    @available(watchOS, deprecated: 6.0, message: "legacy functionality")
     var sslProtocol: SSLProtocol {
         switch self {
         case .tlsv1:
