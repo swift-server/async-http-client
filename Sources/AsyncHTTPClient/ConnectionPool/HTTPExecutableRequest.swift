@@ -201,7 +201,13 @@ protocol HTTPRequestExecutor {
     func cancelRequest(_ task: HTTPExecutableRequest)
 }
 
-protocol HTTPExecutableRequest: AnyObject {
+#if swift(>=5.6)
+typealias _HTTPExecutableRequestSendable = Sendable
+#else
+typealias _HTTPExecutableRequestSendable = Any
+#endif
+
+protocol HTTPExecutableRequest: AnyObject, _HTTPExecutableRequestSendable {
     /// The request's logger
     var logger: Logger { get }
 

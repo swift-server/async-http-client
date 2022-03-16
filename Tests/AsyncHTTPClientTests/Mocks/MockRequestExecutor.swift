@@ -14,7 +14,11 @@
 
 @testable import AsyncHTTPClient
 import NIOConcurrencyHelpers
+#if swift(>=5.6)
+@preconcurrency import NIOCore
+#else
 import NIOCore
+#endif
 
 // This is a MockRequestExecutor, that is synchronized on its EventLoop.
 final class MockRequestExecutor {
@@ -273,3 +277,9 @@ extension MockRequestExecutor {
         }
     }
 }
+
+#if swift(>=5.6)
+extension MockRequestExecutor: @unchecked Sendable {}
+extension MockRequestExecutor.RequestParts: Sendable {}
+extension MockRequestExecutor.BlockingQueue: @unchecked Sendable {}
+#endif

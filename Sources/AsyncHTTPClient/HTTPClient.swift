@@ -1025,3 +1025,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     @available(*, deprecated, message: "AsyncHTTPClient now correctly supports informational headers. For this reason `httpEndReceivedAfterHeadWith1xx` will not be thrown anymore.")
     public static let httpEndReceivedAfterHeadWith1xx = HTTPClientError(code: .httpEndReceivedAfterHeadWith1xx)
 }
+
+#if swift(>=5.6)
+/// HTTPClient is Sendable, since shared state is protected by the internal ``stateLock``.
+extension HTTPClient: @unchecked Sendable {}
+#endif

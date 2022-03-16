@@ -446,3 +446,8 @@ extension RequestBag: HTTPClientTaskDelegate {
         }
     }
 }
+
+#if swift(>=5.6)
+// RequestBag is Sendable because everything is dispatched onto the EL.
+extension RequestBag: @unchecked Sendable {}
+#endif

@@ -15,6 +15,7 @@
 @testable import AsyncHTTPClient
 import Logging
 import NIOCore
+import NIOConcurrencyHelpers
 import NIOEmbedded
 import NIOHTTP1
 import XCTest
@@ -561,15 +562,23 @@ class UploadCountingDelegate: HTTPClientResponseDelegate {
     }
 }
 
-class MockTaskQueuer: HTTPRequestScheduler {
-    private(set) var hitCancelCount = 0
+final class MockTaskQueuer: HTTPRequestScheduler {
+    private let hitCancelCounter = NIOAtomic<Int>.makeAtomic(value: 0)
+
+    var hitCancelCount: Int {
+        self.hitCancelCounter.load()
+    }
 
     init() {}
 
     func cancelRequest(_: HTTPSchedulableRequest) {
-        self.hitCancelCount += 1
+        self.hitCancelCounter.add(1)
     }
 }
+
+#if swift(>=5.6)
+extension MockTaskQueuer: @unchecked Sendable {}
+#endif
 
 extension RequestOptions {
     static func forTests(idleReadTimeout: TimeAmount? = nil) -> Self {
