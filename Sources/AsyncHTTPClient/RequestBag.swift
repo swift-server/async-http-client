@@ -154,8 +154,11 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             return self.task.eventLoop.makeFailedFuture(error)
 
         case .write(let part, let writer, let future):
-            writer.writeRequestBodyPart(part, request: self)
-            self.delegate.didSendRequestPart(task: self.task, part)
+            let promise = self.task.eventLoop.makePromise(of: Void.self)
+            promise.futureResult.whenSuccess {
+                self.delegate.didSendRequestPart(task: self.task, part)
+            }
+            writer.writeRequestBodyPart(part, request: self, promise: promise)
             return future
         }
     }
@@ -168,11 +171,12 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
         switch action {
         case .none:
             break
-        case .forwardStreamFinished(let writer, let promise):
-            writer.finishRequestBodyStream(self)
-            promise?.succeed(())
-
-            self.delegate.didSendRequest(task: self.task)
+        case .forwardStreamFinished(let writer, let writerPromise):
+            let promise = writerPromise ?? self.task.eventLoop.makePromise(of: Void.self)
+            promise.futureResult.whenSuccess {
+                self.delegate.didSendRequest(task: self.task)
+            }
+            writer.finishRequestBodyStream(self, promise: promise)
 
         case .forwardStreamFailureAndFailTask(let writer, let error, let promise):
             writer.cancelRequest(self)

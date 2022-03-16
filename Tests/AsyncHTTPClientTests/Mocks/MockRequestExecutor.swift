@@ -184,12 +184,14 @@ extension MockRequestExecutor: HTTPRequestExecutor {
     // this should always be called twice. When we receive the first call, the next call to produce
     // data is already scheduled. If we call pause here, once, after the second call new subsequent
     // calls should not be scheduled.
-    func writeRequestBodyPart(_ part: IOData, request: HTTPExecutableRequest) {
+    func writeRequestBodyPart(_ part: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
         self.writeNextRequestPart(.body(part), request: request)
+        promise?.succeed(())
     }
 
-    func finishRequestBodyStream(_ request: HTTPExecutableRequest) {
+    func finishRequestBodyStream(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
         self.writeNextRequestPart(.endOfStream, request: request)
+        promise?.succeed(())
     }
 
     private func writeNextRequestPart(_ part: RequestParts, request: HTTPExecutableRequest) {

@@ -70,21 +70,34 @@ struct HTTPRequestStateMachine {
     }
 
     enum Action {
-        /// A action to execute, when we consider a request "done".
-        enum FinalStreamAction {
+        /// A action to execute, when we consider a successful request "done".
+        enum FinalSuccessfulRequestAction {
             /// Close the connection
             case close
             /// If the server has replied, with a status of 200...300 before all data was sent, a request is considered succeeded,
             /// as soon as we wrote the request end onto the wire.
-            case sendRequestEnd
+            ///
+            /// The promise is an optional write promise.
+            case sendRequestEnd(EventLoopPromise<Void>?)
+            /// Do nothing. This is action is used, if the request failed, before we the request head was written onto the wire.
+            /// This might happen if the request is cancelled, or the request failed the soundness check.
+            case none
+        }
+
+        /// A action to execute, when we consider a failed request "done".
+        enum FinalFailedRequestAction {
+            /// Close the connection
+            case close(EventLoopPromise<Void>?)
             /// Do nothing. This is action is used, if the request failed, before we the request head was written onto the wire.
             /// This might happen if the request is cancelled, or the request failed the soundness check.
             case none
         }
 
         case sendRequestHead(HTTPRequestHead, startBody: Bool)
-        case sendBodyPart(IOData)
-        case sendRequestEnd
+        case sendBodyPart(IOData, EventLoopPromise<Void>?)
+        case sendRequestEnd(EventLoopPromise<Void>?)
+        case failSendBodyPart(Error, EventLoopPromise<Void>?)
+        case failSendStreamFinished(Error, EventLoopPromise<Void>?)
 
         case pauseRequestBodyStream
         case resumeRequestBodyStream
@@ -92,8 +105,8 @@ struct HTTPRequestStateMachine {
         case forwardResponseHead(HTTPResponseHead, pauseRequestBodyStream: Bool)
         case forwardResponseBodyParts(CircularBuffer<ByteBuffer>)
 
-        case failRequest(Error, FinalStreamAction)
-        case succeedRequest(FinalStreamAction, CircularBuffer<ByteBuffer>)
+        case failRequest(Error, FinalFailedRequestAction)
+        case succeedRequest(FinalSuccessfulRequestAction, CircularBuffer<ByteBuffer>)
 
         case read
         case wait
@@ -212,7 +225,7 @@ struct HTTPRequestStateMachine {
             return .failRequest(error, .none)
         case .running:
             self.state = .failed(error)
-            return .failRequest(error, .close)
+            return .failRequest(error, .close(nil))
 
         case .finished, .failed:
             // ignore error
@@ -254,14 +267,14 @@ struct HTTPRequestStateMachine {
             // we have received all necessary bytes. For this reason we forward the uncleanShutdown
             // error to the user.
             self.state = .failed(NIOSSLError.uncleanShutdown)
-            return .failRequest(NIOSSLError.uncleanShutdown, .close)
+            return .failRequest(NIOSSLError.uncleanShutdown, .close(nil))
 
         case .waitForChannelToBecomeWritable, .running, .finished, .failed, .initialized, .modifying:
             return nil
         }
     }
 
-    mutating func requestStreamPartReceived(_ part: IOData) -> Action {
+    mutating func requestStreamPartReceived(_ part: IOData, promise: EventLoopPromise<Void>?) -> Action {
         switch self.state {
         case .initialized,
              .waitForChannelToBecomeWritable,
@@ -274,7 +287,7 @@ struct HTTPRequestStateMachine {
             // won't be interested. We expect that the producer has been informed to pause
             // producing.
             assert(producerState == .paused)
-            return .wait
+            return .failSendBodyPart(HTTPClientError.requestStreamCancelled, promise)
 
         case .running(.streaming(let expectedBodyLength, var sentBodyBytes, let producerState), let responseState):
             // We don't check the producer state here:
@@ -290,7 +303,7 @@ struct HTTPRequestStateMachine {
             if let expected = expectedBodyLength, sentBodyBytes + part.readableBytes > expected {
                 let error = HTTPClientError.bodyLengthMismatch
                 self.state = .failed(error)
-                return .failRequest(error, .close)
+                return .failRequest(error, .close(promise))
             }
 
             sentBodyBytes += part.readableBytes
@@ -303,10 +316,10 @@ struct HTTPRequestStateMachine {
 
             self.state = .running(requestState, responseState)
 
-            return .sendBodyPart(part)
+            return .sendBodyPart(part, promise)
 
-        case .failed:
-            return .wait
+        case .failed(let error):
+            return .failSendBodyPart(error, promise)
 
         case .finished:
             // A request may be finished, before we have send all parts. This might be the case if
@@ -318,14 +331,14 @@ struct HTTPRequestStateMachine {
 
             // We may still receive something, here because of potential race conditions with the
             // producing thread.
-            return .wait
+            return .failSendBodyPart(HTTPClientError.requestStreamCancelled, promise)
 
         case .modifying:
             preconditionFailure("Invalid state: \(self.state)")
         }
     }
 
-    mutating func requestStreamFinished() -> Action {
+    mutating func requestStreamFinished(promise: EventLoopPromise<Void>?) -> Action {
         switch self.state {
         case .initialized,
              .waitForChannelToBecomeWritable,
@@ -336,11 +349,11 @@ struct HTTPRequestStateMachine {
             if let expected = expectedBodyLength, expected != sentBodyBytes {
                 let error = HTTPClientError.bodyLengthMismatch
                 self.state = .failed(error)
-                return .failRequest(error, .close)
+                return .failRequest(error, .close(promise))
             }
 
             self.state = .running(.endSent, .waitingForHead)
-            return .sendRequestEnd
+            return .sendRequestEnd(promise)
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, _), .receivingBody(let head, let streamState)):
             assert(head.status.code < 300)
@@ -348,24 +361,24 @@ struct HTTPRequestStateMachine {
             if let expected = expectedBodyLength, expected != sentBodyBytes {
                 let error = HTTPClientError.bodyLengthMismatch
                 self.state = .failed(error)
-                return .failRequest(error, .close)
+                return .failRequest(error, .close(promise))
             }
 
             self.state = .running(.endSent, .receivingBody(head, streamState))
-            return .sendRequestEnd
+            return .sendRequestEnd(promise)
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, _), .endReceived):
             if let expected = expectedBodyLength, expected != sentBodyBytes {
                 let error = HTTPClientError.bodyLengthMismatch
                 self.state = .failed(error)
-                return .failRequest(error, .close)
+                return .failRequest(error, .close(promise))
             }
 
             self.state = .finished
-            return .succeedRequest(.sendRequestEnd, .init())
+            return .succeedRequest(.sendRequestEnd(promise), .init())
 
-        case .failed:
-            return .wait
+        case .failed(let error):
+            return .failSendStreamFinished(error, promise)
 
         case .finished:
             // A request may be finished, before we have send all parts. This might be the case if
@@ -377,7 +390,7 @@ struct HTTPRequestStateMachine {
 
             // We may still receive something, here because of potential race conditions with the
             // producing thread.
-            return .wait
+            return .failSendStreamFinished(HTTPClientError.requestStreamCancelled, promise)
 
         case .modifying:
             preconditionFailure("Invalid state: \(self.state)")
@@ -398,7 +411,7 @@ struct HTTPRequestStateMachine {
         case .running:
             let error = HTTPClientError.cancelled
             self.state = .failed(error)
-            return .failRequest(error, .close)
+            return .failRequest(error, .close(nil))
 
         case .finished:
             return .wait
@@ -597,7 +610,7 @@ struct HTTPRequestStateMachine {
                     // the request is still uploading, we will not be able to finish the upload. For
                     // this reason we can fail the request here.
                     state = .failed(HTTPClientError.remoteConnectionClosed)
-                    return .failRequest(HTTPClientError.remoteConnectionClosed, .close)
+                    return .failRequest(HTTPClientError.remoteConnectionClosed, .close(nil))
                 }
             }
 
@@ -670,7 +683,7 @@ struct HTTPRequestStateMachine {
         case .running(.endSent, .waitingForHead), .running(.endSent, .receivingBody):
             let error = HTTPClientError.readTimeout
             self.state = .failed(error)
-            return .failRequest(error, .close)
+            return .failRequest(error, .close(nil))
 
         case .running(.endSent, .endReceived):
             preconditionFailure("Invalid state. This state should be: .finished")

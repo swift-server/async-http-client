@@ -14,6 +14,7 @@
 
 @testable import AsyncHTTPClient
 import NIOCore
+import NIOEmbedded
 import NIOHTTP1
 import NIOSSL
 import XCTest
@@ -42,22 +43,22 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: [1]))
         let part2 = IOData.byteBuffer(ByteBuffer(bytes: [2]))
         let part3 = IOData.byteBuffer(ByteBuffer(bytes: [3]))
-        XCTAssertEqual(state.requestStreamPartReceived(part0), .sendBodyPart(part0))
-        XCTAssertEqual(state.requestStreamPartReceived(part1), .sendBodyPart(part1))
+        XCTAssertEqual(state.requestStreamPartReceived(part0, promise: nil), .sendBodyPart(part0, nil))
+        XCTAssertEqual(state.requestStreamPartReceived(part1, promise: nil), .sendBodyPart(part1, nil))
 
         // oh the channel reports... we should slow down producing...
         XCTAssertEqual(state.writabilityChanged(writable: false), .pauseRequestBodyStream)
 
         // but we issued a .produceMoreRequestBodyData before... Thus, we must accept more produced
         // data
-        XCTAssertEqual(state.requestStreamPartReceived(part2), .sendBodyPart(part2))
+        XCTAssertEqual(state.requestStreamPartReceived(part2, promise: nil), .sendBodyPart(part2, nil))
         // however when we have put the data on the channel, we should not issue further
         // .produceMoreRequestBodyData events
 
         // once we receive a writable event again, we can allow the producer to produce more data
         XCTAssertEqual(state.writabilityChanged(writable: true), .resumeRequestBodyStream)
-        XCTAssertEqual(state.requestStreamPartReceived(part3), .sendBodyPart(part3))
-        XCTAssertEqual(state.requestStreamFinished(), .sendRequestEnd)
+        XCTAssertEqual(state.requestStreamPartReceived(part3, promise: nil), .sendBodyPart(part3, nil))
+        XCTAssertEqual(state.requestStreamFinished(promise: nil), .sendRequestEnd(nil))
 
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
@@ -74,9 +75,9 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
         let part0 = IOData.byteBuffer(ByteBuffer(bytes: [0, 1, 2, 3]))
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: [0, 1, 2, 3]))
-        XCTAssertEqual(state.requestStreamPartReceived(part0), .sendBodyPart(part0))
+        XCTAssertEqual(state.requestStreamPartReceived(part0, promise: nil), .sendBodyPart(part0, nil))
 
-        state.requestStreamPartReceived(part1).assertFailRequest(HTTPClientError.bodyLengthMismatch, .close)
+        state.requestStreamPartReceived(part1, promise: nil).assertFailRequest(HTTPClientError.bodyLengthMismatch, .close(nil))
 
         // if another error happens the new one is ignored
         XCTAssertEqual(state.errorHappened(HTTPClientError.remoteConnectionClosed), .wait)
@@ -88,9 +89,9 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(8))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
         let part0 = IOData.byteBuffer(ByteBuffer(bytes: [0, 1, 2, 3]))
-        XCTAssertEqual(state.requestStreamPartReceived(part0), .sendBodyPart(part0))
+        XCTAssertEqual(state.requestStreamPartReceived(part0, promise: nil), .sendBodyPart(part0, nil))
 
-        state.requestStreamFinished().assertFailRequest(HTTPClientError.bodyLengthMismatch, .close)
+        state.requestStreamFinished(promise: nil).assertFailRequest(HTTPClientError.bodyLengthMismatch, .close(nil))
     }
 
     func testRequestBodyStreamIsCancelledIfServerRespondsWith301() {
@@ -99,22 +100,31 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(12))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
         let part = IOData.byteBuffer(ByteBuffer(bytes: [0, 1, 2, 3]))
-        XCTAssertEqual(state.requestStreamPartReceived(part), .sendBodyPart(part))
+        XCTAssertEqual(state.requestStreamPartReceived(part, promise: nil), .sendBodyPart(part, nil))
 
         // response is coming before having send all data
         let responseHead = HTTPResponseHead(version: .http1_1, status: .movedPermanently)
         XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: true))
         XCTAssertEqual(state.writabilityChanged(writable: false), .wait)
         XCTAssertEqual(state.writabilityChanged(writable: true), .wait)
-        XCTAssertEqual(state.requestStreamPartReceived(part), .wait,
+        XCTAssertEqual(state.requestStreamPartReceived(part, promise: nil), .failSendBodyPart(HTTPClientError.requestStreamCancelled, nil),
                        "Expected to drop all stream data after having received a response head, with status >= 300")
 
         XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.close, .init()))
 
-        XCTAssertEqual(state.requestStreamPartReceived(part), .wait,
+        XCTAssertEqual(state.requestStreamPartReceived(part, promise: nil), .failSendBodyPart(HTTPClientError.requestStreamCancelled, nil),
                        "Expected to drop all stream data after having received a response head, with status >= 300")
 
-        XCTAssertEqual(state.requestStreamFinished(), .wait,
+        XCTAssertEqual(state.requestStreamFinished(promise: nil), .failSendStreamFinished(HTTPClientError.requestStreamCancelled, nil),
+                       "Expected to drop all stream data after having received a response head, with status >= 300")
+    }
+
+    func testStreamPartReceived_whenCancelled() {
+        var state = HTTPRequestStateMachine(isChannelWritable: false)
+        let part = IOData.byteBuffer(ByteBuffer(bytes: [0, 1, 2, 3]))
+
+        XCTAssertEqual(state.requestCancelled(), .failRequest(HTTPClientError.cancelled, .none))
+        XCTAssertEqual(state.requestStreamPartReceived(part, promise: nil), .failSendBodyPart(HTTPClientError.cancelled, nil),
                        "Expected to drop all stream data after having received a response head, with status >= 300")
     }
 
@@ -124,22 +134,22 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(12))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
         let part = IOData.byteBuffer(ByteBuffer(bytes: [0, 1, 2, 3]))
-        XCTAssertEqual(state.requestStreamPartReceived(part), .sendBodyPart(part))
+        XCTAssertEqual(state.requestStreamPartReceived(part, promise: nil), .sendBodyPart(part, nil))
         XCTAssertEqual(state.writabilityChanged(writable: false), .pauseRequestBodyStream)
 
         // response is coming before having send all data
         let responseHead = HTTPResponseHead(version: .http1_1, status: .movedPermanently)
         XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
         XCTAssertEqual(state.writabilityChanged(writable: true), .wait)
-        XCTAssertEqual(state.requestStreamPartReceived(part), .wait,
+        XCTAssertEqual(state.requestStreamPartReceived(part, promise: nil), .failSendBodyPart(HTTPClientError.requestStreamCancelled, nil),
                        "Expected to drop all stream data after having received a response head, with status >= 300")
 
         XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.close, .init()))
 
-        XCTAssertEqual(state.requestStreamPartReceived(part), .wait,
+        XCTAssertEqual(state.requestStreamPartReceived(part, promise: nil), .failSendBodyPart(HTTPClientError.requestStreamCancelled, nil),
                        "Expected to drop all stream data after having received a response head, with status >= 300")
 
-        XCTAssertEqual(state.requestStreamFinished(), .wait,
+        XCTAssertEqual(state.requestStreamFinished(promise: nil), .failSendStreamFinished(HTTPClientError.requestStreamCancelled, nil),
                        "Expected to drop all stream data after having received a response head, with status >= 300")
     }
 
@@ -149,7 +159,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(12))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
         let part0 = IOData.byteBuffer(ByteBuffer(bytes: 0...3))
-        XCTAssertEqual(state.requestStreamPartReceived(part0), .sendBodyPart(part0))
+        XCTAssertEqual(state.requestStreamPartReceived(part0, promise: nil), .sendBodyPart(part0, nil))
 
         // response is coming before having send all data
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
@@ -157,10 +167,12 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseBodyParts(.init()))
 
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: 4...7))
-        XCTAssertEqual(state.requestStreamPartReceived(part1), .sendBodyPart(part1))
+        XCTAssertEqual(state.requestStreamPartReceived(part1, promise: nil), .sendBodyPart(part1, nil))
         let part2 = IOData.byteBuffer(ByteBuffer(bytes: 8...11))
-        XCTAssertEqual(state.requestStreamPartReceived(part2), .sendBodyPart(part2))
-        XCTAssertEqual(state.requestStreamFinished(), .succeedRequest(.sendRequestEnd, .init()))
+        XCTAssertEqual(state.requestStreamPartReceived(part2, promise: nil), .sendBodyPart(part2, nil))
+        XCTAssertEqual(state.requestStreamFinished(promise: nil), .succeedRequest(.sendRequestEnd(nil), .init()))
+
+        XCTAssertEqual(state.requestStreamPartReceived(part2, promise: nil), .failSendBodyPart(HTTPClientError.requestStreamCancelled, nil))
     }
 
     func testRequestBodyStreamIsContinuedIfServerSendHeadWithStatus200() {
@@ -169,17 +181,17 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(12))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
         let part0 = IOData.byteBuffer(ByteBuffer(bytes: 0...3))
-        XCTAssertEqual(state.requestStreamPartReceived(part0), .sendBodyPart(part0))
+        XCTAssertEqual(state.requestStreamPartReceived(part0, promise: nil), .sendBodyPart(part0, nil))
 
         // response is coming before having send all data
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
 
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: 4...7))
-        XCTAssertEqual(state.requestStreamPartReceived(part1), .sendBodyPart(part1))
+        XCTAssertEqual(state.requestStreamPartReceived(part1, promise: nil), .sendBodyPart(part1, nil))
         let part2 = IOData.byteBuffer(ByteBuffer(bytes: 8...11))
-        XCTAssertEqual(state.requestStreamPartReceived(part2), .sendBodyPart(part2))
-        XCTAssertEqual(state.requestStreamFinished(), .sendRequestEnd)
+        XCTAssertEqual(state.requestStreamPartReceived(part2, promise: nil), .sendBodyPart(part2, nil))
+        XCTAssertEqual(state.requestStreamFinished(promise: nil), .sendRequestEnd(nil))
 
         XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.none, .init()))
     }
@@ -190,7 +202,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(12))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
         let part0 = IOData.byteBuffer(ByteBuffer(bytes: 0...3))
-        XCTAssertEqual(state.requestStreamPartReceived(part0), .sendBodyPart(part0))
+        XCTAssertEqual(state.requestStreamPartReceived(part0, promise: nil), .sendBodyPart(part0, nil))
 
         // response is coming before having send all data
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
@@ -198,8 +210,8 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseBodyParts(.init()))
 
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: 4...7))
-        XCTAssertEqual(state.requestStreamPartReceived(part1), .sendBodyPart(part1))
-        state.requestStreamFinished().assertFailRequest(HTTPClientError.bodyLengthMismatch, .close)
+        XCTAssertEqual(state.requestStreamPartReceived(part1, promise: nil), .sendBodyPart(part1, nil))
+        state.requestStreamFinished(promise: nil).assertFailRequest(HTTPClientError.bodyLengthMismatch, .close(nil))
         XCTAssertEqual(state.channelInactive(), .wait)
     }
 
@@ -209,15 +221,15 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(12))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
         let part0 = IOData.byteBuffer(ByteBuffer(bytes: 0...3))
-        XCTAssertEqual(state.requestStreamPartReceived(part0), .sendBodyPart(part0))
+        XCTAssertEqual(state.requestStreamPartReceived(part0, promise: nil), .sendBodyPart(part0, nil))
 
         // response is coming before having send all data
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
 
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: 4...7))
-        XCTAssertEqual(state.requestStreamPartReceived(part1), .sendBodyPart(part1))
-        state.requestStreamFinished().assertFailRequest(HTTPClientError.bodyLengthMismatch, .close)
+        XCTAssertEqual(state.requestStreamPartReceived(part1, promise: nil), .sendBodyPart(part1, nil))
+        state.requestStreamFinished(promise: nil).assertFailRequest(HTTPClientError.bodyLengthMismatch, .close(nil))
         XCTAssertEqual(state.channelRead(.end(nil)), .wait)
     }
 
@@ -366,7 +378,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
-        state.requestCancelled().assertFailRequest(HTTPClientError.cancelled, .close)
+        state.requestCancelled().assertFailRequest(HTTPClientError.cancelled, .close(nil))
     }
 
     func testRemoteSuddenlyClosesTheConnection() {
@@ -374,8 +386,8 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/", headers: .init([("content-length", "4")]))
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(4))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
-        state.requestCancelled().assertFailRequest(HTTPClientError.cancelled, .close)
-        XCTAssertEqual(state.requestStreamPartReceived(.byteBuffer(.init(bytes: 1...3))), .wait)
+        state.requestCancelled().assertFailRequest(HTTPClientError.cancelled, .close(nil))
+        XCTAssertEqual(state.requestStreamPartReceived(.byteBuffer(.init(bytes: 1...3)), promise: nil), .failSendBodyPart(HTTPClientError.cancelled, nil))
     }
 
     func testReadTimeoutLeadsToFailureWithEverythingAfterBeingIgnored() {
@@ -388,7 +400,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
         let part0 = ByteBuffer(bytes: 0...3)
         XCTAssertEqual(state.channelRead(.body(part0)), .wait)
-        state.idleReadTimeoutTriggered().assertFailRequest(HTTPClientError.readTimeout, .close)
+        state.idleReadTimeoutTriggered().assertFailRequest(HTTPClientError.readTimeout, .close(nil))
         XCTAssertEqual(state.channelRead(.body(ByteBuffer(bytes: 4...7))), .wait)
         XCTAssertEqual(state.channelRead(.body(ByteBuffer(bytes: 8...11))), .wait)
         XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
@@ -441,7 +453,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
 
-        state.errorHappened(HTTPParserError.invalidChunkSize).assertFailRequest(HTTPParserError.invalidChunkSize, .close)
+        state.errorHappened(HTTPParserError.invalidChunkSize).assertFailRequest(HTTPParserError.invalidChunkSize, .close(nil))
         XCTAssertEqual(state.requestCancelled(), .wait, "A cancellation that happens to late is ignored")
     }
 
@@ -486,7 +498,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: true))
 
         let part1: ByteBuffer = .init(string: "foo")
-        XCTAssertEqual(state.requestStreamPartReceived(.byteBuffer(part1)), .sendBodyPart(.byteBuffer(part1)))
+        XCTAssertEqual(state.requestStreamPartReceived(.byteBuffer(part1), promise: nil), .sendBodyPart(.byteBuffer(part1), nil))
         let responseHead = HTTPResponseHead(version: .http1_0, status: .ok)
         let body = ByteBuffer(string: "foo bar")
         XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
@@ -495,7 +507,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.read(), .read)
         XCTAssertEqual(state.channelReadComplete(), .wait)
         XCTAssertEqual(state.channelRead(.body(body)), .wait)
-        state.channelRead(.end(nil)).assertFailRequest(HTTPClientError.remoteConnectionClosed, .close)
+        state.channelRead(.end(nil)).assertFailRequest(HTTPClientError.remoteConnectionClosed, .close(nil))
         XCTAssertEqual(state.channelInactive(), .wait)
     }
 
@@ -510,7 +522,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
         XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
         XCTAssertEqual(state.channelRead(.body(body)), .wait)
-        state.errorHappened(NIOSSLError.uncleanShutdown).assertFailRequest(NIOSSLError.uncleanShutdown, .close)
+        state.errorHappened(NIOSSLError.uncleanShutdown).assertFailRequest(NIOSSLError.uncleanShutdown, .close(nil))
         XCTAssertEqual(state.channelRead(.end(nil)), .wait)
         XCTAssertEqual(state.channelInactive(), .wait)
     }
@@ -532,7 +544,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         XCTAssertEqual(state.startRequest(head: requestHead, metadata: metadata), .sendRequestHead(requestHead, startBody: false))
 
-        state.errorHappened(ArbitraryError()).assertFailRequest(ArbitraryError(), .close)
+        state.errorHappened(ArbitraryError()).assertFailRequest(ArbitraryError(), .close(nil))
         XCTAssertEqual(state.channelInactive(), .wait)
     }
 
@@ -550,7 +562,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelRead(.body(body)), .wait)
         XCTAssertEqual(state.channelReadComplete(), .forwardResponseBodyParts([body]))
         XCTAssertEqual(state.errorHappened(NIOSSLError.uncleanShutdown), .wait)
-        state.errorHappened(HTTPParserError.invalidEOFState).assertFailRequest(HTTPParserError.invalidEOFState, .close)
+        state.errorHappened(HTTPParserError.invalidEOFState).assertFailRequest(HTTPParserError.invalidEOFState, .close(nil))
         XCTAssertEqual(state.channelInactive(), .wait)
     }
 
@@ -656,11 +668,11 @@ extension HTTPRequestStateMachine.Action: Equatable {
         case (.sendRequestHead(let lhsHead, let lhsStartBody), .sendRequestHead(let rhsHead, let rhsStartBody)):
             return lhsHead == rhsHead && lhsStartBody == rhsStartBody
 
-        case (.sendBodyPart(let lhsData), .sendBodyPart(let rhsData)):
-            return lhsData == rhsData
+        case (.sendBodyPart(let lhsData, let lhsPromise), .sendBodyPart(let rhsData, let rhsPromise)):
+            return lhsData == rhsData && lhsPromise?.futureResult == rhsPromise?.futureResult
 
-        case (.sendRequestEnd, .sendRequestEnd):
-            return true
+        case (.sendRequestEnd(let lhsPromise), .sendRequestEnd(let rhsPromise)):
+            return lhsPromise?.futureResult == rhsPromise?.futureResult
 
         case (.pauseRequestBodyStream, .pauseRequestBodyStream):
             return true
@@ -685,6 +697,45 @@ extension HTTPRequestStateMachine.Action: Equatable {
         case (.wait, .wait):
             return true
 
+        case (.failSendBodyPart(let lhsError as HTTPClientError, let lhsPromise), .failSendBodyPart(let rhsError as HTTPClientError, let rhsPromise)):
+            return lhsError == rhsError && lhsPromise?.futureResult == rhsPromise?.futureResult
+
+        case (.failSendStreamFinished(let lhsError as HTTPClientError, let lhsPromise), .failSendStreamFinished(let rhsError as HTTPClientError, let rhsPromise)):
+            return lhsError == rhsError && lhsPromise?.futureResult == rhsPromise?.futureResult
+
+        default:
+            return false
+        }
+    }
+}
+
+extension HTTPRequestStateMachine.Action.FinalSuccessfulRequestAction: Equatable {
+    public static func == (lhs: HTTPRequestStateMachine.Action.FinalSuccessfulRequestAction, rhs: HTTPRequestStateMachine.Action.FinalSuccessfulRequestAction) -> Bool {
+        switch (lhs, rhs) {
+        case (.close, close):
+            return true
+
+        case (.sendRequestEnd(let lhsPromise), .sendRequestEnd(let rhsPromise)):
+            return lhsPromise?.futureResult == rhsPromise?.futureResult
+
+        case (.none, .none):
+            return true
+
+        default:
+            return false
+        }
+    }
+}
+
+extension HTTPRequestStateMachine.Action.FinalFailedRequestAction: Equatable {
+    public static func == (lhs: HTTPRequestStateMachine.Action.FinalFailedRequestAction, rhs: HTTPRequestStateMachine.Action.FinalFailedRequestAction) -> Bool {
+        switch (lhs, rhs) {
+        case (.close(let lhsPromise), close(let rhsPromise)):
+            return lhsPromise?.futureResult == rhsPromise?.futureResult
+
+        case (.none, .none):
+            return true
+
         default:
             return false
         }
@@ -694,7 +745,7 @@ extension HTTPRequestStateMachine.Action: Equatable {
 extension HTTPRequestStateMachine.Action {
     fileprivate func assertFailRequest<Error>(
         _ expectedError: Error,
-        _ expectedFinalStreamAction: HTTPRequestStateMachine.Action.FinalStreamAction,
+        _ expectedFinalStreamAction: HTTPRequestStateMachine.Action.FinalFailedRequestAction,
         file: StaticString = #file,
         line: UInt = #line
     ) where Error: Swift.Error & Equatable {

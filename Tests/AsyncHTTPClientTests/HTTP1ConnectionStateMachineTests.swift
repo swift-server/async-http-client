@@ -32,22 +32,22 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: [1]))
         let part2 = IOData.byteBuffer(ByteBuffer(bytes: [2]))
         let part3 = IOData.byteBuffer(ByteBuffer(bytes: [3]))
-        XCTAssertEqual(state.requestStreamPartReceived(part0), .sendBodyPart(part0))
-        XCTAssertEqual(state.requestStreamPartReceived(part1), .sendBodyPart(part1))
+        XCTAssertEqual(state.requestStreamPartReceived(part0, promise: nil), .sendBodyPart(part0, nil))
+        XCTAssertEqual(state.requestStreamPartReceived(part1, promise: nil), .sendBodyPart(part1, nil))
 
         // oh the channel reports... we should slow down producing...
         XCTAssertEqual(state.writabilityChanged(writable: false), .pauseRequestBodyStream)
 
         // but we issued a .produceMoreRequestBodyData before... Thus, we must accept more produced
         // data
-        XCTAssertEqual(state.requestStreamPartReceived(part2), .sendBodyPart(part2))
+        XCTAssertEqual(state.requestStreamPartReceived(part2, promise: nil), .sendBodyPart(part2, nil))
         // however when we have put the data on the channel, we should not issue further
         // .produceMoreRequestBodyData events
 
         // once we receive a writable event again, we can allow the producer to produce more data
         XCTAssertEqual(state.writabilityChanged(writable: true), .resumeRequestBodyStream)
-        XCTAssertEqual(state.requestStreamPartReceived(part3), .sendBodyPart(part3))
-        XCTAssertEqual(state.requestStreamFinished(), .sendRequestEnd)
+        XCTAssertEqual(state.requestStreamPartReceived(part3, promise: nil), .sendBodyPart(part3, nil))
+        XCTAssertEqual(state.requestStreamFinished(promise: nil), .sendRequestEnd(nil))
 
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(state.channelRead(.head(responseHead)), .forwardResponseHead(responseHead, pauseRequestBodyStream: false))
@@ -186,9 +186,9 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
 
         let part0 = IOData.byteBuffer(ByteBuffer(bytes: [0]))
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: [1]))
-        XCTAssertEqual(state.requestStreamPartReceived(part0), .sendBodyPart(part0))
-        XCTAssertEqual(state.requestStreamPartReceived(part1), .sendBodyPart(part1))
-        XCTAssertEqual(state.requestCancelled(closeConnection: false), .failRequest(HTTPClientError.cancelled, .close))
+        XCTAssertEqual(state.requestStreamPartReceived(part0, promise: nil), .sendBodyPart(part0, nil))
+        XCTAssertEqual(state.requestStreamPartReceived(part1, promise: nil), .sendBodyPart(part1, nil))
+        XCTAssertEqual(state.requestCancelled(closeConnection: false), .failRequest(HTTPClientError.cancelled, .close(nil)))
     }
 
     func testCancelRequestIsIgnoredWhenConnectionIsIdle() {
@@ -226,7 +226,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: ["content-length": "4"])
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(4))
         XCTAssertEqual(state.runNewRequest(head: requestHead, metadata: metadata), .wait)
-        XCTAssertEqual(state.requestCancelled(closeConnection: false), .failRequest(HTTPClientError.cancelled, .informConnectionIsIdle))
+        XCTAssertEqual(state.requestCancelled(closeConnection: false), .failRequest(HTTPClientError.cancelled, .informConnectionIsIdle(nil)))
     }
 
     func testConnectionIsClosedIfErrorHappensWhileInRequest() {
@@ -241,7 +241,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelRead(.body(ByteBuffer(string: "Hello world!\n"))), .wait)
         XCTAssertEqual(state.channelRead(.body(ByteBuffer(string: "Foo Bar!\n"))), .wait)
         let decompressionError = NIOHTTPDecompression.DecompressionError.limit
-        XCTAssertEqual(state.errorHappened(decompressionError), .failRequest(decompressionError, .close))
+        XCTAssertEqual(state.errorHappened(decompressionError), .failRequest(decompressionError, .close(nil)))
     }
 
     func testConnectionIsClosedAfterSwitchingProtocols() {
@@ -276,7 +276,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         let newRequestAction = state.runNewRequest(head: requestHead, metadata: metadata)
-        guard case .failRequest(let error, .none) = newRequestAction else {
+        guard case .failRequest(let error, .failWritePromise) = newRequestAction else {
             return XCTFail("Unexpected test case")
         }
         XCTAssertEqual(error as? HTTPClientError, .remoteConnectionClosed)
@@ -295,8 +295,8 @@ extension HTTP1ConnectionStateMachine.Action: Equatable {
         case (.sendRequestHead(let lhsHead, let lhsStartBody), .sendRequestHead(let rhsHead, let rhsStartBody)):
             return lhsHead == rhsHead && lhsStartBody == rhsStartBody
 
-        case (.sendBodyPart(let lhsData), .sendBodyPart(let rhsData)):
-            return lhsData == rhsData
+        case (.sendBodyPart(let lhsData, let lhsPromise), .sendBodyPart(let rhsData, let rhsPromise)):
+            return lhsData == rhsData && lhsPromise?.futureResult == rhsPromise?.futureResult
 
         case (.sendRequestEnd, .sendRequestEnd):
             return true
@@ -327,6 +327,38 @@ extension HTTP1ConnectionStateMachine.Action: Equatable {
         case (.wait, .wait):
             return true
 
+        default:
+            return false
+        }
+    }
+}
+
+extension HTTP1ConnectionStateMachine.Action.FinalSuccessfulStreamAction: Equatable {
+    public static func == (lhs: HTTP1ConnectionStateMachine.Action.FinalSuccessfulStreamAction, rhs: HTTP1ConnectionStateMachine.Action.FinalSuccessfulStreamAction) -> Bool {
+        switch (lhs, rhs) {
+        case (.close, .close):
+            return true
+        case (sendRequestEnd(let lhsPromise), sendRequestEnd(let rhsPromise)):
+            return lhsPromise?.futureResult == rhsPromise?.futureResult
+        case (informConnectionIsIdle, informConnectionIsIdle):
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+extension HTTP1ConnectionStateMachine.Action.FinalFailedStreamAction: Equatable {
+    public static func == (lhs: HTTP1ConnectionStateMachine.Action.FinalFailedStreamAction, rhs: HTTP1ConnectionStateMachine.Action.FinalFailedStreamAction) -> Bool {
+        switch (lhs, rhs) {
+        case (.close(let lhsPromise), .close(let rhsPromise)):
+            return lhsPromise?.futureResult == rhsPromise?.futureResult
+        case (informConnectionIsIdle(let lhsPromise), informConnectionIsIdle(let rhsPromise)):
+            return lhsPromise?.futureResult == rhsPromise?.futureResult
+        case (.failWritePromise(let lhsPromise), .failWritePromise(let rhsPromise)):
+            return lhsPromise?.futureResult == rhsPromise?.futureResult
+        case (.none, .none):
+            return true
         default:
             return false
         }

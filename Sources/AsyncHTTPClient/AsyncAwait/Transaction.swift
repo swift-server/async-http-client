@@ -63,7 +63,7 @@ final class Transaction: @unchecked Sendable {
 
         switch writeAction {
         case .writeAndWait(let executor), .writeAndContinue(let executor):
-            executor.writeRequestBodyPart(.byteBuffer(byteBuffer), request: self)
+            executor.writeRequestBodyPart(.byteBuffer(byteBuffer), request: self, promise: nil)
 
         case .fail:
             // an error/cancellation has happened. we don't need to continue here
@@ -105,14 +105,14 @@ final class Transaction: @unchecked Sendable {
         switch self.state.writeNextRequestPart() {
         case .writeAndContinue(let executor):
             self.stateLock.unlock()
-            executor.writeRequestBodyPart(.byteBuffer(part), request: self)
+            executor.writeRequestBodyPart(.byteBuffer(part), request: self, promise: nil)
 
         case .writeAndWait(let executor):
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 self.state.waitForRequestBodyDemand(continuation: continuation)
                 self.stateLock.unlock()
 
-                executor.writeRequestBodyPart(.byteBuffer(part), request: self)
+                executor.writeRequestBodyPart(.byteBuffer(part), request: self, promise: nil)
             }
 
         case .fail:
@@ -132,7 +132,7 @@ final class Transaction: @unchecked Sendable {
             break
 
         case .forwardStreamFinished(let executor, let succeedContinuation):
-            executor.finishRequestBodyStream(self)
+            executor.finishRequestBodyStream(self, promise: nil)
             succeedContinuation?.resume(returning: nil)
         }
         return
