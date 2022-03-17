@@ -3,15 +3,15 @@ version: "3"
 services:
 
   runtime-setup:
-    image: async-http-client:20.04-main
+    image: async-http-client:20.04-5.7
     build:
       args:
         base_image: "swiftlang/swift:nightly-main-focal"
 
   test:
-    image: async-http-client:20.04-main
+    image: async-http-client:20.04-5.7
     environment: []
       #- SANITIZER_ARG=--sanitize=thread
 
   shell:
-    image: async-http-client:20.04-main
+    image: async-http-client:20.04-5.7
