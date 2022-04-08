@@ -336,6 +336,45 @@ final class RequestBagTests: XCTestCase {
         }
     }
 
+    func testChannelBecomingWritableDoesntCrashCancelledTask() {
+        let embeddedEventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+        let logger = Logger(label: "test")
+
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(
+            url: "https://swift.org",
+            body: .bytes([1, 2, 3, 4, 5])
+        ))
+        guard let request = maybeRequest else { return XCTFail("Expected to have a request") }
+
+        let delegate = UploadCountingDelegate(eventLoop: embeddedEventLoop)
+        var maybeRequestBag: RequestBag<UploadCountingDelegate>?
+        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embeddedEventLoop),
+            task: .init(eventLoop: embeddedEventLoop, logger: logger),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(),
+            delegate: delegate
+        ))
+        guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
+
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
+        executor.runRequest(bag)
+
+        // This simulates a race between the user cancelling the task (which invokes `RequestBag.cancel`) and the
+        // call to `resumeRequestBodyStream` (which comes from the `Channel` event loop and so may have to hop.
+        bag.cancel()
+        bag.resumeRequestBodyStream()
+
+        XCTAssertEqual(executor.isCancelled, true)
+        XCTAssertThrowsError(try bag.task.futureResult.wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .cancelled)
+        }
+    }
+
     func testHTTPUploadIsCancelledEvenThoughRequestSucceeds() {
         let embeddedEventLoop = EmbeddedEventLoop()
         defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
