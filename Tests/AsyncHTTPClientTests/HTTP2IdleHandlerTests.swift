@@ -225,6 +225,32 @@ class HTTP2IdleHandlerTests: XCTestCase {
             }
         }
     }
+
+    func testReceiveSettingsAndGoAwayAfterClientSideClose() {
+        let delegate = MockHTTP2IdleHandlerDelegate()
+        let idleHandler = HTTP2IdleHandler(delegate: delegate, logger: Logger(label: "test"))
+        let embedded = EmbeddedChannel(handlers: [idleHandler])
+        XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
+
+        let settingsFrame = HTTP2Frame(streamID: 0, payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 10)])))
+        XCTAssertEqual(delegate.maxStreams, nil)
+        XCTAssertNoThrow(try embedded.writeInbound(settingsFrame))
+        XCTAssertEqual(delegate.maxStreams, 10)
+
+        XCTAssertTrue(embedded.isActive)
+        embedded.pipeline.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
+        XCTAssertFalse(embedded.isActive)
+
+        let newSettingsFrame = HTTP2Frame(streamID: 0, payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 20)])))
+        XCTAssertEqual(delegate.maxStreams, 10)
+        XCTAssertNoThrow(try embedded.writeInbound(newSettingsFrame))
+        XCTAssertEqual(delegate.maxStreams, 10, "Expected message to not be forwarded.")
+
+        let goAwayFrame = HTTP2Frame(streamID: HTTP2StreamID(0), payload: .goAway(lastStreamID: 2, errorCode: .http11Required, opaqueData: nil))
+        XCTAssertEqual(delegate.goAwayReceived, false)
+        XCTAssertNoThrow(try embedded.writeInbound(goAwayFrame))
+        XCTAssertEqual(delegate.goAwayReceived, false, "Expected go away to not be forwarded.")
+    }
 }
 
 class MockHTTP2IdleHandlerDelegate: HTTP2IdleHandlerDelegate {

@@ -35,6 +35,7 @@ extension HTTP2IdleHandlerTests {
             ("testCloseEventWhileNoOpenStreams", testCloseEventWhileNoOpenStreams),
             ("testCloseEventWhileThereAreOpenStreams", testCloseEventWhileThereAreOpenStreams),
             ("testGoAwayWhileThereAreOpenStreams", testGoAwayWhileThereAreOpenStreams),
+            ("testReceiveSettingsAndGoAwayAfterClientSideClose", testReceiveSettingsAndGoAwayAfterClientSideClose),
         ]
     }
 }
