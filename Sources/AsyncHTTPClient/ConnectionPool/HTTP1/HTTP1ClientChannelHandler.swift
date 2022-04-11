@@ -183,23 +183,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     private func run(_ action: HTTP1ConnectionStateMachine.Action, context: ChannelHandlerContext) {
         switch action {
         case .sendRequestHead(let head, startBody: let startBody):
-            if startBody {
-                context.write(self.wrapOutboundOut(.head(head)), promise: nil)
-                context.flush()
-
-                self.request!.requestHeadSent()
-                self.request!.resumeRequestBodyStream()
-            } else {
-                context.write(self.wrapOutboundOut(.head(head)), promise: nil)
-                context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
-                context.flush()
-
-                self.request!.requestHeadSent()
-
-                if let timeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
-                    self.runTimeoutAction(timeoutAction, context: context)
-                }
-            }
+            self.sendRequestHead(head, startBody: startBody, context: context)
 
         case .sendBodyPart(let part):
             context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: nil)
@@ -212,9 +196,13 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             }
 
         case .pauseRequestBodyStream:
+            // We can force unwrap the request here, as we have just validated in the state machine,
+            // that the request is neither failed nor finished yet
             self.request!.pauseRequestBodyStream()
 
         case .resumeRequestBodyStream:
+            // We can force unwrap the request here, as we have just validated in the state machine,
+            // that the request is neither failed nor finished yet
             self.request!.resumeRequestBodyStream()
 
         case .fireChannelActive:
@@ -239,15 +227,25 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             break
 
         case .forwardResponseHead(let head, let pauseRequestBodyStream):
+            // We can force unwrap the request here, as we have just validated in the state machine,
+            // that the request is neither failed nor finished yet
             self.request!.receiveResponseHead(head)
-            if pauseRequestBodyStream {
-                self.request!.pauseRequestBodyStream()
+            if pauseRequestBodyStream, let request = self.request {
+                // The above response head forward might lead the request to mark itself as
+                // cancelled, which in turn might pop the request of the handler. For this reason we
+                // must check if the request is still present here.
+                request.pauseRequestBodyStream()
             }
 
         case .forwardResponseBodyParts(let buffer):
+            // We can force unwrap the request here, as we have just validated in the state machine,
+            // that the request is neither failed nor finished yet
             self.request!.receiveResponseBodyParts(buffer)
 
         case .succeedRequest(let finalAction, let buffer):
+            // We can force unwrap the request here, as we have just validated in the state machine,
+            // that the request is neither failed nor finished yet
+
             // The order here is very important...
             // We first nil our own task property! `taskCompleted` will potentially lead to
             // situations in which we get a new request right away. We should finish the task
@@ -290,6 +288,33 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             }
 
             oldRequest.fail(error)
+        }
+    }
+
+    private func sendRequestHead(_ head: HTTPRequestHead, startBody: Bool, context: ChannelHandlerContext) {
+        if startBody {
+            context.writeAndFlush(self.wrapOutboundOut(.head(head)), promise: nil)
+
+            // The above write might trigger an error, which may lead to a call to `errorCaught`,
+            // which in turn, may fail the request and pop it from the handler. For this reason
+            // we must check if the request is still present here.
+            guard let request = self.request else { return }
+            request.requestHeadSent()
+            request.resumeRequestBodyStream()
+        } else {
+            context.write(self.wrapOutboundOut(.head(head)), promise: nil)
+            context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
+            context.flush()
+
+            // The above write might trigger an error, which may lead to a call to `errorCaught`,
+            // which in turn, may fail the request and pop it from the handler. For this reason
+            // we must check if the request is still present here.
+            guard let request = self.request else { return }
+            request.requestHeadSent()
+
+            if let timeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
+                self.runTimeoutAction(timeoutAction, context: context)
+            }
         }
     }
 
