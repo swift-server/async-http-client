@@ -496,6 +496,199 @@ final class RequestBagTests: XCTestCase {
         XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
         XCTAssertEqual(delegate.hitDidReceiveResponse, 1)
     }
+
+    func testRedirectWith3KBBody() {
+        let embeddedEventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+        let logger = Logger(label: "test")
+
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://swift.org"))
+        guard let request = maybeRequest else { return XCTFail("Expected to have a request") }
+
+        let delegate = UploadCountingDelegate(eventLoop: embeddedEventLoop)
+        var maybeRequestBag: RequestBag<UploadCountingDelegate>?
+        var redirectTriggered = false
+        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embeddedEventLoop),
+            task: .init(eventLoop: embeddedEventLoop, logger: logger),
+            redirectHandler: .init(
+                request: request,
+                redirectState: RedirectState(
+                    .follow(max: 5, allowCycles: false),
+                    initialURL: request.url.absoluteString
+                )!,
+                execute: { request, _ in
+                    XCTAssertEqual(request.url.absoluteString, "https://swift.org/sswg")
+                    XCTAssertFalse(redirectTriggered)
+
+                    let task = HTTPClient.Task<UploadCountingDelegate.Response>(eventLoop: embeddedEventLoop, logger: logger)
+                    task.promise.fail(HTTPClientError.cancelled)
+                    redirectTriggered = true
+                    return task
+                }
+            ),
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(),
+            delegate: delegate
+        ))
+        guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
+
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
+        executor.runRequest(bag)
+        XCTAssertFalse(executor.signalledDemandForResponseBody)
+        bag.receiveResponseHead(.init(version: .http1_1, status: .permanentRedirect, headers: ["content-length": "\(3 * 1024)", "location": "https://swift.org/sswg"]))
+        XCTAssertNil(delegate.backpressurePromise)
+        XCTAssertTrue(executor.signalledDemandForResponseBody)
+        executor.resetResponseStreamDemandSignal()
+
+        // "foo" is forwarded for consumption. We expect the RequestBag to consume "foo" with the
+        // delegate and call demandMoreBody afterwards.
+        XCTAssertEqual(delegate.hitDidReceiveBodyPart, 0)
+        XCTAssertFalse(executor.signalledDemandForResponseBody)
+        bag.receiveResponseBodyParts([ByteBuffer(repeating: 0, count: 1024)])
+        XCTAssertTrue(executor.signalledDemandForResponseBody)
+        XCTAssertEqual(delegate.hitDidReceiveBodyPart, 0)
+        XCTAssertNil(delegate.backpressurePromise)
+        executor.resetResponseStreamDemandSignal()
+
+        XCTAssertEqual(delegate.hitDidReceiveBodyPart, 0)
+        XCTAssertFalse(executor.signalledDemandForResponseBody)
+        bag.receiveResponseBodyParts([ByteBuffer(repeating: 1, count: 1024)])
+        XCTAssertTrue(executor.signalledDemandForResponseBody)
+        XCTAssertEqual(delegate.hitDidReceiveBodyPart, 0)
+        XCTAssertNil(delegate.backpressurePromise)
+        executor.resetResponseStreamDemandSignal()
+
+        XCTAssertEqual(delegate.hitDidReceiveBodyPart, 0)
+        XCTAssertFalse(executor.signalledDemandForResponseBody)
+        bag.succeedRequest([ByteBuffer(repeating: 2, count: 1024)])
+        XCTAssertFalse(executor.signalledDemandForResponseBody)
+        XCTAssertEqual(delegate.hitDidReceiveResponse, 0)
+        XCTAssertNil(delegate.backpressurePromise)
+        executor.resetResponseStreamDemandSignal()
+
+        XCTAssertTrue(redirectTriggered)
+    }
+
+    func testRedirectWith4KBBodyAnnouncedInResponseHead() {
+        let embeddedEventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+        let logger = Logger(label: "test")
+
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://swift.org"))
+        guard let request = maybeRequest else { return XCTFail("Expected to have a request") }
+
+        let delegate = UploadCountingDelegate(eventLoop: embeddedEventLoop)
+        var maybeRequestBag: RequestBag<UploadCountingDelegate>?
+        var redirectTriggered = false
+        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embeddedEventLoop),
+            task: .init(eventLoop: embeddedEventLoop, logger: logger),
+            redirectHandler: .init(
+                request: request,
+                redirectState: RedirectState(
+                    .follow(max: 5, allowCycles: false),
+                    initialURL: request.url.absoluteString
+                )!,
+                execute: { request, _ in
+                    XCTAssertEqual(request.url.absoluteString, "https://swift.org/sswg")
+                    XCTAssertFalse(redirectTriggered)
+
+                    let task = HTTPClient.Task<UploadCountingDelegate.Response>(eventLoop: embeddedEventLoop, logger: logger)
+                    task.promise.fail(HTTPClientError.cancelled)
+                    redirectTriggered = true
+                    return task
+                }
+            ),
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(),
+            delegate: delegate
+        ))
+        guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
+
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
+        executor.runRequest(bag)
+        XCTAssertFalse(executor.signalledDemandForResponseBody)
+        bag.receiveResponseHead(.init(version: .http1_1, status: .permanentRedirect, headers: ["content-length": "\(4 * 1024)", "location": "https://swift.org/sswg"]))
+        XCTAssertNil(delegate.backpressurePromise)
+        XCTAssertFalse(executor.signalledDemandForResponseBody)
+        XCTAssertTrue(executor.isCancelled)
+
+        XCTAssertTrue(redirectTriggered)
+    }
+
+    func testRedirectWith4KBBodyNotAnnouncedInResponseHead() {
+        let embeddedEventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+        let logger = Logger(label: "test")
+
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://swift.org"))
+        guard let request = maybeRequest else { return XCTFail("Expected to have a request") }
+
+        let delegate = UploadCountingDelegate(eventLoop: embeddedEventLoop)
+        var maybeRequestBag: RequestBag<UploadCountingDelegate>?
+        var redirectTriggered = false
+        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embeddedEventLoop),
+            task: .init(eventLoop: embeddedEventLoop, logger: logger),
+            redirectHandler: .init(
+                request: request,
+                redirectState: RedirectState(
+                    .follow(max: 5, allowCycles: false),
+                    initialURL: request.url.absoluteString
+                )!,
+                execute: { request, _ in
+                    XCTAssertEqual(request.url.absoluteString, "https://swift.org/sswg")
+                    XCTAssertFalse(redirectTriggered)
+
+                    let task = HTTPClient.Task<UploadCountingDelegate.Response>(eventLoop: embeddedEventLoop, logger: logger)
+                    task.promise.fail(HTTPClientError.cancelled)
+                    redirectTriggered = true
+                    return task
+                }
+            ),
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(),
+            delegate: delegate
+        ))
+        guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
+
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
+        executor.runRequest(bag)
+        XCTAssertFalse(executor.signalledDemandForResponseBody)
+        bag.receiveResponseHead(.init(version: .http1_1, status: .permanentRedirect, headers: ["content-length": "\(3 * 1024)", "location": "https://swift.org/sswg"]))
+        XCTAssertNil(delegate.backpressurePromise)
+        XCTAssertTrue(executor.signalledDemandForResponseBody)
+        executor.resetResponseStreamDemandSignal()
+
+        // "foo" is forwarded for consumption. We expect the RequestBag to consume "foo" with the
+        // delegate and call demandMoreBody afterwards.
+        XCTAssertEqual(delegate.hitDidReceiveBodyPart, 0)
+        XCTAssertFalse(executor.signalledDemandForResponseBody)
+        bag.receiveResponseBodyParts([ByteBuffer(repeating: 0, count: 2024)])
+        XCTAssertTrue(executor.signalledDemandForResponseBody)
+        XCTAssertEqual(delegate.hitDidReceiveBodyPart, 0)
+        XCTAssertNil(delegate.backpressurePromise)
+        executor.resetResponseStreamDemandSignal()
+
+        XCTAssertEqual(delegate.hitDidReceiveBodyPart, 0)
+        XCTAssertFalse(executor.isCancelled)
+        XCTAssertFalse(executor.signalledDemandForResponseBody)
+        bag.receiveResponseBodyParts([ByteBuffer(repeating: 1, count: 2024)])
+        XCTAssertFalse(executor.signalledDemandForResponseBody)
+        XCTAssertTrue(executor.isCancelled)
+        XCTAssertEqual(delegate.hitDidReceiveBodyPart, 0)
+        XCTAssertNil(delegate.backpressurePromise)
+        executor.resetResponseStreamDemandSignal()
+
+        XCTAssertTrue(redirectTriggered)
+    }
 }
 
 class UploadCountingDelegate: HTTPClientResponseDelegate {
