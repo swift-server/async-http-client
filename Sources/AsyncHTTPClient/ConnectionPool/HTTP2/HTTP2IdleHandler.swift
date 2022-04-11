@@ -168,7 +168,7 @@ extension HTTP2IdleHandler {
 
         mutating func settingsReceived(_ settings: HTTP2Settings) -> Action {
             switch self.state {
-            case .initialized, .closed:
+            case .initialized:
                 preconditionFailure("Invalid state: \(self.state)")
 
             case .connected:
@@ -188,12 +188,17 @@ extension HTTP2IdleHandler {
 
             case .closing:
                 return .nothing
+
+            case .closed:
+                // We may receive a Settings frame after we have called connection close, because of
+                // packages being delivered from the incoming buffer.
+                return .nothing
             }
         }
 
         mutating func goAwayReceived() -> Action {
             switch self.state {
-            case .initialized, .closed:
+            case .initialized:
                 preconditionFailure("Invalid state: \(self.state)")
 
             case .connected:
@@ -206,6 +211,11 @@ extension HTTP2IdleHandler {
 
             case .closing:
                 return .notifyConnectionGoAwayReceived(close: false)
+
+            case .closed:
+                // We may receive a GoAway frame after we have called connection close, because of
+                // packages being delivered from the incoming buffer.
+                return .nothing
             }
         }
 
@@ -234,6 +244,9 @@ extension HTTP2IdleHandler {
 
         mutating func streamCreated() -> Action {
             switch self.state {
+            case .initialized, .connected:
+                preconditionFailure("Invalid state: \(self.state)")
+
             case .active(var openStreams, let maxStreams):
                 openStreams += 1
                 self.state = .active(openStreams: openStreams, maxStreams: maxStreams)
@@ -246,13 +259,18 @@ extension HTTP2IdleHandler {
                 self.state = .closing(openStreams: openStreams, maxStreams: maxStreams)
                 return .nothing
 
-            case .initialized, .connected, .closed:
-                preconditionFailure("Invalid state: \(self.state)")
+            case .closed:
+                // We may receive a events after we have called connection close, because of
+                // internal races. We should just ignore these cases.
+                return .nothing
             }
         }
 
         mutating func streamClosed() -> Action {
             switch self.state {
+            case .initialized, .connected:
+                preconditionFailure("Invalid state: \(self.state)")
+
             case .active(var openStreams, let maxStreams):
                 openStreams -= 1
                 assert(openStreams >= 0)
@@ -269,8 +287,10 @@ extension HTTP2IdleHandler {
                 self.state = .closing(openStreams: openStreams, maxStreams: maxStreams)
                 return .nothing
 
-            case .initialized, .connected, .closed:
-                preconditionFailure("Invalid state: \(self.state)")
+            case .closed:
+                // We may receive a events after we have called connection close, because of
+                // internal races. We should just ignore these cases.
+                return .nothing
             }
         }
     }
