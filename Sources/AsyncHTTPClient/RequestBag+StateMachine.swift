@@ -127,7 +127,11 @@ extension RequestBag.StateMachine {
             return .none
 
         case .finished:
-            preconditionFailure("Invalid state: \(self.state)")
+            // If this task has been cancelled we may be in an error state. As a matter of
+            // defensive programming, we also tolerate receiving this notification if we've ended cleanly:
+            // while it shouldn't happen, nothing will go wrong if we just ignore it.
+            // All paths through this state machine should cancel our request body stream to get here anyway.
+            return .none
 
         case .modifying:
             preconditionFailure("Invalid state: \(self.state)")
