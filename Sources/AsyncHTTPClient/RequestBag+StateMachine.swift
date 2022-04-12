@@ -16,6 +16,16 @@ import struct Foundation.URL
 import NIOCore
 import NIOHTTP1
 
+extension HTTPClient {
+    /// The maximum body size allowed, before a redirect response is cancelled. 3KB.
+    ///
+    /// Why 3KB? We feel like this is a good compromise between potentially reusing the
+    /// connection in HTTP/1.1 mode (if we load all data from the redirect response we can
+    /// reuse the connection) and not being to wasteful in the amount of data that is thrown
+    /// away being transferred.
+    fileprivate static let maxBodySizeRedirectResponse = 1024 * 3
+}
+
 extension RequestBag {
     struct StateMachine {
         fileprivate enum State {
@@ -23,7 +33,7 @@ extension RequestBag {
             case queued(HTTPRequestScheduler)
             case executing(HTTPRequestExecutor, RequestStreamState, ResponseStreamState)
             case finished(error: Error?)
-            case redirected(HTTPResponseHead, URL)
+            case redirected(HTTPRequestExecutor, Int, HTTPResponseHead, URL)
             case modifying
         }
 
@@ -259,11 +269,18 @@ extension RequestBag.StateMachine {
         }
     }
 
+    enum ReceiveResponseHeadAction {
+        case none
+        case forwardResponseHead(HTTPResponseHead)
+        case signalBodyDemand(HTTPRequestExecutor)
+        case redirect(HTTPRequestExecutor, RedirectHandler<Delegate.Response>, HTTPResponseHead, URL)
+    }
+
     /// The response head has been received.
     ///
     /// - Parameter head: The response' head
     /// - Returns: Whether the response should be forwarded to the delegate. Will be `false` if the request follows a redirect.
-    mutating func receiveResponseHead(_ head: HTTPResponseHead) -> Bool {
+    mutating func receiveResponseHead(_ head: HTTPResponseHead) -> ReceiveResponseHeadAction {
         switch self.state {
         case .initialized, .queued:
             preconditionFailure("How can we receive a response, if the request hasn't started yet.")
@@ -276,16 +293,25 @@ extension RequestBag.StateMachine {
                 status: head.status,
                 responseHeaders: head.headers
             ) {
-                self.state = .redirected(head, redirectURL)
-                return false
+                // If we will redirect, we need to consume the response's body ASAP, to be able to
+                // reuse the existing connection. We will consume a response body, if the body is
+                // smaller than 3kb.
+                switch head.contentLength {
+                case .some(0...(HTTPClient.maxBodySizeRedirectResponse)), .none:
+                    self.state = .redirected(executor, 0, head, redirectURL)
+                    return .signalBodyDemand(executor)
+                case .some:
+                    self.state = .finished(error: HTTPClientError.cancelled)
+                    return .redirect(executor, self.redirectHandler!, head, redirectURL)
+                }
             } else {
                 self.state = .executing(executor, requestState, .buffering(.init(), next: .askExecutorForMore))
-                return true
+                return .forwardResponseHead(head)
             }
         case .redirected:
             preconditionFailure("This state can only be reached after we have received a HTTP head")
         case .finished(error: .some):
-            return false
+            return .none
         case .finished(error: .none):
             preconditionFailure("How can the request be finished without error, before receiving response head?")
         case .modifying:
@@ -293,7 +319,14 @@ extension RequestBag.StateMachine {
         }
     }
 
-    mutating func receiveResponseBodyParts(_ buffer: CircularBuffer<ByteBuffer>) -> ByteBuffer? {
+    enum ReceiveResponseBodyAction {
+        case none
+        case forwardResponsePart(ByteBuffer)
+        case signalBodyDemand(HTTPRequestExecutor)
+        case redirect(HTTPRequestExecutor, RedirectHandler<Delegate.Response>, HTTPResponseHead, URL)
+    }
+
+    mutating func receiveResponseBodyParts(_ buffer: CircularBuffer<ByteBuffer>) -> ReceiveResponseBodyAction {
         switch self.state {
         case .initialized, .queued:
             preconditionFailure("How can we receive a response body part, if the request hasn't started yet.")
@@ -312,17 +345,26 @@ extension RequestBag.StateMachine {
                 currentBuffer.append(contentsOf: buffer)
             }
             self.state = .executing(executor, requestState, .buffering(currentBuffer, next: next))
-            return nil
+            return .none
         case .executing(let executor, let requestState, .waitingForRemote):
             var buffer = buffer
             let first = buffer.removeFirst()
             self.state = .executing(executor, requestState, .buffering(buffer, next: .askExecutorForMore))
-            return first
-        case .redirected:
-            // ignore body
-            return nil
+            return .forwardResponsePart(first)
+        case .redirected(let executor, var receivedBytes, let head, let redirectURL):
+            let partsLength = buffer.reduce(into: 0) { $0 += $1.readableBytes }
+            receivedBytes += partsLength
+
+            if receivedBytes > HTTPClient.maxBodySizeRedirectResponse {
+                self.state = .finished(error: HTTPClientError.cancelled)
+                return .redirect(executor, self.redirectHandler!, head, redirectURL)
+            } else {
+                self.state = .redirected(executor, receivedBytes, head, redirectURL)
+                return .signalBodyDemand(executor)
+            }
+
         case .finished(error: .some):
-            return nil
+            return .none
         case .finished(error: .none):
             preconditionFailure("How can the request be finished without error, before receiving response head?")
         case .modifying:
@@ -368,7 +410,7 @@ extension RequestBag.StateMachine {
             self.state = .executing(executor, requestState, .buffering(newChunks, next: .eof))
             return .consume(first)
 
-        case .redirected(let head, let redirectURL):
+        case .redirected(_, _, let head, let redirectURL):
             self.state = .finished(error: nil)
             return .redirect(self.redirectHandler!, head, redirectURL)
 
@@ -527,5 +569,14 @@ extension RequestBag.StateMachine {
         case .modifying:
             preconditionFailure("Invalid state: \(self.state)")
         }
+    }
+}
+
+extension HTTPResponseHead {
+    var contentLength: Int? {
+        guard let header = self.headers.first(name: "content-length") else {
+            return nil
+        }
+        return Int(header)
     }
 }

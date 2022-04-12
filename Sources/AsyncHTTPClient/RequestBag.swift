@@ -196,33 +196,49 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
         self.task.eventLoop.assertInEventLoop()
 
         // runs most likely on channel eventLoop
-        let forwardToDelegate = self.state.receiveResponseHead(head)
+        switch self.state.receiveResponseHead(head) {
+        case .none:
+            break
 
-        guard forwardToDelegate else { return }
+        case .signalBodyDemand(let executor):
+            executor.demandResponseBodyStream(self)
 
-        self.delegate.didReceiveHead(task: self.task, head)
-            .hop(to: self.task.eventLoop)
-            .whenComplete { result in
-                // After the head received, let's start to consume body data
-                self.consumeMoreBodyData0(resultOfPreviousConsume: result)
-            }
+        case .redirect(let executor, let handler, let head, let newURL):
+            handler.redirect(status: head.status, to: newURL, promise: self.task.promise)
+            executor.cancelRequest(self)
+
+        case .forwardResponseHead(let head):
+            self.delegate.didReceiveHead(task: self.task, head)
+                .hop(to: self.task.eventLoop)
+                .whenComplete { result in
+                    // After the head received, let's start to consume body data
+                    self.consumeMoreBodyData0(resultOfPreviousConsume: result)
+                }
+        }
     }
 
     private func receiveResponseBodyParts0(_ buffer: CircularBuffer<ByteBuffer>) {
         self.task.eventLoop.assertInEventLoop()
 
-        let maybeForwardBuffer = self.state.receiveResponseBodyParts(buffer)
+        switch self.state.receiveResponseBodyParts(buffer) {
+        case .none:
+            break
 
-        guard let forwardBuffer = maybeForwardBuffer else {
-            return
+        case .signalBodyDemand(let executor):
+            executor.demandResponseBodyStream(self)
+
+        case .redirect(let executor, let handler, let head, let newURL):
+            handler.redirect(status: head.status, to: newURL, promise: self.task.promise)
+            executor.cancelRequest(self)
+
+        case .forwardResponsePart(let part):
+            self.delegate.didReceiveBodyPart(task: self.task, part)
+                .hop(to: self.task.eventLoop)
+                .whenComplete { result in
+                    // on task el
+                    self.consumeMoreBodyData0(resultOfPreviousConsume: result)
+                }
         }
-
-        self.delegate.didReceiveBodyPart(task: self.task, forwardBuffer)
-            .hop(to: self.task.eventLoop)
-            .whenComplete { result in
-                // on task el
-                self.consumeMoreBodyData0(resultOfPreviousConsume: result)
-            }
     }
 
     private func succeedRequest0(_ buffer: CircularBuffer<ByteBuffer>?) {
