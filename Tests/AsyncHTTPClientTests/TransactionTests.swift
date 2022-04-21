@@ -399,11 +399,7 @@ final class TransactionTests: XCTestCase {
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest(timeout: 30) {
             let embeddedEventLoop = EmbeddedEventLoop()
-            defer {
-                print("7", terminator: "")
-                XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully())
-                print("8", terminator: "\n")
-            }
+            defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
 
             var request = HTTPClientRequest(url: "https://localhost/")
             request.method = .GET
@@ -413,12 +409,10 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return
             }
-            print("0", terminator: "")
             let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
-            print("1", terminator: "")
 
             let executor = MockRequestExecutor(
                 pauseRequestBodyPartStreamAfterASingleWrite: true,
@@ -431,9 +425,9 @@ final class TransactionTests: XCTestCase {
             let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["foo": "bar"])
             XCTAssertFalse(executor.signalledDemandForResponseBody)
             transaction.receiveResponseHead(responseHead)
-            print("2", terminator: "")
+            
             let response = try await responseTask.value
-            print("3", terminator: "")
+            
             XCTAssertEqual(response.status, responseHead.status)
             XCTAssertEqual(response.headers, responseHead.headers)
             XCTAssertEqual(response.version, responseHead.version)
@@ -445,7 +439,7 @@ final class TransactionTests: XCTestCase {
             XCTAssertNoThrow(try executor.receiveResponseDemand())
             executor.resetResponseStreamDemandSignal()
             transaction.receiveResponseBodyParts([ByteBuffer(integer: 123)])
-            print("4", terminator: "")
+            
             let result = try await part1
             XCTAssertEqual(result, ByteBuffer(integer: 123))
 
@@ -458,11 +452,9 @@ final class TransactionTests: XCTestCase {
 
             // can't use XCTAssertThrowsError() here, since capturing async let variables is
             // not allowed.
-            print("5", terminator: "")
             await XCTAssertThrowsError(try await responsePartTask.value) {
                 XCTAssertEqual($0 as? HTTPClientError, .readTimeout)
             }
-            print("6", terminator: "")
         }
         #endif
     }
