@@ -1218,7 +1218,7 @@ class HTTPClientTests: XCTestCase {
                                          body: nil)
         let start = NIODeadline.now()
         let response = try self.defaultClient.execute(request: req).wait()
-        XCTAssertGreaterThanOrEqual(.now() - start, .milliseconds(1_900 /* 1.9 seconds */))
+        XCTAssertGreaterThanOrEqual(.now() - start, .milliseconds(1_900 /* 1.9 seconds */ ))
         XCTAssertEqual(response.status, .ok)
     }
 
