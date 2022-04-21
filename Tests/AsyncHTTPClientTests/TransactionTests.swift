@@ -41,7 +41,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return XCTFail("Expected to have a request here.")
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
@@ -78,7 +78,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
@@ -141,7 +141,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return
             }
-            var tuple: (Transaction, Task<HTTPClientResponse, Error>)! = Transaction.makeWithResultTask(
+            var tuple: (Transaction, Task<HTTPClientResponse, Error>)! = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
@@ -196,7 +196,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return XCTFail("Expected to have a request here.")
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
@@ -282,7 +282,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return XCTFail("Expected to have a request here.")
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: eventLoopGroup.next()
             )
@@ -324,7 +324,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return XCTFail("Expected to have a request here.")
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
@@ -366,7 +366,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return XCTFail("Expected to have a request here.")
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
@@ -397,9 +397,13 @@ final class TransactionTests: XCTestCase {
     func testResponseStreamFails() {
         #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
-        XCTAsyncTest {
+        XCTAsyncTest(timeout: 30) {
             let embeddedEventLoop = EmbeddedEventLoop()
-            defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+            defer {
+                print("7", terminator: "")
+                XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully())
+                print("8", terminator: "\n")
+            }
 
             var request = HTTPClientRequest(url: "https://localhost/")
             request.method = .GET
@@ -409,10 +413,12 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
+            print("0", terminator: "")
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
+            print("1", terminator: "")
 
             let executor = MockRequestExecutor(
                 pauseRequestBodyPartStreamAfterASingleWrite: true,
@@ -425,8 +431,9 @@ final class TransactionTests: XCTestCase {
             let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["foo": "bar"])
             XCTAssertFalse(executor.signalledDemandForResponseBody)
             transaction.receiveResponseHead(responseHead)
-
+            print("2", terminator: "")
             let response = try await responseTask.value
+            print("3", terminator: "")
             XCTAssertEqual(response.status, responseHead.status)
             XCTAssertEqual(response.headers, responseHead.headers)
             XCTAssertEqual(response.version, responseHead.version)
@@ -438,6 +445,7 @@ final class TransactionTests: XCTestCase {
             XCTAssertNoThrow(try executor.receiveResponseDemand())
             executor.resetResponseStreamDemandSignal()
             transaction.receiveResponseBodyParts([ByteBuffer(integer: 123)])
+            print("4", terminator: "")
             let result = try await part1
             XCTAssertEqual(result, ByteBuffer(integer: 123))
 
@@ -450,9 +458,11 @@ final class TransactionTests: XCTestCase {
 
             // can't use XCTAssertThrowsError() here, since capturing async let variables is
             // not allowed.
+            print("5", terminator: "")
             await XCTAssertThrowsError(try await responsePartTask.value) {
                 XCTAssertEqual($0 as? HTTPClientError, .readTimeout)
             }
+            print("6", terminator: "")
         }
         #endif
     }
@@ -493,7 +503,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: eventLoopGroup.next()
             )
@@ -561,9 +571,55 @@ extension Transaction {
         logger: Logger = Logger(label: "test"),
         connectionDeadline: NIODeadline = .distantFuture,
         preferredEventLoop: EventLoop
-    ) -> (Transaction, _Concurrency.Task<HTTPClientResponse, Error>) {
-        let transactionPromise = preferredEventLoop.makePromise(of: Transaction.self)
-        let result = Task {
+    ) async -> (Transaction, _Concurrency.Task<HTTPClientResponse, Error>) {
+        final class ResultAccumulator: @unchecked Sendable {
+            var task: _Concurrency.Task<HTTPClientResponse, Error>?
+            var transaction: Transaction?
+            var continuation: CheckedContinuation<(Transaction, _Concurrency.Task<HTTPClientResponse, Error>), Never>?
+            var lock = Lock()
+            init() {}
+            
+            func result() async -> (Transaction, _Concurrency.Task<HTTPClientResponse, Error>) {
+                self.lock.lock()
+                precondition(self.continuation == nil)
+                guard let transaction = self.transaction,
+                      let task = self.task
+                else {
+                    return await withCheckedContinuation { (continuation: CheckedContinuation<(Transaction, _Concurrency.Task<HTTPClientResponse, Error>), Never>) in
+                        self.continuation = continuation
+                        self.lock.unlock()
+                    }
+                }
+                self.lock.unlock()
+                return (transaction, task)
+            }
+            
+            func setTransaction(_ transaction: Transaction) {
+                lock.withLock {
+                    precondition(self.transaction == nil)
+                    self.transaction = transaction
+                    self.resumeContinuationIfNeeded()
+                }
+            }
+            func setTask(_ task: _Concurrency.Task<HTTPClientResponse, Error>) {
+                lock.withLock {
+                    precondition(self.task == nil)
+                    self.task = task
+                    self.resumeContinuationIfNeeded()
+                }
+            }
+            private func resumeContinuationIfNeeded() {
+                guard let continuation = continuation,
+                      let transaction = transaction,
+                      let task = task
+                else {
+                    return
+                }
+                continuation.resume(returning: (transaction, task))
+            }
+        }
+        let resultAccumulator = ResultAccumulator()
+        let task = Task {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<HTTPClientResponse, Error>) in
                 let transaction = Transaction(
                     request: request,
@@ -573,13 +629,11 @@ extension Transaction {
                     preferredEventLoop: preferredEventLoop,
                     responseContinuation: continuation
                 )
-                transactionPromise.succeed(transaction)
+                resultAccumulator.setTransaction(transaction)
             }
         }
-        // the promise can never fail and it is therefore safe to force unwrap
-        let transaction = try! transactionPromise.futureResult.wait()
-
-        return (transaction, result)
+        resultAccumulator.setTask(task)
+        return await resultAccumulator.result()
     }
 }
 #endif
