@@ -563,6 +563,45 @@ actor SharedIterator<Iterator: AsyncIteratorProtocol> {
     }
 }
 
+/// non fail-able promise that only support one observer
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+fileprivate actor Promise<Value> {
+    private enum State {
+        case initialised
+        case fulfilled(Value)
+    }
+    
+    private var state: State = .initialised
+    
+    private var observer: CheckedContinuation<Value, Never>?
+    
+    init() {}
+
+    func fulfil(_ value: Value) {
+        switch state {
+        case .initialised:
+            self.state = .fulfilled(value)
+            observer?.resume(returning: value)
+        case .fulfilled:
+            preconditionFailure("\(Self.self) over fulfilled")
+        }
+    }
+    
+    var value: Value {
+        get async {
+            switch state {
+            case .initialised:
+                return await withCheckedContinuation { (continuation: CheckedContinuation<Value, Never>) in
+                    precondition(observer == nil, "\(Self.self) supports only one observer")
+                    observer = continuation
+                }
+            case .fulfilled(let value):
+                return value
+            }
+        }
+    }
+}
+
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension Transaction {
     fileprivate static func makeWithResultTask(
@@ -572,53 +611,7 @@ extension Transaction {
         connectionDeadline: NIODeadline = .distantFuture,
         preferredEventLoop: EventLoop
     ) async -> (Transaction, _Concurrency.Task<HTTPClientResponse, Error>) {
-        final class ResultAccumulator: @unchecked Sendable {
-            var task: _Concurrency.Task<HTTPClientResponse, Error>?
-            var transaction: Transaction?
-            var continuation: CheckedContinuation<(Transaction, _Concurrency.Task<HTTPClientResponse, Error>), Never>?
-            var lock = Lock()
-            init() {}
-            
-            func result() async -> (Transaction, _Concurrency.Task<HTTPClientResponse, Error>) {
-                self.lock.lock()
-                precondition(self.continuation == nil)
-                guard let transaction = self.transaction,
-                      let task = self.task
-                else {
-                    return await withCheckedContinuation { (continuation: CheckedContinuation<(Transaction, _Concurrency.Task<HTTPClientResponse, Error>), Never>) in
-                        self.continuation = continuation
-                        self.lock.unlock()
-                    }
-                }
-                self.lock.unlock()
-                return (transaction, task)
-            }
-            
-            func setTransaction(_ transaction: Transaction) {
-                lock.withLock {
-                    precondition(self.transaction == nil)
-                    self.transaction = transaction
-                    self.resumeContinuationIfNeeded()
-                }
-            }
-            func setTask(_ task: _Concurrency.Task<HTTPClientResponse, Error>) {
-                lock.withLock {
-                    precondition(self.task == nil)
-                    self.task = task
-                    self.resumeContinuationIfNeeded()
-                }
-            }
-            private func resumeContinuationIfNeeded() {
-                guard let continuation = continuation,
-                      let transaction = transaction,
-                      let task = task
-                else {
-                    return
-                }
-                continuation.resume(returning: (transaction, task))
-            }
-        }
-        let resultAccumulator = ResultAccumulator()
+        let transactionPromise = Promise<Transaction>()
         let task = Task {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<HTTPClientResponse, Error>) in
                 let transaction = Transaction(
@@ -629,11 +622,13 @@ extension Transaction {
                     preferredEventLoop: preferredEventLoop,
                     responseContinuation: continuation
                 )
-                resultAccumulator.setTransaction(transaction)
+                Task {
+                    await transactionPromise.fulfil(transaction)
+                }
             }
         }
-        resultAccumulator.setTask(task)
-        return await resultAccumulator.result()
+        
+        return (await transactionPromise.value, task)
     }
 }
 #endif
