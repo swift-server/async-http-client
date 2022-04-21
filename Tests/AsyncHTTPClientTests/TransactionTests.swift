@@ -425,9 +425,9 @@ final class TransactionTests: XCTestCase {
             let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["foo": "bar"])
             XCTAssertFalse(executor.signalledDemandForResponseBody)
             transaction.receiveResponseHead(responseHead)
-            
+
             let response = try await responseTask.value
-            
+
             XCTAssertEqual(response.status, responseHead.status)
             XCTAssertEqual(response.headers, responseHead.headers)
             XCTAssertEqual(response.version, responseHead.version)
@@ -439,7 +439,7 @@ final class TransactionTests: XCTestCase {
             XCTAssertNoThrow(try executor.receiveResponseDemand())
             executor.resetResponseStreamDemandSignal()
             transaction.receiveResponseBodyParts([ByteBuffer(integer: 123)])
-            
+
             let result = try await part1
             XCTAssertEqual(result, ByteBuffer(integer: 123))
 
@@ -562,30 +562,30 @@ fileprivate actor Promise<Value> {
         case initialised
         case fulfilled(Value)
     }
-    
+
     private var state: State = .initialised
-    
+
     private var observer: CheckedContinuation<Value, Never>?
-    
+
     init() {}
 
     func fulfil(_ value: Value) {
-        switch state {
+        switch self.state {
         case .initialised:
             self.state = .fulfilled(value)
-            observer?.resume(returning: value)
+            self.observer?.resume(returning: value)
         case .fulfilled:
             preconditionFailure("\(Self.self) over fulfilled")
         }
     }
-    
+
     var value: Value {
         get async {
-            switch state {
+            switch self.state {
             case .initialised:
                 return await withCheckedContinuation { (continuation: CheckedContinuation<Value, Never>) in
-                    precondition(observer == nil, "\(Self.self) supports only one observer")
-                    observer = continuation
+                    precondition(self.observer == nil, "\(Self.self) supports only one observer")
+                    self.observer = continuation
                 }
             case .fulfilled(let value):
                 return value
@@ -619,7 +619,7 @@ extension Transaction {
                 }
             }
         }
-        
+
         return (await transactionPromise.value, task)
     }
 }
