@@ -1216,9 +1216,9 @@ class HTTPClientTests: XCTestCase {
                                          method: .GET,
                                          headers: ["X-internal-delay": "2000"],
                                          body: nil)
-        let start = Date()
-        let response = try! self.defaultClient.execute(request: req).wait()
-        XCTAssertGreaterThan(Date().timeIntervalSince(start), 2)
+        let start = NIODeadline.now()
+        let response = try self.defaultClient.execute(request: req).wait()
+        XCTAssertGreaterThanOrEqual(.now() - start, .milliseconds(1_900 /* 1.9 seconds */))
         XCTAssertEqual(response.status, .ok)
     }
 
