@@ -14,7 +14,11 @@
 
 @testable import AsyncHTTPClient
 import Logging
+#if swift(>=5.6)
+@preconcurrency import NIOCore
+#else
 import NIOCore
+#endif
 import NIOHTTP1
 import NIOSSL
 
@@ -747,3 +751,7 @@ class MockHTTPRequest: HTTPSchedulableRequest {
         preconditionFailure("Unimplemented")
     }
 }
+
+#if swift(>=5.6)
+extension MockHTTPRequest: @unchecked Sendable {}
+#endif

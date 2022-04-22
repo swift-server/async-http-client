@@ -13,7 +13,11 @@
 //===----------------------------------------------------------------------===//
 
 @testable import AsyncHTTPClient
+#if swift(>=5.6)
+@preconcurrency import Logging
+#else
 import Logging
+#endif
 import NIOCore
 import NIOPosix
 import XCTest
@@ -327,13 +331,14 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let client = makeDefaultHTTPClient()
             defer { XCTAssertNoThrow(try client.syncShutdown()) }
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
-            var request = HTTPClientRequest(url: "http://localhost:\(bin.port)/offline")
-            request.method = .POST
-            let streamWriter = AsyncSequenceWriter<ByteBuffer>()
-            request.body = .stream(streamWriter, length: .unknown)
 
-            let task = Task<HTTPClientResponse, Error> { [request] in
-                try await client.execute(request, deadline: .now() + .seconds(2), logger: logger)
+            let task = Task<Void, Error> {
+                var request = HTTPClientRequest(url: "http://localhost:\(bin.port)/offline")
+                request.method = .POST
+                let streamWriter = AsyncSequenceWriter<ByteBuffer>()
+                request.body = .stream(streamWriter, length: .unknown)
+
+                _ = try await client.execute(request, deadline: .now() + .seconds(2), logger: logger)
             }
             task.cancel()
             await XCTAssertThrowsError(try await task.value) { error in
@@ -352,10 +357,10 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let client = makeDefaultHTTPClient()
             defer { XCTAssertNoThrow(try client.syncShutdown()) }
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
-            let request = HTTPClientRequest(url: "https://localhost:\(bin.port)/wait")
 
-            let task = Task<HTTPClientResponse, Error> { [request] in
-                try await client.execute(request, deadline: .now() + .milliseconds(100), logger: logger)
+            let task = Task<Void, Error> {
+                let request = HTTPClientRequest(url: "https://localhost:\(bin.port)/wait")
+                _ = try await client.execute(request, deadline: .now() + .milliseconds(100), logger: logger)
             }
             await XCTAssertThrowsError(try await task.value) { error in
                 guard let error = error as? HTTPClientError else {
@@ -377,10 +382,10 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let client = makeDefaultHTTPClient()
             defer { XCTAssertNoThrow(try client.syncShutdown()) }
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
-            let request = HTTPClientRequest(url: "http://localhost:\(bin.port)/wait")
 
-            let task = Task<HTTPClientResponse, Error> { [request] in
-                try await client.execute(request, deadline: .now(), logger: logger)
+            let task = Task<Void, Error> {
+                let request = HTTPClientRequest(url: "http://localhost:\(bin.port)/wait")
+                _ = try await client.execute(request, deadline: .now(), logger: logger)
             }
             await XCTAssertThrowsError(try await task.value) { error in
                 guard let error = error as? HTTPClientError else {

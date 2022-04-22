@@ -14,8 +14,12 @@
 
 import Foundation
 import Logging
-import NIOConcurrencyHelpers
+#if swift(>=5.6)
+@preconcurrency import NIOCore
+#else
 import NIOCore
+#endif
+import NIOConcurrencyHelpers
 import NIOHTTP1
 import NIOSSL
 
@@ -385,6 +389,12 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
     }
 }
 
+#if swift(>=5.6)
+@preconcurrency public protocol _HTTPClientResponseDelegate: Sendable {}
+#else
+public protocol _HTTPClientResponseDelegate {}
+#endif
+
 /// `HTTPClientResponseDelegate` allows an implementation to receive notifications about request processing and to control how response parts are processed.
 /// You can implement this protocol if you need fine-grained control over an HTTP request/response, for example, if you want to inspect the response
 /// headers before deciding whether to accept a response body, or if you want to stream your request body. Pass an instance of your conforming
@@ -414,7 +424,7 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
 ///          released together with the `HTTPTaskHandler` when channel is closed.
 ///          Users of the library are not required to keep a reference to the
 ///          object that implements this protocol, but may do so if needed.
-public protocol HTTPClientResponseDelegate: AnyObject {
+public protocol HTTPClientResponseDelegate: AnyObject, _HTTPClientResponseDelegate {
     associatedtype Response
 
     /// Called when the request head is sent. Will be called once.
@@ -634,6 +644,11 @@ extension HTTPClient {
         }
     }
 }
+
+#if swift(>=5.6)
+// HTTPClient.Task is Sendable thanks to the internal lock.
+extension HTTPClient.Task: @unchecked Sendable {}
+#endif
 
 internal struct TaskCancelEvent {}
 

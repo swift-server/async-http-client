@@ -137,3 +137,7 @@ private class MockScheduledRequest: HTTPSchedulableRequest {
         preconditionFailure("Unimplemented")
     }
 }
+
+#if swift(>=5.6)
+extension MockScheduledRequest: @unchecked Sendable {}
+#endif

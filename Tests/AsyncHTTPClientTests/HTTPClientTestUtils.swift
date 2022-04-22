@@ -591,6 +591,10 @@ extension HTTPBin where RequestHandler == HTTPBinHandler {
     }
 }
 
+#if swift(>=5.6)
+extension HTTPBin: @unchecked Sendable {}
+#endif
+
 enum HTTPBinError: Error {
     case refusedConnection
     case invalidProxyRequest

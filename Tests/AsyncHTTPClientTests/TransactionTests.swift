@@ -15,7 +15,11 @@
 @testable import AsyncHTTPClient
 import Logging
 import NIOConcurrencyHelpers
+#if swift(>=5.6)
+@preconcurrency import NIOCore
+#else
 import NIOCore
+#endif
 import NIOEmbedded
 import NIOHTTP1
 import NIOPosix
@@ -41,23 +45,23 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return XCTFail("Expected to have a request here.")
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
-                request: preparedRequest,
-                preferredEventLoop: embeddedEventLoop
-            )
 
             let queuer = MockTaskQueuer()
-            transaction.requestWasQueued(queuer)
 
-            Task.detached {
-                try await Task.sleep(nanoseconds: 5 * 1000 * 1000)
-                transaction.cancel()
-            }
+            await XCTAssertThrowsError(try await Transaction.awaitResponseWithTransaction(
+                request: preparedRequest,
+                preferredEventLoop: embeddedEventLoop
+            ) { transaction in
+                transaction.requestWasQueued(queuer)
 
-            XCTAssertEqual(queuer.hitCancelCount, 0)
-            await XCTAssertThrowsError(try await responseTask.value) {
-                XCTAssertEqual($0 as? HTTPClientError, .cancelled)
-            }
+                Task.detached {
+                    try await Task.sleep(nanoseconds: 5 * 1000 * 1000)
+                    transaction.cancel()
+                }
+
+                XCTAssertEqual(queuer.hitCancelCount, 0)
+            })
+
             XCTAssertEqual(queuer.hitCancelCount, 1)
         }
         #endif
@@ -78,50 +82,54 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
-                request: preparedRequest,
-                preferredEventLoop: embeddedEventLoop
-            )
 
             let executor = MockRequestExecutor(
                 pauseRequestBodyPartStreamAfterASingleWrite: true,
                 eventLoop: embeddedEventLoop
             )
 
-            transaction.willExecuteRequest(executor)
-            transaction.requestHeadSent()
+            let response = try await Transaction.awaitResponseWithTransaction(
+                request: preparedRequest,
+                preferredEventLoop: embeddedEventLoop
+            ) { transaction in
 
-            let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["foo": "bar"])
-            XCTAssertFalse(executor.signalledDemandForResponseBody)
-            transaction.receiveResponseHead(responseHead)
+                transaction.willExecuteRequest(executor)
+                transaction.requestHeadSent()
 
-            let response = try await responseTask.value
-            XCTAssertEqual(response.status, responseHead.status)
-            XCTAssertEqual(response.headers, responseHead.headers)
-            XCTAssertEqual(response.version, responseHead.version)
+                let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["foo": "bar"])
+                XCTAssertFalse(executor.signalledDemandForResponseBody)
+                transaction.receiveResponseHead(responseHead)
 
-            let iterator = SharedIterator(response.body.filter { $0.readableBytes > 0 }.makeAsyncIterator())
+                for i in 0..<100 {
+                    XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
 
-            for i in 0..<100 {
+                    XCTAssertNoThrow(try executor.receiveResponseDemand())
+                    executor.resetResponseStreamDemandSignal()
+                    transaction.receiveResponseBodyParts([ByteBuffer(integer: i)])
+                }
+
                 XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
-
-                async let part = iterator.next()
-
                 XCTAssertNoThrow(try executor.receiveResponseDemand())
                 executor.resetResponseStreamDemandSignal()
-                transaction.receiveResponseBodyParts([ByteBuffer(integer: i)])
+                transaction.succeedRequest([])
+            }
 
-                let result = try await part
+            let expectedResponse = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["foo": "bar"])
+
+            XCTAssertEqual(response.status, expectedResponse.status)
+            XCTAssertEqual(response.headers, expectedResponse.headers)
+            XCTAssertEqual(response.version, expectedResponse.version)
+
+            var iterator = response.body.filter { $0.readableBytes > 0 }.makeAsyncIterator()
+
+            for i in 0..<100 {
+                let result = try await iterator.next()
                 XCTAssertEqual(result, ByteBuffer(integer: i))
             }
 
-            XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
-            async let part = iterator.next()
-            XCTAssertNoThrow(try executor.receiveResponseDemand())
-            executor.resetResponseStreamDemandSignal()
-            transaction.succeedRequest([])
-            let result = try await part
-            XCTAssertNil(result)
+            let final = try await iterator.next()
+            XCTAssertNil(final)
+
         }
         #endif
     }
@@ -580,6 +588,35 @@ extension Transaction {
         let transaction = try! transactionPromise.futureResult.wait()
 
         return (transaction, result)
+    }
+
+    fileprivate static func awaitResponseWithTransaction(
+        request: PreparedRequest,
+        requestOptions: RequestOptions = .forTests(),
+        logger: Logger = Logger(label: "test"),
+        connectionDeadline: NIODeadline = .distantFuture,
+        preferredEventLoop: EventLoop,
+        _ closure: @Sendable @escaping (Transaction) async throws -> ()
+    ) async throws -> HTTPClientResponse {
+
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<HTTPClientResponse, Error>) in
+            let transaction = Transaction(
+                request: request,
+                requestOptions: requestOptions,
+                logger: logger,
+                connectionDeadline: connectionDeadline,
+                preferredEventLoop: preferredEventLoop,
+                responseContinuation: continuation
+            )
+
+            Task {
+                do {
+                    try await closure(transaction)
+                } catch {
+                    XCTFail()
+                }
+            }
+        }
     }
 }
 #endif
