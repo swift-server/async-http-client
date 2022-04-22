@@ -949,6 +949,76 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         return "HTTPClientError.\(String(describing: self.code))"
     }
 
+    /// Short description of the error that can be used in case a bounded set of error descriptions is expected, e.g. to
+    /// include in metric labels. For this reason the description must not contain associated values.
+    public var shortDescription: String {
+        // When adding new cases here, do *not* include dynamic (associated) values in the description.
+        switch self.code {
+        case .invalidURL:
+            return "Invalid URL"
+        case .emptyHost:
+            return "Empty host"
+        case .missingSocketPath:
+            return "Missing socket path"
+        case .alreadyShutdown:
+            return "Already shutdown"
+        case .emptyScheme:
+            return "Empty scheme"
+        case .unsupportedScheme:
+            return "Unsupported scheme"
+        case .readTimeout:
+            return "Read timeout"
+        case .remoteConnectionClosed:
+            return "Remote connection closed"
+        case .cancelled:
+            return "Cancelled"
+        case .identityCodingIncorrectlyPresent:
+            return "Identity coding incorrectly present"
+        case .chunkedSpecifiedMultipleTimes:
+            return "Chunked specified multiple times"
+        case .invalidProxyResponse:
+            return "Invalid proxy response"
+        case .contentLengthMissing:
+            return "Content length missing"
+        case .proxyAuthenticationRequired:
+            return "Proxy authentication required"
+        case .redirectLimitReached:
+            return "Redirect limit reached"
+        case .redirectCycleDetected:
+            return "Redirect cycle detected"
+        case .uncleanShutdown:
+            return "Unclean shutdown"
+        case .traceRequestWithBody:
+            return "Trace request with body"
+        case .invalidHeaderFieldNames:
+            return "Invalid header field names"
+        case .bodyLengthMismatch:
+            return "Body length mismatch"
+        case .writeAfterRequestSent:
+            return "Write after request sent"
+        case .incompatibleHeaders:
+            return "Incompatible headers"
+        case .connectTimeout:
+            return "Connect timeout"
+        case .socksHandshakeTimeout:
+            return "SOCKS handshake timeout"
+        case .httpProxyHandshakeTimeout:
+            return "HTTP proxy handshake timeout"
+        case .tlsHandshakeTimeout:
+            return "TLS handshake timeout"
+        case .serverOfferedUnsupportedApplicationProtocol:
+            return "Server offered unsupported application protocol"
+        case .requestStreamCancelled:
+            return "Request stream cancelled"
+        case .getConnectionFromPoolTimeout:
+            return "Get connection from pool timeout"
+        case .deadlineExceeded:
+            return "Deadline exceeded"
+        case .httpEndReceivedAfterHeadWith1xx:
+            return "HTTP end received after head with 1xx"
+        }
+    }
+
     /// URL provided is invalid.
     public static let invalidURL = HTTPClientError(code: .invalidURL)
     /// URL does not contain host.
