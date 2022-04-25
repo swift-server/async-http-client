@@ -291,9 +291,8 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                 writePromise?.fail(error)
                 oldRequest.fail(error)
 
-            case .informConnectionIsIdle(let writePromise):
+            case .informConnectionIsIdle:
                 self.connection.taskCompleted()
-                writePromise?.fail(error)
                 oldRequest.fail(error)
 
             case .failWritePromise(let writePromise):
@@ -391,6 +390,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     private func finishRequestBodyStream0(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
         guard self.request === request, let context = self.channelContext else {
             // See code comment in `writeRequestBodyPart0`
+            promise?.fail(HTTPClientError.requestStreamCancelled)
             return
         }
 

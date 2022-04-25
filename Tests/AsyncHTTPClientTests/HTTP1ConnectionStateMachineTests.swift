@@ -226,7 +226,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: ["content-length": "4"])
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(4))
         XCTAssertEqual(state.runNewRequest(head: requestHead, metadata: metadata), .wait)
-        XCTAssertEqual(state.requestCancelled(closeConnection: false), .failRequest(HTTPClientError.cancelled, .informConnectionIsIdle(nil)))
+        XCTAssertEqual(state.requestCancelled(closeConnection: false), .failRequest(HTTPClientError.cancelled, .informConnectionIsIdle))
     }
 
     func testConnectionIsClosedIfErrorHappensWhileInRequest() {
@@ -353,8 +353,8 @@ extension HTTP1ConnectionStateMachine.Action.FinalFailedStreamAction: Equatable 
         switch (lhs, rhs) {
         case (.close(let lhsPromise), .close(let rhsPromise)):
             return lhsPromise?.futureResult == rhsPromise?.futureResult
-        case (informConnectionIsIdle(let lhsPromise), informConnectionIsIdle(let rhsPromise)):
-            return lhsPromise?.futureResult == rhsPromise?.futureResult
+        case (.informConnectionIsIdle, .informConnectionIsIdle):
+            return true
         case (.failWritePromise(let lhsPromise), .failWritePromise(let rhsPromise)):
             return lhsPromise?.futureResult == rhsPromise?.futureResult
         case (.none, .none):

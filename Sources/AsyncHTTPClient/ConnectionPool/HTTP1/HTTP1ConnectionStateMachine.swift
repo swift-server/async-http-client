@@ -47,9 +47,7 @@ struct HTTP1ConnectionStateMachine {
             /// The promise is an optional write promise.
             case close(EventLoopPromise<Void>?)
             /// Inform an observer that the connection has become idle
-            ///
-            /// The promise is an optional write promise.
-            case informConnectionIsIdle(EventLoopPromise<Void>?)
+            case informConnectionIsIdle
             /// Fail the write promise
             case failWritePromise(EventLoopPromise<Void>?)
             /// Do nothing.
@@ -191,7 +189,7 @@ struct HTTP1ConnectionStateMachine {
             // as closed.
             //
             // TODO: AHC should support a fast rescheduling mechanism here.
-            return .failRequest(HTTPClientError.remoteConnectionClosed, .failWritePromise(nil))
+            return .failRequest(HTTPClientError.remoteConnectionClosed, .none)
 
         case .idle:
             var requestStateMachine = HTTPRequestStateMachine(isChannelWritable: self.isChannelWritable)
@@ -422,43 +420,30 @@ extension HTTP1ConnectionStateMachine.State {
             return .succeedRequest(newFinalAction, finalParts)
 
         case .failRequest(let error, let finalAction):
-            switch (self, finalAction) {
-            case (.initialized, _):
+            switch self {
+            case .initialized:
                 preconditionFailure("Invalid state: \(self)")
-
-            case (.idle, _):
+            case .idle:
                 preconditionFailure("How can we fail a task, if we are idle")
+            case .inRequest(_, close: let close):
+                if case .close(let promise) = finalAction {
+                    self = .closing
+                    return .failRequest(error, .close(promise))
+                } else if close {
+                    self = .closing
+                    return .failRequest(error, .close(nil))
+                } else {
+                    self = .idle
+                    return .failRequest(error, .informConnectionIsIdle)
+                }
 
-            // If we are either in .inRequest(_, close: true) or the final action is .close
-            // we have to fail the request with .close()
-            case (.inRequest(_, let close), .none) where close:
-                self = .closing
-                return .failRequest(error, .close(nil))
-
-            case (.inRequest(_, _), .close(let writePromise)):
-                self = .closing
-                return .failRequest(error, .close(writePromise))
-
-            // otherwise we fail with .informConnectionIsIdle
-            case (.inRequest(_, _), .none):
-                self = .idle
-                return .failRequest(error, .informConnectionIsIdle(nil))
-
-            case (.closing, .close(let writePromise)):
-                return .failRequest(error, .failWritePromise(writePromise))
-
-            case (.closing, .none):
+            case .closing:
                 return .failRequest(error, .none)
-
-            case (.closed, .close(let writePromise)):
-                // this state can be reached, if the connection was unexpectedly closed by remote
-                return .failRequest(error, .failWritePromise(writePromise))
-
-            case (.closed, .none):
+            case .closed:
                 // this state can be reached, if the connection was unexpectedly closed by remote
                 return .failRequest(error, .none)
 
-            case (.modifying, _):
+            case .modifying:
                 preconditionFailure("Invalid state: \(self)")
             }
 
