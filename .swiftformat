@@ -19,5 +19,6 @@
 --disable redundantReturn
 --disable preferKeyPath
 --disable sortedSwitchCases
+--disable numberFormatting
 
 # rules

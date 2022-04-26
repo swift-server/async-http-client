@@ -41,7 +41,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return XCTFail("Expected to have a request here.")
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
@@ -78,7 +78,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
@@ -141,7 +141,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return
             }
-            var tuple: (Transaction, Task<HTTPClientResponse, Error>)! = Transaction.makeWithResultTask(
+            var tuple: (Transaction, Task<HTTPClientResponse, Error>)! = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
@@ -196,7 +196,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return XCTFail("Expected to have a request here.")
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
@@ -282,7 +282,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return XCTFail("Expected to have a request here.")
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: eventLoopGroup.next()
             )
@@ -324,7 +324,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return XCTFail("Expected to have a request here.")
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
@@ -366,7 +366,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return XCTFail("Expected to have a request here.")
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
@@ -397,7 +397,7 @@ final class TransactionTests: XCTestCase {
     func testResponseStreamFails() {
         #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
-        XCTAsyncTest {
+        XCTAsyncTest(timeout: 30) {
             let embeddedEventLoop = EmbeddedEventLoop()
             defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
 
@@ -409,7 +409,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: embeddedEventLoop
             )
@@ -427,6 +427,7 @@ final class TransactionTests: XCTestCase {
             transaction.receiveResponseHead(responseHead)
 
             let response = try await responseTask.value
+
             XCTAssertEqual(response.status, responseHead.status)
             XCTAssertEqual(response.headers, responseHead.headers)
             XCTAssertEqual(response.version, responseHead.version)
@@ -438,6 +439,7 @@ final class TransactionTests: XCTestCase {
             XCTAssertNoThrow(try executor.receiveResponseDemand())
             executor.resetResponseStreamDemandSignal()
             transaction.receiveResponseBodyParts([ByteBuffer(integer: 123)])
+
             let result = try await part1
             XCTAssertEqual(result, ByteBuffer(integer: 123))
 
@@ -493,7 +495,7 @@ final class TransactionTests: XCTestCase {
             guard let preparedRequest = maybePreparedRequest else {
                 return
             }
-            let (transaction, responseTask) = Transaction.makeWithResultTask(
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
                 preferredEventLoop: eventLoopGroup.next()
             )
@@ -553,6 +555,45 @@ actor SharedIterator<Iterator: AsyncIteratorProtocol> {
     }
 }
 
+/// non fail-able promise that only supports one observer
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+fileprivate actor Promise<Value> {
+    private enum State {
+        case initialised
+        case fulfilled(Value)
+    }
+
+    private var state: State = .initialised
+
+    private var observer: CheckedContinuation<Value, Never>?
+
+    init() {}
+
+    func fulfil(_ value: Value) {
+        switch self.state {
+        case .initialised:
+            self.state = .fulfilled(value)
+            self.observer?.resume(returning: value)
+        case .fulfilled:
+            preconditionFailure("\(Self.self) over fulfilled")
+        }
+    }
+
+    var value: Value {
+        get async {
+            switch self.state {
+            case .initialised:
+                return await withCheckedContinuation { (continuation: CheckedContinuation<Value, Never>) in
+                    precondition(self.observer == nil, "\(Self.self) supports only one observer")
+                    self.observer = continuation
+                }
+            case .fulfilled(let value):
+                return value
+            }
+        }
+    }
+}
+
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension Transaction {
     fileprivate static func makeWithResultTask(
@@ -561,9 +602,9 @@ extension Transaction {
         logger: Logger = Logger(label: "test"),
         connectionDeadline: NIODeadline = .distantFuture,
         preferredEventLoop: EventLoop
-    ) -> (Transaction, _Concurrency.Task<HTTPClientResponse, Error>) {
-        let transactionPromise = preferredEventLoop.makePromise(of: Transaction.self)
-        let result = Task {
+    ) async -> (Transaction, _Concurrency.Task<HTTPClientResponse, Error>) {
+        let transactionPromise = Promise<Transaction>()
+        let task = Task {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<HTTPClientResponse, Error>) in
                 let transaction = Transaction(
                     request: request,
@@ -573,13 +614,13 @@ extension Transaction {
                     preferredEventLoop: preferredEventLoop,
                     responseContinuation: continuation
                 )
-                transactionPromise.succeed(transaction)
+                Task {
+                    await transactionPromise.fulfil(transaction)
+                }
             }
         }
-        // the promise can never fail and it is therefore safe to force unwrap
-        let transaction = try! transactionPromise.futureResult.wait()
 
-        return (transaction, result)
+        return (await transactionPromise.value, task)
     }
 }
 #endif
