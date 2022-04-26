@@ -148,11 +148,11 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             // that the request is neither failed nor finished yet
             self.request!.pauseRequestBodyStream()
 
-        case .sendBodyPart(let data):
-            context.writeAndFlush(self.wrapOutboundOut(.body(data)), promise: nil)
+        case .sendBodyPart(let data, let writePromise):
+            context.writeAndFlush(self.wrapOutboundOut(.body(data)), promise: writePromise)
 
-        case .sendRequestEnd:
-            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+        case .sendRequestEnd(let writePromise):
+            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: writePromise)
 
             if let timeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
                 self.runTimeoutAction(timeoutAction, context: context)
@@ -185,7 +185,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             // that the request is neither failed nor finished yet
             self.request!.receiveResponseBodyParts(parts)
 
-        case .failRequest(let error, _):
+        case .failRequest(let error, let finalAction):
             // We can force unwrap the request here, as we have just validated in the state machine,
             // that the request object is still present.
             self.request!.fail(error)
@@ -195,7 +195,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             // once the h2 stream is closed, it is released from the h2 multiplexer. The
             // HTTPRequestStateMachine may signal finalAction: .none in the error case (as this is
             // the right result for HTTP/1). In the h2 case we MUST always close.
-            self.runFinalAction(.close, context: context)
+            self.runFailedFinalAction(finalAction, context: context, error: error)
 
         case .succeedRequest(let finalAction, let finalParts):
             // We can force unwrap the request here, as we have just validated in the state machine,
@@ -203,7 +203,10 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             self.request!.succeedRequest(finalParts)
             self.request = nil
             self.runTimeoutAction(.clearIdleReadTimeoutTimer, context: context)
-            self.runFinalAction(finalAction, context: context)
+            self.runSuccessfulFinalAction(finalAction, context: context)
+
+        case .failSendBodyPart(let error, let writePromise), .failSendStreamFinished(let error, let writePromise):
+            writePromise?.fail(error)
         }
     }
 
@@ -234,13 +237,24 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         }
     }
 
-    private func runFinalAction(_ action: HTTPRequestStateMachine.Action.FinalStreamAction, context: ChannelHandlerContext) {
+    private func runSuccessfulFinalAction(_ action: HTTPRequestStateMachine.Action.FinalSuccessfulRequestAction, context: ChannelHandlerContext) {
         switch action {
         case .close:
             context.close(promise: nil)
 
-        case .sendRequestEnd:
-            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+        case .sendRequestEnd(let writePromise):
+            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: writePromise)
+
+        case .none:
+            break
+        }
+    }
+
+    private func runFailedFinalAction(_ action: HTTPRequestStateMachine.Action.FinalFailedRequestAction, context: ChannelHandlerContext, error: Error) {
+        switch action {
+        case .close(let writePromise):
+            context.close(promise: nil)
+            writePromise?.fail(error)
 
         case .none:
             break
@@ -281,27 +295,28 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
     // MARK: Private HTTPRequestExecutor
 
-    private func writeRequestBodyPart0(_ data: IOData, request: HTTPExecutableRequest) {
+    private func writeRequestBodyPart0(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
         guard self.request === request, let context = self.channelContext else {
             // Because the HTTPExecutableRequest may run in a different thread to our eventLoop,
             // calls from the HTTPExecutableRequest to our ChannelHandler may arrive here after
             // the request has been popped by the state machine or the ChannelHandler has been
             // removed from the Channel pipeline. This is a normal threading issue, noone has
             // screwed up.
+            promise?.fail(HTTPClientError.requestStreamCancelled)
             return
         }
 
-        let action = self.state.requestStreamPartReceived(data)
+        let action = self.state.requestStreamPartReceived(data, promise: promise)
         self.run(action, context: context)
     }
 
-    private func finishRequestBodyStream0(_ request: HTTPExecutableRequest) {
+    private func finishRequestBodyStream0(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
         guard self.request === request, let context = self.channelContext else {
             // See code comment in `writeRequestBodyPart0`
             return
         }
 
-        let action = self.state.requestStreamFinished()
+        let action = self.state.requestStreamFinished(promise: promise)
         self.run(action, context: context)
     }
 
@@ -327,22 +342,22 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 }
 
 extension HTTP2ClientRequestHandler: HTTPRequestExecutor {
-    func writeRequestBodyPart(_ data: IOData, request: HTTPExecutableRequest) {
+    func writeRequestBodyPart(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
         if self.eventLoop.inEventLoop {
-            self.writeRequestBodyPart0(data, request: request)
+            self.writeRequestBodyPart0(data, request: request, promise: promise)
         } else {
             self.eventLoop.execute {
-                self.writeRequestBodyPart0(data, request: request)
+                self.writeRequestBodyPart0(data, request: request, promise: promise)
             }
         }
     }
 
-    func finishRequestBodyStream(_ request: HTTPExecutableRequest) {
+    func finishRequestBodyStream(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
         if self.eventLoop.inEventLoop {
-            self.finishRequestBodyStream0(request)
+            self.finishRequestBodyStream0(request, promise: promise)
         } else {
             self.eventLoop.execute {
-                self.finishRequestBodyStream0(request)
+                self.finishRequestBodyStream0(request, promise: promise)
             }
         }
     }

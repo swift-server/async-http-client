@@ -185,11 +185,11 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         case .sendRequestHead(let head, startBody: let startBody):
             self.sendRequestHead(head, startBody: startBody, context: context)
 
-        case .sendBodyPart(let part):
-            context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: nil)
+        case .sendBodyPart(let part, let writePromise):
+            context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: writePromise)
 
-        case .sendRequestEnd:
-            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+        case .sendRequestEnd(let writePromise):
+            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: writePromise)
 
             if let timeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
                 self.runTimeoutAction(timeoutAction, context: context)
@@ -260,15 +260,24 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             switch finalAction {
             case .close:
                 context.close(promise: nil)
-            case .sendRequestEnd:
-                context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+                oldRequest.succeedRequest(buffer)
+            case .sendRequestEnd(let writePromise):
+                let writePromise = writePromise ?? context.eventLoop.makePromise(of: Void.self)
+                // We need to defer succeeding the old request to avoid ordering issues
+                writePromise.futureResult.whenComplete { result in
+                    switch result {
+                    case .success:
+                        oldRequest.succeedRequest(buffer)
+                    case .failure(let error):
+                        oldRequest.fail(error)
+                    }
+                }
+
+                context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: writePromise)
             case .informConnectionIsIdle:
                 self.connection.taskCompleted()
-            case .none:
-                break
+                oldRequest.succeedRequest(buffer)
             }
-
-            oldRequest.succeedRequest(buffer)
 
         case .failRequest(let error, let finalAction):
             // see comment in the `succeedRequest` case.
@@ -277,17 +286,25 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             self.runTimeoutAction(.clearIdleReadTimeoutTimer, context: context)
 
             switch finalAction {
-            case .close:
+            case .close(let writePromise):
                 context.close(promise: nil)
-            case .sendRequestEnd:
-                context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+                writePromise?.fail(error)
+                oldRequest.fail(error)
+
             case .informConnectionIsIdle:
                 self.connection.taskCompleted()
+                oldRequest.fail(error)
+
+            case .failWritePromise(let writePromise):
+                writePromise?.fail(error)
+                oldRequest.fail(error)
+
             case .none:
-                break
+                oldRequest.fail(error)
             }
 
-            oldRequest.fail(error)
+        case .failSendBodyPart(let error, let writePromise), .failSendStreamFinished(let error, let writePromise):
+            writePromise?.fail(error)
         }
     }
 
@@ -355,27 +372,29 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
     // MARK: Private HTTPRequestExecutor
 
-    private func writeRequestBodyPart0(_ data: IOData, request: HTTPExecutableRequest) {
+    private func writeRequestBodyPart0(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
         guard self.request === request, let context = self.channelContext else {
             // Because the HTTPExecutableRequest may run in a different thread to our eventLoop,
             // calls from the HTTPExecutableRequest to our ChannelHandler may arrive here after
             // the request has been popped by the state machine or the ChannelHandler has been
             // removed from the Channel pipeline. This is a normal threading issue, noone has
             // screwed up.
+            promise?.fail(HTTPClientError.requestStreamCancelled)
             return
         }
 
-        let action = self.state.requestStreamPartReceived(data)
+        let action = self.state.requestStreamPartReceived(data, promise: promise)
         self.run(action, context: context)
     }
 
-    private func finishRequestBodyStream0(_ request: HTTPExecutableRequest) {
+    private func finishRequestBodyStream0(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
         guard self.request === request, let context = self.channelContext else {
             // See code comment in `writeRequestBodyPart0`
+            promise?.fail(HTTPClientError.requestStreamCancelled)
             return
         }
 
-        let action = self.state.requestStreamFinished()
+        let action = self.state.requestStreamFinished(promise: promise)
         self.run(action, context: context)
     }
 
@@ -405,22 +424,22 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 }
 
 extension HTTP1ClientChannelHandler: HTTPRequestExecutor {
-    func writeRequestBodyPart(_ data: IOData, request: HTTPExecutableRequest) {
+    func writeRequestBodyPart(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
         if self.eventLoop.inEventLoop {
-            self.writeRequestBodyPart0(data, request: request)
+            self.writeRequestBodyPart0(data, request: request, promise: promise)
         } else {
             self.eventLoop.execute {
-                self.writeRequestBodyPart0(data, request: request)
+                self.writeRequestBodyPart0(data, request: request, promise: promise)
             }
         }
     }
 
-    func finishRequestBodyStream(_ request: HTTPExecutableRequest) {
+    func finishRequestBodyStream(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
         if self.eventLoop.inEventLoop {
-            self.finishRequestBodyStream0(request)
+            self.finishRequestBodyStream0(request, promise: promise)
         } else {
             self.eventLoop.execute {
-                self.finishRequestBodyStream0(request)
+                self.finishRequestBodyStream0(request, promise: promise)
             }
         }
     }

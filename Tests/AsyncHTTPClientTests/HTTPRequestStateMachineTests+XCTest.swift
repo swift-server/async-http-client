@@ -30,6 +30,7 @@ extension HTTPRequestStateMachineTests {
             ("testPOSTContentLengthIsTooLong", testPOSTContentLengthIsTooLong),
             ("testPOSTContentLengthIsTooShort", testPOSTContentLengthIsTooShort),
             ("testRequestBodyStreamIsCancelledIfServerRespondsWith301", testRequestBodyStreamIsCancelledIfServerRespondsWith301),
+            ("testStreamPartReceived_whenCancelled", testStreamPartReceived_whenCancelled),
             ("testRequestBodyStreamIsCancelledIfServerRespondsWith301WhileWriteBackpressure", testRequestBodyStreamIsCancelledIfServerRespondsWith301WhileWriteBackpressure),
             ("testRequestBodyStreamIsContinuedIfServerRespondsWith200", testRequestBodyStreamIsContinuedIfServerRespondsWith200),
             ("testRequestBodyStreamIsContinuedIfServerSendHeadWithStatus200", testRequestBodyStreamIsContinuedIfServerSendHeadWithStatus200),

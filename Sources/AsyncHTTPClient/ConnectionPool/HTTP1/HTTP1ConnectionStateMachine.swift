@@ -28,21 +28,37 @@ struct HTTP1ConnectionStateMachine {
 
     enum Action {
         /// A action to execute, when we consider a request "done".
-        enum FinalStreamAction {
+        enum FinalSuccessfulStreamAction {
             /// Close the connection
             case close
             /// If the server has replied, with a status of 200...300 before all data was sent, a request is considered succeeded,
             /// as soon as we wrote the request end onto the wire.
-            case sendRequestEnd
+            ///
+            /// The promise is an optional write promise.
+            case sendRequestEnd(EventLoopPromise<Void>?)
             /// Inform an observer that the connection has become idle
             case informConnectionIsIdle
+        }
+
+        /// A action to execute, when we consider a request "done".
+        enum FinalFailedStreamAction {
+            /// Close the connection
+            ///
+            /// The promise is an optional write promise.
+            case close(EventLoopPromise<Void>?)
+            /// Inform an observer that the connection has become idle
+            case informConnectionIsIdle
+            /// Fail the write promise
+            case failWritePromise(EventLoopPromise<Void>?)
             /// Do nothing.
             case none
         }
 
         case sendRequestHead(HTTPRequestHead, startBody: Bool)
-        case sendBodyPart(IOData)
-        case sendRequestEnd
+        case sendBodyPart(IOData, EventLoopPromise<Void>?)
+        case sendRequestEnd(EventLoopPromise<Void>?)
+        case failSendBodyPart(Error, EventLoopPromise<Void>?)
+        case failSendStreamFinished(Error, EventLoopPromise<Void>?)
 
         case pauseRequestBodyStream
         case resumeRequestBodyStream
@@ -50,8 +66,8 @@ struct HTTP1ConnectionStateMachine {
         case forwardResponseHead(HTTPResponseHead, pauseRequestBodyStream: Bool)
         case forwardResponseBodyParts(CircularBuffer<ByteBuffer>)
 
-        case failRequest(Error, FinalStreamAction)
-        case succeedRequest(FinalStreamAction, CircularBuffer<ByteBuffer>)
+        case failRequest(Error, FinalFailedStreamAction)
+        case succeedRequest(FinalSuccessfulStreamAction, CircularBuffer<ByteBuffer>)
 
         case read
         case close
@@ -189,25 +205,25 @@ struct HTTP1ConnectionStateMachine {
         }
     }
 
-    mutating func requestStreamPartReceived(_ part: IOData) -> Action {
+    mutating func requestStreamPartReceived(_ part: IOData, promise: EventLoopPromise<Void>?) -> Action {
         guard case .inRequest(var requestStateMachine, let close) = self.state else {
             preconditionFailure("Invalid state: \(self.state)")
         }
 
         return self.avoidingStateMachineCoW { state -> Action in
-            let action = requestStateMachine.requestStreamPartReceived(part)
+            let action = requestStateMachine.requestStreamPartReceived(part, promise: promise)
             state = .inRequest(requestStateMachine, close: close)
             return state.modify(with: action)
         }
     }
 
-    mutating func requestStreamFinished() -> Action {
+    mutating func requestStreamFinished(promise: EventLoopPromise<Void>?) -> Action {
         guard case .inRequest(var requestStateMachine, let close) = self.state else {
             preconditionFailure("Invalid state: \(self.state)")
         }
 
         return self.avoidingStateMachineCoW { state -> Action in
-            let action = requestStateMachine.requestStreamFinished()
+            let action = requestStateMachine.requestStreamFinished(promise: promise)
             state = .inRequest(requestStateMachine, close: close)
             return state.modify(with: action)
         }
@@ -377,10 +393,10 @@ extension HTTP1ConnectionStateMachine.State {
             return .pauseRequestBodyStream
         case .resumeRequestBodyStream:
             return .resumeRequestBodyStream
-        case .sendBodyPart(let part):
-            return .sendBodyPart(part)
-        case .sendRequestEnd:
-            return .sendRequestEnd
+        case .sendBodyPart(let part, let writePromise):
+            return .sendBodyPart(part, writePromise)
+        case .sendRequestEnd(let writePromise):
+            return .sendRequestEnd(writePromise)
         case .forwardResponseHead(let head, let pauseRequestBodyStream):
             return .forwardResponseHead(head, pauseRequestBodyStream: pauseRequestBodyStream)
         case .forwardResponseBodyParts(let parts):
@@ -390,13 +406,13 @@ extension HTTP1ConnectionStateMachine.State {
                 preconditionFailure("Invalid state: \(self)")
             }
 
-            let newFinalAction: HTTP1ConnectionStateMachine.Action.FinalStreamAction
+            let newFinalAction: HTTP1ConnectionStateMachine.Action.FinalSuccessfulStreamAction
             switch finalAction {
             case .close:
                 self = .closing
                 newFinalAction = .close
-            case .sendRequestEnd:
-                newFinalAction = .sendRequestEnd
+            case .sendRequestEnd(let writePromise):
+                newFinalAction = .sendRequestEnd(writePromise)
             case .none:
                 self = .idle
                 newFinalAction = close ? .close : .informConnectionIsIdle
@@ -410,9 +426,12 @@ extension HTTP1ConnectionStateMachine.State {
             case .idle:
                 preconditionFailure("How can we fail a task, if we are idle")
             case .inRequest(_, close: let close):
-                if close || finalAction == .close {
+                if case .close(let promise) = finalAction {
                     self = .closing
-                    return .failRequest(error, .close)
+                    return .failRequest(error, .close(promise))
+                } else if close {
+                    self = .closing
+                    return .failRequest(error, .close(nil))
                 } else {
                     self = .idle
                     return .failRequest(error, .informConnectionIsIdle)
@@ -433,6 +452,12 @@ extension HTTP1ConnectionStateMachine.State {
 
         case .wait:
             return .wait
+
+        case .failSendBodyPart(let error, let writePromise):
+            return .failSendBodyPart(error, writePromise)
+
+        case .failSendStreamFinished(let error, let writePromise):
+            return .failSendStreamFinished(error, writePromise)
         }
     }
 }

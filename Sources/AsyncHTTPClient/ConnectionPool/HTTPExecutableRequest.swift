@@ -180,12 +180,12 @@ protocol HTTPRequestExecutor {
     /// Writes a body part into the channel pipeline
     ///
     /// This method may be **called on any thread**. The executor needs to ensure thread safety.
-    func writeRequestBodyPart(_: IOData, request: HTTPExecutableRequest)
+    func writeRequestBodyPart(_: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?)
 
     /// Signals that the request body stream has finished
     ///
     /// This method may be **called on any thread**. The executor needs to ensure thread safety.
-    func finishRequestBodyStream(_ task: HTTPExecutableRequest)
+    func finishRequestBodyStream(_ task: HTTPExecutableRequest, promise: EventLoopPromise<Void>?)
 
     /// Signals that more bytes from response body stream can be consumed.
     ///
