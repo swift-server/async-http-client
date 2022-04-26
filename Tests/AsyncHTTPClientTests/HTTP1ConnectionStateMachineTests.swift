@@ -276,7 +276,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
         let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
         let newRequestAction = state.runNewRequest(head: requestHead, metadata: metadata)
-        guard case .failRequest(let error, .failWritePromise) = newRequestAction else {
+        guard case .failRequest(let error, .none) = newRequestAction else {
             return XCTFail("Unexpected test case")
         }
         XCTAssertEqual(error as? HTTPClientError, .remoteConnectionClosed)
