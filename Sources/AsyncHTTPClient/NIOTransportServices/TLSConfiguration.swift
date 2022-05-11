@@ -62,6 +62,31 @@ extension TLSConfiguration {
     /// Dispatch queue used by Network framework TLS to control certificate verification
     static var tlsDispatchQueue = DispatchQueue(label: "TLSDispatch")
 
+    /// Optional pinning verification block
+    static var verifyPinningBlock: ((sec_protocol_metadata_t) -> Bool)? = nil
+
+    /// Set the pinning verification block
+    public static func setVerifyPinningBlock(newValue: @escaping (sec_protocol_metadata_t) -> Bool) {
+        Self.tlsDispatchQueue.async {
+            verifyPinningBlock = newValue;
+        }
+    }
+
+    /// Handler to perform trust verification for TLS handshakes, using the pinning verification block
+    private static let verifyTLSBlock = {
+        (
+            sec_protocol_metadata: sec_protocol_metadata_t,
+            sec_trust: sec_trust_t,
+            sec_protocol_verify_complete: sec_protocol_verify_complete_t
+        ) in
+        if let verifyPinningBlock = TLSConfiguration.verifyPinningBlock {
+            let isPinned = verifyPinningBlock(sec_protocol_metadata)
+            sec_protocol_verify_complete(isPinned)
+        } else {
+            sec_protocol_verify_complete(false)
+        }
+    }
+
     /// create NWProtocolTLS.Options for use with NIOTransportServices from the NIOSSL TLSConfiguration
     ///
     /// - Parameter eventLoop: EventLoop to wait for creation of options on
@@ -167,7 +192,7 @@ extension TLSConfiguration {
             // add verify block to control certificate verification
             sec_protocol_options_set_verify_block(
                 options.securityProtocolOptions,
-                { _, sec_trust, sec_protocol_verify_complete in
+                { sec_protocol_metadata, sec_trust, sec_protocol_verify_complete in
                     guard self.certificateVerification != .none else {
                         sec_protocol_verify_complete(true)
                         return
@@ -183,13 +208,27 @@ extension TLSConfiguration {
                             if let error = error {
                                 print("Trust failed: \(error.localizedDescription)")
                             }
-                            sec_protocol_verify_complete(result)
+                            // Optional pinning check
+                            if result {
+                                if let verifyPinningBlock = TLSConfiguration.verifyPinningBlock {
+                                    let isPinned = verifyPinningBlock(sec_protocol_metadata)
+                                    sec_protocol_verify_complete(isPinned)
+                                }
+                            } else {
+                                sec_protocol_verify_complete(result)
+                            }
                         }
                     } else {
                         SecTrustEvaluateAsync(trust, Self.tlsDispatchQueue) { _, result in
                             switch result {
                             case .proceed, .unspecified:
-                                sec_protocol_verify_complete(true)
+                                // Optional pinning check
+                                if let verifyPinningBlock = TLSConfiguration.verifyPinningBlock {
+                                    let isPinned = verifyPinningBlock(sec_protocol_metadata)
+                                    sec_protocol_verify_complete(isPinned)
+                                } else {
+                                    sec_protocol_verify_complete(true)
+                                }
                             default:
                                 sec_protocol_verify_complete(false)
                             }
@@ -197,6 +236,10 @@ extension TLSConfiguration {
                     }
                 }, Self.tlsDispatchQueue
             )
+        } else if (TLSConfiguration.verifyPinningBlock != nil) {
+            // Optionally, set block for pinning check
+            sec_protocol_options_set_verify_block(options.securityProtocolOptions, TLSConfiguration.verifyTLSBlock,
+                Self.tlsDispatchQueue)
         }
         return options
     }
