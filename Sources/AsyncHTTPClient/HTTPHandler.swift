@@ -697,9 +697,10 @@ extension HTTPClient {
     public final class Task<Response> {
         /// The `EventLoop` the delegate will be executed on.
         public let eventLoop: EventLoop
+        /// The `Logger` used by the `Task` for logging.
+        public let logger: Logger // We are okay to store the logger here because a Task is for only one request.
 
         let promise: EventLoopPromise<Response>
-        let logger: Logger // We are okay to store the logger here because a Task is for only one request.
 
         var isCancelled: Bool {
             self.lock.withLock { self._isCancelled }
