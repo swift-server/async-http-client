@@ -1157,12 +1157,21 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testStressGetHttpsSSLError() throws {
-        let request = try Request(url: "https://localhost:\(self.defaultHTTPBin.port)/wait", method: .GET)
-        let tasks = (1...100).map { _ -> HTTPClient.Task<TestHTTPDelegate.Response> in
-            self.defaultClient.execute(request: request, delegate: TestHTTPDelegate())
+        var config = HTTPClient.Configuration()
+        config.networkFrameworkWaitForConnectivity = false
+
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                     configuration: config)
+        defer {
+            XCTAssertNoThrow(try localClient.syncShutdown())
         }
 
-        let results = try EventLoopFuture<TestHTTPDelegate.Response>.whenAllComplete(tasks.map { $0.futureResult }, on: self.defaultClient.eventLoopGroup.next()).wait()
+        let request = try Request(url: "https://localhost:\(self.defaultHTTPBin.port)/wait", method: .GET)
+        let tasks = (1...100).map { _ -> HTTPClient.Task<TestHTTPDelegate.Response> in
+            localClient.execute(request: request, delegate: TestHTTPDelegate())
+        }
+
+        let results = try EventLoopFuture<TestHTTPDelegate.Response>.whenAllComplete(tasks.map { $0.futureResult }, on: localClient.eventLoopGroup.next()).wait()
 
         for result in results {
             switch result {
@@ -1786,7 +1795,12 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertThrowsError(try localClient.get(url: "http://localhost:\(port)").wait()) { error in
             if isTestingNIOTS() {
-                XCTAssertEqual(error as? HTTPClientError, .connectTimeout)
+                #if canImport(Network)
+                // We can't be more specific than this.
+                XCTAssertTrue(error is HTTPClient.NWTLSError || error is HTTPClient.NWPOSIXError)
+                #else
+                XCTFail("Impossible condition")
+                #endif
             } else {
                 XCTAssert(error is NIOConnectionError, "Unexpected error: \(error)")
             }
@@ -2749,6 +2763,8 @@ class HTTPClientTests: XCTestCase {
         if isTestingNIOTS() {
             // If we are using Network.framework, we set the connect timeout down very low here
             // because on NIOTS a failing TLS handshake manifests as a connect timeout.
+            // Note that we do this here to prove that we correctly manifest the underlying error: DO NOT
+            // CHANGE THIS TO DISABLE WAITING FOR CONNECTIVITY.
             timeout.connect = .milliseconds(100)
         }
 
@@ -2763,7 +2779,12 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertThrowsError(try task.wait()) { error in
             if isTestingNIOTS() {
-                XCTAssertEqual(error as? HTTPClientError, .connectTimeout)
+                #if canImport(Network)
+                // We can't be more specific than this.
+                XCTAssertTrue(error is HTTPClient.NWTLSError)
+                #else
+                XCTFail("Impossible condition")
+                #endif
             } else {
                 switch error as? NIOSSLError {
                 case .some(.handshakeFailed(.sslError(_))): break
@@ -2815,7 +2836,12 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertThrowsError(try task.wait()) { error in
             if isTestingNIOTS() {
-                XCTAssertEqual(error as? HTTPClientError, .connectTimeout)
+                #if canImport(Network)
+                // We can't be more specific than this.
+                XCTAssertTrue(error is HTTPClient.NWTLSError)
+                #else
+                XCTFail("Impossible condition")
+                #endif
             } else {
                 switch error as? NIOSSLError {
                 case .some(.handshakeFailed(.sslError(_))): break

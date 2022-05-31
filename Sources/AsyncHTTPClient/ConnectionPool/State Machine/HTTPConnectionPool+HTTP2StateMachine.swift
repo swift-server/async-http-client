@@ -406,6 +406,11 @@ extension HTTPConnectionPool {
             return .init(request: .none, connection: .scheduleBackoffTimer(connectionID, backoff: backoff, on: eventLoop))
         }
 
+        mutating func waitingForConnectivity(_ error: Error, connectionID: Connection.ID) -> Action {
+            self.lastConnectFailure = error
+            return .init(request: .none, connection: .none)
+        }
+
         mutating func connectionCreationBackoffDone(_ connectionID: Connection.ID) -> Action {
             // The naming of `failConnection` is a little confusing here. All it does is moving the
             // connection state from `.backingOff` to `.closed` here. It also returns the

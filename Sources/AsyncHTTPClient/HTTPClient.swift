@@ -655,6 +655,10 @@ public class HTTPClient {
         /// is set to `.automatic` by default which will use HTTP/2 if run over https and the server supports it, otherwise HTTP/1
         public var httpVersion: HTTPVersion
 
+        /// Whether `HTTPClient` will let Network.framework sit in the `.waiting` state awaiting new network changes, or fail immediately. Defaults to `true`,
+        /// which is the recommended setting. Only set this to `false` when attempting to trigger a particular error path.
+        public var networkFrameworkWaitForConnectivity: Bool
+
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
@@ -671,6 +675,7 @@ public class HTTPClient {
             self.proxy = proxy
             self.decompression = decompression
             self.httpVersion = .automatic
+            self.networkFrameworkWaitForConnectivity = true
         }
 
         public init(tlsConfiguration: TLSConfiguration? = nil,

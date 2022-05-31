@@ -241,6 +241,12 @@ extension HTTPConnectionPool {
             }
         }
 
+        mutating func waitingForConnectivity(_ error: Error, connectionID: Connection.ID) -> Action {
+            self.lastConnectFailure = error
+
+            return .init(request: .none, connection: .none)
+        }
+
         mutating func connectionCreationBackoffDone(_ connectionID: Connection.ID) -> Action {
             switch self.lifecycleState {
             case .running:
