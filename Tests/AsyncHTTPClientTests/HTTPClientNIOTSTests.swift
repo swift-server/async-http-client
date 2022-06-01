@@ -81,6 +81,7 @@ class HTTPClientNIOTSTests: XCTestCase {
 
     func testConnectionFailsFastError() {
         guard isTestingNIOTS() else { return }
+        #if canImport(Network)
         let httpBin = HTTPBin(.http1_1(ssl: false))
         var config = HTTPClient.Configuration()
         config.networkFrameworkWaitForConnectivity = false
@@ -98,6 +99,7 @@ class HTTPClientNIOTSTests: XCTestCase {
         XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(port)/get").wait()) {
             XCTAssertTrue($0 is NWError)
         }
+        #endif
     }
 
     func testConnectionFailError() {
