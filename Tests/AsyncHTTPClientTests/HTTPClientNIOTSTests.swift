@@ -22,7 +22,6 @@ import NIOPosix
 import NIOSSL
 import NIOTransportServices
 import XCTest
-import NIOEmbedded
 
 class HTTPClientNIOTSTests: XCTestCase {
     var clientGroup: EventLoopGroup!
