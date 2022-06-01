@@ -2763,8 +2763,8 @@ class HTTPClientTests: XCTestCase {
         if isTestingNIOTS() {
             // If we are using Network.framework, we set the connect timeout down very low here
             // because on NIOTS a failing TLS handshake manifests as a connect timeout.
-            // Note that we do this here to prove that we correctly manifest the underlying error: DO NOT
-            // CHANGE THIS TO DISABLE WAITING FOR CONNECTIVITY.
+            // Note that we do this here to prove that we correctly manifest the underlying error: 
+            // DO NOT CHANGE THIS TO DISABLE WAITING FOR CONNECTIVITY.
             timeout.connect = .milliseconds(100)
         }
 
