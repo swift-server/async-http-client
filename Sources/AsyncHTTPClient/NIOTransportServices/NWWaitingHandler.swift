@@ -23,7 +23,7 @@ final class NWWaitingHandler<Requester: HTTPConnectionRequester>: ChannelInbound
     typealias InboundIn = Any
     typealias InboundOut = Any
 
-    private var requester: Requester?
+    private var requester: Requester
     private let connectionID: HTTPConnectionPool.Connection.ID
 
     init(requester: Requester, connectionID: HTTPConnectionPool.Connection.ID) {
@@ -32,15 +32,10 @@ final class NWWaitingHandler<Requester: HTTPConnectionRequester>: ChannelInbound
     }
 
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
-        if let waitingEvent = event as? NIOTSNetworkEvents.WaitingForConnectivity, let requester = self.requester {
-            requester.waitingForConnectivity(self.connectionID, error: HTTPClient.NWErrorHandler.translateError(waitingEvent.transientError))
-            self.requester = nil
+        if let waitingEvent = event as? NIOTSNetworkEvents.WaitingForConnectivity{
+            self.requester.waitingForConnectivity(self.connectionID, error: HTTPClient.NWErrorHandler.translateError(waitingEvent.transientError))
         }
         context.fireUserInboundEventTriggered(event)
-    }
-
-    func handlerRemoved(context: ChannelHandlerContext) {
-        self.requester = nil
     }
 }
 #endif

@@ -16,11 +16,13 @@
 #if canImport(Network)
 import Network
 #endif
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOPosix
 import NIOSSL
 import NIOTransportServices
 import XCTest
+import NIOEmbedded
 
 class HTTPClientNIOTSTests: XCTestCase {
     var clientGroup: EventLoopGroup!
@@ -76,6 +78,27 @@ class HTTPClientNIOTSTests: XCTestCase {
         #else
         XCTFail("wrong OS")
         #endif
+    }
+
+    func testConnectionFailsFastError() {
+        guard isTestingNIOTS() else { return }
+        let httpBin = HTTPBin(.http1_1(ssl: false))
+        var config = HTTPClient.Configuration()
+        config.networkFrameworkWaitForConnectivity = false
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                    configuration: config)
+
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+        }
+
+        let port = httpBin.port
+        XCTAssertNoThrow(try httpBin.shutdown())
+
+        XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(port)/get").wait()) {
+            XCTAssertTrue($0 is NWError)
+        }
     }
 
     func testConnectionFailError() {
