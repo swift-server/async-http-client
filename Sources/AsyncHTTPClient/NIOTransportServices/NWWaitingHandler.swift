@@ -14,11 +14,11 @@
 
 #if canImport(Network)
 import Network
-#endif
 import NIOCore
 import NIOHTTP1
 import NIOTransportServices
 
+@available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *)
 final class NWWaitingHandler<Requester: HTTPConnectionRequester>: ChannelInboundHandler {
     typealias InboundIn = Any
     typealias InboundOut = Any
@@ -32,14 +32,10 @@ final class NWWaitingHandler<Requester: HTTPConnectionRequester>: ChannelInbound
     }
 
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
-        #if canImport(Network)
-        if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
-            if let waitingEvent = event as? NIOTSNetworkEvents.WaitingForConnectivity, let requester = self.requester {
-                requester.waitingForConnectivity(self.connectionID, error: HTTPClient.NWErrorHandler.translateError(waitingEvent.transientError))
-                self.requester = nil
-            }
+        if let waitingEvent = event as? NIOTSNetworkEvents.WaitingForConnectivity, let requester = self.requester {
+            requester.waitingForConnectivity(self.connectionID, error: HTTPClient.NWErrorHandler.translateError(waitingEvent.transientError))
+            self.requester = nil
         }
-        #endif
         context.fireUserInboundEventTriggered(event)
     }
 
@@ -47,3 +43,4 @@ final class NWWaitingHandler<Requester: HTTPConnectionRequester>: ChannelInbound
         self.requester = nil
     }
 }
+#endif
