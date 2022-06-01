@@ -27,6 +27,7 @@ extension HTTPClientNIOTSTests {
         return [
             ("testCorrectEventLoopGroup", testCorrectEventLoopGroup),
             ("testTLSFailError", testTLSFailError),
+            ("testConnectionFailsFastError", testConnectionFailsFastError),
             ("testConnectionFailError", testConnectionFailError),
             ("testTLSVersionError", testTLSVersionError),
             ("testTrustRootCertificateLoadFail", testTrustRootCertificateLoadFail),

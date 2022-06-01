@@ -211,6 +211,14 @@ extension HTTPConnectionPool {
             })
         }
 
+        mutating func waitingForConnectivity(_ error: Error, connectionID: Connection.ID) -> Action {
+            self.state.modify(http1: { http1 in
+                http1.waitingForConnectivity(error, connectionID: connectionID)
+            }, http2: { http2 in
+                http2.waitingForConnectivity(error, connectionID: connectionID)
+            })
+        }
+
         mutating func connectionCreationBackoffDone(_ connectionID: Connection.ID) -> Action {
             self.state.modify(http1: { http1 in
                 http1.connectionCreationBackoffDone(connectionID)

@@ -467,6 +467,16 @@ extension HTTPConnectionPool: HTTPConnectionRequester {
             $0.failedToCreateNewConnection(error, connectionID: connectionID)
         }
     }
+
+    func waitingForConnectivity(_ connectionID: HTTPConnectionPool.Connection.ID, error: Error) {
+        self.logger.debug("waiting for connectivity", metadata: [
+            "ahc-error": "\(error)",
+            "ahc-connection-id": "\(connectionID)",
+        ])
+        self.modifyStateAndRunActions {
+            $0.waitingForConnectivity(error, connectionID: connectionID)
+        }
+    }
 }
 
 extension HTTPConnectionPool: HTTP1ConnectionDelegate {

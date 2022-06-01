@@ -16,6 +16,7 @@
 #if canImport(Network)
 import Network
 #endif
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOPosix
 import NIOSSL
@@ -54,7 +55,10 @@ class HTTPClientNIOTSTests: XCTestCase {
         guard isTestingNIOTS() else { return }
 
         let httpBin = HTTPBin(.http1_1(ssl: true))
-        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        var config = HTTPClient.Configuration()
+        config.networkFrameworkWaitForConnectivity = false
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                    configuration: config)
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
             XCTAssertNoThrow(try httpBin.shutdown())
@@ -75,9 +79,32 @@ class HTTPClientNIOTSTests: XCTestCase {
         #endif
     }
 
+    func testConnectionFailsFastError() {
+        guard isTestingNIOTS() else { return }
+        #if canImport(Network)
+        let httpBin = HTTPBin(.http1_1(ssl: false))
+        var config = HTTPClient.Configuration()
+        config.networkFrameworkWaitForConnectivity = false
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                    configuration: config)
+
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+        }
+
+        let port = httpBin.port
+        XCTAssertNoThrow(try httpBin.shutdown())
+
+        XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(port)/get").wait()) {
+            XCTAssertTrue($0 is NWError)
+        }
+        #endif
+    }
+
     func testConnectionFailError() {
         guard isTestingNIOTS() else { return }
-        let httpBin = HTTPBin(.http1_1(ssl: true))
+        let httpBin = HTTPBin(.http1_1(ssl: false))
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: .init(timeout: .init(connect: .milliseconds(100),
                                                                         read: .milliseconds(100))))
@@ -89,7 +116,7 @@ class HTTPClientNIOTSTests: XCTestCase {
         let port = httpBin.port
         XCTAssertNoThrow(try httpBin.shutdown())
 
-        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(port)/get").wait()) {
+        XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(port)/get").wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
         }
     }
@@ -102,9 +129,12 @@ class HTTPClientNIOTSTests: XCTestCase {
         tlsConfig.certificateVerification = .none
         tlsConfig.minimumTLSVersion = .tlsv11
         tlsConfig.maximumTLSVersion = .tlsv1
+
+        var clientConfig = HTTPClient.Configuration(tlsConfiguration: tlsConfig)
+        clientConfig.networkFrameworkWaitForConnectivity = false
         let httpClient = HTTPClient(
             eventLoopGroupProvider: .shared(self.clientGroup),
-            configuration: .init(tlsConfiguration: tlsConfig)
+            configuration: clientConfig
         )
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))

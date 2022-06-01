@@ -429,7 +429,9 @@ class HTTPClientInternalTests: XCTestCase {
         let el2 = elg.next()
 
         let httpBin = HTTPBin(.refuse)
-        let client = HTTPClient(eventLoopGroupProvider: .shared(elg))
+        var config = HTTPClient.Configuration()
+        config.networkFrameworkWaitForConnectivity = false
+        let client = HTTPClient(eventLoopGroupProvider: .shared(elg), configuration: config)
 
         defer {
             XCTAssertNoThrow(try client.syncShutdown())

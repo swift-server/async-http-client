@@ -405,6 +405,10 @@ extension TestConnectionCreator: HTTPConnectionRequester {
         }
         wrapper.fail(error)
     }
+
+    func waitingForConnectivity(_: HTTPConnectionPool.Connection.ID, error: Swift.Error) {
+        preconditionFailure("TODO")
+    }
 }
 
 class TestHTTP2ConnectionDelegate: HTTP2ConnectionDelegate {
