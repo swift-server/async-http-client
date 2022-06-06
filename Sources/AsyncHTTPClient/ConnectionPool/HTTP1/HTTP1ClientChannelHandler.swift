@@ -267,6 +267,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                 writePromise.futureResult.whenComplete { result in
                     switch result {
                     case .success:
+                        self.connection.taskCompleted()
                         oldRequest.succeedRequest(buffer)
                     case .failure(let error):
                         oldRequest.fail(error)

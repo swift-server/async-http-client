@@ -1253,6 +1253,37 @@ class HTTPEchoHandler: ChannelInboundHandler {
     }
 }
 
+class HTTP200DelayedHandler: ChannelInboundHandler {
+    typealias InboundIn = HTTPServerRequestPart
+    typealias OutboundOut = HTTPServerResponsePart
+
+    var pendingBodyParts: Int?
+
+    init(bodyPartsBeforeResponse: Int) {
+        self.pendingBodyParts = bodyPartsBeforeResponse
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        let request = self.unwrapInboundIn(data)
+        switch request {
+        case .head:
+            break
+        case .body:
+            if let pendingBodyParts = self.pendingBodyParts {
+                if pendingBodyParts > 0 {
+                    self.pendingBodyParts = pendingBodyParts - 1
+                } else {
+                    self.pendingBodyParts = nil
+                    context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok))), promise: nil)
+                    context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+                }
+            }
+        case .end:
+            break
+        }
+    }
+}
+
 private let cert = """
 -----BEGIN CERTIFICATE-----
 MIICmDCCAYACCQCPC8JDqMh1zzANBgkqhkiG9w0BAQsFADANMQswCQYDVQQGEwJ1
