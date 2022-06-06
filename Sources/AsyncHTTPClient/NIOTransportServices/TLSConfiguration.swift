@@ -209,11 +209,9 @@ extension TLSConfiguration {
                                 print("Trust failed: \(error.localizedDescription)")
                             }
                             // Optional pinning check
-                            if result {
-                                if let verifyPinningBlock = TLSConfiguration.verifyPinningBlock {
-                                    let isPinned = verifyPinningBlock(sec_protocol_metadata)
-                                    sec_protocol_verify_complete(isPinned)
-                                }
+                            if let verifyPinningBlock = TLSConfiguration.verifyPinningBlock {
+                                let isPinned = verifyPinningBlock(sec_protocol_metadata)
+                                sec_protocol_verify_complete(result && isPinned)
                             } else {
                                 sec_protocol_verify_complete(result)
                             }
