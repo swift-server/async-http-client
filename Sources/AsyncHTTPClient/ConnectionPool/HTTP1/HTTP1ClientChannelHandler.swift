@@ -267,6 +267,10 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                 writePromise.futureResult.whenComplete { result in
                     switch result {
                     case .success:
+                        // If our final action was `sendRequestEnd`, that means we've already received
+                        // the complete response. As a result, once we've uploaded all the body parts
+                        // we need to tell the pool that the connection is idle.
+                        self.connection.taskCompleted()
                         oldRequest.succeedRequest(buffer)
                     case .failure(let error):
                         oldRequest.fail(error)

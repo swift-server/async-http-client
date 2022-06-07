@@ -347,10 +347,14 @@ extension RequestBag.StateMachine {
             self.state = .executing(executor, requestState, .buffering(currentBuffer, next: next))
             return .none
         case .executing(let executor, let requestState, .waitingForRemote):
-            var buffer = buffer
-            let first = buffer.removeFirst()
-            self.state = .executing(executor, requestState, .buffering(buffer, next: .askExecutorForMore))
-            return .forwardResponsePart(first)
+            if buffer.count > 0 {
+                var buffer = buffer
+                let first = buffer.removeFirst()
+                self.state = .executing(executor, requestState, .buffering(buffer, next: .askExecutorForMore))
+                return .forwardResponsePart(first)
+            } else {
+                return .none
+            }
         case .redirected(let executor, var receivedBytes, let head, let redirectURL):
             let partsLength = buffer.reduce(into: 0) { $0 += $1.readableBytes }
             receivedBytes += partsLength
