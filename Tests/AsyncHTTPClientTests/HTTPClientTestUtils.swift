@@ -1253,7 +1253,7 @@ class HTTPEchoHandler: ChannelInboundHandler {
     }
 }
 
-class HTTP200DelayedHandler: ChannelInboundHandler {
+final class HTTP200DelayedHandler: ChannelInboundHandler {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
 
