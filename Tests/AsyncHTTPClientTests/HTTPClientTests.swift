@@ -650,7 +650,7 @@ class HTTPClientTests: XCTestCase {
         // The backlog behaviour on Linux can not be used to simulate a non-reachable server.
         // Linux sends a `SYN/ACK` back even if the `backlog` queue is full as it has two queues.
         // The second queue is not limit by `ChannelOptions.backlog` but by `/proc/sys/net/ipv4/tcp_max_syn_backlog`.
-        
+
         let serverChannel = try ServerBootstrap(group: self.serverGroup)
             .serverChannelOption(ChannelOptions.backlog, value: 1)
             .serverChannelOption(ChannelOptions.autoRead, value: false)
@@ -668,7 +668,7 @@ class HTTPClientTests: XCTestCase {
         }
         let url = "http://localhost:\(port)/get"
         #endif
-        
+
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: .init(timeout: .init(connect: .milliseconds(100), read: .milliseconds(150))))
 
