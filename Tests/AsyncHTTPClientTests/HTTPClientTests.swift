@@ -640,7 +640,35 @@ class HTTPClientTests: XCTestCase {
         }
     }
 
-    func testConnectTimeout() {
+    func testConnectTimeout() throws {
+        #if os(Linux)
+        // 198.51.100.254 is reserved for documentation only and therefore should not accept any TCP connection
+        let url = "http://198.51.100.254/get"
+        #else
+        // on macOS we can use the TCP backlog behaviour when the queue is full to simulate a non reachable server.
+        // this makes this test a bit more stable if `198.51.100.254` actually responds to connection attempt.
+        // The backlog behaviour on Linux can not be used to simulate a non-reachable server.
+        // Linux sends a `SYN/ACK` back even if the `backlog` queue is full as it has two queues.
+        // The second queue is not limit by `ChannelOptions.backlog` but by `/proc/sys/net/ipv4/tcp_max_syn_backlog`.
+
+        let serverChannel = try ServerBootstrap(group: self.serverGroup)
+            .serverChannelOption(ChannelOptions.backlog, value: 1)
+            .serverChannelOption(ChannelOptions.autoRead, value: false)
+            .bind(host: "127.0.0.1", port: 0)
+            .wait()
+        defer {
+            XCTAssertNoThrow(try serverChannel.close().wait())
+        }
+        let port = serverChannel.localAddress!.port!
+        let firstClientChannel = try ClientBootstrap(group: self.serverGroup)
+            .connect(host: "127.0.0.1", port: port)
+            .wait()
+        defer {
+            XCTAssertNoThrow(try firstClientChannel.close().wait())
+        }
+        let url = "http://localhost:\(port)/get"
+        #endif
+
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: .init(timeout: .init(connect: .milliseconds(100), read: .milliseconds(150))))
 
@@ -648,9 +676,8 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try httpClient.syncShutdown())
         }
 
-        // This must throw as 198.51.100.254 is reserved for documentation only
-        XCTAssertThrowsError(try httpClient.get(url: "http://198.51.100.254/get").wait()) {
-            XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
+        XCTAssertThrowsError(try httpClient.get(url: url).wait()) {
+            XCTAssertEqualTypeAndValue($0, HTTPClientError.connectTimeout)
         }
     }
 
