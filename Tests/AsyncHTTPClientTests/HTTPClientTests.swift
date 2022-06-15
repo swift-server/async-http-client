@@ -1228,7 +1228,7 @@ class HTTPClientTests: XCTestCase {
             }
         }
     }
-    
+
     func testSelfSignedCertificateIsRejectedWithCorrectError() throws {
         /// key + cert was created with the follwing command:
         /// openssl req -x509 -newkey rsa:4096 -keyout self_signed_key.pem -out self_signed_cert.pem -sha256 -days 99999 -nodes -subj '/CN=localhost'
@@ -1247,7 +1247,7 @@ class HTTPClientTests: XCTestCase {
         let serverChannel = try server.bind(host: "localhost", port: 0).wait()
         defer { XCTAssertNoThrow(try serverChannel.close().wait()) }
         let port = serverChannel.localAddress!.port!
-        
+
         var config = HTTPClient.Configuration()
         config.timeout.connect = .seconds(2)
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: config)
