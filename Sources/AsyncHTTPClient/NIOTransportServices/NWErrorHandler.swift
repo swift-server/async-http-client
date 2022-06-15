@@ -60,7 +60,7 @@ extension HTTPClient {
     }
     #endif
 
-    class NWErrorHandler: ChannelInboundHandler {
+    final class NWErrorHandler: ChannelInboundHandler {
         typealias InboundIn = HTTPClientResponsePart
 
         func errorCaught(context: ChannelHandlerContext, error: Error) {
@@ -73,9 +73,9 @@ extension HTTPClient {
                 if let error = error as? NWError {
                     switch error {
                     case .tls(let status):
-                        return NWTLSError(status, reason: error.localizedDescription)
+                        return NWTLSError(status, reason: String(describing: error))
                     case .posix(let errorCode):
-                        return NWPOSIXError(errorCode, reason: error.localizedDescription)
+                        return NWPOSIXError(errorCode, reason: String(describing: error))
                     default:
                         return error
                     }

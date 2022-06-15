@@ -78,6 +78,7 @@ extension HTTPClientTests {
             ("testSubsequentRequestsWorkWithServerAlternatingBetweenKeepAliveAndClose", testSubsequentRequestsWorkWithServerAlternatingBetweenKeepAliveAndClose),
             ("testStressGetHttps", testStressGetHttps),
             ("testStressGetHttpsSSLError", testStressGetHttpsSSLError),
+            ("testSelfSignedCertificateIsRejectedWithCorrectError", testSelfSignedCertificateIsRejectedWithCorrectError),
             ("testFailingConnectionIsReleased", testFailingConnectionIsReleased),
             ("testResponseDelayGet", testResponseDelayGet),
             ("testIdleTimeoutNoReuse", testIdleTimeoutNoReuse),
