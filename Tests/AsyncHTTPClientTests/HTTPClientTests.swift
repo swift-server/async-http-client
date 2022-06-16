@@ -3075,6 +3075,61 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNoThrow(try future2.wait())
     }
 
+    // This test validates that we correctly close the connection after our body completes when we've streamed a
+    // body and received the 2XX response _before_ we finished our stream.
+    func testCloseConnectionAfterEarly2XXWhenStreaming() {
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 2)
+        defer { XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully()) }
+
+        let onClosePromise = eventLoopGroup.next().makePromise(of: Void.self)
+        let httpBin = HTTPBin(.http1_1(ssl: false, compress: false)) { _ in ExpectClosureServerHandler(onClosePromise: onClosePromise) }
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
+
+        let writeEL = eventLoopGroup.next()
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
+        defer { XCTAssertNoThrow(try httpClient.syncShutdown()) }
+
+        let body: HTTPClient.Body = .stream { writer in
+            let finalPromise = writeEL.makePromise(of: Void.self)
+
+            func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
+                // always invoke from the wrong el to test thread safety
+                writeEL.preconditionInEventLoop()
+
+                if index >= 30 {
+                    return finalPromise.succeed(())
+                }
+
+                let sent = ByteBuffer(integer: index)
+                writer.write(.byteBuffer(sent)).whenComplete { result in
+                    switch result {
+                    case .success:
+                        writeEL.execute {
+                            writeLoop(writer, index: index + 1)
+                        }
+
+                    case .failure(let error):
+                        finalPromise.fail(error)
+                    }
+                }
+            }
+
+            writeEL.execute {
+                writeLoop(writer, index: 0)
+            }
+
+            return finalPromise.futureResult
+        }
+
+        let headers = HTTPHeaders([("Connection", "close")])
+        let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)", headers: headers, body: body)
+        let future = httpClient.execute(request: request)
+        XCTAssertNoThrow(try future.wait())
+        XCTAssertNoThrow(try onClosePromise.futureResult.wait())
+    }
+
+
     func testSynchronousHandshakeErrorReporting() throws {
         // This only affects cases where we use NIOSSL.
         guard !isTestingNIOTS() else { return }

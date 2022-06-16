@@ -261,16 +261,22 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             case .close:
                 context.close(promise: nil)
                 oldRequest.succeedRequest(buffer)
-            case .sendRequestEnd(let writePromise):
+            case .sendRequestEnd(let writePromise, let shouldClose):
                 let writePromise = writePromise ?? context.eventLoop.makePromise(of: Void.self)
                 // We need to defer succeeding the old request to avoid ordering issues
-                writePromise.futureResult.whenComplete { result in
+                writePromise.futureResult.hop(to: context.eventLoop).whenComplete { result in
                     switch result {
                     case .success:
                         // If our final action was `sendRequestEnd`, that means we've already received
                         // the complete response. As a result, once we've uploaded all the body parts
-                        // we need to tell the pool that the connection is idle.
-                        self.connection.taskCompleted()
+                        // we need to tell the pool that the connection is idle or, if we were asked to
+                        // close when we're done, send the close. Either way, we then succeed the request
+                        if shouldClose {
+                            context.close(promise: nil)
+                        } else {
+                            self.connection.taskCompleted()
+                        }
+
                         oldRequest.succeedRequest(buffer)
                     case .failure(let error):
                         oldRequest.fail(error)
