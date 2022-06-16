@@ -1267,7 +1267,11 @@ final class HTTP200DelayedHandler: ChannelInboundHandler {
         let request = self.unwrapInboundIn(data)
         switch request {
         case .head:
-            break
+            // Once we have received one response, all further requests are responded to immediately.
+            if self.pendingBodyParts == nil {
+                context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok))), promise: nil)
+                context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+            }
         case .body:
             if let pendingBodyParts = self.pendingBodyParts {
                 if pendingBodyParts > 0 {
