@@ -3129,7 +3129,6 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNoThrow(try onClosePromise.futureResult.wait())
     }
 
-
     func testSynchronousHandshakeErrorReporting() throws {
         // This only affects cases where we use NIOSSL.
         guard !isTestingNIOTS() else { return }
