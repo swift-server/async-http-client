@@ -1017,6 +1017,32 @@ internal final class CloseWithoutClosingServerHandler: ChannelInboundHandler {
     }
 }
 
+final class ExpectClosureServerHandler: ChannelInboundHandler {
+    typealias InboundIn = HTTPServerRequestPart
+    typealias OutboundOut = HTTPServerResponsePart
+
+    private let onClosePromise: EventLoopPromise<Void>
+
+    init(onClosePromise: EventLoopPromise<Void>) {
+        self.onClosePromise = onClosePromise
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        switch self.unwrapInboundIn(data) {
+        case .head:
+            let head = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["Content-Length": "0"])
+            context.write(self.wrapOutboundOut(.head(head)), promise: nil)
+            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+        case .body, .end:
+            ()
+        }
+    }
+
+    func channelInactive(context: ChannelHandlerContext) {
+        self.onClosePromise.succeed(())
+    }
+}
+
 struct EventLoopFutureTimeoutError: Error {}
 
 extension EventLoopFuture {
@@ -1267,7 +1293,11 @@ final class HTTP200DelayedHandler: ChannelInboundHandler {
         let request = self.unwrapInboundIn(data)
         switch request {
         case .head:
-            break
+            // Once we have received one response, all further requests are responded to immediately.
+            if self.pendingBodyParts == nil {
+                context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok))), promise: nil)
+                context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+            }
         case .body:
             if let pendingBodyParts = self.pendingBodyParts {
                 if pendingBodyParts > 0 {

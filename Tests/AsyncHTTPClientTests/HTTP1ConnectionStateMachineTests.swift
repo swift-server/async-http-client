@@ -338,8 +338,8 @@ extension HTTP1ConnectionStateMachine.Action.FinalSuccessfulStreamAction: Equata
         switch (lhs, rhs) {
         case (.close, .close):
             return true
-        case (sendRequestEnd(let lhsPromise), sendRequestEnd(let rhsPromise)):
-            return lhsPromise?.futureResult == rhsPromise?.futureResult
+        case (sendRequestEnd(let lhsPromise, let lhsShouldClose), sendRequestEnd(let rhsPromise, let rhsShouldClose)):
+            return lhsPromise?.futureResult == rhsPromise?.futureResult && lhsShouldClose == rhsShouldClose
         case (informConnectionIsIdle, informConnectionIsIdle):
             return true
         default:
