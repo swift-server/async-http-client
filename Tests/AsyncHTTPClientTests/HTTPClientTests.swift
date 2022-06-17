@@ -3021,6 +3021,60 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNil(try delegate.next().wait())
     }
 
+    // This test is identical to the one above, except that we send another request immediately after. This is a regression
+    // test for https://github.com/swift-server/async-http-client/issues/595.
+    func testBiDirectionalStreamingEarly200DoesntPreventUsFromSendingMoreRequests() {
+        let httpBin = HTTPBin(.http1_1(ssl: false, compress: false)) { _ in HTTP200DelayedHandler(bodyPartsBeforeResponse: 1) }
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
+
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 2)
+        defer { XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully()) }
+        let writeEL = eventLoopGroup.next()
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
+        defer { XCTAssertNoThrow(try httpClient.syncShutdown()) }
+
+        let body: HTTPClient.Body = .stream { writer in
+            let finalPromise = writeEL.makePromise(of: Void.self)
+
+            func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
+                // always invoke from the wrong el to test thread safety
+                writeEL.preconditionInEventLoop()
+
+                if index >= 30 {
+                    return finalPromise.succeed(())
+                }
+
+                let sent = ByteBuffer(integer: index)
+                writer.write(.byteBuffer(sent)).whenComplete { result in
+                    switch result {
+                    case .success:
+                        writeEL.execute {
+                            writeLoop(writer, index: index + 1)
+                        }
+
+                    case .failure(let error):
+                        finalPromise.fail(error)
+                    }
+                }
+            }
+
+            writeEL.execute {
+                writeLoop(writer, index: 0)
+            }
+
+            return finalPromise.futureResult
+        }
+
+        let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)", body: body)
+        let future = httpClient.execute(request: request)
+        XCTAssertNoThrow(try future.wait())
+
+        // Try another request
+        let future2 = httpClient.execute(request: request)
+        XCTAssertNoThrow(try future2.wait())
+    }
+
     func testSynchronousHandshakeErrorReporting() throws {
         // This only affects cases where we use NIOSSL.
         guard !isTestingNIOTS() else { return }

@@ -412,6 +412,7 @@ extension HTTP1ConnectionStateMachine.State {
                 self = .closing
                 newFinalAction = .close
             case .sendRequestEnd(let writePromise):
+                self = .idle
                 newFinalAction = .sendRequestEnd(writePromise)
             case .none:
                 self = .idle
