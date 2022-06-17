@@ -279,6 +279,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
                         oldRequest.succeedRequest(buffer)
                     case .failure(let error):
+                        context.close(promise: nil)
                         oldRequest.fail(error)
                     }
                 }

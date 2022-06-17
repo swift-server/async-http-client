@@ -32,6 +32,7 @@ extension HTTP1ClientChannelHandlerTests {
             ("testIdleReadTimeoutIsCanceledIfRequestIsCanceled", testIdleReadTimeoutIsCanceledIfRequestIsCanceled),
             ("testFailHTTPRequestWithContentLengthBecauseOfChannelInactiveWaitingForDemand", testFailHTTPRequestWithContentLengthBecauseOfChannelInactiveWaitingForDemand),
             ("testWriteHTTPHeadFails", testWriteHTTPHeadFails),
+            ("testHandlerClosesChannelIfLastActionIsSendEndAndItFails", testHandlerClosesChannelIfLastActionIsSendEndAndItFails),
         ]
     }
 }
