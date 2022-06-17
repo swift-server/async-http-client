@@ -61,6 +61,10 @@ let package = Package(
                 .product(name: "NIOHTTP2", package: "swift-nio-http2"),
                 .product(name: "NIOSOCKS", package: "swift-nio-extras"),
                 .product(name: "Logging", package: "swift-log"),
+            ],
+            resources: [
+                .copy("Resources/self_signed_cert.pem"),
+                .copy("Resources/self_signed_key.pem"),
             ]
         ),
     ]

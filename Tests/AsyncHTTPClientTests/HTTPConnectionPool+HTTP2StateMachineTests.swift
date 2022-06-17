@@ -1242,7 +1242,7 @@ func XCTAssertEqualTypeAndValue<Left, Right: Equatable>(
         let lhs = try lhs()
         let rhs = try rhs()
         guard let lhsAsRhs = lhs as? Right else {
-            XCTFail("could not cast \(lhs) of type \(Right.self) to \(Left.self)")
+            XCTFail("could not cast \(lhs) of type \(type(of: lhs)) to \(type(of: rhs))")
             return
         }
         XCTAssertEqual(lhsAsRhs, rhs)
