@@ -710,7 +710,7 @@ final class FailEndHandler: ChannelOutboundHandler {
     typealias OutboundIn = HTTPClientRequestPart
     typealias OutboundOut = HTTPClientRequestPart
 
-    struct Error: Swift.Error { }
+    struct Error: Swift.Error {}
 
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
         if case .end = self.unwrapOutboundIn(data) {
