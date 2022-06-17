@@ -131,6 +131,7 @@ extension HTTPClientTests {
             ("testBiDirectionalStreaming", testBiDirectionalStreaming),
             ("testBiDirectionalStreamingEarly200", testBiDirectionalStreamingEarly200),
             ("testBiDirectionalStreamingEarly200DoesntPreventUsFromSendingMoreRequests", testBiDirectionalStreamingEarly200DoesntPreventUsFromSendingMoreRequests),
+            ("testCloseConnectionAfterEarly2XXWhenStreaming", testCloseConnectionAfterEarly2XXWhenStreaming),
             ("testSynchronousHandshakeErrorReporting", testSynchronousHandshakeErrorReporting),
             ("testFileDownloadChunked", testFileDownloadChunked),
             ("testCloseWhileBackpressureIsExertedIsFine", testCloseWhileBackpressureIsExertedIsFine),
