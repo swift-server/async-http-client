@@ -327,7 +327,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.head(responseHead)))
 
         // canceling the request
-        requestBag.cancel()
+        requestBag.cancel(.userInitiated)
         XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .cancelled)
         }

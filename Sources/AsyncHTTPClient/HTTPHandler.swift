@@ -556,7 +556,7 @@ extension URL {
 }
 
 protocol HTTPClientTaskDelegate {
-    func cancel()
+    func cancel(_ reason: CancelationReason)
 }
 
 extension HTTPClient {
@@ -618,7 +618,7 @@ extension HTTPClient {
                 return self._taskDelegate
             }
 
-            taskDelegate?.cancel()
+            taskDelegate?.cancel(.userInitiated)
         }
 
         func succeed<Delegate: HTTPClientResponseDelegate>(promise: EventLoopPromise<Response>?,
