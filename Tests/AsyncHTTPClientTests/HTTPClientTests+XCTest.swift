@@ -79,6 +79,7 @@ extension HTTPClientTests {
             ("testStressGetHttps", testStressGetHttps),
             ("testStressGetHttpsSSLError", testStressGetHttpsSSLError),
             ("testSelfSignedCertificateIsRejectedWithCorrectError", testSelfSignedCertificateIsRejectedWithCorrectError),
+            ("testSelfSignedCertificateIsRejectedWithCorrectErrorIfRequestDeadlineIsExceeded", testSelfSignedCertificateIsRejectedWithCorrectErrorIfRequestDeadlineIsExceeded),
             ("testFailingConnectionIsReleased", testFailingConnectionIsReleased),
             ("testResponseDelayGet", testResponseDelayGet),
             ("testIdleTimeoutNoReuse", testIdleTimeoutNoReuse),
