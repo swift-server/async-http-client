@@ -445,7 +445,7 @@ extension HTTPConnectionPool {
         mutating func cancelRequest(_ requestID: Request.ID) -> Action {
             // 1. check requests in queue
             if let request = self.requests.remove(requestID) {
-                let error = lastConnectFailure ?? HTTPClientError.cancelled
+                let error = self.lastConnectFailure ?? HTTPClientError.cancelled
                 return .init(
                     request: .failRequest(request, error, cancelTimeout: true),
                     connection: .none

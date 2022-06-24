@@ -322,7 +322,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
 
         self.executeFailAction0(action)
     }
-    
+
     private func executeFailAction0(_ action: RequestBag<Delegate>.StateMachine.FailAction) {
         switch action {
         case .failTask(let error, let scheduler, let executor):
@@ -335,7 +335,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             break
         }
     }
-    
+
     private func cancel0(_ reason: CancelationReason) {
         self.task.eventLoop.assertInEventLoop()
 
@@ -353,7 +353,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
 enum CancelationReason {
     case userInitiated
     case deadlineExceeded
-    
+
     var error: HTTPClientError {
         switch self {
         case .userInitiated:

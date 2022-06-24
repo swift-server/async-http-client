@@ -66,8 +66,6 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
 
         // fail all connection attempts
         while let randomConnectionID = connections.randomStartingConnection() {
-            
-
             XCTAssertNoThrow(try connections.failConnectionCreation(randomConnectionID))
             let action = state.failedToCreateNewConnection(SomeError(), connectionID: randomConnectionID)
 

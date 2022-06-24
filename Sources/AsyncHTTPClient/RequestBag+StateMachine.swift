@@ -532,7 +532,7 @@ extension RequestBag.StateMachine {
             preconditionFailure()
         }
     }
-    
+
     enum CancelAction {
         case cancelScheduler(HTTPRequestScheduler?)
         case fail(FailAction)

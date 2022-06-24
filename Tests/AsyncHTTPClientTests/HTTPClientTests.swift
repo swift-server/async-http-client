@@ -1268,7 +1268,7 @@ class HTTPClientTests: XCTestCase {
             #endif
         }
     }
-    
+
     func testSelfSignedCertificateIsRejectedWithCorrectErrorIfRequestDeadlineIsExceeded() throws {
         /// key + cert was created with the follwing command:
         /// openssl req -x509 -newkey rsa:4096 -keyout self_signed_key.pem -out self_signed_cert.pem -sha256 -days 99999 -nodes -subj '/CN=localhost'
@@ -1292,7 +1292,7 @@ class HTTPClientTests: XCTestCase {
         config.timeout.connect = .seconds(3)
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: config)
         defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
-        
+
         XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(port)", deadline: .now() + .seconds(2)).wait()) { error in
             #if canImport(Network)
             guard let nwTLSError = error as? HTTPClient.NWTLSError else {
