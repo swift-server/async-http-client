@@ -334,7 +334,7 @@ class HTTPConnectionPoolTests: XCTestCase {
 
         pool.executeRequest(requestBag)
         XCTAssertNoThrow(try eventLoop.scheduleTask(in: .seconds(1)) {}.futureResult.wait())
-        requestBag.cancel(.userInitiated)
+        requestBag.cancel()
 
         XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .cancelled)

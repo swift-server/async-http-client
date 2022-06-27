@@ -335,11 +335,10 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             break
         }
     }
-
-    private func cancel0(_ reason: CancelationReason) {
+    
+    func deadlineExceeded0() {
         self.task.eventLoop.assertInEventLoop()
-
-        let action = self.state.cancel(reason)
+        let action = self.state.deadlineExceeded()
 
         switch action {
         case .cancelScheduler(let scheduler):
@@ -348,18 +347,14 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             self.executeFailAction0(failAction)
         }
     }
-}
-
-enum CancelationReason {
-    case userInitiated
-    case deadlineExceeded
-
-    var error: HTTPClientError {
-        switch self {
-        case .userInitiated:
-            return .cancelled
-        case .deadlineExceeded:
-            return .deadlineExceeded
+    
+    func deadlineExceeded() {
+        if self.task.eventLoop.inEventLoop {
+            self.deadlineExceeded0()
+        } else {
+            self.task.eventLoop.execute {
+                self.deadlineExceeded0()
+            }
         }
     }
 }
@@ -487,13 +482,7 @@ extension RequestBag: HTTPExecutableRequest {
 }
 
 extension RequestBag: HTTPClientTaskDelegate {
-    func cancel(_ reason: CancelationReason) {
-        if self.task.eventLoop.inEventLoop {
-            self.cancel0(reason)
-        } else {
-            self.task.eventLoop.execute {
-                self.cancel0(reason)
-            }
-        }
+    func cancel() {
+        self.fail(HTTPClientError.cancelled)
     }
 }
