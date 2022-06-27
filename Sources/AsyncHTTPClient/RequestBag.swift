@@ -335,7 +335,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             break
         }
     }
-    
+
     func deadlineExceeded0() {
         self.task.eventLoop.assertInEventLoop()
         let action = self.state.deadlineExceeded()
@@ -347,7 +347,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             self.executeFailAction0(failAction)
         }
     }
-    
+
     func deadlineExceeded() {
         if self.task.eventLoop.inEventLoop {
             self.deadlineExceeded0()
