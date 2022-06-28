@@ -545,6 +545,8 @@ extension RequestBag.StateMachine {
             self.state = .deadlineExceededWhileQueued
             return .cancelScheduler(queuer)
         default:
+            /// if we are not in the queued state, we can fail early by just calling down to `self.fail(_:)`
+            /// which does the appropriate state transition for us.
             return .fail(self.fail(HTTPClientError.deadlineExceeded))
         }
     }
