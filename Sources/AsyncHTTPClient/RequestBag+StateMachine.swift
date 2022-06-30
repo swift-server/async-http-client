@@ -31,7 +31,9 @@ extension RequestBag {
         fileprivate enum State {
             case initialized
             case queued(HTTPRequestScheduler)
-            /// if the deadline was exceeded while in the `.queued(_:)` state, we wait until the request pool fails the request with a potential more descriptive error message if a connection failure has occured while the request was queued.
+            /// if the deadline was exceeded while in the `.queued(_:)` state,
+            /// we wait until the request pool fails the request with a potential more descriptive error message,
+            /// if a connection failure has occured while the request was queued.
             case deadlineExceededWhileQueued
             case executing(HTTPRequestExecutor, RequestStreamState, ResponseStreamState)
             case finished(error: Error?)
@@ -91,14 +93,24 @@ extension RequestBag.StateMachine {
 
         self.state = .queued(scheduler)
     }
+    
+    enum WillExecuteRequestAction {
+        case cancelExecuter(HTTPRequestExecutor)
+        case failTaskAndCancelExecutor(Error, HTTPRequestExecutor)
+        case none
+    }
 
-    mutating func willExecuteRequest(_ executor: HTTPRequestExecutor) -> Bool {
+    mutating func willExecuteRequest(_ executor: HTTPRequestExecutor) -> WillExecuteRequestAction {
         switch self.state {
         case .initialized, .queued:
             self.state = .executing(executor, .initialized, .initialized)
-            return true
-        case .finished(error: .some), .deadlineExceededWhileQueued:
-            return false
+            return .none
+        case .deadlineExceededWhileQueued:
+            let error: Error = HTTPClientError.deadlineExceeded
+            self.state = .finished(error: error)
+            return .failTaskAndCancelExecutor(error, executor)
+        case .finished(error: .some):
+            return .cancelExecuter(executor)
         case .executing, .redirected, .finished(error: .none), .modifying:
             preconditionFailure("Invalid state: \(self.state)")
         }
@@ -542,9 +554,17 @@ extension RequestBag.StateMachine {
     mutating func deadlineExceeded() -> DeadlineExceededAction {
         switch self.state {
         case .queued(let queuer):
+            /// We do not fail the request immediately because we want to give the scheduler a chance of throwing a better error message
+            /// We therefore depend on the scheduler failing the request after we cancel the request.
             self.state = .deadlineExceededWhileQueued
             return .cancelScheduler(queuer)
-        default:
+            
+        case .initialized,
+            .deadlineExceededWhileQueued,
+            .executing,
+            .finished,
+            .redirected,
+            .modifying:
             /// if we are not in the queued state, we can fail early by just calling down to `self.fail(_:)`
             /// which does the appropriate state transition for us.
             return .fail(self.fail(HTTPClientError.deadlineExceeded))

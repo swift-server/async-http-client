@@ -61,7 +61,6 @@ extension HTTPConnectionPool {
             case failRequestsAndCancelTimeouts([Request], Error)
 
             case scheduleRequestTimeout(for: Request, on: EventLoop)
-            case cancelRequestTimeout(Request.ID)
 
             case none
         }

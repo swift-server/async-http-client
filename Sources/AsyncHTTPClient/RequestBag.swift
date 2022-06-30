@@ -81,8 +81,16 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
 
     private func willExecuteRequest0(_ executor: HTTPRequestExecutor) {
         self.task.eventLoop.assertInEventLoop()
-        if !self.state.willExecuteRequest(executor) {
-            return executor.cancelRequest(self)
+        let action = self.state.willExecuteRequest(executor)
+        switch action {
+        case .cancelExecuter(let executor):
+            executor.cancelRequest(self)
+        case .failTaskAndCancelExecutor(let error, let executor):
+            self.delegate.didReceiveError(task: self.task, error)
+            self.task.fail(with: error, delegateType: Delegate.self)
+            executor.cancelRequest(self)
+        case .none:
+            break
         }
     }
 

@@ -227,6 +227,44 @@ final class RequestBagTests: XCTestCase {
             XCTAssertEqual($0 as? HTTPClientError, .cancelled)
         }
     }
+    
+    func testDeadlineExceededFailsTaskEvenIfRaceBetweenCancelingSchedulerAndRequestStart() {
+        let embeddedEventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+        let logger = Logger(label: "test")
+
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://swift.org"))
+        guard let request = maybeRequest else { return XCTFail("Expected to have a request") }
+
+        let delegate = UploadCountingDelegate(eventLoop: embeddedEventLoop)
+        var maybeRequestBag: RequestBag<UploadCountingDelegate>?
+        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embeddedEventLoop),
+            task: .init(eventLoop: embeddedEventLoop, logger: logger),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(),
+            delegate: delegate
+        ))
+        guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
+        XCTAssert(bag.eventLoop === embeddedEventLoop)
+        
+        let queuer = MockTaskQueuer()
+        bag.requestWasQueued(queuer)
+
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
+        XCTAssertEqual(queuer.hitCancelCount, 0)
+        bag.deadlineExceeded()
+        XCTAssertEqual(queuer.hitCancelCount, 1)
+
+        bag.willExecuteRequest(executor)
+        XCTAssertTrue(executor.isCancelled, "The request bag, should call cancel immediately on the executor")
+        XCTAssertThrowsError(try bag.task.futureResult.wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .deadlineExceeded)
+        }
+    }
 
     func testCancelFailsTaskAfterRequestIsSent() {
         let embeddedEventLoop = EmbeddedEventLoop()
