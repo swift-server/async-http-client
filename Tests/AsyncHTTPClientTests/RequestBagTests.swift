@@ -227,7 +227,7 @@ final class RequestBagTests: XCTestCase {
             XCTAssertEqual($0 as? HTTPClientError, .cancelled)
         }
     }
-    
+
     func testDeadlineExceededFailsTaskEvenIfRaceBetweenCancelingSchedulerAndRequestStart() {
         let embeddedEventLoop = EmbeddedEventLoop()
         defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
@@ -250,7 +250,7 @@ final class RequestBagTests: XCTestCase {
         ))
         guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
         XCTAssert(bag.eventLoop === embeddedEventLoop)
-        
+
         let queuer = MockTaskQueuer()
         bag.requestWasQueued(queuer)
 

@@ -93,7 +93,7 @@ extension RequestBag.StateMachine {
 
         self.state = .queued(scheduler)
     }
-    
+
     enum WillExecuteRequestAction {
         case cancelExecuter(HTTPRequestExecutor)
         case failTaskAndCancelExecutor(Error, HTTPRequestExecutor)
@@ -558,13 +558,13 @@ extension RequestBag.StateMachine {
             /// We therefore depend on the scheduler failing the request after we cancel the request.
             self.state = .deadlineExceededWhileQueued
             return .cancelScheduler(queuer)
-            
+
         case .initialized,
-            .deadlineExceededWhileQueued,
-            .executing,
-            .finished,
-            .redirected,
-            .modifying:
+             .deadlineExceededWhileQueued,
+             .executing,
+             .finished,
+             .redirected,
+             .modifying:
             /// if we are not in the queued state, we can fail early by just calling down to `self.fail(_:)`
             /// which does the appropriate state transition for us.
             return .fail(self.fail(HTTPClientError.deadlineExceeded))
