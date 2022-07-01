@@ -1269,6 +1269,47 @@ class HTTPClientTests: XCTestCase {
         }
     }
 
+    func testSelfSignedCertificateIsRejectedWithCorrectErrorIfRequestDeadlineIsExceeded() throws {
+        /// key + cert was created with the follwing command:
+        /// openssl req -x509 -newkey rsa:4096 -keyout self_signed_key.pem -out self_signed_cert.pem -sha256 -days 99999 -nodes -subj '/CN=localhost'
+        let certPath = Bundle.module.path(forResource: "self_signed_cert", ofType: "pem")!
+        let keyPath = Bundle.module.path(forResource: "self_signed_key", ofType: "pem")!
+        let configuration = TLSConfiguration.makeServerConfiguration(
+            certificateChain: try NIOSSLCertificate.fromPEMFile(certPath).map { .certificate($0) },
+            privateKey: .file(keyPath)
+        )
+        let sslContext = try NIOSSLContext(configuration: configuration)
+
+        let server = ServerBootstrap(group: serverGroup)
+            .childChannelInitializer { channel in
+                channel.pipeline.addHandler(NIOSSLServerHandler(context: sslContext))
+            }
+        let serverChannel = try server.bind(host: "localhost", port: 0).wait()
+        defer { XCTAssertNoThrow(try serverChannel.close().wait()) }
+        let port = serverChannel.localAddress!.port!
+
+        var config = HTTPClient.Configuration()
+        config.timeout.connect = .seconds(3)
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: config)
+        defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+
+        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(port)", deadline: .now() + .seconds(2)).wait()) { error in
+            #if canImport(Network)
+            guard let nwTLSError = error as? HTTPClient.NWTLSError else {
+                XCTFail("could not cast \(error) of type \(type(of: error)) to \(HTTPClient.NWTLSError.self)")
+                return
+            }
+            XCTAssertEqual(nwTLSError.status, errSSLBadCert, "unexpected tls error: \(nwTLSError)")
+            #else
+            guard let sslError = error as? NIOSSLError,
+                  case .handshakeFailed(.sslError) = sslError else {
+                XCTFail("unexpected error \(error)")
+                return
+            }
+            #endif
+        }
+    }
+
     func testFailingConnectionIsReleased() {
         let localHTTPBin = HTTPBin(.refuse)
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))

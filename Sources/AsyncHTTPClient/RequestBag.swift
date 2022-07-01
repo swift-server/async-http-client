@@ -81,8 +81,16 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
 
     private func willExecuteRequest0(_ executor: HTTPRequestExecutor) {
         self.task.eventLoop.assertInEventLoop()
-        if !self.state.willExecuteRequest(executor) {
-            return executor.cancelRequest(self)
+        let action = self.state.willExecuteRequest(executor)
+        switch action {
+        case .cancelExecuter(let executor):
+            executor.cancelRequest(self)
+        case .failTaskAndCancelExecutor(let error, let executor):
+            self.delegate.didReceiveError(task: self.task, error)
+            self.task.fail(with: error, delegateType: Delegate.self)
+            executor.cancelRequest(self)
+        case .none:
+            break
         }
     }
 
@@ -320,8 +328,12 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
 
         let action = self.state.fail(error)
 
+        self.executeFailAction0(action)
+    }
+
+    private func executeFailAction0(_ action: RequestBag<Delegate>.StateMachine.FailAction) {
         switch action {
-        case .failTask(let scheduler, let executor):
+        case .failTask(let error, let scheduler, let executor):
             scheduler?.cancelRequest(self)
             executor?.cancelRequest(self)
             self.failTask0(error)
@@ -329,6 +341,28 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             executor.cancelRequest(self)
         case .none:
             break
+        }
+    }
+
+    func deadlineExceeded0() {
+        self.task.eventLoop.assertInEventLoop()
+        let action = self.state.deadlineExceeded()
+
+        switch action {
+        case .cancelScheduler(let scheduler):
+            scheduler?.cancelRequest(self)
+        case .fail(let failAction):
+            self.executeFailAction0(failAction)
+        }
+    }
+
+    func deadlineExceeded() {
+        if self.task.eventLoop.inEventLoop {
+            self.deadlineExceeded0()
+        } else {
+            self.task.eventLoop.execute {
+                self.deadlineExceeded0()
+            }
         }
     }
 }
@@ -457,12 +491,6 @@ extension RequestBag: HTTPExecutableRequest {
 
 extension RequestBag: HTTPClientTaskDelegate {
     func cancel() {
-        if self.task.eventLoop.inEventLoop {
-            self.fail0(HTTPClientError.cancelled)
-        } else {
-            self.task.eventLoop.execute {
-                self.fail0(HTTPClientError.cancelled)
-            }
-        }
+        self.fail(HTTPClientError.cancelled)
     }
 }

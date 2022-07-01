@@ -126,8 +126,6 @@ extension HTTPConnectionPool.StateMachine.RequestAction: Equatable {
             return lhsReqs.elementsEqual(rhsReqs, by: { $0 == $1 })
         case (.scheduleRequestTimeout(for: let lhsReq, on: let lhsEL), .scheduleRequestTimeout(for: let rhsReq, on: let rhsEL)):
             return lhsReq == rhsReq && lhsEL === rhsEL
-        case (.cancelRequestTimeout(let lhsReqID), .cancelRequestTimeout(let rhsReqID)):
-            return lhsReqID == rhsReqID
         case (.none, .none):
             return true
         default:

@@ -28,6 +28,7 @@ extension RequestBagTests {
             ("testWriteBackpressureWorks", testWriteBackpressureWorks),
             ("testTaskIsFailedIfWritingFails", testTaskIsFailedIfWritingFails),
             ("testCancelFailsTaskBeforeRequestIsSent", testCancelFailsTaskBeforeRequestIsSent),
+            ("testDeadlineExceededFailsTaskEvenIfRaceBetweenCancelingSchedulerAndRequestStart", testDeadlineExceededFailsTaskEvenIfRaceBetweenCancelingSchedulerAndRequestStart),
             ("testCancelFailsTaskAfterRequestIsSent", testCancelFailsTaskAfterRequestIsSent),
             ("testCancelFailsTaskWhenTaskIsQueued", testCancelFailsTaskWhenTaskIsQueued),
             ("testFailsTaskWhenTaskIsWaitingForMoreFromServer", testFailsTaskWhenTaskIsWaitingForMoreFromServer),

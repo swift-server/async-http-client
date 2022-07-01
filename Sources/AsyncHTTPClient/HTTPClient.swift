@@ -606,7 +606,7 @@ public class HTTPClient {
             var deadlineSchedule: Scheduled<Void>?
             if let deadline = deadline {
                 deadlineSchedule = taskEL.scheduleTask(deadline: deadline) {
-                    requestBag.fail(HTTPClientError.deadlineExceeded)
+                    requestBag.deadlineExceeded()
                 }
 
                 task.promise.futureResult.whenComplete { _ in
