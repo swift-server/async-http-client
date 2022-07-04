@@ -212,7 +212,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
 
         // 2. cancel request
         let cancelAction = state.cancelRequest(request.id)
-        XCTAssertEqual(cancelAction.request, .cancelRequestTimeout(request.id))
+        XCTAssertEqual(cancelAction.request, .failRequest(request, HTTPClientError.cancelled, cancelTimeout: true))
         XCTAssertEqual(cancelAction.connection, .none)
 
         // 3. request timeout triggers to late
@@ -1242,9 +1242,9 @@ func XCTAssertEqualTypeAndValue<Left, Right: Equatable>(
         let lhs = try lhs()
         let rhs = try rhs()
         guard let lhsAsRhs = lhs as? Right else {
-            XCTFail("could not cast \(lhs) of type \(Right.self) to \(Left.self)")
+            XCTFail("could not cast \(lhs) of type \(type(of: lhs)) to \(type(of: rhs))", file: file, line: line)
             return
         }
-        XCTAssertEqual(lhsAsRhs, rhs)
+        XCTAssertEqual(lhsAsRhs, rhs, file: file, line: line)
     }(), file: file, line: line)
 }

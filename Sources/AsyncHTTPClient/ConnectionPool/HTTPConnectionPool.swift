@@ -147,8 +147,6 @@ final class HTTPConnectionPool {
             self.unlocked = Unlocked(connection: .none, request: .none)
 
             switch stateMachineAction.request {
-            case .cancelRequestTimeout(let requestID):
-                self.locked.request = .cancelRequestTimeout(requestID)
             case .executeRequest(let request, let connection, cancelTimeout: let cancelTimeout):
                 if cancelTimeout {
                     self.locked.request = .cancelRequestTimeout(request.id)

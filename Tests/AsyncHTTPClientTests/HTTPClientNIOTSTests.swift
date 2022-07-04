@@ -104,6 +104,7 @@ class HTTPClientNIOTSTests: XCTestCase {
 
     func testConnectionFailError() {
         guard isTestingNIOTS() else { return }
+        #if canImport(Network)
         let httpBin = HTTPBin(.http1_1(ssl: false))
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: .init(timeout: .init(connect: .milliseconds(100),
@@ -117,8 +118,15 @@ class HTTPClientNIOTSTests: XCTestCase {
         XCTAssertNoThrow(try httpBin.shutdown())
 
         XCTAssertThrowsError(try httpClient.get(url: "http://localhost:\(port)/get").wait()) {
-            XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
+            if let httpClientError = $0 as? HTTPClientError {
+                XCTAssertEqual(httpClientError, .connectTimeout)
+            } else if let posixError = $0 as? HTTPClient.NWPOSIXError {
+                XCTAssertEqual(posixError.errorCode, .ECONNREFUSED)
+            } else {
+                XCTFail("unexpected error \($0)")
+            }
         }
+        #endif
     }
 
     func testTLSVersionError() {

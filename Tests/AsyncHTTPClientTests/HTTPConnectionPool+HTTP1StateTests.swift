@@ -21,6 +21,7 @@ import XCTest
 
 class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
     func testCreatingAndFailingConnections() {
+        struct SomeError: Error, Equatable {}
         let elg = EmbeddedEventLoopGroup(loops: 4)
         defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
 
@@ -65,8 +66,6 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
 
         // fail all connection attempts
         while let randomConnectionID = connections.randomStartingConnection() {
-            struct SomeError: Error, Equatable {}
-
             XCTAssertNoThrow(try connections.failConnectionCreation(randomConnectionID))
             let action = state.failedToCreateNewConnection(SomeError(), connectionID: randomConnectionID)
 
@@ -86,9 +85,9 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
 
         // cancel all queued requests
         while let request = queuer.timeoutRandomRequest() {
-            let cancelAction = state.cancelRequest(request)
+            let cancelAction = state.cancelRequest(request.0)
             XCTAssertEqual(cancelAction.connection, .none)
-            XCTAssertEqual(cancelAction.request, .cancelRequestTimeout(request))
+            XCTAssertEqual(cancelAction.request, .failRequest(.init(request.1), SomeError(), cancelTimeout: true))
         }
 
         // connection backoff done
@@ -184,7 +183,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         // 2. cancel request
 
         let cancelAction = state.cancelRequest(request.id)
-        XCTAssertEqual(cancelAction.request, .cancelRequestTimeout(request.id))
+        XCTAssertEqual(cancelAction.request, .failRequest(request, HTTPClientError.cancelled, cancelTimeout: true))
         XCTAssertEqual(cancelAction.connection, .none)
 
         // 3. request timeout triggers to late

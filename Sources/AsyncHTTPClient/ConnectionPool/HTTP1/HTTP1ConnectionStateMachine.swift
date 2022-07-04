@@ -35,7 +35,10 @@ struct HTTP1ConnectionStateMachine {
             /// as soon as we wrote the request end onto the wire.
             ///
             /// The promise is an optional write promise.
-            case sendRequestEnd(EventLoopPromise<Void>?)
+            ///
+            /// `shouldClose` records whether we have attached a Connection: close header to this request, and so the connection should
+            /// be terminated
+            case sendRequestEnd(EventLoopPromise<Void>?, shouldClose: Bool)
             /// Inform an observer that the connection has become idle
             case informConnectionIsIdle
         }
@@ -412,7 +415,8 @@ extension HTTP1ConnectionStateMachine.State {
                 self = .closing
                 newFinalAction = .close
             case .sendRequestEnd(let writePromise):
-                newFinalAction = .sendRequestEnd(writePromise)
+                self = .idle
+                newFinalAction = .sendRequestEnd(writePromise, shouldClose: close)
             case .none:
                 self = .idle
                 newFinalAction = close ? .close : .informConnectionIsIdle

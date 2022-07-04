@@ -1229,6 +1229,87 @@ class HTTPClientTests: XCTestCase {
         }
     }
 
+    func testSelfSignedCertificateIsRejectedWithCorrectError() throws {
+        /// key + cert was created with the follwing command:
+        /// openssl req -x509 -newkey rsa:4096 -keyout self_signed_key.pem -out self_signed_cert.pem -sha256 -days 99999 -nodes -subj '/CN=localhost'
+        let certPath = Bundle.module.path(forResource: "self_signed_cert", ofType: "pem")!
+        let keyPath = Bundle.module.path(forResource: "self_signed_key", ofType: "pem")!
+        let configuration = TLSConfiguration.makeServerConfiguration(
+            certificateChain: try NIOSSLCertificate.fromPEMFile(certPath).map { .certificate($0) },
+            privateKey: .file(keyPath)
+        )
+        let sslContext = try NIOSSLContext(configuration: configuration)
+
+        let server = ServerBootstrap(group: serverGroup)
+            .childChannelInitializer { channel in
+                channel.pipeline.addHandler(NIOSSLServerHandler(context: sslContext))
+            }
+        let serverChannel = try server.bind(host: "localhost", port: 0).wait()
+        defer { XCTAssertNoThrow(try serverChannel.close().wait()) }
+        let port = serverChannel.localAddress!.port!
+
+        var config = HTTPClient.Configuration()
+        config.timeout.connect = .seconds(2)
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: config)
+        defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(port)").wait()) { error in
+            #if canImport(Network)
+            guard let nwTLSError = error as? HTTPClient.NWTLSError else {
+                XCTFail("could not cast \(error) of type \(type(of: error)) to \(HTTPClient.NWTLSError.self)")
+                return
+            }
+            XCTAssertEqual(nwTLSError.status, errSSLBadCert, "unexpected tls error: \(nwTLSError)")
+            #else
+            guard let sslError = error as? NIOSSLError,
+                  case .handshakeFailed(.sslError) = sslError else {
+                XCTFail("unexpected error \(error)")
+                return
+            }
+            #endif
+        }
+    }
+
+    func testSelfSignedCertificateIsRejectedWithCorrectErrorIfRequestDeadlineIsExceeded() throws {
+        /// key + cert was created with the follwing command:
+        /// openssl req -x509 -newkey rsa:4096 -keyout self_signed_key.pem -out self_signed_cert.pem -sha256 -days 99999 -nodes -subj '/CN=localhost'
+        let certPath = Bundle.module.path(forResource: "self_signed_cert", ofType: "pem")!
+        let keyPath = Bundle.module.path(forResource: "self_signed_key", ofType: "pem")!
+        let configuration = TLSConfiguration.makeServerConfiguration(
+            certificateChain: try NIOSSLCertificate.fromPEMFile(certPath).map { .certificate($0) },
+            privateKey: .file(keyPath)
+        )
+        let sslContext = try NIOSSLContext(configuration: configuration)
+
+        let server = ServerBootstrap(group: serverGroup)
+            .childChannelInitializer { channel in
+                channel.pipeline.addHandler(NIOSSLServerHandler(context: sslContext))
+            }
+        let serverChannel = try server.bind(host: "localhost", port: 0).wait()
+        defer { XCTAssertNoThrow(try serverChannel.close().wait()) }
+        let port = serverChannel.localAddress!.port!
+
+        var config = HTTPClient.Configuration()
+        config.timeout.connect = .seconds(3)
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: config)
+        defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+
+        XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(port)", deadline: .now() + .seconds(2)).wait()) { error in
+            #if canImport(Network)
+            guard let nwTLSError = error as? HTTPClient.NWTLSError else {
+                XCTFail("could not cast \(error) of type \(type(of: error)) to \(HTTPClient.NWTLSError.self)")
+                return
+            }
+            XCTAssertEqual(nwTLSError.status, errSSLBadCert, "unexpected tls error: \(nwTLSError)")
+            #else
+            guard let sslError = error as? NIOSSLError,
+                  case .handshakeFailed(.sslError) = sslError else {
+                XCTFail("unexpected error \(error)")
+                return
+            }
+            #endif
+        }
+    }
+
     func testFailingConnectionIsReleased() {
         let localHTTPBin = HTTPBin(.refuse)
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
@@ -3019,6 +3100,114 @@ class HTTPClientTests: XCTestCase {
         let future = httpClient.execute(request: request, delegate: delegate, eventLoop: .delegate(on: delegateEL))
         XCTAssertNoThrow(try future.wait())
         XCTAssertNil(try delegate.next().wait())
+    }
+
+    // This test is identical to the one above, except that we send another request immediately after. This is a regression
+    // test for https://github.com/swift-server/async-http-client/issues/595.
+    func testBiDirectionalStreamingEarly200DoesntPreventUsFromSendingMoreRequests() {
+        let httpBin = HTTPBin(.http1_1(ssl: false, compress: false)) { _ in HTTP200DelayedHandler(bodyPartsBeforeResponse: 1) }
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
+
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 2)
+        defer { XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully()) }
+        let writeEL = eventLoopGroup.next()
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
+        defer { XCTAssertNoThrow(try httpClient.syncShutdown()) }
+
+        let body: HTTPClient.Body = .stream { writer in
+            let finalPromise = writeEL.makePromise(of: Void.self)
+
+            func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
+                // always invoke from the wrong el to test thread safety
+                writeEL.preconditionInEventLoop()
+
+                if index >= 30 {
+                    return finalPromise.succeed(())
+                }
+
+                let sent = ByteBuffer(integer: index)
+                writer.write(.byteBuffer(sent)).whenComplete { result in
+                    switch result {
+                    case .success:
+                        writeEL.execute {
+                            writeLoop(writer, index: index + 1)
+                        }
+
+                    case .failure(let error):
+                        finalPromise.fail(error)
+                    }
+                }
+            }
+
+            writeEL.execute {
+                writeLoop(writer, index: 0)
+            }
+
+            return finalPromise.futureResult
+        }
+
+        let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)", body: body)
+        let future = httpClient.execute(request: request)
+        XCTAssertNoThrow(try future.wait())
+
+        // Try another request
+        let future2 = httpClient.execute(request: request)
+        XCTAssertNoThrow(try future2.wait())
+    }
+
+    // This test validates that we correctly close the connection after our body completes when we've streamed a
+    // body and received the 2XX response _before_ we finished our stream.
+    func testCloseConnectionAfterEarly2XXWhenStreaming() {
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 2)
+        defer { XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully()) }
+
+        let onClosePromise = eventLoopGroup.next().makePromise(of: Void.self)
+        let httpBin = HTTPBin(.http1_1(ssl: false, compress: false)) { _ in ExpectClosureServerHandler(onClosePromise: onClosePromise) }
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
+
+        let writeEL = eventLoopGroup.next()
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
+        defer { XCTAssertNoThrow(try httpClient.syncShutdown()) }
+
+        let body: HTTPClient.Body = .stream { writer in
+            let finalPromise = writeEL.makePromise(of: Void.self)
+
+            func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
+                // always invoke from the wrong el to test thread safety
+                writeEL.preconditionInEventLoop()
+
+                if index >= 30 {
+                    return finalPromise.succeed(())
+                }
+
+                let sent = ByteBuffer(integer: index)
+                writer.write(.byteBuffer(sent)).whenComplete { result in
+                    switch result {
+                    case .success:
+                        writeEL.execute {
+                            writeLoop(writer, index: index + 1)
+                        }
+
+                    case .failure(let error):
+                        finalPromise.fail(error)
+                    }
+                }
+            }
+
+            writeEL.execute {
+                writeLoop(writer, index: 0)
+            }
+
+            return finalPromise.futureResult
+        }
+
+        let headers = HTTPHeaders([("Connection", "close")])
+        let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)", headers: headers, body: body)
+        let future = httpClient.execute(request: request)
+        XCTAssertNoThrow(try future.wait())
+        XCTAssertNoThrow(try onClosePromise.futureResult.wait())
     }
 
     func testSynchronousHandshakeErrorReporting() throws {
