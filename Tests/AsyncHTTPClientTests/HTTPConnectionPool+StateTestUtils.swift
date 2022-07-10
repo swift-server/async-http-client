@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Atomics
 @testable import AsyncHTTPClient
 import Dispatch
 import NIOConcurrencyHelpers
@@ -21,14 +22,14 @@ import NIOEmbedded
 /// An `EventLoopGroup` of `EmbeddedEventLoop`s.
 final class EmbeddedEventLoopGroup: EventLoopGroup {
     private let loops: [EmbeddedEventLoop]
-    private let index = NIOAtomic<Int>.makeAtomic(value: 0)
+    private let index = ManagedAtomic(0)
 
     internal init(loops: Int) {
         self.loops = (0..<loops).map { _ in EmbeddedEventLoop() }
     }
 
     internal func next() -> EventLoop {
-        let index: Int = self.index.add(1)
+        let index: Int = self.index.loadThenWrappingIncrement(ordering: .relaxed)
         return self.loops[index % self.loops.count]
     }
 

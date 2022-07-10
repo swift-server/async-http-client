@@ -27,6 +27,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.10.0"),
         .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.11.4"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.4.0"),
+        .package(url: "https://github.com/apple/swift-atomics.git", from: "1.0.2"),
     ],
     targets: [
         .target(name: "CAsyncHTTPClient"),
@@ -46,6 +47,7 @@ let package = Package(
                 .product(name: "NIOSOCKS", package: "swift-nio-extras"),
                 .product(name: "NIOTransportServices", package: "swift-nio-transport-services"),
                 .product(name: "Logging", package: "swift-log"),
+                .product(name: "Atomics", package: "swift-atomics"),
             ]
         ),
         .testTarget(
@@ -61,6 +63,7 @@ let package = Package(
                 .product(name: "NIOHTTP2", package: "swift-nio-http2"),
                 .product(name: "NIOSOCKS", package: "swift-nio-extras"),
                 .product(name: "Logging", package: "swift-log"),
+                .product(name: "Atomics", package: "swift-atomics"),
             ],
             resources: [
                 .copy("Resources/self_signed_cert.pem"),

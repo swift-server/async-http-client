@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Atomics
 import AsyncHTTPClient
 import Foundation
 import Logging
@@ -351,7 +352,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
     private let mode: Mode
     private let sslContext: NIOSSLContext?
     private var serverChannel: Channel!
-    private let isShutdown: NIOAtomic<Bool> = .makeAtomic(value: false)
+    private let isShutdown = ManagedAtomic(false)
     private let handlerFactory: (Int) -> (RequestHandler)
 
     init(
@@ -376,7 +377,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
 
         self.activeConnCounterHandler = ConnectionsCountHandler()
 
-        let connectionIDAtomic = NIOAtomic<Int>.makeAtomic(value: 0)
+        let connectionIDAtomic = ManagedAtomic(0)
 
         self.serverChannel = try! ServerBootstrap(group: self.group)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
@@ -384,7 +385,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
                 channel.pipeline.addHandler(self.activeConnCounterHandler)
             }.childChannelInitializer { channel in
                 do {
-                    let connectionID = connectionIDAtomic.add(1)
+                    let connectionID = connectionIDAtomic.loadThenWrappingIncrement(ordering: .relaxed)
 
                     if case .refuse = mode {
                         throw HTTPBinError.refusedConnection
@@ -572,12 +573,12 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
     }
 
     func shutdown() throws {
-        self.isShutdown.store(true)
+        self.isShutdown.store(true, ordering: .relaxed)
         try self.group.syncShutdownGracefully()
     }
 
     deinit {
-        assert(self.isShutdown.load(), "HTTPBin not shutdown before deinit")
+        assert(self.isShutdown.load(ordering: .relaxed), "HTTPBin not shutdown before deinit")
     }
 }
 
@@ -946,24 +947,24 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
 final class ConnectionsCountHandler: ChannelInboundHandler {
     typealias InboundIn = Channel
 
-    private let activeConns = NIOAtomic<Int>.makeAtomic(value: 0)
-    private let createdConns = NIOAtomic<Int>.makeAtomic(value: 0)
+    private let activeConns = ManagedAtomic(0)
+    private let createdConns = ManagedAtomic(0)
 
     var createdConnections: Int {
-        self.createdConns.load()
+        self.createdConns.load(ordering: .relaxed)
     }
 
     var currentlyActiveConnections: Int {
-        self.activeConns.load()
+        self.activeConns.load(ordering: .relaxed)
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let channel = self.unwrapInboundIn(data)
 
-        _ = self.activeConns.add(1)
-        _ = self.createdConns.add(1)
+        _ = self.activeConns.loadThenWrappingIncrement(ordering: .relaxed)
+        _ = self.createdConns.loadThenWrappingIncrement(ordering: .relaxed)
         channel.closeFuture.whenComplete { _ in
-            _ = self.activeConns.sub(1)
+            _ = self.activeConns.loadThenWrappingDecrement(ordering: .relaxed)
         }
 
         context.fireChannelRead(data)
