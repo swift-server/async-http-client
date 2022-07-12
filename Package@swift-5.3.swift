@@ -1,4 +1,4 @@
-// swift-tools-version:5.4
+// swift-tools-version:5.3
 //===----------------------------------------------------------------------===//
 //
 // This source file is part of the AsyncHTTPClient open source project
@@ -21,7 +21,7 @@ let package = Package(
         .library(name: "AsyncHTTPClient", targets: ["AsyncHTTPClient"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.38.0"),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.36.0"),
         .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.14.1"),
         .package(url: "https://github.com/apple/swift-nio-http2.git", from: "1.19.0"),
         .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.10.0"),
@@ -43,7 +43,8 @@ let package = Package(
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
                 .product(name: "NIOHTTPCompression", package: "swift-nio-extras"),
                 .product(name: "NIOSOCKS", package: "swift-nio-extras"),
-                .product(name: "NIOTransportServices", package: "swift-nio-transport-services"),
+                .product(name: "NIOTransportServices", package: "swift-nio-transport-services",
+                         condition: .when(platforms: [.macOS, .macCatalyst, .iOS, .tvOS, .watchOS])),
                 .product(name: "Logging", package: "swift-log"),
             ]
         ),
@@ -60,11 +61,13 @@ let package = Package(
                 .product(name: "NIOHTTP2", package: "swift-nio-http2"),
                 .product(name: "NIOSOCKS", package: "swift-nio-extras"),
                 .product(name: "Logging", package: "swift-log"),
-            ],
-            resources: [
-                .copy("Resources/self_signed_cert.pem"),
-                .copy("Resources/self_signed_key.pem"),
             ]
         ),
     ]
 )
+
+#if swift(<5.5)
+extension Platform {
+    static var macCatalyst: Platform { .macOS }
+}
+#endif

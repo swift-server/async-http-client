@@ -25,8 +25,10 @@ import NIOHTTPCompression
 import NIOPosix
 import NIOSSL
 import NIOTLS
-import NIOTransportServices
 import XCTest
+#if canImport(Network)
+import NIOTransportServices
+#endif
 #if canImport(Darwin)
 import Darwin
 #elseif canImport(Glibc)

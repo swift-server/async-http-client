@@ -15,12 +15,12 @@
 @testable import AsyncHTTPClient
 #if canImport(Network)
 import Network
+import NIOTransportServices
 #endif
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOPosix
 import NIOSSL
-import NIOTransportServices
 import XCTest
 
 class HTTPClientNIOTSTests: XCTestCase {

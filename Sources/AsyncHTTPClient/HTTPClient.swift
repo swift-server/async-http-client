@@ -21,7 +21,9 @@ import NIOHTTPCompression
 import NIOPosix
 import NIOSSL
 import NIOTLS
+#if canImport(Network)
 import NIOTransportServices
+#endif
 
 extension Logger {
     private func requestInfo(_ request: HTTPClient.Request) -> Logger.Metadata.Value {

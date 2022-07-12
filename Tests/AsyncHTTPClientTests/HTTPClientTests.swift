@@ -15,6 +15,7 @@
 /* NOT @testable */ import AsyncHTTPClient // Tests that need @testable go into HTTPClientInternalTests.swift
 #if canImport(Network)
 import Network
+import NIOTransportServices
 #endif
 import Logging
 import NIOConcurrencyHelpers
@@ -25,7 +26,6 @@ import NIOHTTPCompression
 import NIOPosix
 import NIOSSL
 import NIOTestUtils
-import NIOTransportServices
 import XCTest
 
 class HTTPClientTests: XCTestCase {
