@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 /* NOT @testable */ import AsyncHTTPClient // Tests that need @testable go into HTTPClientInternalTests.swift
+import Atomics
 #if canImport(Network)
 import Network
 #endif
@@ -1790,16 +1791,16 @@ class HTTPClientTests: XCTestCase {
             typealias InboundIn = HTTPServerRequestPart
             typealias OutboundOut = HTTPServerResponsePart
 
-            let requestNumber: NIOAtomic<Int>
-            let connectionNumber: NIOAtomic<Int>
+            let requestNumber: ManagedAtomic<Int>
+            let connectionNumber: ManagedAtomic<Int>
 
-            init(requestNumber: NIOAtomic<Int>, connectionNumber: NIOAtomic<Int>) {
+            init(requestNumber: ManagedAtomic<Int>, connectionNumber: ManagedAtomic<Int>) {
                 self.requestNumber = requestNumber
                 self.connectionNumber = connectionNumber
             }
 
             func channelActive(context: ChannelHandlerContext) {
-                _ = self.connectionNumber.add(1)
+                _ = self.connectionNumber.loadThenWrappingIncrement(ordering: .relaxed)
             }
 
             func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -1809,7 +1810,7 @@ class HTTPClientTests: XCTestCase {
                 case .head, .body:
                     ()
                 case .end:
-                    let last = self.requestNumber.add(1)
+                    let last = self.requestNumber.loadThenWrappingIncrement(ordering: .relaxed)
                     switch last {
                     case 0, 2:
                         context.write(self.wrapOutboundOut(.head(.init(version: .init(major: 1, minor: 1), status: .ok))),
@@ -1824,8 +1825,8 @@ class HTTPClientTests: XCTestCase {
             }
         }
 
-        let requestNumber = NIOAtomic<Int>.makeAtomic(value: 0)
-        let connectionNumber = NIOAtomic<Int>.makeAtomic(value: 0)
+        let requestNumber = ManagedAtomic(0)
+        let connectionNumber = ManagedAtomic(0)
         let sharedStateServerHandler = ServerThatAcceptsThenRejects(requestNumber: requestNumber,
                                                                     connectionNumber: connectionNumber)
         var maybeServer: Channel?
@@ -1854,19 +1855,19 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try client.syncShutdown())
         }
 
-        XCTAssertEqual(0, sharedStateServerHandler.connectionNumber.load())
-        XCTAssertEqual(0, sharedStateServerHandler.requestNumber.load())
+        XCTAssertEqual(0, sharedStateServerHandler.connectionNumber.load(ordering: .relaxed))
+        XCTAssertEqual(0, sharedStateServerHandler.requestNumber.load(ordering: .relaxed))
         XCTAssertEqual(.ok, try client.get(url: url).wait().status)
-        XCTAssertEqual(1, sharedStateServerHandler.connectionNumber.load())
-        XCTAssertEqual(1, sharedStateServerHandler.requestNumber.load())
+        XCTAssertEqual(1, sharedStateServerHandler.connectionNumber.load(ordering: .relaxed))
+        XCTAssertEqual(1, sharedStateServerHandler.requestNumber.load(ordering: .relaxed))
         XCTAssertThrowsError(try client.get(url: url).wait().status) { error in
             XCTAssertEqual(.remoteConnectionClosed, error as? HTTPClientError)
         }
-        XCTAssertEqual(1, sharedStateServerHandler.connectionNumber.load())
-        XCTAssertEqual(2, sharedStateServerHandler.requestNumber.load())
+        XCTAssertEqual(1, sharedStateServerHandler.connectionNumber.load(ordering: .relaxed))
+        XCTAssertEqual(2, sharedStateServerHandler.requestNumber.load(ordering: .relaxed))
         XCTAssertEqual(.ok, try client.get(url: url).wait().status)
-        XCTAssertEqual(2, sharedStateServerHandler.connectionNumber.load())
-        XCTAssertEqual(3, sharedStateServerHandler.requestNumber.load())
+        XCTAssertEqual(2, sharedStateServerHandler.connectionNumber.load(ordering: .relaxed))
+        XCTAssertEqual(3, sharedStateServerHandler.requestNumber.load(ordering: .relaxed))
     }
 
     func testPoolClosesIdleConnections() {

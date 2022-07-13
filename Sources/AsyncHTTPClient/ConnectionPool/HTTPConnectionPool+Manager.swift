@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Atomics
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -165,14 +166,14 @@ extension HTTPConnectionPool.Connection.ID {
     static var globalGenerator = Generator()
 
     struct Generator {
-        private let atomic: NIOAtomic<Int>
+        private let atomic: ManagedAtomic<Int>
 
         init() {
-            self.atomic = .makeAtomic(value: 0)
+            self.atomic = .init(0)
         }
 
         func next() -> Int {
-            return self.atomic.add(1)
+            return self.atomic.loadThenWrappingIncrement(ordering: .relaxed)
         }
     }
 }
