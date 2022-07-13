@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Atomics
 import AsyncHTTPClient
+import Atomics
 import Foundation
 import Logging
 import NIOConcurrencyHelpers

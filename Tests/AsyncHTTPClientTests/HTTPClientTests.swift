@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Atomics
 /* NOT @testable */ import AsyncHTTPClient // Tests that need @testable go into HTTPClientInternalTests.swift
+import Atomics
 #if canImport(Network)
 import Network
 #endif

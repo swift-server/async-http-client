@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Atomics
 @testable import AsyncHTTPClient
+import Atomics
 import Dispatch
 import NIOConcurrencyHelpers
 import NIOCore
