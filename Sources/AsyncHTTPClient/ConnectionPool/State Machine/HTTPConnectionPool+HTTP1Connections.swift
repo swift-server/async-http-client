@@ -604,7 +604,7 @@ extension HTTPConnectionPool {
 
             // we may already start connections for those requests and do not want to start to many
             let startingRequiredEventLoopConnectionCount = Dictionary(
-                self.connections[self.overflowIndex..<self.connections.endIndex].lazy.map {
+                self.connections[self.overflowIndex..<self.connections.endIndex].map {
                     ($0.eventLoop.id, 1)
                 },
                 uniquingKeysWith: +
@@ -617,7 +617,7 @@ extension HTTPConnectionPool {
                     // If we have not enough, we will create additional connections to have at least
                     // on connection per request.
                     let connectionsToStart = requestCount - startingRequiredEventLoopConnectionCount[eventLoop.id, default: 0]
-                    return stride(from: 0, to: connectionsToStart, by: 1).lazy.map { _ in
+                    return stride(from: 0, to: connectionsToStart, by: 1).map { _ in
                         (self.createNewOverflowConnection(on: eventLoop), eventLoop)
                     }
                 }
