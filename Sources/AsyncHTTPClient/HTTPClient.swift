@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Foundation
 import Atomics
+import Foundation
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
