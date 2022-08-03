@@ -38,6 +38,7 @@ extension AsyncAwaitEndToEndTests {
             ("testCanceling", testCanceling),
             ("testDeadline", testDeadline),
             ("testImmediateDeadline", testImmediateDeadline),
+            ("testSelfSignedCertificateIsRejectedWithCorrectErrorIfRequestDeadlineIsExceeded", testSelfSignedCertificateIsRejectedWithCorrectErrorIfRequestDeadlineIsExceeded),
             ("testInvalidURL", testInvalidURL),
             ("testRedirectChangesHostHeader", testRedirectChangesHostHeader),
             ("testShutdown", testShutdown),

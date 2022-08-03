@@ -73,6 +73,7 @@ final class Transaction_StateMachineTests: XCTestCase {
     }
 
     func testQueuedRequestGetsRemovedWhenDeadlineExceeded() {
+        struct MyError: Error, Equatable {}
         #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
@@ -82,16 +83,62 @@ final class Transaction_StateMachineTests: XCTestCase {
 
                 state.requestWasQueued(queuer)
 
-                let failAction = state.deadlineExceeded()
-                guard case .cancel(let continuation, let scheduler, nil, nil) = failAction else {
+                let deadlineExceededAction = state.deadlineExceeded()
+                guard case .cancelSchedulerOnly(let scheduler) = deadlineExceededAction else {
+                    return XCTFail("Unexpected fail action: \(deadlineExceededAction)")
+                }
+                XCTAssertIdentical(scheduler as? MockTaskQueuer, queuer)
+
+                let failAction = state.fail(MyError())
+                guard case .failResponseHead(let continuation, let error, nil, nil, bodyStreamContinuation: nil) = failAction else {
                     return XCTFail("Unexpected fail action: \(failAction)")
                 }
                 XCTAssertIdentical(scheduler as? MockTaskQueuer, queuer)
 
-                continuation.resume(throwing: HTTPClientError.deadlineExceeded)
+                continuation.resume(throwing: error)
             }
 
-            await XCTAssertThrowsError(try await withCheckedThrowingContinuation(workaround))
+            await XCTAssertThrowsError(try await withCheckedThrowingContinuation(workaround)) {
+                XCTAssertEqualTypeAndValue($0, MyError())
+            }
+        }
+        #endif
+    }
+
+    func testDeadlineExceededAndFullyFailedRequestCanBeCanceledWithNoEffect() {
+        struct MyError: Error, Equatable {}
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
+        XCTAsyncTest {
+            func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
+                var state = Transaction.StateMachine(continuation)
+                let queuer = MockTaskQueuer()
+
+                state.requestWasQueued(queuer)
+
+                let deadlineExceededAction = state.deadlineExceeded()
+                guard case .cancelSchedulerOnly(let scheduler) = deadlineExceededAction else {
+                    return XCTFail("Unexpected fail action: \(deadlineExceededAction)")
+                }
+                XCTAssertIdentical(scheduler as? MockTaskQueuer, queuer)
+
+                let failAction = state.fail(MyError())
+                guard case .failResponseHead(let continuation, let error, nil, nil, bodyStreamContinuation: nil) = failAction else {
+                    return XCTFail("Unexpected fail action: \(failAction)")
+                }
+                XCTAssertIdentical(scheduler as? MockTaskQueuer, queuer)
+
+                let secondFailAction = state.fail(HTTPClientError.cancelled)
+                guard case .none = secondFailAction else {
+                    return XCTFail("Unexpected fail action: \(secondFailAction)")
+                }
+
+                continuation.resume(throwing: error)
+            }
+
+            await XCTAssertThrowsError(try await withCheckedThrowingContinuation(workaround)) {
+                XCTAssertEqualTypeAndValue($0, MyError())
+            }
         }
         #endif
     }
@@ -119,6 +166,40 @@ final class Transaction_StateMachineTests: XCTestCase {
             }
 
             await XCTAssertThrowsError(try await withCheckedThrowingContinuation(workaround))
+        }
+        #endif
+    }
+
+    func testDeadlineExceededRaceWithRequestWillExecute() {
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
+        let eventLoop = EmbeddedEventLoop()
+        XCTAsyncTest {
+            func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
+                var state = Transaction.StateMachine(continuation)
+                let expectedExecutor = MockRequestExecutor(eventLoop: eventLoop)
+                let queuer = MockTaskQueuer()
+
+                state.requestWasQueued(queuer)
+
+                let deadlineExceededAction = state.deadlineExceeded()
+                guard case .cancelSchedulerOnly(let scheduler) = deadlineExceededAction else {
+                    return XCTFail("Unexpected fail action: \(deadlineExceededAction)")
+                }
+                XCTAssertIdentical(scheduler as? MockTaskQueuer, queuer)
+
+                let failAction = state.willExecuteRequest(expectedExecutor)
+                guard case .cancelAndFail(let returnedExecutor, let continuation, with: let error) = failAction else {
+                    return XCTFail("Unexpected fail action: \(failAction)")
+                }
+                XCTAssertIdentical(returnedExecutor as? MockRequestExecutor, expectedExecutor)
+
+                continuation.resume(throwing: error)
+            }
+
+            await XCTAssertThrowsError(try await withCheckedThrowingContinuation(workaround)) {
+                XCTAssertEqualTypeAndValue($0, HTTPClientError.deadlineExceeded)
+            }
         }
         #endif
     }
