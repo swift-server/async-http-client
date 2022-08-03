@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Atomics
 import Foundation
 import Logging
 import NIOConcurrencyHelpers
@@ -36,7 +37,7 @@ extension Logger {
     }
 }
 
-let globalRequestID = NIOAtomic<Int>.makeAtomic(value: 0)
+let globalRequestID = ManagedAtomic(0)
 
 /// HTTPClient class provides API for request execution.
 ///
@@ -541,7 +542,7 @@ public class HTTPClient {
         logger originalLogger: Logger?,
         redirectState: RedirectState?
     ) -> Task<Delegate.Response> {
-        let logger = (originalLogger ?? HTTPClient.loggingDisabled).attachingRequestInformation(request, requestID: globalRequestID.add(1))
+        let logger = (originalLogger ?? HTTPClient.loggingDisabled).attachingRequestInformation(request, requestID: globalRequestID.wrappingIncrementThenLoad(ordering: .relaxed))
         let taskEL: EventLoop
         switch eventLoopPreference.preference {
         case .indifferent:
