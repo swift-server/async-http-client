@@ -29,6 +29,7 @@ extension RequestBagTests {
             ("testTaskIsFailedIfWritingFails", testTaskIsFailedIfWritingFails),
             ("testCancelFailsTaskBeforeRequestIsSent", testCancelFailsTaskBeforeRequestIsSent),
             ("testDeadlineExceededFailsTaskEvenIfRaceBetweenCancelingSchedulerAndRequestStart", testDeadlineExceededFailsTaskEvenIfRaceBetweenCancelingSchedulerAndRequestStart),
+            ("testCancelHasNoEffectAfterDeadlineExceededFailsTask", testCancelHasNoEffectAfterDeadlineExceededFailsTask),
             ("testCancelFailsTaskAfterRequestIsSent", testCancelFailsTaskAfterRequestIsSent),
             ("testCancelFailsTaskWhenTaskIsQueued", testCancelFailsTaskWhenTaskIsQueued),
             ("testFailsTaskWhenTaskIsWaitingForMoreFromServer", testFailsTaskWhenTaskIsWaitingForMoreFromServer),
