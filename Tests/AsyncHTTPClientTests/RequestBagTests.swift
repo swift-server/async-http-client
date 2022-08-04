@@ -266,6 +266,48 @@ final class RequestBagTests: XCTestCase {
         }
     }
 
+    func testCancelHasNoEffectAfterDeadlineExceededFailsTask() {
+        struct MyError: Error, Equatable {}
+        let embeddedEventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+        let logger = Logger(label: "test")
+
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://swift.org"))
+        guard let request = maybeRequest else { return XCTFail("Expected to have a request") }
+
+        let delegate = UploadCountingDelegate(eventLoop: embeddedEventLoop)
+        var maybeRequestBag: RequestBag<UploadCountingDelegate>?
+        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embeddedEventLoop),
+            task: .init(eventLoop: embeddedEventLoop, logger: logger),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(),
+            delegate: delegate
+        ))
+        guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
+        XCTAssert(bag.eventLoop === embeddedEventLoop)
+
+        let queuer = MockTaskQueuer()
+        bag.requestWasQueued(queuer)
+
+        XCTAssertEqual(queuer.hitCancelCount, 0)
+        bag.deadlineExceeded()
+        XCTAssertEqual(queuer.hitCancelCount, 1)
+        XCTAssertEqual(delegate.hitDidReceiveError, 0)
+        bag.fail(MyError())
+        XCTAssertEqual(delegate.hitDidReceiveError, 1)
+
+        bag.cancel()
+        XCTAssertEqual(delegate.hitDidReceiveError, 1)
+
+        XCTAssertThrowsError(try bag.task.futureResult.wait()) {
+            XCTAssertEqualTypeAndValue($0, MyError())
+        }
+    }
+
     func testCancelFailsTaskAfterRequestIsSent() {
         let embeddedEventLoop = EmbeddedEventLoop()
         defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
