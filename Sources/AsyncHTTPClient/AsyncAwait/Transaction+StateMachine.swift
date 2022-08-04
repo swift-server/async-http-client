@@ -28,6 +28,7 @@ extension Transaction {
         private enum State {
             case initialized(CheckedContinuation<HTTPClientResponse, Error>)
             case queued(CheckedContinuation<HTTPClientResponse, Error>, HTTPRequestScheduler)
+            case deadlineExceededWhileQueued(CheckedContinuation<HTTPClientResponse, Error>)
             case executing(ExecutionContext, RequestStreamState, ResponseStreamState)
             case finished(error: Error?, HTTPClientResponse.Body.IteratorStream.ID?)
         }
@@ -105,7 +106,20 @@ extension Transaction {
             case .queued(let continuation, let scheduler):
                 self.state = .finished(error: error, nil)
                 return .failResponseHead(continuation, error, scheduler, nil, bodyStreamContinuation: nil)
+            case .deadlineExceededWhileQueued(let continuation):
+                let realError: Error = {
+                    if (error as? HTTPClientError) == .cancelled {
+                        /// if we just get a `HTTPClientError.cancelled` we can use the original cancellation reason
+                        /// to give a more descriptive error to the user.
+                        return HTTPClientError.deadlineExceeded
+                    } else {
+                        /// otherwise we already had an intermediate connection error which we should present to the user instead
+                        return error
+                    }
+                }()
 
+                self.state = .finished(error: realError, nil)
+                return .failResponseHead(continuation, realError, nil, nil, bodyStreamContinuation: nil)
             case .executing(let context, let requestStreamState, .waitingForResponseHead):
                 switch requestStreamState {
                 case .paused(continuation: .some(let continuation)):
@@ -178,6 +192,7 @@ extension Transaction {
 
         enum StartExecutionAction {
             case cancel(HTTPRequestExecutor)
+            case cancelAndFail(HTTPRequestExecutor, CheckedContinuation<HTTPClientResponse, Error>, with: Error)
             case none
         }
 
@@ -191,6 +206,8 @@ extension Transaction {
                 )
                 self.state = .executing(context, .requestHeadSent, .waitingForResponseHead)
                 return .none
+            case .deadlineExceededWhileQueued(let continuation):
+                return .cancelAndFail(executor, continuation, with: HTTPClientError.deadlineExceeded)
 
             case .finished(error: .some, .none):
                 return .cancel(executor)
@@ -210,7 +227,7 @@ extension Transaction {
 
         mutating func resumeRequestBodyStream() -> ResumeProducingAction {
             switch self.state {
-            case .initialized, .queued:
+            case .initialized, .queued, .deadlineExceededWhileQueued:
                 preconditionFailure("Received a resumeBodyRequest on a request, that isn't executing. Invalid state: \(self.state)")
 
             case .executing(let context, .requestHeadSent, let responseState):
@@ -246,6 +263,7 @@ extension Transaction {
             switch self.state {
             case .initialized,
                  .queued,
+                 .deadlineExceededWhileQueued,
                  .executing(_, .requestHeadSent, _):
                 preconditionFailure("A request stream can only be resumed, if the request was started")
 
@@ -271,6 +289,7 @@ extension Transaction {
             switch self.state {
             case .initialized,
                  .queued,
+                 .deadlineExceededWhileQueued,
                  .executing(_, .requestHeadSent, _):
                 preconditionFailure("A request stream can only produce, if the request was started. Invalid state: \(self.state)")
 
@@ -301,6 +320,7 @@ extension Transaction {
             switch self.state {
             case .initialized,
                  .queued,
+                 .deadlineExceededWhileQueued,
                  .executing(_, .requestHeadSent, _),
                  .executing(_, .finished, _):
                 preconditionFailure("A request stream can only produce, if the request was started. Invalid state: \(self.state)")
@@ -334,6 +354,7 @@ extension Transaction {
             switch self.state {
             case .initialized,
                  .queued,
+                 .deadlineExceededWhileQueued,
                  .executing(_, .finished, _):
                 preconditionFailure("Invalid state: \(self.state)")
 
@@ -372,6 +393,7 @@ extension Transaction {
             switch self.state {
             case .initialized,
                  .queued,
+                 .deadlineExceededWhileQueued,
                  .executing(_, _, .waitingForResponseIterator),
                  .executing(_, _, .buffering),
                  .executing(_, _, .waitingForRemote):
@@ -401,7 +423,7 @@ extension Transaction {
 
         mutating func receiveResponseBodyParts(_ buffer: CircularBuffer<ByteBuffer>) -> ReceiveResponsePartAction {
             switch self.state {
-            case .initialized, .queued:
+            case .initialized, .queued, .deadlineExceededWhileQueued:
                 preconditionFailure("Received a response body part, but request hasn't started yet. Invalid state: \(self.state)")
 
             case .executing(_, _, .waitingForResponseHead):
@@ -457,6 +479,7 @@ extension Transaction {
             switch self.state {
             case .initialized,
                  .queued,
+                 .deadlineExceededWhileQueued,
                  .executing(_, _, .waitingForResponseHead):
                 preconditionFailure("Got notice about a deinited response, before we even received a response. Invalid state: \(self.state)")
 
@@ -486,7 +509,7 @@ extension Transaction {
 
         mutating func responseBodyIteratorDeinited(streamID: HTTPClientResponse.Body.IteratorStream.ID) -> FailAction {
             switch self.state {
-            case .initialized, .queued, .executing(_, _, .waitingForResponseHead):
+            case .initialized, .queued, .deadlineExceededWhileQueued, .executing(_, _, .waitingForResponseHead):
                 preconditionFailure("Got notice about a deinited response body iterator, before we even received a response. Invalid state: \(self.state)")
 
             case .executing(_, _, .buffering(let registeredStreamID, _, next: _)),
@@ -516,6 +539,7 @@ extension Transaction {
             switch self.state {
             case .initialized,
                  .queued,
+                 .deadlineExceededWhileQueued,
                  .executing(_, _, .waitingForResponseHead):
                 preconditionFailure("If we receive a response body, we must have received a head before")
 
@@ -635,6 +659,7 @@ extension Transaction {
             switch self.state {
             case .initialized,
                  .queued,
+                 .deadlineExceededWhileQueued,
                  .executing(_, _, .waitingForResponseHead):
                 preconditionFailure("Received no response head, but received a response end. Invalid state: \(self.state)")
 
@@ -677,6 +702,7 @@ extension Transaction {
 
         enum DeadlineExceededAction {
             case none
+            case cancelSchedulerOnly(scheduler: HTTPRequestScheduler)
             /// fail response before head received. scheduler and executor are exclusive here.
             case cancel(
                 requestContinuation: CheckedContinuation<HTTPClientResponse, Error>,
@@ -699,14 +725,12 @@ extension Transaction {
                 )
 
             case .queued(let continuation, let scheduler):
-                self.state = .finished(error: error, nil)
-                return .cancel(
-                    requestContinuation: continuation,
-                    scheduler: scheduler,
-                    executor: nil,
-                    bodyStreamContinuation: nil
+                self.state = .deadlineExceededWhileQueued(continuation)
+                return .cancelSchedulerOnly(
+                    scheduler: scheduler
                 )
-
+            case .deadlineExceededWhileQueued:
+                return .none
             case .executing(let context, let requestStreamState, .waitingForResponseHead):
                 switch requestStreamState {
                 case .paused(continuation: .some(let continuation)):

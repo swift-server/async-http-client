@@ -174,7 +174,9 @@ extension Transaction: HTTPExecutableRequest {
         switch action {
         case .cancel(let executor):
             executor.cancelRequest(self)
-
+        case .cancelAndFail(let executor, let continuation, with: let error):
+            executor.cancelRequest(self)
+            continuation.resume(throwing: error)
         case .none:
             break
         }
@@ -309,7 +311,8 @@ extension Transaction: HTTPExecutableRequest {
             scheduler?.cancelRequest(self)
             executor?.cancelRequest(self)
             bodyStreamContinuation?.resume(throwing: HTTPClientError.deadlineExceeded)
-
+        case .cancelSchedulerOnly(scheduler: let scheduler):
+            scheduler.cancelRequest(self)
         case .none:
             break
         }

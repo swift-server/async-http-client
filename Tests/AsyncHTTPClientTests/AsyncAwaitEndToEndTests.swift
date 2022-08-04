@@ -16,6 +16,7 @@
 import Logging
 import NIOCore
 import NIOPosix
+import NIOSSL
 import XCTest
 
 private func makeDefaultHTTPClient(
@@ -388,6 +389,53 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 }
                 // a race between deadline and connect timer can result in either error
                 XCTAssertTrue([.deadlineExceeded, .connectTimeout].contains(error))
+            }
+        }
+        #endif
+    }
+
+    func testSelfSignedCertificateIsRejectedWithCorrectErrorIfRequestDeadlineIsExceeded() {
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
+        XCTAsyncTest(timeout: 5) {
+            /// key + cert was created with the follwing command:
+            /// openssl req -x509 -newkey rsa:4096 -keyout self_signed_key.pem -out self_signed_cert.pem -sha256 -days 99999 -nodes -subj '/CN=localhost'
+            let certPath = Bundle.module.path(forResource: "self_signed_cert", ofType: "pem")!
+            let keyPath = Bundle.module.path(forResource: "self_signed_key", ofType: "pem")!
+            let configuration = TLSConfiguration.makeServerConfiguration(
+                certificateChain: try NIOSSLCertificate.fromPEMFile(certPath).map { .certificate($0) },
+                privateKey: .file(keyPath)
+            )
+            let sslContext = try NIOSSLContext(configuration: configuration)
+            let serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+            defer { XCTAssertNoThrow(try serverGroup.syncShutdownGracefully()) }
+            let server = ServerBootstrap(group: serverGroup)
+                .childChannelInitializer { channel in
+                    channel.pipeline.addHandler(NIOSSLServerHandler(context: sslContext))
+                }
+            let serverChannel = try server.bind(host: "localhost", port: 0).wait()
+            defer { XCTAssertNoThrow(try serverChannel.close().wait()) }
+            let port = serverChannel.localAddress!.port!
+
+            var config = HTTPClient.Configuration()
+            config.timeout.connect = .seconds(3)
+            let localClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: config)
+            defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+            let request = HTTPClientRequest(url: "https://localhost:\(port)")
+            await XCTAssertThrowsError(try await localClient.execute(request, deadline: .now() + .seconds(2))) { error in
+                #if canImport(Network)
+                guard let nwTLSError = error as? HTTPClient.NWTLSError else {
+                    XCTFail("could not cast \(error) of type \(type(of: error)) to \(HTTPClient.NWTLSError.self)")
+                    return
+                }
+                XCTAssertEqual(nwTLSError.status, errSSLBadCert, "unexpected tls error: \(nwTLSError)")
+                #else
+                guard let sslError = error as? NIOSSLError,
+                      case .handshakeFailed(.sslError) = sslError else {
+                    XCTFail("unexpected error \(error)")
+                    return
+                }
+                #endif
             }
         }
         #endif
