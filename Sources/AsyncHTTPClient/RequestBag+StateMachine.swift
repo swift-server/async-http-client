@@ -607,13 +607,18 @@ extension RequestBag.StateMachine {
             // An error occurred after the request has finished. Ignore...
             return .none
         case .deadlineExceededWhileQueued:
-            // if we just get a `HTTPClientError.cancelled` we can use the original cancellation reason
-            // to give a more descriptive error to the user.
-            if (error as? HTTPClientError) == .cancelled {
-                return .failTask(HTTPClientError.deadlineExceeded, nil, nil)
-            }
-            // otherwise we already had an intermediate connection error which we should present to the user instead
-            return .failTask(error, nil, nil)
+            let realError: Error = {
+                if (error as? HTTPClientError) == .cancelled {
+                    /// if we just get a `HTTPClientError.cancelled` we can use the original cancellation reason
+                    /// to give a more descriptive error to the user.
+                    return HTTPClientError.deadlineExceeded
+                } else {
+                    /// otherwise we already had an intermediate connection error which we should present to the user instead
+                    return error
+                }
+            }()
+            self.state = .finished(error: realError)
+            return .failTask(realError, nil, nil)
         case .finished(.some(_)):
             // this might happen, if the stream consumer has failed... let's just drop the data
             return .none
