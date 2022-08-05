@@ -890,6 +890,49 @@ class HTTPClientTests: XCTestCase {
         }
     }
 
+    func testDecompressionHTTP2() throws {
+        let localHTTPBin = HTTPBin(.http2(compress: true))
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: .init(
+                certificateVerification: .none,
+                decompression: .enabled(limit: .none)
+            )
+        )
+
+        defer {
+            XCTAssertNoThrow(try localClient.syncShutdown())
+            XCTAssertNoThrow(try localHTTPBin.shutdown())
+        }
+
+        var body = ""
+        for _ in 1...1000 {
+            body += "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
+        }
+
+        for algorithm: String? in [nil] {
+            var request = try HTTPClient.Request(url: "https://localhost:\(localHTTPBin.port)/post", method: .POST)
+            request.body = .string(body)
+            if let algorithm = algorithm {
+                request.headers.add(name: "Accept-Encoding", value: algorithm)
+            }
+
+            let response = try localClient.execute(request: request).wait()
+            var responseBody = try XCTUnwrap(response.body)
+            let data = try responseBody.readJSONDecodable(RequestInfo.self, length: responseBody.readableBytes)
+
+            XCTAssertEqual(.ok, response.status)
+            let contentLength = try XCTUnwrap(response.headers["Content-Length"].first.flatMap { Int($0) })
+            XCTAssertGreaterThan(body.count, contentLength)
+            if let algorithm = algorithm {
+                XCTAssertEqual(algorithm, response.headers["Content-Encoding"].first)
+            } else {
+                XCTAssertEqual("deflate", response.headers["Content-Encoding"].first)
+            }
+            XCTAssertEqual(body, data?.data)
+        }
+    }
+
     func testDecompressionLimit() throws {
         let localHTTPBin = HTTPBin(.http1_1(compress: true))
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: .init(decompression: .enabled(limit: .ratio(1))))

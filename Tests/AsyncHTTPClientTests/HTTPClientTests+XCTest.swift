@@ -66,6 +66,7 @@ extension HTTPClientTests {
             ("testUploadStreaming", testUploadStreaming),
             ("testEventLoopArgument", testEventLoopArgument),
             ("testDecompression", testDecompression),
+            ("testDecompressionHTTP2", testDecompressionHTTP2),
             ("testDecompressionLimit", testDecompressionLimit),
             ("testLoopDetectionRedirectLimit", testLoopDetectionRedirectLimit),
             ("testCountRedirectLimit", testCountRedirectLimit),

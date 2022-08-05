@@ -15,6 +15,7 @@
 import Logging
 import NIOCore
 import NIOHTTP2
+import NIOHTTPCompression
 
 protocol HTTP2ConnectionDelegate {
     func http2Connection(_: HTTP2Connection, newMaxStreamSetting: Int)
@@ -79,6 +80,7 @@ final class HTTP2Connection {
     /// request.
     private var openStreams = Set<ChannelBox>()
     let id: HTTPConnectionPool.Connection.ID
+    let decompression: HTTPClient.Decompression
 
     var closeFuture: EventLoopFuture<Void> {
         self.channel.closeFuture
@@ -86,10 +88,12 @@ final class HTTP2Connection {
 
     init(channel: Channel,
          connectionID: HTTPConnectionPool.Connection.ID,
+         decompression: HTTPClient.Decompression,
          delegate: HTTP2ConnectionDelegate,
          logger: Logger) {
         self.channel = channel
         self.id = connectionID
+        self.decompression = decompression
         self.logger = logger
         self.multiplexer = HTTP2StreamMultiplexer(
             mode: .client,
@@ -118,7 +122,7 @@ final class HTTP2Connection {
         configuration: HTTPClient.Configuration,
         logger: Logger
     ) -> EventLoopFuture<(HTTP2Connection, Int)> {
-        let connection = HTTP2Connection(channel: channel, connectionID: connectionID, delegate: delegate, logger: logger)
+        let connection = HTTP2Connection(channel: channel, connectionID: connectionID, decompression: configuration.decompression, delegate: delegate, logger: logger)
         return connection.start().map { maxStreams in (connection, maxStreams) }
     }
 
@@ -208,9 +212,14 @@ final class HTTP2Connection {
                     // We only support http/2 over an https connection – using the Application-Layer
                     // Protocol Negotiation (ALPN). For this reason it is safe to fix this to `.https`.
                     let translate = HTTP2FramePayloadToHTTP1ClientCodec(httpProtocol: .https)
-                    let handler = HTTP2ClientRequestHandler(eventLoop: channel.eventLoop)
-
                     try channel.pipeline.syncOperations.addHandler(translate)
+
+                    if case .enabled(let limit) = self.decompression {
+                        let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
+                        try channel.pipeline.syncOperations.addHandler(decompressHandler)
+                    }
+
+                    let handler = HTTP2ClientRequestHandler(eventLoop: channel.eventLoop)
                     try channel.pipeline.syncOperations.addHandler(handler)
 
                     // We must add the new channel to the list of open channels BEFORE we write the
