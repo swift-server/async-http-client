@@ -539,6 +539,9 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
                                 let sync = channel.pipeline.syncOperations
 
                                 try sync.addHandler(HTTP2FramePayloadToHTTP1ServerCodec())
+                                if self.mode.compress {
+                                    try sync.addHandler(HTTPResponseCompressor())
+                                }
                                 try sync.addHandler(self.handlerFactory(connectionID))
 
                                 return channel.eventLoop.makeSucceededVoidFuture()
