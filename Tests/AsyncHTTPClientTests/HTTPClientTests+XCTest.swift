@@ -142,6 +142,7 @@ extension HTTPClientTests {
             ("testRequestSpecificTLS", testRequestSpecificTLS),
             ("testConnectionPoolSizeConfigValueIsRespected", testConnectionPoolSizeConfigValueIsRespected),
             ("testRequestWithHeaderTransferEncodingIdentityDoesNotFail", testRequestWithHeaderTransferEncodingIdentityDoesNotFail),
+            ("testMassiveDownload", testMassiveDownload),
         ]
     }
 }
