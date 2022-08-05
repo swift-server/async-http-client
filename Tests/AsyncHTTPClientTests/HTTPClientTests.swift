@@ -3411,4 +3411,13 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertNoThrow(try client.execute(request: request).wait())
     }
+
+    func testMassiveDownload() {
+        var response: HTTPClient.Response?
+        XCTAssertNoThrow(response = try self.defaultClient.get(url: "\(self.defaultHTTPBinURLPrefix)mega-chunked").wait())
+
+        XCTAssertEqual(.ok, response?.status)
+        XCTAssertEqual(response?.version, .http1_1)
+        XCTAssertEqual(response?.body?.readableBytes, 10_000)
+    }
 }
