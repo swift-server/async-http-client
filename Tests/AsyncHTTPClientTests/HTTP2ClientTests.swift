@@ -432,6 +432,19 @@ class HTTP2ClientTests: XCTestCase {
             )
         }
     }
+
+    func testMassiveDownload() {
+        let bin = HTTPBin(.http2(compress: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+        let client = self.makeDefaultHTTPClient()
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+        var response: HTTPClient.Response?
+        XCTAssertNoThrow(response = try client.get(url: "https://localhost:\(bin.port)/mega-chunked").wait())
+
+        XCTAssertEqual(.ok, response?.status)
+        XCTAssertEqual(response?.version, .http2)
+        XCTAssertEqual(response?.body?.readableBytes, 10_000)
+    }
 }
 
 private final class HeadReceivedCallback: HTTPClientResponseDelegate {

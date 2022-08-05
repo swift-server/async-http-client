@@ -37,6 +37,7 @@ extension HTTP2ClientTests {
             ("testH2CanHandleRequestsThatHaveAlreadyHitTheDeadline", testH2CanHandleRequestsThatHaveAlreadyHitTheDeadline),
             ("testStressCancelingRunningRequestFromDifferentThreads", testStressCancelingRunningRequestFromDifferentThreads),
             ("testPlatformConnectErrorIsForwardedOnTimeout", testPlatformConnectErrorIsForwardedOnTimeout),
+            ("testMassiveDownload", testMassiveDownload),
         ]
     }
 }

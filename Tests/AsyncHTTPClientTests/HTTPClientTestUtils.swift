@@ -745,6 +745,22 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
         context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
     }
 
+    func writeManyChunks(context: ChannelHandlerContext) {
+        // This tests receiving a lot of tiny chunks: they must all be sent in a single flush or the test doesn't work.
+        let headers = HTTPHeaders([("Transfer-Encoding", "chunked")])
+
+        context.write(self.wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))), promise: nil)
+        let message = ByteBuffer(integer: UInt8(ascii: "a"))
+
+        // This number (10k) is load-bearing and a bit magic: it has been experimentally verified as being sufficient to blow the stack
+        // in the old implementation on all testing platforms. Please don't change it without good reason.
+        for _ in 0..<10_000 {
+            context.write(wrapOutboundOut(.body(.byteBuffer(message))), promise: nil)
+        }
+
+        context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+    }
+
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         self.isServingRequest = true
         switch self.unwrapInboundIn(data) {
@@ -862,6 +878,9 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                 self.writeEvents(context: context, isContentLengthRequired: true)
             case "/chunked":
                 self.writeChunked(context: context)
+                return
+            case "/mega-chunked":
+                self.writeManyChunks(context: context)
                 return
             case "/close-on-response":
                 var headers = self.responseHeaders

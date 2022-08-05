@@ -19,6 +19,14 @@ import NIOHTTP1
 import NIOSSL
 
 final class RequestBag<Delegate: HTTPClientResponseDelegate> {
+    /// Defends against the call stack getting too large when consuming body parts.
+    ///
+    /// If the response body comes in lots of tiny chunks, we'll deliver those tiny chunks to users
+    /// one at a time.
+    private static var maxConsumeBodyPartStackDepth: Int {
+        50
+    }
+
     let task: HTTPClient.Task<Delegate.Response>
     var eventLoop: EventLoop {
         self.task.eventLoop
@@ -29,6 +37,9 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
 
     // the request state is synchronized on the task eventLoop
     private var state: StateMachine
+
+    // the consume body part stack depth is synchronized on the task event loop.
+    private var consumeBodyPartStackDepth: Int
 
     // MARK: HTTPClientTask properties
 
@@ -55,6 +66,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
         self.eventLoopPreference = eventLoopPreference
         self.task = task
         self.state = .init(redirectHandler: redirectHandler)
+        self.consumeBodyPartStackDepth = 0
         self.request = request
         self.connectionDeadline = connectionDeadline
         self.requestOptions = requestOptions
@@ -290,16 +302,39 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
     private func consumeMoreBodyData0(resultOfPreviousConsume result: Result<Void, Error>) {
         self.task.eventLoop.assertInEventLoop()
 
+        // We get defensive here about the maximum stack depth. It's possible for the `didReceiveBodyPart`
+        // future to be returned to us completed. If it is, we will recurse back into this method. To
+        // break that recursion we have a max stack depth which we increment and decrement in this method:
+        // if it gets too large, instead of recurring we'll insert an `eventLoop.execute`, which will
+        // manually break the recursion and unwind the stack.
+        //
+        // Note that we don't bother starting this at the various other call sites that _begin_ stacks
+        // that risk ending up in this loop. That's because we don't need an accurate count: our limit is
+        // a best-effort target anyway, one stack frame here or there does not put us at risk. We're just
+        // trying to prevent ourselves looping out of control.
+        self.consumeBodyPartStackDepth += 1
+        defer {
+            self.consumeBodyPartStackDepth -= 1
+            assert(self.consumeBodyPartStackDepth >= 0)
+        }
+
         let consumptionAction = self.state.consumeMoreBodyData(resultOfPreviousConsume: result)
 
         switch consumptionAction {
         case .consume(let byteBuffer):
             self.delegate.didReceiveBodyPart(task: self.task, byteBuffer)
                 .hop(to: self.task.eventLoop)
-                .whenComplete {
-                    switch $0 {
+                .whenComplete { result in
+                    switch result {
                     case .success:
-                        self.consumeMoreBodyData0(resultOfPreviousConsume: $0)
+                        if self.consumeBodyPartStackDepth < Self.maxConsumeBodyPartStackDepth {
+                            self.consumeMoreBodyData0(resultOfPreviousConsume: result)
+                        } else {
+                            // We need to unwind the stack, let's take a break.
+                            self.task.eventLoop.execute {
+                                self.consumeMoreBodyData0(resultOfPreviousConsume: result)
+                            }
+                        }
                     case .failure(let error):
                         self.fail(error)
                     }
