@@ -11,6 +11,7 @@ services:
 
   test:
     image: async-http-client:18.04-5.4
+    command: /bin/bash -xcl "swift test --parallel -Xswiftc -warnings-as-errors $${SANITIZER_ARG-}"
     environment: []
       #- SANITIZER_ARG=--sanitize=thread
 
