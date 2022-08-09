@@ -16,12 +16,12 @@
 import NIOCore
 import NIOHTTP1
 
-/// A representation of a HTTP request for the Swift Concurrency HTTPClient API.
+/// A representation of an HTTP request for the Swift Concurrency HTTPClient API.
 ///
 /// This object is similar to ``HTTPClient/Request``, but used for the Swift Concurrency API.
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 public struct HTTPClientRequest {
-    /// The request URL, including scheme and hostname.
+    /// The request URL, including scheme, hostname, and optionally port.
     public var url: String
 
     /// The request method.
@@ -43,7 +43,7 @@ public struct HTTPClientRequest {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest {
-    /// A HTTP request body.
+    /// An HTTP request body.
     ///
     /// This object encapsulates the difference between streamed HTTP request bodies and those bodies that
     /// are already entirely in memory.
@@ -67,14 +67,14 @@ extension HTTPClientRequest {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest.Body {
-    /// Create a ``HTTPClientRequest/Body-swift.struct`` from a `ByteBuffer`.
+    /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `ByteBuffer`.
     ///
     /// - parameter byteBuffer: The bytes of the body.
     public static func bytes(_ byteBuffer: ByteBuffer) -> Self {
         self.init(.byteBuffer(byteBuffer))
     }
 
-    /// Create a ``HTTPClientRequest/Body-swift.struct`` from a `RandomAccessCollection` of bytes.
+    /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `RandomAccessCollection` of bytes.
     ///
     /// This construction will flatten the bytes into a `ByteBuffer`. As a result, the peak memory
     /// usage of this construction will be double the size of the original collection. The construction
@@ -98,7 +98,7 @@ extension HTTPClientRequest.Body {
         })
     }
 
-    /// Create a ``HTTPClientRequest/Body-swift.struct`` from a `Sequence` of bytes.
+    /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `Sequence` of bytes.
     ///
     /// This construction will flatten the bytes into a `ByteBuffer`. As a result, the peak memory
     /// usage of this construction will be double the size of the original collection. The construction
@@ -133,7 +133,7 @@ extension HTTPClientRequest.Body {
         })
     }
 
-    /// Create a ``HTTPClientRequest/Body-swift.struct`` from a `Collection` of bytes.
+    /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `Collection` of bytes.
     ///
     /// This construction will flatten the bytes into a `ByteBuffer`. As a result, the peak memory
     /// usage of this construction will be double the size of the original collection. The construction
@@ -164,7 +164,7 @@ extension HTTPClientRequest.Body {
         })
     }
 
-    /// Create a ``HTTPClientRequest/Body-swift.struct`` from an `AsyncSequence` of `ByteBuffer`s.
+    /// Create an ``HTTPClientRequest/Body-swift.struct`` from an `AsyncSequence` of `ByteBuffer`s.
     ///
     /// This construction will stream the upload one `ByteBuffer` at a time.
     ///
@@ -187,10 +187,11 @@ extension HTTPClientRequest.Body {
         return body
     }
 
-    /// Create a ``HTTPClientRequest/Body-swift.struct`` from an `AsyncSequence` of bytes.
+    /// Create an ``HTTPClientRequest/Body-swift.struct`` from an `AsyncSequence` of bytes.
     ///
     /// This construction will consume 1kB chunks from the `Bytes` and send them at once. This optimizes for
-    /// `AsyncSEquence`s where
+    /// `AsyncSequence`s where larger chunks are buffered up and available without actually suspending, such
+    /// as those provided by `FileHandle`.
     ///
     /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
     /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload

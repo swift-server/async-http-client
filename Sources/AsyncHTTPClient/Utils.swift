@@ -14,7 +14,7 @@
 
 import NIOCore
 
-/// A ``HTTPClientResponseDelegate`` that wraps a callback.
+/// An ``HTTPClientResponseDelegate`` that wraps a callback.
 ///
 /// ``HTTPClientCopyingDelegate`` discards most parts of a HTTP response, but streams the body
 /// to the `chunkHandler` provided on ``init(chunkHandler:)``. This is mostly useful for testing.

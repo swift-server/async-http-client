@@ -99,7 +99,7 @@ extension HTTPClient {
         }
     }
 
-    /// Represents a HTTP request.
+    /// Represents an HTTP request.
     public struct Request {
         /// Request HTTP method, defaults to `GET`.
         public let method: HTTPMethod
@@ -228,7 +228,7 @@ extension HTTPClient {
         }
     }
 
-    /// Represents a HTTP response.
+    /// Represents an HTTP response.
     public struct Response {
         /// Remote host of the request.
         public var host: String

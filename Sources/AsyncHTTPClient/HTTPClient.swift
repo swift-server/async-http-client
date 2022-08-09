@@ -65,7 +65,7 @@ let globalRequestID = ManagedAtomic(0)
 ///     try client.syncShutdown()
 /// ```
 public class HTTPClient {
-    /// The `EventLoopGroup` in use by this `HTTPClient`.
+    /// The `EventLoopGroup` in use by this ``HTTPClient``.
     ///
     /// All HTTP transactions will occur on loops owned by this group.
     public let eventLoopGroup: EventLoopGroup
