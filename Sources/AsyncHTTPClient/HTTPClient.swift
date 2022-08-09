@@ -65,6 +65,9 @@ let globalRequestID = ManagedAtomic(0)
 ///     try client.syncShutdown()
 /// ```
 public class HTTPClient {
+    /// The `EventLoopGroup` in use by this ``HTTPClient``.
+    ///
+    /// All HTTP transactions will occur on loops owned by this group.
     public let eventLoopGroup: EventLoopGroup
     let eventLoopGroupProvider: EventLoopGroupProvider
     let configuration: Configuration
@@ -74,7 +77,7 @@ public class HTTPClient {
 
     internal static let loggingDisabled = Logger(label: "AHC-do-not-log", factory: { _ in SwiftLogNoOpLogHandler() })
 
-    /// Create an `HTTPClient` with specified `EventLoopGroup` provider and configuration.
+    /// Create an ``HTTPClient`` with specified `EventLoopGroup` provider and configuration.
     ///
     /// - parameters:
     ///     - eventLoopGroupProvider: Specify how `EventLoopGroup` will be created.
@@ -86,7 +89,7 @@ public class HTTPClient {
                   backgroundActivityLogger: HTTPClient.loggingDisabled)
     }
 
-    /// Create an `HTTPClient` with specified `EventLoopGroup` provider and configuration.
+    /// Create an ``HTTPClient`` with specified `EventLoopGroup` provider and configuration.
     ///
     /// - parameters:
     ///     - eventLoopGroupProvider: Specify how `EventLoopGroup` will be created.
@@ -180,7 +183,9 @@ public class HTTPClient {
         }
     }
 
-    /// Shuts down the client and event loop gracefully. This function is clearly an outlier in that it uses a completion
+    /// Shuts down the client and event loop gracefully.
+    ///
+    /// This function is clearly an outlier in that it uses a completion
     /// callback instead of an EventLoopFuture. The reason for that is that NIO's EventLoopFutures will call back on an event loop.
     /// The virtue of this function is to shut the event loop down. To work around that we call back on a DispatchQueue
     /// instead.
@@ -623,11 +628,11 @@ public class HTTPClient {
         return task
     }
 
-    /// `HTTPClient` configuration.
+    /// ``HTTPClient`` configuration.
     public struct Configuration {
         /// TLS configuration, defaults to `TLSConfiguration.makeClientConfiguration()`.
         public var tlsConfiguration: Optional<TLSConfiguration>
-        /// Enables following 3xx redirects automatically, defaults to `RedirectConfiguration()`.
+        /// Enables following 3xx redirects automatically.
         ///
         /// Following redirects are supported:
         ///  - `301: Moved Permanently`
@@ -638,7 +643,8 @@ public class HTTPClient {
         ///  - `307: Temporary Redirect`
         ///  - `308: Permanent Redirect`
         public var redirectConfiguration: RedirectConfiguration
-        /// Default client timeout, defaults to no `read` timeout and 10 seconds `connect` timeout.
+        /// Default client timeout, defaults to no ``Timeout-swift.struct/read`` timeout
+        /// and 10 seconds ``Timeout-swift.struct/connect`` timeout.
         public var timeout: Timeout
         /// Connection pool configuration.
         public var connectionPool: ConnectionPool
@@ -653,10 +659,12 @@ public class HTTPClient {
             set {}
         }
 
-        /// is set to `.automatic` by default which will use HTTP/2 if run over https and the server supports it, otherwise HTTP/1
+        /// What HTTP versions to use.
+        ///
+        /// Set to ``HTTPVersion-swift.struct/automatic`` by default which will use HTTP/2 if run over https and the server supports it, otherwise HTTP/1
         public var httpVersion: HTTPVersion
 
-        /// Whether `HTTPClient` will let Network.framework sit in the `.waiting` state awaiting new network changes, or fail immediately. Defaults to `true`,
+        /// Whether ``HTTPClient`` will let Network.framework sit in the `.waiting` state awaiting new network changes, or fail immediately. Defaults to `true`,
         /// which is the recommended setting. Only set this to `false` when attempting to trigger a particular error path.
         public var networkFrameworkWaitForConnectivity: Bool
 
@@ -755,11 +763,11 @@ public class HTTPClient {
     public enum EventLoopGroupProvider {
         /// `EventLoopGroup` will be provided by the user. Owner of this group is responsible for its lifecycle.
         case shared(EventLoopGroup)
-        /// `EventLoopGroup` will be created by the client. When `syncShutdown` is called, created `EventLoopGroup` will be shut down as well.
+        /// `EventLoopGroup` will be created by the client. When ``HTTPClient/syncShutdown()`` is called, the created `EventLoopGroup` will be shut down as well.
         case createNew
     }
 
-    /// Specifies how the library will treat event loop passed by the user.
+    /// Specifies how the library will treat the event loop passed by the user.
     public struct EventLoopPreference {
         enum Preference {
             /// Event Loop will be selected by the library.
@@ -830,8 +838,7 @@ extension HTTPClient.Configuration {
         /// Create timeout.
         ///
         /// - parameters:
-        ///     - connect: `connect` timeout. Will default to 10 seconds, if no value is
-        ///       provided. See `var connectionCreationTimeout`
+        ///     - connect: `connect` timeout. Will default to 10 seconds, if no value is provided.
         ///     - read: `read` timeout.
         public init(connect: TimeAmount? = nil, read: TimeAmount? = nil) {
             self.connect = connect
@@ -897,7 +904,7 @@ extension HTTPClient.Configuration {
             case automatic
         }
 
-        /// we only use HTTP/1, even if the server would supports HTTP/2
+        /// We will only use HTTP/1, even if the server would supports HTTP/2
         public static let http1Only: Self = .init(configuration: .http1Only)
 
         /// HTTP/2 is used if we connect to a server with HTTPS and the server supports HTTP/2, otherwise we use HTTP/1

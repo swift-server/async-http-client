@@ -21,6 +21,7 @@ import NIOTransportServices
 
 extension HTTPClient {
     #if canImport(Network)
+    /// A wrapper for `POSIX` errors thrown by `Network.framework`.
     public struct NWPOSIXError: Error, CustomStringConvertible {
         /// POSIX error code (enum)
         public let errorCode: POSIXErrorCode
@@ -40,8 +41,9 @@ extension HTTPClient {
         public var description: String { return self.reason }
     }
 
+    /// A wrapper for TLS errors thrown by `Network.framework`.
     public struct NWTLSError: Error, CustomStringConvertible {
-        /// TLS error status. List of TLS errors can be found in <Security/SecureTransport.h>
+        /// TLS error status. List of TLS errors can be found in `<Security/SecureTransport.h>`
         public let status: OSStatus
 
         /// actual reason, in human readable form

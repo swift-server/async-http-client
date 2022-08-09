@@ -16,13 +16,28 @@
 import NIOCore
 import NIOHTTP1
 
+/// A representation of an HTTP response for the Swift Concurrency HTTPClient API.
+///
+/// This object is similar to ``HTTPClient/Response``, but used for the Swift Concurrency API.
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 public struct HTTPClientResponse {
+    /// The HTTP version on which the response was received.
     public var version: HTTPVersion
+
+    /// The HTTP status for this response.
     public var status: HTTPResponseStatus
+
+    /// The HTTP headers of this response.
     public var headers: HTTPHeaders
+
+    /// The body of this HTTP response.
     public var body: Body
 
+    /// A representation of the response body for an HTTP response.
+    ///
+    /// The body is streamed as an `AsyncSequence` of `ByteBuffer`, where each `ByteBuffer` contains
+    /// an arbitrarily large chunk of data. The boundaries between `ByteBuffer` objects in the sequence
+    /// are entirely synthetic and have no semantic meaning.
     public struct Body {
         private let bag: Transaction
         private let reference: ResponseRef
