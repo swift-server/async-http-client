@@ -20,13 +20,15 @@ import NIOHTTP1
 import NIOSSL
 
 extension HTTPClient {
-    /// Represent request body.
+    /// A request body.
     public struct Body {
-        /// Chunk provider.
+        /// A streaming uploader.
+        ///
+        /// ``StreamWriter`` abstracts
         public struct StreamWriter {
             let closure: (IOData) -> EventLoopFuture<Void>
 
-            /// Create new StreamWriter
+            /// Create new ``HTTPClient/Body/StreamWriter``
             ///
             /// - parameters:
             ///     - closure: function that will be called to write actual bytes to the channel.
@@ -43,7 +45,7 @@ extension HTTPClient {
             }
         }
 
-        /// Body size. if nil,`Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
+        /// Body size. If nil,`Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
         /// header is set with the given `length`.
         public var length: Int?
         /// Body chunk provider.
@@ -65,7 +67,7 @@ extension HTTPClient {
             }
         }
 
-        /// Create and stream body using `StreamWriter`.
+        /// Create and stream body using ``StreamWriter``.
         ///
         /// - parameters:
         ///     - length: Body size. If nil, `Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
@@ -97,7 +99,7 @@ extension HTTPClient {
         }
     }
 
-    /// Represent HTTP request.
+    /// Represents a HTTP request.
     public struct Request {
         /// Request HTTP method, defaults to `GET`.
         public let method: HTTPMethod
@@ -226,7 +228,7 @@ extension HTTPClient {
         }
     }
 
-    /// Represent HTTP response.
+    /// Represents a HTTP response.
     public struct Response {
         /// Remote host of the request.
         public var host: String
@@ -272,7 +274,7 @@ extension HTTPClient {
         }
     }
 
-    /// HTTP authentication
+    /// HTTP authentication.
     public struct Authorization: Hashable {
         private enum Scheme: Hashable {
             case Basic(String)
@@ -285,18 +287,24 @@ extension HTTPClient {
             self.scheme = scheme
         }
 
+        /// HTTP basic auth.
         public static func basic(username: String, password: String) -> HTTPClient.Authorization {
             return .basic(credentials: Base64.encode(bytes: "\(username):\(password)".utf8))
         }
 
+        /// HTTP basic auth.
+        ///
+        /// This version uses the raw string directly.
         public static func basic(credentials: String) -> HTTPClient.Authorization {
             return .init(scheme: .Basic(credentials))
         }
 
+        /// HTTP bearer auth
         public static func bearer(tokens: String) -> HTTPClient.Authorization {
             return .init(scheme: .Bearer(tokens))
         }
 
+        /// The header string for this auth field.
         public var headerValue: String {
             switch self.scheme {
             case .Basic(let credentials):
@@ -308,6 +316,10 @@ extension HTTPClient {
     }
 }
 
+/// The default ``HTTPClientResponseDelegate``.
+///
+/// This ``HTTPClientResponseDelegate`` buffers a complete HTTP response in memory. It does not stream the response body in.
+/// The resulting ``Response`` type is ``HTTPClient/Response``.
 public class ResponseAccumulator: HTTPClientResponseDelegate {
     public typealias Response = HTTPClient.Response
 
@@ -385,32 +397,34 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
     }
 }
 
-/// `HTTPClientResponseDelegate` allows an implementation to receive notifications about request processing and to control how response parts are processed.
+/// ``HTTPClientResponseDelegate`` allows an implementation to receive notifications about request processing and to control how response parts are processed.
+///
 /// You can implement this protocol if you need fine-grained control over an HTTP request/response, for example, if you want to inspect the response
 /// headers before deciding whether to accept a response body, or if you want to stream your request body. Pass an instance of your conforming
-/// class to the `HTTPClient.execute()` method and this package will call each delegate method appropriately as the request takes place./
+/// class to the ``HTTPClient/execute(request:delegate:eventLoop:deadline:)`` method and this package will call each delegate method appropriately as the request takes place.
 ///
 /// ### Backpressure
 ///
-/// A `HTTPClientResponseDelegate` can be used to exert backpressure on the server response. This is achieved by way of the futures returned from
-/// `didReceiveHead` and `didReceiveBodyPart`. The following functions are part of the "backpressure system" in the delegate:
+/// A ``HTTPClientResponseDelegate`` can be used to exert backpressure on the server response. This is achieved by way of the futures returned from
+/// ``HTTPClientResponseDelegate/didReceiveHead(task:_:)-9r4xd`` and ``HTTPClientResponseDelegate/didReceiveBodyPart(task:_:)-4fd4v``.
+/// The following functions are part of the "backpressure system" in the delegate:
 ///
-/// - `didReceiveHead`
-/// - `didReceiveBodyPart`
-/// - `didFinishRequest`
-/// - `didReceiveError`
+/// - ``HTTPClientResponseDelegate/didReceiveHead(task:_:)-9r4xd``
+/// - ``HTTPClientResponseDelegate/didReceiveBodyPart(task:_:)-4fd4v``
+/// - ``HTTPClientResponseDelegate/didFinishRequest(task:)``
+/// - ``HTTPClientResponseDelegate/didReceiveError(task:_:)-fhsg``
 ///
-/// The first three methods are strictly _exclusive_, with that exclusivity managed by the futures returned by `didReceiveHead` and
-/// `didReceiveBodyPart`. What this means is that until the returned future is completed, none of these three methods will be called
-/// again. This allows delegates to rate limit the server to a capacity it can manage. `didFinishRequest` does not return a future,
+/// The first three methods are strictly _exclusive_, with that exclusivity managed by the futures returned by ``HTTPClientResponseDelegate/didReceiveHead(task:_:)-9r4xd`` and
+/// ``HTTPClientResponseDelegate/didReceiveBodyPart(task:_:)-4fd4v``. What this means is that until the returned future is completed, none of these three methods will be called
+/// again. This allows delegates to rate limit the server to a capacity it can manage. ``HTTPClientResponseDelegate/didFinishRequest(task:)`` does not return a future,
 /// as we are expecting no more data from the server at this time.
 ///
-/// `didReceiveError` is somewhat special: it signals the end of this regime. `didRecieveError` is not exclusive: it may be called at
-/// any time, even if a returned future is not yet completed. `didReceiveError` is terminal, meaning that once it has been called none
-/// of these four methods will be called again. This can be used as a signal to abandon all outstanding work.
+/// ``HTTPClientResponseDelegate/didReceiveError(task:_:)-fhsg`` is somewhat special: it signals the end of this regime. ``HTTPClientResponseDelegate/didReceiveError(task:_:)-fhsg``
+/// is not exclusive: it may be called at any time, even if a returned future is not yet completed. ``HTTPClientResponseDelegate/didReceiveError(task:_:)-fhsg`` is terminal, meaning
+/// that once it has been called none of these four methods will be called again. This can be used as a signal to abandon all outstanding work.
 ///
 ///  - note: This delegate is strongly held by the `HTTPTaskHandler`
-///          for the duration of the `Request` processing and will be
+///          for the duration of the ``HTTPClient/Request`` processing and will be
 ///          released together with the `HTTPTaskHandler` when channel is closed.
 ///          Users of the library are not required to keep a reference to the
 ///          object that implements this protocol, but may do so if needed.
@@ -428,7 +442,7 @@ public protocol HTTPClientResponseDelegate: AnyObject {
     ///
     /// - parameters:
     ///     - task: Current request context.
-    ///     - part: Request body `Part`.
+    ///     - part: Request body part.
     func didSendRequestPart(task: HTTPClient.Task<Response>, _ part: IOData)
 
     /// Called when the request is fully sent. Will be called once.
@@ -451,7 +465,7 @@ public protocol HTTPClientResponseDelegate: AnyObject {
     /// You must return an `EventLoopFuture<Void>` that you complete when you have finished processing the body part.
     /// You can create an already succeeded future by calling `task.eventLoop.makeSucceededFuture(())`.
     ///
-    /// This function will not be called until the future returned by `didReceiveHead` has completed.
+    /// This function will not be called until the future returned by ``HTTPClientResponseDelegate/didReceiveHead(task:_:)-9r4xd`` has completed.
     ///
     /// This function will not be called for subsequent body parts until the previous future returned by a
     /// call to this function completes.
@@ -464,19 +478,22 @@ public protocol HTTPClientResponseDelegate: AnyObject {
 
     /// Called when error was thrown during request execution. Will be called zero or one time only. Request processing will be stopped after that.
     ///
-    /// This function may be called at any time: it does not respect the backpressure exerted by `didReceiveHead` and `didReceiveBodyPart`.
-    /// All outstanding work may be cancelled when this is received. Once called, no further calls will be made to `didReceiveHead`, `didReceiveBodyPart`,
-    /// or `didFinishRequest`.
+    /// This function may be called at any time: it does not respect the backpressure exerted by ``HTTPClientResponseDelegate/didReceiveHead(task:_:)-9r4xd``
+    /// and ``HTTPClientResponseDelegate/didReceiveBodyPart(task:_:)-4fd4v``.
+    /// All outstanding work may be cancelled when this is received. Once called, no further calls will be made to
+    /// ``HTTPClientResponseDelegate/didReceiveHead(task:_:)-9r4xd``, ``HTTPClientResponseDelegate/didReceiveBodyPart(task:_:)-4fd4v``,
+    /// or ``HTTPClientResponseDelegate/didFinishRequest(task:)``.
     ///
     /// - parameters:
     ///     - task: Current request context.
     ///     - error: Error that occured during response processing.
     func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error)
 
-    /// Called when the complete HTTP request is finished. You must return an instance of your `Response` associated type. Will be called once, except if an error occurred.
+    /// Called when the complete HTTP request is finished. You must return an instance of your ``Response`` associated type. Will be called once, except if an error occurred.
     ///
-    /// This function will not be called until all futures returned by `didReceiveHead` and `didReceiveBodyPart` have completed. Once called,
-    /// no further calls will be made to `didReceiveHead`, `didReceiveBodyPart`, or `didReceiveError`.
+    /// This function will not be called until all futures returned by ``HTTPClientResponseDelegate/didReceiveHead(task:_:)-9r4xd`` and ``HTTPClientResponseDelegate/didReceiveBodyPart(task:_:)-4fd4v``
+    /// have completed. Once called, no further calls will be made to ``HTTPClientResponseDelegate/didReceiveHead(task:_:)-9r4xd``, ``HTTPClientResponseDelegate/didReceiveBodyPart(task:_:)-4fd4v``,
+    /// or ``HTTPClientResponseDelegate/didReceiveError(task:_:)-fhsg``.
     ///
     /// - parameters:
     ///     - task: Current request context.
@@ -485,20 +502,38 @@ public protocol HTTPClientResponseDelegate: AnyObject {
 }
 
 extension HTTPClientResponseDelegate {
+    /// Default implementation of ``HTTPClientResponseDelegate/didSendRequestHead(task:_:)-6khai``.
+    ///
+    /// By default, this does nothing.
     public func didSendRequestHead(task: HTTPClient.Task<Response>, _ head: HTTPRequestHead) {}
 
+    /// Default implementation of ``HTTPClientResponseDelegate/didSendRequestPart(task:_:)-4qxap``.
+    ///
+    /// By default, this does nothing.
     public func didSendRequestPart(task: HTTPClient.Task<Response>, _ part: IOData) {}
 
+    /// Default implementation of ``HTTPClientResponseDelegate/didSendRequest(task:)-3vqgm``.
+    ///
+    /// By default, this does nothing.
     public func didSendRequest(task: HTTPClient.Task<Response>) {}
 
+    /// Default implementation of ``HTTPClientResponseDelegate/didReceiveHead(task:_:)-9r4xd``.
+    ///
+    /// By default, this does nothing.
     public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) -> EventLoopFuture<Void> {
-        return task.eventLoop.makeSucceededFuture(())
+        return task.eventLoop.makeSucceededVoidFuture()
     }
 
+    /// Default implementation of ``HTTPClientResponseDelegate/didReceiveBodyPart(task:_:)-4fd4v``.
+    ///
+    /// By default, this does nothing.
     public func didReceiveBodyPart(task: HTTPClient.Task<Response>, _: ByteBuffer) -> EventLoopFuture<Void> {
-        return task.eventLoop.makeSucceededFuture(())
+        return task.eventLoop.makeSucceededVoidFuture()
     }
 
+    /// Default implementation of ``HTTPClientResponseDelegate/didReceiveError(task:_:)-fhsg``.
+    ///
+    /// By default, this does nothing.
     public func didReceiveError(task: HTTPClient.Task<Response>, _: Error) {}
 }
 
@@ -560,7 +595,9 @@ protocol HTTPClientTaskDelegate {
 }
 
 extension HTTPClient {
-    /// Response execution context. Will be created by the library and could be used for obtaining
+    /// Response execution context.
+    ///
+    /// Will be created by the library and could be used for obtaining
     /// `EventLoopFuture<Response>` of the execution or cancellation of the execution.
     public final class Task<Response> {
         /// The `EventLoop` the delegate will be executed on.

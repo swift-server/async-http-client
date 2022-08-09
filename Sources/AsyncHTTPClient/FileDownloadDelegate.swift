@@ -38,6 +38,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     private var writeFuture: EventLoopFuture<Void>?
 
     /// Initializes a new file download delegate.
+    /// 
     /// - parameters:
     ///     - path: Path to a file you'd like to write the download to.
     ///     - pool: A thread pool to use for asynchronous file I/O.
