@@ -33,6 +33,13 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     private let io: NonBlockingFileIO
     private let reportHead: ((HTTPResponseHead) -> Void)?
     private let reportProgress: ((Progress) -> Void)?
+    
+    private enum ThreadPool {
+        case unowned
+        // if we own the thread pool we also need to shut it down
+        case owned(NIOThreadPool)
+    }
+    private let threadPool: ThreadPool
 
     private var fileHandleFuture: EventLoopFuture<NIOFileHandle>?
     private var writeFuture: EventLoopFuture<Void>?
@@ -47,12 +54,47 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     ///       the total byte count and download byte count passed to it as arguments. The callbacks
     ///       will be invoked in the same threading context that the delegate itself is invoked,
     ///       as controlled by `EventLoopPreference`.
-    public init(
+    public convenience init(
         path: String,
-        pool: NIOThreadPool = NIOThreadPool(numberOfThreads: 1),
+        pool: NIOThreadPool,
         reportHead: ((HTTPResponseHead) -> Void)? = nil,
         reportProgress: ((Progress) -> Void)? = nil
     ) throws {
+        try self.init(path: path, sharedThreadPool: pool, reportHead: reportHead, reportProgress: reportProgress)
+    }
+    
+    /// Initializes a new file download delegate and spawns a new thread for file I/O.
+    ///
+    /// - parameters:
+    ///     - path: Path to a file you'd like to write the download to.
+    ///     - reportHead: A closure called when the response head is available.
+    ///     - reportProgress: A closure called when a body chunk has been downloaded, with
+    ///       the total byte count and download byte count passed to it as arguments. The callbacks
+    ///       will be invoked in the same threading context that the delegate itself is invoked,
+    ///       as controlled by `EventLoopPreference`.
+    public convenience init(
+        path: String,
+        reportHead: ((HTTPResponseHead) -> Void)? = nil,
+        reportProgress: ((Progress) -> Void)? = nil
+    ) throws {
+        try self.init(path: path, sharedThreadPool: nil, reportHead: reportHead, reportProgress: reportProgress)
+    }
+    
+    private init(
+        path: String,
+        sharedThreadPool: NIOThreadPool?,
+        reportHead: ((HTTPResponseHead) -> Void)? = nil,
+        reportProgress: ((Progress) -> Void)? = nil
+    ) throws {
+        let pool: NIOThreadPool
+        if let sharedThreadPool = sharedThreadPool {
+            pool = sharedThreadPool
+            self.threadPool = .unowned
+        } else {
+            pool = NIOThreadPool(numberOfThreads: 1)
+            self.threadPool = .owned(pool)
+        }
+        
         pool.start()
         self.io = NonBlockingFileIO(threadPool: pool)
         self.filePath = path
@@ -60,6 +102,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         self.reportHead = reportHead
         self.reportProgress = reportProgress
     }
+    
 
     public func didReceiveHead(
         task: HTTPClient.Task<Response>,
@@ -107,6 +150,12 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     private func close(fileHandle: NIOFileHandle) {
         try! fileHandle.close()
         self.fileHandleFuture = nil
+        switch threadPool {
+        case .unowned:
+            break
+        case .owned(let pool):
+            try! pool.syncShutdownGracefully()
+        }
     }
 
     private func finalize() {
@@ -127,5 +176,15 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     public func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
         self.finalize()
         return self.progress
+    }
+    
+    deinit {
+        switch threadPool {
+        case .unowned:
+            break
+        case .owned(let pool):
+            // if the delegate is unused we still need to shutdown the thread pool
+            try! pool.syncShutdownGracefully()
+        }
     }
 }
