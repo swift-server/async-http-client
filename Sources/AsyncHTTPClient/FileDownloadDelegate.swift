@@ -33,12 +33,13 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     private let io: NonBlockingFileIO
     private let reportHead: ((HTTPResponseHead) -> Void)?
     private let reportProgress: ((Progress) -> Void)?
-    
+
     private enum ThreadPool {
         case unowned
         // if we own the thread pool we also need to shut it down
         case owned(NIOThreadPool)
     }
+
     private let threadPool: ThreadPool
 
     private var fileHandleFuture: EventLoopFuture<NIOFileHandle>?
@@ -62,7 +63,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     ) throws {
         try self.init(path: path, sharedThreadPool: pool, reportHead: reportHead, reportProgress: reportProgress)
     }
-    
+
     /// Initializes a new file download delegate and spawns a new thread for file I/O.
     ///
     /// - parameters:
@@ -79,7 +80,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     ) throws {
         try self.init(path: path, sharedThreadPool: nil, reportHead: reportHead, reportProgress: reportProgress)
     }
-    
+
     private init(
         path: String,
         sharedThreadPool: NIOThreadPool?,
@@ -94,7 +95,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
             pool = NIOThreadPool(numberOfThreads: 1)
             self.threadPool = .owned(pool)
         }
-        
+
         pool.start()
         self.io = NonBlockingFileIO(threadPool: pool)
         self.filePath = path
@@ -102,7 +103,6 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         self.reportHead = reportHead
         self.reportProgress = reportProgress
     }
-    
 
     public func didReceiveHead(
         task: HTTPClient.Task<Response>,
@@ -150,7 +150,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     private func close(fileHandle: NIOFileHandle) {
         try! fileHandle.close()
         self.fileHandleFuture = nil
-        switch threadPool {
+        switch self.threadPool {
         case .unowned:
             break
         case .owned(let pool):
@@ -177,7 +177,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         self.finalize()
         return self.progress
     }
-    
+
     deinit {
         switch threadPool {
         case .unowned:
