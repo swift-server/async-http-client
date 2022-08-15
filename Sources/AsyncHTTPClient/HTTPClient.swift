@@ -72,6 +72,9 @@ public class HTTPClient {
     let eventLoopGroupProvider: EventLoopGroupProvider
     let configuration: Configuration
     let poolManager: HTTPConnectionPool.Manager
+
+    /// Shared thread pool used for file IO. It is given to the user through ``HTTPClientResponseDelegate/provideSharedThreadPool(fileIOPool:)-6phmu``
+    private let fileIOThreadPool = NIOThreadPool(numberOfThreads: 1)
     private var state: State
     private let stateLock = Lock()
 
@@ -97,6 +100,7 @@ public class HTTPClient {
     public required init(eventLoopGroupProvider: EventLoopGroupProvider,
                          configuration: Configuration = Configuration(),
                          backgroundActivityLogger: Logger) {
+        self.fileIOThreadPool.start()
         self.eventLoopGroupProvider = eventLoopGroupProvider
         switch self.eventLoopGroupProvider {
         case .shared(let group):
@@ -241,10 +245,11 @@ public class HTTPClient {
                     let error: Error? = (requiresClean && unclean) ? HTTPClientError.uncleanShutdown : nil
                     return (callback, error)
                 }
-
-                self.shutdownEventLoop(queue: queue) { error in
-                    let reportedError = error ?? uncleanError
-                    callback(reportedError)
+                self.fileIOThreadPool.shutdownGracefully(queue: queue) { ioThreadPoolError in
+                    self.shutdownEventLoop(queue: queue) { error in
+                        let reportedError = error ?? ioThreadPoolError ?? uncleanError
+                        callback(reportedError)
+                    }
                 }
             }
         }
@@ -562,9 +567,12 @@ public class HTTPClient {
         case .testOnly_exact(_, delegateOn: let delegateEL):
             taskEL = delegateEL
         }
+
         logger.trace("selected EventLoop for task given the preference",
                      metadata: ["ahc-eventloop": "\(taskEL)",
                                 "ahc-el-preference": "\(eventLoopPreference)"])
+
+        delegate.provideSharedThreadPool(fileIOPool: self.fileIOThreadPool)
 
         let failedTask: Task<Delegate.Response>? = self.stateLock.withLock {
             switch state {

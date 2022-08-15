@@ -17,6 +17,7 @@ import Logging
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
+import NIOPosix
 import NIOSSL
 
 extension HTTPClient {
@@ -431,6 +432,13 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
 public protocol HTTPClientResponseDelegate: AnyObject {
     associatedtype Response
 
+    /// Called exactly once before any other methods of this delegate are called.
+    /// It is used to give access to the shared thread pool of the ``HTTPClient`` the request is executed on.
+    /// Use this thread pool to do file IO associated with the request e.g. to save a response to disk.
+    ///
+    /// - Parameter fileIOPool: File IO Pool
+    func provideSharedThreadPool(fileIOPool: NIOThreadPool)
+
     /// Called when the request head is sent. Will be called once.
     ///
     /// - parameters:
@@ -502,7 +510,12 @@ public protocol HTTPClientResponseDelegate: AnyObject {
 }
 
 extension HTTPClientResponseDelegate {
-    /// Default implementation of ``HTTPClientResponseDelegate/didSendRequestHead(task:_:)-6khai``.
+    /// Default implementation of ``HTTPClientResponseDelegate/provideSharedThreadPool(fileIOPool:)-8y1b``
+    ///
+    /// By default, this does nothing.
+    public func provideSharedThreadPool(fileIOPool: NIOThreadPool) {}
+
+    /// Default implementation of ``HTTPClientResponseDelegate/didSendRequest(task:)-9od5p``.
     ///
     /// By default, this does nothing.
     public func didSendRequestHead(task: HTTPClient.Task<Response>, _ head: HTTPRequestHead) {}

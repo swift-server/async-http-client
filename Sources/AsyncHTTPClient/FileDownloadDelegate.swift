@@ -30,17 +30,9 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     public typealias Response = Progress
 
     private let filePath: String
-    private let io: NonBlockingFileIO
+    private var io: NonBlockingFileIO?
     private let reportHead: ((HTTPResponseHead) -> Void)?
     private let reportProgress: ((Progress) -> Void)?
-
-    private enum ThreadPool {
-        case unowned
-        // if we own the thread pool we also need to shut it down
-        case owned(NIOThreadPool)
-    }
-
-    private let threadPool: ThreadPool
 
     private var fileHandleFuture: EventLoopFuture<NIOFileHandle>?
     private var writeFuture: EventLoopFuture<Void>?
@@ -61,7 +53,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         reportHead: ((HTTPResponseHead) -> Void)? = nil,
         reportProgress: ((Progress) -> Void)? = nil
     ) throws {
-        try self.init(path: path, sharedThreadPool: pool, reportHead: reportHead, reportProgress: reportProgress)
+        try self.init(path: path, pool: .some(pool), reportHead: reportHead, reportProgress: reportProgress)
     }
 
     /// Initializes a new file download delegate and spawns a new thread for file I/O.
@@ -78,30 +70,35 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         reportHead: ((HTTPResponseHead) -> Void)? = nil,
         reportProgress: ((Progress) -> Void)? = nil
     ) throws {
-        try self.init(path: path, sharedThreadPool: nil, reportHead: reportHead, reportProgress: reportProgress)
+        try self.init(path: path, pool: nil, reportHead: reportHead, reportProgress: reportProgress)
     }
 
     private init(
         path: String,
-        sharedThreadPool: NIOThreadPool?,
+        pool: NIOThreadPool?,
         reportHead: ((HTTPResponseHead) -> Void)? = nil,
         reportProgress: ((Progress) -> Void)? = nil
     ) throws {
-        let pool: NIOThreadPool
-        if let sharedThreadPool = sharedThreadPool {
-            pool = sharedThreadPool
-            self.threadPool = .unowned
+        if let pool = pool {
+            self.io = NonBlockingFileIO(threadPool: pool)
         } else {
-            pool = NIOThreadPool(numberOfThreads: 1)
-            self.threadPool = .owned(pool)
+            // we should use the shared thread pool from the HTTPClient which
+            // we will get shortly through a call to provideSharedThreadPool(fileIOPool:)
+            self.io = nil
         }
 
-        pool.start()
-        self.io = NonBlockingFileIO(threadPool: pool)
         self.filePath = path
 
         self.reportHead = reportHead
         self.reportProgress = reportProgress
+    }
+
+    public func provideSharedThreadPool(fileIOPool: NIOThreadPool) {
+        guard self.io == nil else {
+            // user has provided their own thread pool
+            return
+        }
+        self.io = NonBlockingFileIO(threadPool: fileIOPool)
     }
 
     public func didReceiveHead(
@@ -122,16 +119,19 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         task: HTTPClient.Task<Response>,
         _ buffer: ByteBuffer
     ) -> EventLoopFuture<Void> {
+        guard let io = io else {
+            preconditionFailure("thread pool not provided by HTTPClient before calling \(#function)")
+        }
         self.progress.receivedBytes += buffer.readableBytes
         self.reportProgress?(self.progress)
 
         let writeFuture: EventLoopFuture<Void>
         if let fileHandleFuture = self.fileHandleFuture {
             writeFuture = fileHandleFuture.flatMap {
-                self.io.write(fileHandle: $0, buffer: buffer, eventLoop: task.eventLoop)
+                io.write(fileHandle: $0, buffer: buffer, eventLoop: task.eventLoop)
             }
         } else {
-            let fileHandleFuture = self.io.openFile(
+            let fileHandleFuture = io.openFile(
                 path: self.filePath,
                 mode: .write,
                 flags: .allowFileCreation(),
@@ -139,7 +139,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
             )
             self.fileHandleFuture = fileHandleFuture
             writeFuture = fileHandleFuture.flatMap {
-                self.io.write(fileHandle: $0, buffer: buffer, eventLoop: task.eventLoop)
+                io.write(fileHandle: $0, buffer: buffer, eventLoop: task.eventLoop)
             }
         }
 
@@ -150,12 +150,6 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     private func close(fileHandle: NIOFileHandle) {
         try! fileHandle.close()
         self.fileHandleFuture = nil
-        switch self.threadPool {
-        case .unowned:
-            break
-        case .owned(let pool):
-            try! pool.syncShutdownGracefully()
-        }
     }
 
     private func finalize() {
@@ -176,15 +170,5 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     public func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
         self.finalize()
         return self.progress
-    }
-
-    deinit {
-        switch threadPool {
-        case .unowned:
-            break
-        case .owned(let pool):
-            // if the delegate is unused we still need to shutdown the thread pool
-            try! pool.syncShutdownGracefully()
-        }
     }
 }
