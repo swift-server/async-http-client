@@ -604,7 +604,7 @@ public class HTTPClient {
                 eventLoopPreference: eventLoopPreference,
                 task: task,
                 redirectHandler: redirectHandler,
-                connectionDeadline: .now() + (self.configuration.timeout.connect ?? .seconds(10)),
+                connectionDeadline: .now() + (self.configuration.timeout.connectionCreationTimeout),
                 requestOptions: .fromClientConfiguration(self.configuration),
                 delegate: delegate
             )
