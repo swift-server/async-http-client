@@ -56,7 +56,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         try self.init(path: path, pool: .some(pool), reportHead: reportHead, reportProgress: reportProgress)
     }
 
-    /// Initializes a new file download delegate and spawns a new thread for file I/O.
+    /// Initializes a new file download delegate and uses the shared thread pool of the ``HTTPClient`` for file I/O.
     ///
     /// - parameters:
     ///     - path: Path to a file you'd like to write the download to.
