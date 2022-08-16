@@ -74,7 +74,9 @@ public class HTTPClient {
     let poolManager: HTTPConnectionPool.Manager
 
     /// Shared thread pool used for file IO. It is given to the user through ``HTTPClientResponseDelegate/provideSharedThreadPool(fileIOPool:)-6phmu``
-    private let fileIOThreadPool = NIOThreadPool(numberOfThreads: 1)
+    private var fileIOThreadPool: NIOThreadPool?
+    private var fileIOThreadPoolLock = Lock()
+
     private var state: State
     private let stateLock = Lock()
 
@@ -100,7 +102,6 @@ public class HTTPClient {
     public required init(eventLoopGroupProvider: EventLoopGroupProvider,
                          configuration: Configuration = Configuration(),
                          backgroundActivityLogger: Logger) {
-        self.fileIOThreadPool.start()
         self.eventLoopGroupProvider = eventLoopGroupProvider
         switch self.eventLoopGroupProvider {
         case .shared(let group):
@@ -217,6 +218,16 @@ public class HTTPClient {
         }
     }
 
+    private func shutdownFileIOThreadPool(queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
+        self.fileIOThreadPoolLock.withLockVoid {
+            guard let fileIOThreadPool = fileIOThreadPool else {
+                callback(nil)
+                return
+            }
+            fileIOThreadPool.shutdownGracefully(queue: queue, callback)
+        }
+    }
+
     private func shutdown(requiresCleanClose: Bool, queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
         do {
             try self.stateLock.withLock {
@@ -245,13 +256,25 @@ public class HTTPClient {
                     let error: Error? = (requiresClean && unclean) ? HTTPClientError.uncleanShutdown : nil
                     return (callback, error)
                 }
-                self.fileIOThreadPool.shutdownGracefully(queue: queue) { ioThreadPoolError in
+                self.shutdownFileIOThreadPool(queue: queue) { ioThreadPoolError in
                     self.shutdownEventLoop(queue: queue) { error in
                         let reportedError = error ?? ioThreadPoolError ?? uncleanError
                         callback(reportedError)
                     }
                 }
             }
+        }
+    }
+
+    private func makeOrGetFileIOThreadPool() -> NIOThreadPool {
+        self.fileIOThreadPoolLock.withLock {
+            guard let fileIOThreadPool = fileIOThreadPool else {
+                let fileIOThreadPool = NIOThreadPool(numberOfThreads: ProcessInfo.processInfo.processorCount)
+                fileIOThreadPool.start()
+                self.fileIOThreadPool = fileIOThreadPool
+                return fileIOThreadPool
+            }
+            return fileIOThreadPool
         }
     }
 
@@ -572,8 +595,6 @@ public class HTTPClient {
                      metadata: ["ahc-eventloop": "\(taskEL)",
                                 "ahc-el-preference": "\(eventLoopPreference)"])
 
-        delegate.provideSharedThreadPool(fileIOPool: self.fileIOThreadPool)
-
         let failedTask: Task<Delegate.Response>? = self.stateLock.withLock {
             switch state {
             case .upAndRunning:
@@ -582,7 +603,8 @@ public class HTTPClient {
                 logger.debug("client is shutting down, failing request")
                 return Task<Delegate.Response>.failedTask(eventLoop: taskEL,
                                                           error: HTTPClientError.alreadyShutdown,
-                                                          logger: logger)
+                                                          logger: logger,
+                                                          makeOrGetFileIOThreadPool: self.makeOrGetFileIOThreadPool)
             }
         }
 
@@ -605,7 +627,7 @@ public class HTTPClient {
             }
         }()
 
-        let task = Task<Delegate.Response>(eventLoop: taskEL, logger: logger)
+        let task = Task<Delegate.Response>(eventLoop: taskEL, logger: logger, makeOrGetFileIOThreadPool: self.makeOrGetFileIOThreadPool)
         do {
             let requestBag = try RequestBag(
                 request: request,

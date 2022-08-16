@@ -83,7 +83,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
             self.io = NonBlockingFileIO(threadPool: pool)
         } else {
             // we should use the shared thread pool from the HTTPClient which
-            // we will get shortly through a call to provideSharedThreadPool(fileIOPool:)
+            // we will get from the `HTTPClient.Task`
             self.io = nil
         }
 
@@ -119,9 +119,15 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         task: HTTPClient.Task<Response>,
         _ buffer: ByteBuffer
     ) -> EventLoopFuture<Void> {
-        guard let io = io else {
-            preconditionFailure("thread pool not provided by HTTPClient before calling \(#function)")
-        }
+        let io: NonBlockingFileIO = {
+            guard let io = self.io else {
+                let pool = task.fileIOThreadPool
+                let io = NonBlockingFileIO(threadPool: pool)
+                self.io = io
+                return io
+            }
+            return io
+        }()
         self.progress.receivedBytes += buffer.readableBytes
         self.reportProgress?(self.progress)
 

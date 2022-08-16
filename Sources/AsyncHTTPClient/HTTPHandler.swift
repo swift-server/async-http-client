@@ -432,13 +432,6 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
 public protocol HTTPClientResponseDelegate: AnyObject {
     associatedtype Response
 
-    /// Called exactly once before any other methods of this delegate are called.
-    /// It is used to give access to the shared thread pool of the ``HTTPClient`` the request is executed on.
-    /// Use this thread pool to do file IO associated with the request e.g. to save a response to disk.
-    ///
-    /// - Parameter fileIOPool: File IO Pool
-    func provideSharedThreadPool(fileIOPool: NIOThreadPool)
-
     /// Called when the request head is sent. Will be called once.
     ///
     /// - parameters:
@@ -510,11 +503,6 @@ public protocol HTTPClientResponseDelegate: AnyObject {
 }
 
 extension HTTPClientResponseDelegate {
-    /// Default implementation of ``HTTPClientResponseDelegate/provideSharedThreadPool(fileIOPool:)-8y1b``
-    ///
-    /// By default, this does nothing.
-    public func provideSharedThreadPool(fileIOPool: NIOThreadPool) {}
-
     /// Default implementation of ``HTTPClientResponseDelegate/didSendRequest(task:)-9od5p``.
     ///
     /// By default, this does nothing.
@@ -635,15 +623,26 @@ extension HTTPClient {
         private var _isCancelled: Bool = false
         private var _taskDelegate: HTTPClientTaskDelegate?
         private let lock = Lock()
+        private let makeOrGetFileIOThreadPool: () -> NIOThreadPool
 
-        init(eventLoop: EventLoop, logger: Logger) {
+        public var fileIOThreadPool: NIOThreadPool {
+            self.makeOrGetFileIOThreadPool()
+        }
+
+        init(eventLoop: EventLoop, logger: Logger, makeOrGetFileIOThreadPool: @escaping () -> NIOThreadPool) {
             self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.logger = logger
+            self.makeOrGetFileIOThreadPool = makeOrGetFileIOThreadPool
         }
 
-        static func failedTask(eventLoop: EventLoop, error: Error, logger: Logger) -> Task<Response> {
-            let task = self.init(eventLoop: eventLoop, logger: logger)
+        static func failedTask(
+            eventLoop: EventLoop,
+            error: Error,
+            logger: Logger,
+            makeOrGetFileIOThreadPool: @escaping () -> NIOThreadPool
+        ) -> Task<Response> {
+            let task = self.init(eventLoop: eventLoop, logger: logger, makeOrGetFileIOThreadPool: makeOrGetFileIOThreadPool)
             task.promise.fail(error)
             return task
         }

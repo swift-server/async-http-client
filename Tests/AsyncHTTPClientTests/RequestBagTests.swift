@@ -771,6 +771,20 @@ final class RequestBagTests: XCTestCase {
     }
 }
 
+import NIOPosix
+
+extension HTTPClient.Task {
+    convenience init(
+        eventLoop: EventLoop,
+        logger: Logger
+    ) {
+        lazy var threadPool = NIOThreadPool(numberOfThreads: 1)
+        self.init(eventLoop: eventLoop, logger: logger) {
+            threadPool
+        }
+    }
+}
+
 class UploadCountingDelegate: HTTPClientResponseDelegate {
     typealias Response = Void
 
