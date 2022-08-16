@@ -134,7 +134,7 @@ extension HTTPClient {
                     request: request,
                     requestOptions: .init(idleReadTimeout: nil),
                     logger: logger,
-                    connectionDeadline: deadline,
+                    connectionDeadline: .now() + (self.configuration.timeout.connectionCreationTimeout),
                     preferredEventLoop: eventLoop,
                     responseContinuation: continuation
                 )
