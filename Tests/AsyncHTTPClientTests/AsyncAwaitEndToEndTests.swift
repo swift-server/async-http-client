@@ -34,6 +34,27 @@ private func makeDefaultHTTPClient(
 }
 
 final class AsyncAwaitEndToEndTests: XCTestCase {
+    var clientGroup: EventLoopGroup!
+    var serverGroup: EventLoopGroup!
+
+    override func setUp() {
+        XCTAssertNil(self.clientGroup)
+        XCTAssertNil(self.serverGroup)
+
+        self.clientGroup = getDefaultEventLoopGroup(numberOfThreads: 1)
+        self.serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+    }
+
+    override func tearDown() {
+        XCTAssertNotNil(self.clientGroup)
+        XCTAssertNoThrow(try self.clientGroup.syncShutdownGracefully())
+        self.clientGroup = nil
+
+        XCTAssertNotNil(self.serverGroup)
+        XCTAssertNoThrow(try self.serverGroup.syncShutdownGracefully())
+        self.serverGroup = nil
+    }
+
     func testSimpleGet() {
         #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
@@ -389,6 +410,65 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 }
                 // a race between deadline and connect timer can result in either error
                 XCTAssertTrue([.deadlineExceeded, .connectTimeout].contains(error))
+            }
+        }
+        #endif
+    }
+
+    func testConnectTimeout() {
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
+        XCTAsyncTest(timeout: 60) {
+            #if os(Linux)
+            // 198.51.100.254 is reserved for documentation only and therefore should not accept any TCP connection
+            let url = "http://198.51.100.254/get"
+            #else
+            // on macOS we can use the TCP backlog behaviour when the queue is full to simulate a non reachable server.
+            // this makes this test a bit more stable if `198.51.100.254` actually responds to connection attempt.
+            // The backlog behaviour on Linux can not be used to simulate a non-reachable server.
+            // Linux sends a `SYN/ACK` back even if the `backlog` queue is full as it has two queues.
+            // The second queue is not limit by `ChannelOptions.backlog` but by `/proc/sys/net/ipv4/tcp_max_syn_backlog`.
+
+            let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+            defer {
+                XCTAssertNoThrow(try group.syncShutdownGracefully())
+            }
+
+            let serverChannel = try await ServerBootstrap(group: self.serverGroup)
+                .serverChannelOption(ChannelOptions.backlog, value: 1)
+                .serverChannelOption(ChannelOptions.autoRead, value: false)
+                .bind(host: "127.0.0.1", port: 0)
+                .get()
+            defer {
+                XCTAssertNoThrow(try serverChannel.close().wait())
+            }
+            let port = serverChannel.localAddress!.port!
+            let firstClientChannel = try ClientBootstrap(group: self.serverGroup)
+                .connect(host: "127.0.0.1", port: port)
+                .wait()
+            defer {
+                XCTAssertNoThrow(try firstClientChannel.close().wait())
+            }
+            let url = "http://localhost:\(port)/get"
+            #endif
+
+            let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                        configuration: .init(timeout: .init(connect: .milliseconds(100), read: .milliseconds(150))))
+
+            defer {
+                XCTAssertNoThrow(try httpClient.syncShutdown())
+            }
+
+            let request = HTTPClientRequest(url: url)
+            let start = NIODeadline.now()
+            await XCTAssertThrowsError(try await httpClient.execute(request, deadline: .now() + .seconds(30))) {
+                XCTAssertEqualTypeAndValue($0, HTTPClientError.connectTimeout)
+                let end = NIODeadline.now()
+                let duration = end - start
+
+                // We give ourselves 10x slack in order to be confident that even on slow machines this assertion passes.
+                // It's 30x smaller than our other timeout though.
+                XCTAssertLessThan(duration, .seconds(1))
             }
         }
         #endif
