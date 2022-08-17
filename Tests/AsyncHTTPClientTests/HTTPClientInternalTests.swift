@@ -554,4 +554,39 @@ class HTTPClientInternalTests: XCTestCase {
             XCTAssertFalse(elements.hasSuffix([0, 0, 0]))
         }
     }
+
+    /// test to verify that we actually share the same thread pool across all ``FileDownloadDelegate``s for a given ``HTTPClient``
+    func testSharedThreadPoolIsIdenticalForAllDelegates() throws {
+        let httpBin = HTTPBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+        var request = try Request(url: "http://localhost:\(httpBin.port)/events/10/content-length")
+        request.headers.add(name: "Accept", value: "text/event-stream")
+
+        let filePaths = (0..<10).map { _ in
+            TemporaryFileHelpers.makeTemporaryFilePath()
+        }
+        defer {
+            for filePath in filePaths {
+                TemporaryFileHelpers.removeTemporaryFile(at: filePath)
+            }
+        }
+        let delegates = try filePaths.map {
+            try FileDownloadDelegate(path: $0)
+        }
+
+        let resultFutures = delegates.map { delegate in
+            httpClient.execute(
+                request: request,
+                delegate: delegate
+            ).futureResult
+        }
+        _ = try EventLoopFuture.whenAllSucceed(resultFutures, on: self.clientGroup.next()).wait()
+        let threadPools = delegates.map { $0.fileIOThreadPool }
+        let firstThreadPool = threadPools.first ?? nil
+        XCTAssert(threadPools.dropFirst().allSatisfy { $0 === firstThreadPool })
+    }
 }

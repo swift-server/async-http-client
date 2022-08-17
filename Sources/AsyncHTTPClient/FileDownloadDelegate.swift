@@ -30,7 +30,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     public typealias Response = Progress
 
     private let filePath: String
-    private var io: NonBlockingFileIO?
+    private(set) var fileIOThreadPool: NIOThreadPool?
     private let reportHead: ((HTTPResponseHead) -> Void)?
     private let reportProgress: ((Progress) -> Void)?
 
@@ -80,11 +80,11 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         reportProgress: ((Progress) -> Void)? = nil
     ) throws {
         if let pool = pool {
-            self.io = NonBlockingFileIO(threadPool: pool)
+            self.fileIOThreadPool = pool
         } else {
             // we should use the shared thread pool from the HTTPClient which
             // we will get from the `HTTPClient.Task`
-            self.io = nil
+            self.fileIOThreadPool = nil
         }
 
         self.filePath = path
@@ -111,15 +111,15 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         task: HTTPClient.Task<Response>,
         _ buffer: ByteBuffer
     ) -> EventLoopFuture<Void> {
-        let io: NonBlockingFileIO = {
-            guard let io = self.io else {
+        let threadPool: NIOThreadPool = {
+            guard let pool = self.fileIOThreadPool else {
                 let pool = task.fileIOThreadPool
-                let io = NonBlockingFileIO(threadPool: pool)
-                self.io = io
-                return io
+                self.fileIOThreadPool = pool
+                return pool
             }
-            return io
+            return pool
         }()
+        let io = NonBlockingFileIO(threadPool: threadPool)
         self.progress.receivedBytes += buffer.readableBytes
         self.reportProgress?(self.progress)
 

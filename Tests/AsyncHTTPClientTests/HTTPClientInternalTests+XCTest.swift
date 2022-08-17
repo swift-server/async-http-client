@@ -36,6 +36,7 @@ extension HTTPClientInternalTests {
             ("testConnectErrorCalloutOnCorrectEL", testConnectErrorCalloutOnCorrectEL),
             ("testInternalRequestURI", testInternalRequestURI),
             ("testHasSuffix", testHasSuffix),
+            ("testSharedThreadPoolIsIdenticalForAllDelegates", testSharedThreadPoolIsIdenticalForAllDelegates),
         ]
     }
 }
