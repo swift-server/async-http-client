@@ -626,7 +626,7 @@ extension HTTPClient {
         private let makeOrGetFileIOThreadPool: () -> NIOThreadPool
 
         /// The shared thread pool of a ``HTTPClient`` used for file IO. It is lazily created on first access.
-        public var fileIOThreadPool: NIOThreadPool {
+        internal var fileIOThreadPool: NIOThreadPool {
             self.makeOrGetFileIOThreadPool()
         }
 
