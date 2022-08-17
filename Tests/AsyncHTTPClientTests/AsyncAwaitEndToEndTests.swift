@@ -610,9 +610,3 @@ extension AsyncSequence where Element == ByteBuffer {
     }
 }
 #endif
-
-extension NIOTooManyBytesError: Equatable {
-    public static func == (lhs: NIOTooManyBytesError, rhs: NIOTooManyBytesError) -> Bool {
-        true
-    }
-}
