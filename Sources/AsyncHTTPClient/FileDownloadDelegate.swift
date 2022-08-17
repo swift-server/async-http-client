@@ -93,14 +93,6 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         self.reportProgress = reportProgress
     }
 
-    public func provideSharedThreadPool(fileIOPool: NIOThreadPool) {
-        guard self.io == nil else {
-            // user has provided their own thread pool
-            return
-        }
-        self.io = NonBlockingFileIO(threadPool: fileIOPool)
-    }
-
     public func didReceiveHead(
         task: HTTPClient.Task<Response>,
         _ head: HTTPResponseHead

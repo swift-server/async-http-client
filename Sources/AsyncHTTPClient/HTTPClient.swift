@@ -73,9 +73,9 @@ public class HTTPClient {
     let configuration: Configuration
     let poolManager: HTTPConnectionPool.Manager
 
-    /// Shared thread pool used for file IO. It is given to the user through ``HTTPClientResponseDelegate/provideSharedThreadPool(fileIOPool:)-6phmu``
+    /// Shared thread pool used for file IO. It is lazily created on first access of ``Task/fileIOThreadPool``.
     private var fileIOThreadPool: NIOThreadPool?
-    private var fileIOThreadPoolLock = Lock()
+    private let fileIOThreadPoolLock = Lock()
 
     private var state: State
     private let stateLock = Lock()
