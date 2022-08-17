@@ -578,7 +578,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         }
         #endif
     }
-    
+
     /// Regression test for https://github.com/swift-server/async-http-client/issues/612
     func testCancelingBodyDoesNotCrash() {
         #if compiler(>=5.5.2) && canImport(_Concurrency)
@@ -588,10 +588,10 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             defer { XCTAssertNoThrow(try client.syncShutdown()) }
             let bin = HTTPBin(.http2(compress: true))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
-            
+
             let request = HTTPClientRequest(url: "https://127.0.0.1:\(bin.port)/mega-chunked")
             let response = try await client.execute(request, deadline: .now() + .seconds(1))
-            
+
             await XCTAssertThrowsError(try await response.body.collect(upTo: 100)) { error in
                 XCTAssert(error is NIOTooManyBytesError)
             }
