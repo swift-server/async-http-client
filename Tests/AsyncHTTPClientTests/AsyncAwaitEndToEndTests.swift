@@ -619,9 +619,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             await XCTAssertThrowsError(try await response.body.collect(upTo: 100)) { error in
                 XCTAssert(error is NIOTooManyBytesError)
             }
-            
-            // we need to wait a bit to receive more packets before we shutdown the HTTPClient
-            try await Task.sleep(nanoseconds: UInt64(TimeAmount.milliseconds(100).nanoseconds))
         }
         #endif
     }
