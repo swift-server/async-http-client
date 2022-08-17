@@ -590,7 +590,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             defer { XCTAssertNoThrow(try bin.shutdown()) }
 
             let request = HTTPClientRequest(url: "https://127.0.0.1:\(bin.port)/mega-chunked")
-            let response = try await client.execute(request, deadline: .now() + .seconds(1))
+            let response = try await client.execute(request, deadline: .now() + .seconds(10))
 
             await XCTAssertThrowsError(try await response.body.collect(upTo: 100)) { error in
                 XCTAssert(error is NIOTooManyBytesError)
