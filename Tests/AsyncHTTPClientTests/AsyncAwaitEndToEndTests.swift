@@ -579,30 +579,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         #endif
     }
     
-    func test() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
-        XCTAsyncTest {
-            let client = HTTPClient(eventLoopGroupProvider: .createNew)
-            
-            defer { XCTAssertNoThrow(try client.syncShutdown()) }
-            
-            var request = HTTPClientRequest(url: "http://api.weather.gov/zones/forecast/AKZ026/forecast")
-            request.headers.add(name: "User-Agent", value: "Swift HTTPClient")
-            let response = try await client.execute(request, deadline: .now() + .seconds(10))
-            
-            let maxBodySize = 1024 * 1024
-        
-            await XCTAssertThrowsError(try await response.body.collect(upTo: maxBodySize)) { error in
-                XCTAssert(error is NIOTooManyBytesError)
-            }
-            
-            // we need to wait a bit to receive more packets before we shutdown the HTTPClient
-            try await Task.sleep(nanoseconds: UInt64(TimeAmount.milliseconds(100).nanoseconds))
-        }
-        #endif
-    }
-    
     /// Regression test for https://github.com/swift-server/async-http-client/issues/612
     func testCancelingBodyDoesNotCrash() {
         #if compiler(>=5.5.2) && canImport(_Concurrency)
