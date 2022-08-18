@@ -17,6 +17,7 @@ import Logging
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
+import NIOPosix
 import NIOSSL
 
 extension HTTPClient {
@@ -502,7 +503,7 @@ public protocol HTTPClientResponseDelegate: AnyObject {
 }
 
 extension HTTPClientResponseDelegate {
-    /// Default implementation of ``HTTPClientResponseDelegate/didSendRequestHead(task:_:)-6khai``.
+    /// Default implementation of ``HTTPClientResponseDelegate/didSendRequest(task:)-9od5p``.
     ///
     /// By default, this does nothing.
     public func didSendRequestHead(task: HTTPClient.Task<Response>, _ head: HTTPRequestHead) {}
@@ -622,15 +623,27 @@ extension HTTPClient {
         private var _isCancelled: Bool = false
         private var _taskDelegate: HTTPClientTaskDelegate?
         private let lock = Lock()
+        private let makeOrGetFileIOThreadPool: () -> NIOThreadPool
 
-        init(eventLoop: EventLoop, logger: Logger) {
+        /// The shared thread pool of a ``HTTPClient`` used for file IO. It is lazily created on first access.
+        internal var fileIOThreadPool: NIOThreadPool {
+            self.makeOrGetFileIOThreadPool()
+        }
+
+        init(eventLoop: EventLoop, logger: Logger, makeOrGetFileIOThreadPool: @escaping () -> NIOThreadPool) {
             self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.logger = logger
+            self.makeOrGetFileIOThreadPool = makeOrGetFileIOThreadPool
         }
 
-        static func failedTask(eventLoop: EventLoop, error: Error, logger: Logger) -> Task<Response> {
-            let task = self.init(eventLoop: eventLoop, logger: logger)
+        static func failedTask(
+            eventLoop: EventLoop,
+            error: Error,
+            logger: Logger,
+            makeOrGetFileIOThreadPool: @escaping () -> NIOThreadPool
+        ) -> Task<Response> {
+            let task = self.init(eventLoop: eventLoop, logger: logger, makeOrGetFileIOThreadPool: makeOrGetFileIOThreadPool)
             task.promise.fail(error)
             return task
         }

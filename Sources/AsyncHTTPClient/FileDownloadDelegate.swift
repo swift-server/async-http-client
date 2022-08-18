@@ -30,7 +30,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     public typealias Response = Progress
 
     private let filePath: String
-    private let io: NonBlockingFileIO
+    private(set) var fileIOThreadPool: NIOThreadPool?
     private let reportHead: ((HTTPResponseHead) -> Void)?
     private let reportProgress: ((Progress) -> Void)?
 
@@ -47,14 +47,46 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     ///       the total byte count and download byte count passed to it as arguments. The callbacks
     ///       will be invoked in the same threading context that the delegate itself is invoked,
     ///       as controlled by `EventLoopPreference`.
-    public init(
+    public convenience init(
         path: String,
-        pool: NIOThreadPool = NIOThreadPool(numberOfThreads: 1),
+        pool: NIOThreadPool,
         reportHead: ((HTTPResponseHead) -> Void)? = nil,
         reportProgress: ((Progress) -> Void)? = nil
     ) throws {
-        pool.start()
-        self.io = NonBlockingFileIO(threadPool: pool)
+        try self.init(path: path, pool: .some(pool), reportHead: reportHead, reportProgress: reportProgress)
+    }
+
+    /// Initializes a new file download delegate and uses the shared thread pool of the ``HTTPClient`` for file I/O.
+    ///
+    /// - parameters:
+    ///     - path: Path to a file you'd like to write the download to.
+    ///     - reportHead: A closure called when the response head is available.
+    ///     - reportProgress: A closure called when a body chunk has been downloaded, with
+    ///       the total byte count and download byte count passed to it as arguments. The callbacks
+    ///       will be invoked in the same threading context that the delegate itself is invoked,
+    ///       as controlled by `EventLoopPreference`.
+    public convenience init(
+        path: String,
+        reportHead: ((HTTPResponseHead) -> Void)? = nil,
+        reportProgress: ((Progress) -> Void)? = nil
+    ) throws {
+        try self.init(path: path, pool: nil, reportHead: reportHead, reportProgress: reportProgress)
+    }
+
+    private init(
+        path: String,
+        pool: NIOThreadPool?,
+        reportHead: ((HTTPResponseHead) -> Void)? = nil,
+        reportProgress: ((Progress) -> Void)? = nil
+    ) throws {
+        if let pool = pool {
+            self.fileIOThreadPool = pool
+        } else {
+            // we should use the shared thread pool from the HTTPClient which
+            // we will get from the `HTTPClient.Task`
+            self.fileIOThreadPool = nil
+        }
+
         self.filePath = path
 
         self.reportHead = reportHead
@@ -79,16 +111,25 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         task: HTTPClient.Task<Response>,
         _ buffer: ByteBuffer
     ) -> EventLoopFuture<Void> {
+        let threadPool: NIOThreadPool = {
+            guard let pool = self.fileIOThreadPool else {
+                let pool = task.fileIOThreadPool
+                self.fileIOThreadPool = pool
+                return pool
+            }
+            return pool
+        }()
+        let io = NonBlockingFileIO(threadPool: threadPool)
         self.progress.receivedBytes += buffer.readableBytes
         self.reportProgress?(self.progress)
 
         let writeFuture: EventLoopFuture<Void>
         if let fileHandleFuture = self.fileHandleFuture {
             writeFuture = fileHandleFuture.flatMap {
-                self.io.write(fileHandle: $0, buffer: buffer, eventLoop: task.eventLoop)
+                io.write(fileHandle: $0, buffer: buffer, eventLoop: task.eventLoop)
             }
         } else {
-            let fileHandleFuture = self.io.openFile(
+            let fileHandleFuture = io.openFile(
                 path: self.filePath,
                 mode: .write,
                 flags: .allowFileCreation(),
@@ -96,7 +137,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
             )
             self.fileHandleFuture = fileHandleFuture
             writeFuture = fileHandleFuture.flatMap {
-                self.io.write(fileHandle: $0, buffer: buffer, eventLoop: task.eventLoop)
+                io.write(fileHandle: $0, buffer: buffer, eventLoop: task.eventLoop)
             }
         }
 

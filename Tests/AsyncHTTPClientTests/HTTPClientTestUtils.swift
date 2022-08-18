@@ -283,6 +283,23 @@ enum TemporaryFileHelpers {
         return try body(path)
     }
 
+    internal static func makeTemporaryFilePath(
+        directory: String = temporaryDirectory
+    ) -> String {
+        let (fd, path) = self.openTemporaryFile()
+        close(fd)
+        try! FileManager.default.removeItem(atPath: path)
+        return path
+    }
+
+    internal static func removeTemporaryFile(
+        at path: String
+    ) {
+        if FileManager.default.fileExists(atPath: path) {
+            try? FileManager.default.removeItem(atPath: path)
+        }
+    }
+
     internal static func fileSize(path: String) throws -> Int? {
         return try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int
     }

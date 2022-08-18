@@ -72,6 +72,11 @@ public class HTTPClient {
     let eventLoopGroupProvider: EventLoopGroupProvider
     let configuration: Configuration
     let poolManager: HTTPConnectionPool.Manager
+
+    /// Shared thread pool used for file IO. It is lazily created on first access of ``Task/fileIOThreadPool``.
+    private var fileIOThreadPool: NIOThreadPool?
+    private let fileIOThreadPoolLock = Lock()
+
     private var state: State
     private let stateLock = Lock()
 
@@ -213,6 +218,16 @@ public class HTTPClient {
         }
     }
 
+    private func shutdownFileIOThreadPool(queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
+        self.fileIOThreadPoolLock.withLockVoid {
+            guard let fileIOThreadPool = fileIOThreadPool else {
+                callback(nil)
+                return
+            }
+            fileIOThreadPool.shutdownGracefully(queue: queue, callback)
+        }
+    }
+
     private func shutdown(requiresCleanClose: Bool, queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
         do {
             try self.stateLock.withLock {
@@ -241,12 +256,25 @@ public class HTTPClient {
                     let error: Error? = (requiresClean && unclean) ? HTTPClientError.uncleanShutdown : nil
                     return (callback, error)
                 }
-
-                self.shutdownEventLoop(queue: queue) { error in
-                    let reportedError = error ?? uncleanError
-                    callback(reportedError)
+                self.shutdownFileIOThreadPool(queue: queue) { ioThreadPoolError in
+                    self.shutdownEventLoop(queue: queue) { error in
+                        let reportedError = error ?? ioThreadPoolError ?? uncleanError
+                        callback(reportedError)
+                    }
                 }
             }
+        }
+    }
+
+    private func makeOrGetFileIOThreadPool() -> NIOThreadPool {
+        self.fileIOThreadPoolLock.withLock {
+            guard let fileIOThreadPool = fileIOThreadPool else {
+                let fileIOThreadPool = NIOThreadPool(numberOfThreads: ProcessInfo.processInfo.processorCount)
+                fileIOThreadPool.start()
+                self.fileIOThreadPool = fileIOThreadPool
+                return fileIOThreadPool
+            }
+            return fileIOThreadPool
         }
     }
 
@@ -562,6 +590,7 @@ public class HTTPClient {
         case .testOnly_exact(_, delegateOn: let delegateEL):
             taskEL = delegateEL
         }
+
         logger.trace("selected EventLoop for task given the preference",
                      metadata: ["ahc-eventloop": "\(taskEL)",
                                 "ahc-el-preference": "\(eventLoopPreference)"])
@@ -574,7 +603,8 @@ public class HTTPClient {
                 logger.debug("client is shutting down, failing request")
                 return Task<Delegate.Response>.failedTask(eventLoop: taskEL,
                                                           error: HTTPClientError.alreadyShutdown,
-                                                          logger: logger)
+                                                          logger: logger,
+                                                          makeOrGetFileIOThreadPool: self.makeOrGetFileIOThreadPool)
             }
         }
 
@@ -597,7 +627,7 @@ public class HTTPClient {
             }
         }()
 
-        let task = Task<Delegate.Response>(eventLoop: taskEL, logger: logger)
+        let task = Task<Delegate.Response>(eventLoop: taskEL, logger: logger, makeOrGetFileIOThreadPool: self.makeOrGetFileIOThreadPool)
         do {
             let requestBag = try RequestBag(
                 request: request,

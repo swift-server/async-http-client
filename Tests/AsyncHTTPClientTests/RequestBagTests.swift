@@ -771,6 +771,17 @@ final class RequestBagTests: XCTestCase {
     }
 }
 
+extension HTTPClient.Task {
+    convenience init(
+        eventLoop: EventLoop,
+        logger: Logger
+    ) {
+        self.init(eventLoop: eventLoop, logger: logger) {
+            preconditionFailure("thread pool not needed in tests")
+        }
+    }
+}
+
 class UploadCountingDelegate: HTTPClientResponseDelegate {
     typealias Response = Void
 
