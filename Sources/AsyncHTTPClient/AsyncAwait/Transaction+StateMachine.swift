@@ -429,17 +429,20 @@ extension Transaction {
             case .executing(_, _, .waitingForResponseHead):
                 preconditionFailure("If we receive a response body, we must have received a head before")
 
-            case .executing(let context, let requestState, .buffering(let streamID, var currentBuffer, next: let next)):
-                guard case .askExecutorForMore = next else {
-                    preconditionFailure("If we have received an error or eof before, why did we get another body part? Next: \(next)")
-                }
+            case .executing(_, _, .buffering(_, _, next: .endOfFile)):
+                preconditionFailure("If we have received an eof before, why did we get another body part?")
 
+            case .executing(_, _, .buffering(_, _, next: .error)):
+                // we might still get pending buffers if the user has canceled the request
+                return .none
+
+            case .executing(let context, let requestState, .buffering(let streamID, var currentBuffer, next: .askExecutorForMore)):
                 if currentBuffer.isEmpty {
                     currentBuffer = buffer
                 } else {
                     currentBuffer.append(contentsOf: buffer)
                 }
-                self.state = .executing(context, requestState, .buffering(streamID, currentBuffer, next: next))
+                self.state = .executing(context, requestState, .buffering(streamID, currentBuffer, next: .askExecutorForMore))
                 return .none
 
             case .executing(let executor, let requestState, .waitingForResponseIterator(var currentBuffer, next: let next)):
@@ -690,10 +693,11 @@ extension Transaction {
             case .finished:
                 // the request failed or was cancelled before, we can ignore all events
                 return .none
-
+            case .executing(_, _, .buffering(_, _, next: .error)):
+                // we might still get pending buffers if the user has canceled the request
+                return .none
             case .executing(_, _, .waitingForResponseIterator(_, next: .error)),
                  .executing(_, _, .waitingForResponseIterator(_, next: .endOfFile)),
-                 .executing(_, _, .buffering(_, _, next: .error)),
                  .executing(_, _, .buffering(_, _, next: .endOfFile)),
                  .executing(_, _, .finished(_, _)):
                 preconditionFailure("Already received an eof or error before. Must not receive further events. Invalid state: \(self.state)")

@@ -43,6 +43,7 @@ extension AsyncAwaitEndToEndTests {
             ("testInvalidURL", testInvalidURL),
             ("testRedirectChangesHostHeader", testRedirectChangesHostHeader),
             ("testShutdown", testShutdown),
+            ("testCancelingBodyDoesNotCrash", testCancelingBodyDoesNotCrash),
         ]
     }
 }
