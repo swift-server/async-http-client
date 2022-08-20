@@ -269,7 +269,7 @@ public class HTTPClient {
     private func makeOrGetFileIOThreadPool() -> NIOThreadPool {
         self.fileIOThreadPoolLock.withLock {
             guard let fileIOThreadPool = fileIOThreadPool else {
-                let fileIOThreadPool = NIOThreadPool(numberOfThreads: ProcessInfo.processInfo.processorCount)
+                let fileIOThreadPool = NIOThreadPool(numberOfThreads: System.coreCount)
                 fileIOThreadPool.start()
                 self.fileIOThreadPool = fileIOThreadPool
                 return fileIOThreadPool
