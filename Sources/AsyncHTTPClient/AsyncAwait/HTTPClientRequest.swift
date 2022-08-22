@@ -50,8 +50,26 @@ extension HTTPClientRequest {
     public struct Body {
         @usableFromInline
         internal enum Mode {
-            case asyncSequence(length: RequestBodyLength, (ByteBufferAllocator) async throws -> ByteBuffer?)
-            case sequence(length: RequestBodyLength, canBeConsumedMultipleTimes: Bool, (ByteBufferAllocator) -> ByteBuffer)
+            /// - parameters:
+            ///     - length: complete body length.
+            ///     If `length` is `.known`, `nextBodyPart` is not allowed to produce more bytes than `length` defines.
+            ///     - makeAsyncIterator: Creates a new async iterator under the hood and returns a function which will call `next()` on it.
+            ///     The returned function then produce the next body buffer asynchronously.
+            ///     We use a closure as abstraction instead of an existential to enable specialization.
+            case asyncSequence(
+                length: RequestBodyLength,
+                makeAsyncIterator: () -> ((ByteBufferAllocator) async throws -> ByteBuffer?)
+            )
+            /// - parameters:
+            ///     - length: complete body length.
+            ///     If `length` is `.known`, `nextBodyPart` is not allowed to produce more bytes than `length` defines.
+            ///     - canBeConsumedMultipleTimes: if `makeBody` can be called multiple times and returns the same result.
+            ///     - makeCompleteBody: function to produce the complete body.
+            case sequence(
+                length: RequestBodyLength,
+                canBeConsumedMultipleTimes: Bool,
+                makeCompleteBody: (ByteBufferAllocator) -> ByteBuffer
+            )
             case byteBuffer(ByteBuffer)
         }
 
@@ -180,9 +198,11 @@ extension HTTPClientRequest.Body {
         _ sequenceOfBytes: SequenceOfBytes,
         length: Length
     ) -> Self where SequenceOfBytes.Element == ByteBuffer {
-        var iterator = sequenceOfBytes.makeAsyncIterator()
-        let body = self.init(.asyncSequence(length: length.storage) { _ -> ByteBuffer? in
-            try await iterator.next()
+        let body = self.init(.asyncSequence(length: length.storage) {
+            var iterator = sequenceOfBytes.makeAsyncIterator()
+            return { _ -> ByteBuffer? in
+                try await iterator.next()
+            }
         })
         return body
     }
@@ -205,16 +225,18 @@ extension HTTPClientRequest.Body {
         _ bytes: Bytes,
         length: Length
     ) -> Self where Bytes.Element == UInt8 {
-        var iterator = bytes.makeAsyncIterator()
-        let body = self.init(.asyncSequence(length: length.storage) { allocator -> ByteBuffer? in
-            var buffer = allocator.buffer(capacity: 1024) // TODO: Magic number
-            while buffer.writableBytes > 0, let byte = try await iterator.next() {
-                buffer.writeInteger(byte)
+        let body = self.init(.asyncSequence(length: length.storage) {
+            var iterator = bytes.makeAsyncIterator()
+            return { allocator -> ByteBuffer? in
+                var buffer = allocator.buffer(capacity: 1024) // TODO: Magic number
+                while buffer.writableBytes > 0, let byte = try await iterator.next() {
+                    buffer.writeInteger(byte)
+                }
+                if buffer.readableBytes > 0 {
+                    return buffer
+                }
+                return nil
             }
-            if buffer.readableBytes > 0 {
-                return buffer
-            }
-            return nil
         })
         return body
     }

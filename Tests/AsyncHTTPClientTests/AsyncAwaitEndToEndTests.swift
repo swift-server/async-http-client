@@ -598,6 +598,44 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         }
         #endif
     }
+
+    func testAsyncSequenceReuse() {
+        #if compiler(>=5.5.2) && canImport(_Concurrency)
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
+        XCTAsyncTest {
+            let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
+            defer { XCTAssertNoThrow(try bin.shutdown()) }
+            let client = makeDefaultHTTPClient()
+            defer { XCTAssertNoThrow(try client.syncShutdown()) }
+            let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+            var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/")
+            request.method = .POST
+            request.body = .stream([
+                ByteBuffer(string: "1"),
+                ByteBuffer(string: "2"),
+                ByteBuffer(string: "34"),
+            ].asAsyncSequence(), length: .unknown)
+
+            guard let response1 = await XCTAssertNoThrowWithResult(
+                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+            ) else { return }
+            XCTAssertEqual(response1.headers["content-length"], [])
+            guard let body = await XCTAssertNoThrowWithResult(
+                try await response1.body.collect()
+            ) else { return }
+            XCTAssertEqual(body, ByteBuffer(string: "1234"))
+
+            guard let response2 = await XCTAssertNoThrowWithResult(
+                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+            ) else { return }
+            XCTAssertEqual(response2.headers["content-length"], [])
+            guard let body = await XCTAssertNoThrowWithResult(
+                try await response2.body.collect()
+            ) else { return }
+            XCTAssertEqual(body, ByteBuffer(string: "1234"))
+        }
+        #endif
+    }
 }
 
 #if compiler(>=5.5.2) && canImport(_Concurrency)
