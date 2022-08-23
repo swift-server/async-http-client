@@ -163,7 +163,7 @@ extension HTTPConnectionPool.Manager: HTTPConnectionPoolDelegate {
 }
 
 extension HTTPConnectionPool.Connection.ID {
-    static var globalGenerator = Generator()
+    static let globalGenerator = Generator()
 
     struct Generator {
         private let atomic: ManagedAtomic<Int>

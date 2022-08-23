@@ -137,7 +137,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
             var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/")
             request.method = .POST
-            request.body = .bytes(AnySequence("1234".utf8), length: .unknown)
+            request.body = .bytes(AnySendableSequence("1234".utf8), length: .unknown)
 
             guard let response = await XCTAssertNoThrowWithResult(
                 try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
@@ -162,7 +162,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
             var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/")
             request.method = .POST
-            request.body = .bytes(AnyCollection("1234".utf8), length: .unknown)
+            request.body = .bytes(AnySendableCollection("1234".utf8), length: .unknown)
 
             guard let response = await XCTAssertNoThrowWithResult(
                 try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
@@ -647,4 +647,47 @@ extension AsyncSequence where Element == ByteBuffer {
         }
     }
 }
+
+struct AnySendableSequence<Element>: @unchecked Sendable {
+    private let wrapped: AnySequence<Element>
+    init<WrappedSequence: Sequence & Sendable>(
+        _ sequence: WrappedSequence
+    ) where WrappedSequence.Element == Element {
+        self.wrapped = .init(sequence)
+    }
+}
+
+extension AnySendableSequence: Sequence {
+    func makeIterator() -> AnySequence<Element>.Iterator {
+        self.wrapped.makeIterator()
+    }
+}
+
+struct AnySendableCollection<Element>: @unchecked Sendable {
+    private let wrapped: AnyCollection<Element>
+    init<WrappedCollection: Collection & Sendable>(
+        _ collection: WrappedCollection
+    ) where WrappedCollection.Element == Element {
+        self.wrapped = .init(collection)
+    }
+}
+
+extension AnySendableCollection: Collection {
+    var startIndex: AnyCollection<Element>.Index {
+        self.wrapped.startIndex
+    }
+
+    var endIndex: AnyCollection<Element>.Index {
+        self.wrapped.endIndex
+    }
+
+    func index(after i: AnyIndex) -> AnyIndex {
+        self.wrapped.index(after: i)
+    }
+
+    subscript(position: AnyCollection<Element>.Index) -> Element {
+        self.wrapped[position]
+    }
+}
+
 #endif

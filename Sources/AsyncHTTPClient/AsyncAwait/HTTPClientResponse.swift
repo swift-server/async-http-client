@@ -20,7 +20,7 @@ import NIOHTTP1
 ///
 /// This object is similar to ``HTTPClient/Response``, but used for the Swift Concurrency API.
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-public struct HTTPClientResponse {
+public struct HTTPClientResponse: Sendable {
     /// The HTTP version on which the response was received.
     public var version: HTTPVersion
 
@@ -38,7 +38,7 @@ public struct HTTPClientResponse {
     /// The body is streamed as an `AsyncSequence` of `ByteBuffer`, where each `ByteBuffer` contains
     /// an arbitrarily large chunk of data. The boundaries between `ByteBuffer` objects in the sequence
     /// are entirely synthetic and have no semantic meaning.
-    public struct Body {
+    public struct Body: Sendable {
         private let bag: Transaction
         private let reference: ResponseRef
 
@@ -87,7 +87,7 @@ extension HTTPClientResponse.Body {
     /// The purpose of this object is to inform the transaction about the response body being deinitialized.
     /// If the users has not called `makeAsyncIterator` on the body, before it is deinited, the http
     /// request needs to be cancelled.
-    fileprivate class ResponseRef {
+    fileprivate final class ResponseRef: Sendable {
         private let transaction: Transaction
 
         init(transaction: Transaction) {

@@ -18,7 +18,7 @@ import NIOConcurrencyHelpers
 import NIOCore
 import NIOSSL
 
-class SSLContextCache {
+final class SSLContextCache {
     private let lock = Lock()
     private var sslContextCache = LRUCache<BestEffortHashableTLSConfiguration, NIOSSLContext>()
     private let offloadQueue = DispatchQueue(label: "io.github.swift-server.AsyncHTTPClient.SSLContextCache")
@@ -55,3 +55,7 @@ extension SSLContextCache {
         return newSSLContext
     }
 }
+
+#if swift(>=5.5) && canImport(_Concurrency)
+extension SSLContextCache: @unchecked Sendable {}
+#endif

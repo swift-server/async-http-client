@@ -23,9 +23,16 @@ public final class HTTPClientCopyingDelegate: HTTPClientResponseDelegate {
 
     let chunkHandler: (ByteBuffer) -> EventLoopFuture<Void>
 
+    #if swift(>=5.6)
+    @preconcurrency
+    public init(chunkHandler: @Sendable @escaping (ByteBuffer) -> EventLoopFuture<Void>) {
+        self.chunkHandler = chunkHandler
+    }
+    #else
     public init(chunkHandler: @escaping (ByteBuffer) -> EventLoopFuture<Void>) {
         self.chunkHandler = chunkHandler
     }
+    #endif
 
     public func didReceiveBodyPart(task: HTTPClient.Task<Void>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         return self.chunkHandler(buffer)
