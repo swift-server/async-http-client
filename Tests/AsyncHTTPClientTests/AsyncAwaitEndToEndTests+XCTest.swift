@@ -44,6 +44,7 @@ extension AsyncAwaitEndToEndTests {
             ("testRedirectChangesHostHeader", testRedirectChangesHostHeader),
             ("testShutdown", testShutdown),
             ("testCancelingBodyDoesNotCrash", testCancelingBodyDoesNotCrash),
+            ("testAsyncSequenceReuse", testAsyncSequenceReuse),
         ]
     }
 }

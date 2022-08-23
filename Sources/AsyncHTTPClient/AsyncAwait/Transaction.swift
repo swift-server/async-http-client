@@ -194,7 +194,7 @@ extension Transaction: HTTPExecutableRequest {
             break
 
         case .startStream(let allocator):
-            switch self.request.body?.mode {
+            switch self.request.body {
             case .asyncSequence(_, let next):
                 // it is safe to call this async here. it dispatches...
                 self.continueRequestBodyStream(allocator, next: next)

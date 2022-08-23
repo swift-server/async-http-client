@@ -489,11 +489,11 @@ private struct LengthMismatch: Error {
 }
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-extension Optional where Wrapped == HTTPClientRequest.Body {
+extension Optional where Wrapped == HTTPClientRequest.Prepared.Body {
     /// Accumulates all data from `self` into a single `ByteBuffer` and checks that the user specified length matches
     /// the length of the accumulated data.
     fileprivate func read() async throws -> ByteBuffer {
-        switch self?.mode {
+        switch self {
         case .none:
             return ByteBuffer()
         case .byteBuffer(let buffer):
