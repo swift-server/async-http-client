@@ -12,9 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+import NIOCore
+
 /// - Note: use `HTTPClientRequest.Body.Length` if you want to expose `RequestBodyLength` publicly
 @usableFromInline
-internal enum RequestBodyLength: Hashable {
+internal enum RequestBodyLength: Hashable, NIOSendable {
     /// size of the request body is not known before starting the request
     case unknown
     /// size of the request body is fixed and exactly `count` bytes

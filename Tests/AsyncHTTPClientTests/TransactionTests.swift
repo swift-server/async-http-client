@@ -100,7 +100,7 @@ final class TransactionTests: XCTestCase {
             XCTAssertEqual(response.headers, responseHead.headers)
             XCTAssertEqual(response.version, responseHead.version)
 
-            let iterator = SharedIterator(response.body.filter { $0.readableBytes > 0 }.makeAsyncIterator())
+            let iterator = SharedIterator(response.body.filter { $0.readableBytes > 0 })
 
             for i in 0..<100 {
                 XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
@@ -237,7 +237,7 @@ final class TransactionTests: XCTestCase {
             XCTAssertEqual(response.headers, responseHead.headers)
             XCTAssertEqual(response.version, responseHead.version)
 
-            let iterator = SharedIterator(response.body.makeAsyncIterator())
+            let iterator = SharedIterator(response.body)
 
             XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
             async let part = iterator.next()
@@ -433,7 +433,7 @@ final class TransactionTests: XCTestCase {
             XCTAssertEqual(response.version, responseHead.version)
 
             XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
-            let iterator = SharedIterator(response.body.filter { $0.readableBytes > 0 }.makeAsyncIterator())
+            let iterator = SharedIterator(response.body.filter { $0.readableBytes > 0 })
 
             async let part1 = iterator.next()
             XCTAssertNoThrow(try executor.receiveResponseDemand())
@@ -510,7 +510,7 @@ final class TransactionTests: XCTestCase {
             XCTAssertEqual(response.version, .http2)
             XCTAssertEqual(delegate.hitStreamClosed, 0)
 
-            let iterator = SharedIterator(response.body.filter { $0.readableBytes > 0 }.makeAsyncIterator())
+            let iterator = SharedIterator(response.body.filter { $0.readableBytes > 0 })
 
             // at this point we can start to write to the stream and wait for the results
 
@@ -541,16 +541,26 @@ final class TransactionTests: XCTestCase {
 // tasks. Since we want to wait for things to happen in tests, we need to `async let`, which creates
 // implicit tasks. Therefore we need to wrap our iterator struct.
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-actor SharedIterator<Iterator: AsyncIteratorProtocol> {
-    private var iterator: Iterator
+actor SharedIterator<Wrapped: AsyncSequence> where Wrapped.Element: Sendable {
+    private var wrappedIterator: Wrapped.AsyncIterator
+    private var nextCallInProgress: Bool = false
 
-    init(_ iterator: Iterator) {
-        self.iterator = iterator
+    init(_ sequence: Wrapped) {
+        self.wrappedIterator = sequence.makeAsyncIterator()
     }
 
-    func next() async throws -> Iterator.Element? {
-        var iter = self.iterator
-        defer { self.iterator = iter }
+    func next() async throws -> Wrapped.Element? {
+        precondition(self.nextCallInProgress == false)
+        self.nextCallInProgress = true
+        var iter = self.wrappedIterator
+        defer {
+            // auto-closure of `precondition(_:)` messes with actor isolation analyses in Swift 5.5
+            // we therefore need to move the access to `self.nextCallInProgress` out of the auto-closure
+            let nextCallInProgress = nextCallInProgress
+            precondition(nextCallInProgress == true)
+            self.nextCallInProgress = false
+            self.wrappedIterator = iter
+        }
         return try await iter.next()
     }
 }

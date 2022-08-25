@@ -170,24 +170,38 @@ public class HTTPClient {
             """)
         }
         let errorStorageLock = Lock()
-        var errorStorage: Error?
+        let errorStorage: UnsafeMutableTransferBox<Error?> = .init(nil)
         let continuation = DispatchWorkItem {}
         self.shutdown(requiresCleanClose: requiresCleanClose, queue: DispatchQueue(label: "async-http-client.shutdown")) { error in
             if let error = error {
                 errorStorageLock.withLock {
-                    errorStorage = error
+                    errorStorage.wrappedValue = error
                 }
             }
             continuation.perform()
         }
         continuation.wait()
         try errorStorageLock.withLock {
-            if let error = errorStorage {
+            if let error = errorStorage.wrappedValue {
                 throw error
             }
         }
     }
 
+    #if swift(>=5.6)
+    /// Shuts down the client and event loop gracefully.
+    ///
+    /// This function is clearly an outlier in that it uses a completion
+    /// callback instead of an EventLoopFuture. The reason for that is that NIO's EventLoopFutures will call back on an event loop.
+    /// The virtue of this function is to shut the event loop down. To work around that we call back on a DispatchQueue
+    /// instead.
+    @preconcurrency public func shutdown(
+        queue: DispatchQueue = .global(),
+        _ callback: @Sendable @escaping (Error?) -> Void
+    ) {
+        self.shutdown(requiresCleanClose: false, queue: queue, callback)
+    }
+    #else
     /// Shuts down the client and event loop gracefully.
     ///
     /// This function is clearly an outlier in that it uses a completion
@@ -197,8 +211,9 @@ public class HTTPClient {
     public func shutdown(queue: DispatchQueue = .global(), _ callback: @escaping (Error?) -> Void) {
         self.shutdown(requiresCleanClose: false, queue: queue, callback)
     }
+    #endif
 
-    private func shutdownEventLoop(queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
+    private func shutdownEventLoop(queue: DispatchQueue, _ callback: @escaping ShutdownCallback) {
         self.stateLock.withLock {
             switch self.eventLoopGroupProvider {
             case .shared:
@@ -218,7 +233,7 @@ public class HTTPClient {
         }
     }
 
-    private func shutdownFileIOThreadPool(queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
+    private func shutdownFileIOThreadPool(queue: DispatchQueue, _ callback: @escaping ShutdownCallback) {
         self.fileIOThreadPoolLock.withLockVoid {
             guard let fileIOThreadPool = fileIOThreadPool else {
                 callback(nil)
@@ -228,7 +243,7 @@ public class HTTPClient {
         }
     }
 
-    private func shutdown(requiresCleanClose: Bool, queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
+    private func shutdown(requiresCleanClose: Bool, queue: DispatchQueue, _ callback: @escaping ShutdownCallback) {
         do {
             try self.stateLock.withLock {
                 guard case .upAndRunning = self.state else {
@@ -248,7 +263,7 @@ public class HTTPClient {
             case .failure:
                 preconditionFailure("Shutting down the connection pool must not fail, ever.")
             case .success(let unclean):
-                let (callback, uncleanError) = self.stateLock.withLock { () -> ((Error?) -> Void, Error?) in
+                let (callback, uncleanError) = self.stateLock.withLock { () -> (ShutdownCallback, Error?) in
                     guard case .shuttingDown(let requiresClean, callback: let callback) = self.state else {
                         preconditionFailure("Why did the pool manager shut down, if it was not instructed to")
                     }
@@ -838,23 +853,43 @@ public class HTTPClient {
     }
 
     /// Specifies decompression settings.
-    public enum Decompression {
+    public enum Decompression: NIOSendable {
         /// Decompression is disabled.
         case disabled
         /// Decompression is enabled.
         case enabled(limit: NIOHTTPDecompression.DecompressionLimit)
     }
 
+    #if swift(>=5.6)
+    typealias ShutdownCallback = @Sendable (Error?) -> Void
+    #else
+    typealias ShutdownCallback = (Error?) -> Void
+    #endif
+
     enum State {
         case upAndRunning
-        case shuttingDown(requiresCleanClose: Bool, callback: (Error?) -> Void)
+        case shuttingDown(requiresCleanClose: Bool, callback: ShutdownCallback)
         case shutDown
     }
 }
 
+#if swift(>=5.7)
+extension HTTPClient.Configuration: Sendable {}
+#endif
+
+#if swift(>=5.6)
+extension HTTPClient.EventLoopGroupProvider: Sendable {}
+extension HTTPClient.EventLoopPreference: Sendable {}
+#endif
+
+#if swift(>=5.5) && canImport(_Concurrency)
+// HTTPClient is thread-safe because its shared mutable state is protected through a lock
+extension HTTPClient: @unchecked Sendable {}
+#endif
+
 extension HTTPClient.Configuration {
     /// Timeout configuration.
-    public struct Timeout {
+    public struct Timeout: NIOSendable {
         /// Specifies connect timeout. If no connect timeout is given, a default 30 seconds timeout will applied.
         public var connect: TimeAmount?
         /// Specifies read timeout.
@@ -877,7 +912,7 @@ extension HTTPClient.Configuration {
     }
 
     /// Specifies redirect processing settings.
-    public struct RedirectConfiguration {
+    public struct RedirectConfiguration: NIOSendable {
         enum Mode {
             /// Redirects are not followed.
             case disallow
@@ -909,7 +944,7 @@ extension HTTPClient.Configuration {
     }
 
     /// Connection pool configuration.
-    public struct ConnectionPool: Hashable {
+    public struct ConnectionPool: Hashable, NIOSendable {
         /// Specifies amount of time connections are kept idle in the pool. After this time has passed without a new
         /// request the connections are closed.
         public var idleTimeout: TimeAmount
@@ -928,7 +963,7 @@ extension HTTPClient.Configuration {
         }
     }
 
-    public struct HTTPVersion {
+    public struct HTTPVersion: NIOSendable {
         internal enum Configuration {
             case http1Only
             case automatic

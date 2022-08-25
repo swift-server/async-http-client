@@ -1050,11 +1050,11 @@ class HTTPClientTests: XCTestCase {
             XCTAssertNoThrow(try server?.close().wait())
         }
 
+        let url = "http://127.0.0.1:\(server?.localAddress?.port ?? -1)/hello"
         let g = DispatchGroup()
         for workerID in 0..<numberOfParallelWorkers {
             DispatchQueue(label: "\(#file):\(#line):worker-\(workerID)").async(group: g) {
                 func makeRequest() {
-                    let url = "http://127.0.0.1:\(server?.localAddress?.port ?? -1)/hello"
                     XCTAssertNoThrow(try self.defaultClient.get(url: url).wait())
                 }
                 for _ in 0..<numberOfRequestsPerThread {

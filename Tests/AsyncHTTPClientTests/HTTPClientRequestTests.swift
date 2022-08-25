@@ -296,7 +296,7 @@ class HTTPClientRequestTests: XCTestCase {
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
-            let sequence = AnySequence(ByteBuffer(string: "post body").readableBytesView)
+            let sequence = AnySendableSequence(ByteBuffer(string: "post body").readableBytesView)
             request.body = .bytes(sequence, length: .unknown)
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
@@ -333,7 +333,7 @@ class HTTPClientRequestTests: XCTestCase {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
 
-            let sequence = AnySequence(ByteBuffer(string: "post body").readableBytesView)
+            let sequence = AnySendableSequence(ByteBuffer(string: "post body").readableBytesView)
             request.body = .bytes(sequence, length: .known(9))
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
@@ -541,6 +541,8 @@ struct ChunkedSequence<Wrapped: Collection>: Sequence {
     }
 }
 
+extension ChunkedSequence: Sendable where Wrapped: Sendable {}
+
 extension Collection {
     /// Lazily splits `self` into `SubSequence`s with `maxChunkSize` elements.
     /// - Parameter maxChunkSize: size of each chunk except the last one which can be smaller if not enough elements are remaining.
@@ -550,7 +552,7 @@ extension Collection {
 }
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-struct AsyncSequenceFromSyncSequence<Wrapped: Sequence>: AsyncSequence {
+struct AsyncSequenceFromSyncSequence<Wrapped: Sequence & Sendable>: AsyncSequence, Sendable {
     typealias Element = Wrapped.Element
     struct AsyncIterator: AsyncIteratorProtocol {
         fileprivate var iterator: Wrapped.Iterator
@@ -567,7 +569,7 @@ struct AsyncSequenceFromSyncSequence<Wrapped: Sequence>: AsyncSequence {
 }
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-extension Sequence {
+extension Sequence where Self: Sendable {
     /// Turns `self` into an `AsyncSequence` by wending each element of `self` asynchronously.
     func asAsyncSequence() -> AsyncSequenceFromSyncSequence<Self> {
         .init(wrapped: self)

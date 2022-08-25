@@ -12,6 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+import NIOCore
+
 extension HTTPClient.Configuration {
     /// Proxy server configuration
     /// Specifies the remote address of an HTTP proxy.
@@ -23,7 +25,7 @@ extension HTTPClient.Configuration {
     /// If a `TLSConfiguration` is used in conjunction with `HTTPClient.Configuration.Proxy`,
     /// TLS will be established _after_ successful proxy, between your client
     /// and the destination server.
-    public struct Proxy {
+    public struct Proxy: NIOSendable {
         enum ProxyType: Hashable {
             case http(HTTPClient.Authorization?)
             case socks
