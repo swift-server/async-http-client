@@ -1,5 +1,5 @@
 # AsyncHTTPClient
-This package provides simple HTTP Client library built on top of SwiftNIO.
+This package provides an HTTP Client library built on top of SwiftNIO.
 
 This library provides the following:
 - First class support for Swift Concurrency (since version 1.9.0)
