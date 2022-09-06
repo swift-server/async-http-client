@@ -228,7 +228,7 @@ extension HTTPConnectionPool {
                         preconditionFailure("Failed to create a connection that is unknown to us?")
                     }
                     self.connections.removeConnection(at: index)
-                    
+
                     return .init(
                         request: self.failAllRequests(reason: error),
                         connection: .none
@@ -258,7 +258,7 @@ extension HTTPConnectionPool {
 
         mutating func waitingForConnectivity(_ error: Error, connectionID: Connection.ID) -> Action {
             self.lastConnectFailure = error
-            
+
             guard self.retryConnectionEstablishment else {
                 return .init(
                     request: self.failAllRequests(reason: error),
@@ -544,9 +544,9 @@ extension HTTPConnectionPool {
             self.connections.removeConnection(at: index)
             return .none
         }
-        
+
         private mutating func failAllRequests(reason error: Error) -> RequestAction {
-            let allRequests = requests.removeAll()
+            let allRequests = self.requests.removeAll()
             guard !allRequests.isEmpty else {
                 return .none
             }

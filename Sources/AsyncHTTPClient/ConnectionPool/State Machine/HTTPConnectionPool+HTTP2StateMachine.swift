@@ -404,13 +404,13 @@ extension HTTPConnectionPool {
         mutating func failedToCreateNewConnection(_ error: Error, connectionID: Connection.ID) -> Action {
             self.failedConsecutiveConnectionAttempts += 1
             self.lastConnectFailure = error
-            
+
             guard self.retryConnectionEstablishment else {
                 guard let (index, _) = self.connections.failConnection(connectionID) else {
                     preconditionFailure("Failed to create a connection that is unknown to us?")
                 }
                 self.connections.removeConnection(at: index)
-                
+
                 return .init(
                     request: self.failAllRequests(reason: error),
                     connection: .none
@@ -424,19 +424,19 @@ extension HTTPConnectionPool {
 
         mutating func waitingForConnectivity(_ error: Error, connectionID: Connection.ID) -> Action {
             self.lastConnectFailure = error
-            
+
             guard self.retryConnectionEstablishment else {
                 guard let (index, _) = self.connections.failConnection(connectionID) else {
                     preconditionFailure("Failed to create a connection that is unknown to us?")
                 }
                 _ = self.connections.closeConnection(at: index)
-                
+
                 return .init(
                     request: self.failAllRequests(reason: error),
                     connection: .none
                 )
             }
-            
+
             return .init(request: .none, connection: .none)
         }
 
@@ -449,9 +449,9 @@ extension HTTPConnectionPool {
             }
             return self.nextActionForFailedConnection(at: index, on: context.eventLoop)
         }
-        
+
         private mutating func failAllRequests(reason error: Error) -> RequestAction {
-            let allRequests = requests.removeAll()
+            let allRequests = self.requests.removeAll()
             guard !allRequests.isEmpty else {
                 return .none
             }

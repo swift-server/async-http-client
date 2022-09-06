@@ -155,7 +155,7 @@ extension HTTPConnectionPool {
 
                 var http2StateMachine = HTTP2StateMachine(
                     idGenerator: self.idGenerator,
-                    retryConnectionEstablishment: retryConnectionEstablishment,
+                    retryConnectionEstablishment: self.retryConnectionEstablishment,
                     lifecycleState: http1StateMachine.lifecycleState
                 )
                 let migrationAction = http2StateMachine.migrateFromHTTP1(

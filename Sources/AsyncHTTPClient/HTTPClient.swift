@@ -952,7 +952,7 @@ extension HTTPClient.Configuration {
         /// The maximum number of connections that are kept alive in the connection pool per host. If requests with
         /// an explicit eventLoopRequirement are sent, this number might be exceeded due to overflow connections.
         public var concurrentHTTP1ConnectionsPerHostSoftLimit: Int
-        
+
         /// If true, ``HTTPClient`` will try to create new connections on connection failure with an exponential backoff.
         /// Requests will only fail after the ``HTTPClient/Configuration/Timeout-swift.struct/connect`` timeout exceeded.
         /// If false, requests will fail immediately after a connection could not be established.

@@ -102,7 +102,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         XCTAssert(queuer.isEmpty)
         XCTAssert(connections.isEmpty)
     }
-    
+
     func testCreatingAndFailingConnectionsWithoutRetry() {
         struct SomeError: Error, Equatable {}
         let elg = EmbeddedEventLoopGroup(loops: 4)
@@ -149,7 +149,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         // timeout all queued requests except for two
 
         // fail all connection attempts
-        
+
         // the first failure should cancel all requests because we have disabled connection establishtment retry
         let randomConnectionID = connections.randomStartingConnection()!
         XCTAssertNoThrow(try connections.failConnectionCreation(randomConnectionID))
@@ -162,7 +162,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         for requestToFail in requestsToFail {
             XCTAssertNoThrow(try queuer.fail(requestToFail.id, request: requestToFail.__testOnly_wrapped_request()))
         }
-        
+
         // all requests have been canceled and therefore nothing should happen if a connection fails
         while let randomConnectionID = connections.randomStartingConnection() {
             XCTAssertNoThrow(try connections.failConnectionCreation(randomConnectionID))
@@ -170,7 +170,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
 
             XCTAssertEqual(action, .none)
         }
-        
+
         XCTAssert(queuer.isEmpty)
         XCTAssert(connections.isEmpty)
     }

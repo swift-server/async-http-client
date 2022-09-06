@@ -193,7 +193,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         // 4. retry connection, but no more queued requests.
         XCTAssertEqual(state.connectionCreationBackoffDone(newConnectionID), .none)
     }
-    
+
     func testConnectionFailureWithoutRetry() {
         struct SomeError: Error, Equatable {}
         let elg = EmbeddedEventLoopGroup(loops: 4)
