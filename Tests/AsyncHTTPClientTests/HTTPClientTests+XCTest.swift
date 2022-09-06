@@ -143,6 +143,7 @@ extension HTTPClientTests {
             ("testConnectionPoolSizeConfigValueIsRespected", testConnectionPoolSizeConfigValueIsRespected),
             ("testRequestWithHeaderTransferEncodingIdentityDoesNotFail", testRequestWithHeaderTransferEncodingIdentityDoesNotFail),
             ("testMassiveDownload", testMassiveDownload),
+            ("testShutdownWithFutures", testShutdownWithFutures),
         ]
     }
 }
