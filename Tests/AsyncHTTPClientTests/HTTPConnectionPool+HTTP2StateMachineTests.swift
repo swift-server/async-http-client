@@ -29,7 +29,11 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let el1 = elg.next()
         var connections = MockConnectionPool()
         var queuer = MockRequestQueuer()
-        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: .init(), lifecycleState: .running)
+        var state = HTTPConnectionPool.HTTP2StateMachine(
+            idGenerator: .init(),
+            retryConnectionEstablishment: true,
+            lifecycleState: .running
+        )
 
         /// first request should create a new connection
         let mockRequest = MockHTTPRequest(eventLoop: el1)
@@ -138,6 +142,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
 
         var state = HTTPConnectionPool.HTTP2StateMachine(
             idGenerator: .init(),
+            retryConnectionEstablishment: true,
             lifecycleState: .running
         )
 
@@ -188,6 +193,38 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         // 4. retry connection, but no more queued requests.
         XCTAssertEqual(state.connectionCreationBackoffDone(newConnectionID), .none)
     }
+    
+    func testConnectionFailureWithoutRetry() {
+        struct SomeError: Error, Equatable {}
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
+
+        var state = HTTPConnectionPool.HTTP2StateMachine(
+            idGenerator: .init(),
+            retryConnectionEstablishment: false,
+            lifecycleState: .running
+        )
+
+        let mockRequest = MockHTTPRequest(eventLoop: elg.next())
+        let request = HTTPConnectionPool.Request(mockRequest)
+
+        let action = state.executeRequest(request)
+        XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), action.request)
+
+        // 1. connection attempt
+        guard case .createConnection(let connectionID, on: let connectionEL) = action.connection else {
+            return XCTFail("Unexpected connection action: \(action.connection)")
+        }
+        XCTAssert(connectionEL === mockRequest.eventLoop) // XCTAssertIdentical not available on Linux
+
+        let failedConnectAction = state.failedToCreateNewConnection(SomeError(), connectionID: connectionID)
+        XCTAssertEqual(failedConnectAction.connection, .none)
+        guard case .failRequestsAndCancelTimeouts(let requestsToFail, let requestError) = failedConnectAction.request else {
+            return XCTFail("Unexpected request action: \(action.request)")
+        }
+        XCTAssertEqualTypeAndValue(requestError, SomeError())
+        XCTAssertEqualTypeAndValue(requestsToFail, [request])
+    }
 
     func testCancelRequestWorks() {
         let elg = EmbeddedEventLoopGroup(loops: 4)
@@ -195,6 +232,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
 
         var state = HTTPConnectionPool.HTTP2StateMachine(
             idGenerator: .init(),
+            retryConnectionEstablishment: true,
             lifecycleState: .running
         )
 
@@ -233,6 +271,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
 
         var state = HTTPConnectionPool.HTTP2StateMachine(
             idGenerator: .init(),
+            retryConnectionEstablishment: true,
             lifecycleState: .running
         )
 
@@ -287,7 +326,12 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let el1 = elg.next()
 
         let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
-        var http1State = HTTPConnectionPool.HTTP1StateMachine(idGenerator: idGenerator, maximumConcurrentConnections: 8, lifecycleState: .running)
+        var http1State = HTTPConnectionPool.HTTP1StateMachine(
+            idGenerator: idGenerator,
+            maximumConcurrentConnections: 8,
+            retryConnectionEstablishment: true,
+            lifecycleState: .running
+        )
 
         let mockRequest1 = MockHTTPRequest(eventLoop: el1)
         let request1 = HTTPConnectionPool.Request(mockRequest1)
@@ -313,7 +357,11 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
 
         // second connection is a HTTP2 connection and we need to migrate
         let conn2: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn2ID, eventLoop: el1)
-        var http2State = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator, lifecycleState: .running)
+        var http2State = HTTPConnectionPool.HTTP2StateMachine(
+            idGenerator: idGenerator,
+            retryConnectionEstablishment: true,
+            lifecycleState: .running
+        )
 
         let http2ConnectAction = http2State.migrateFromHTTP1(
             http1Connections: http1State.connections,
@@ -353,7 +401,11 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
         var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator)
         let conn1ID = http1Conns.createNewConnection(on: el1)
-        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator, lifecycleState: .running)
+        var state = HTTPConnectionPool.HTTP2StateMachine(
+            idGenerator: idGenerator,
+            retryConnectionEstablishment: true,
+            lifecycleState: .running
+        )
 
         let conn1 = HTTPConnectionPool.Connection.__testOnly_connection(id: conn1ID, eventLoop: el1)
         let connectAction = state.migrateFromHTTP1(http1Connections: http1Conns, requests: .init(), newHTTP2Connection: conn1, maxConcurrentStreams: 100)
@@ -398,7 +450,11 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
         var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator)
         let conn1ID = http1Conns.createNewConnection(on: el1)
-        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator, lifecycleState: .running)
+        var state = HTTPConnectionPool.HTTP2StateMachine(
+            idGenerator: idGenerator,
+            retryConnectionEstablishment: true,
+            lifecycleState: .running
+        )
 
         let conn1 = HTTPConnectionPool.Connection.__testOnly_connection(id: conn1ID, eventLoop: el1)
         let connectAction = state.migrateFromHTTP1(http1Connections: http1Conns, requests: .init(), newHTTP2Connection: conn1, maxConcurrentStreams: 100)
@@ -426,7 +482,11 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
         var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator)
         let conn1ID = http1Conns.createNewConnection(on: el1)
-        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator, lifecycleState: .running)
+        var state = HTTPConnectionPool.HTTP2StateMachine(
+            idGenerator: idGenerator,
+            retryConnectionEstablishment: true,
+            lifecycleState: .running
+        )
         let conn1 = HTTPConnectionPool.Connection.__testOnly_connection(id: conn1ID, eventLoop: el1)
         let connectAction = state.migrateFromHTTP1(http1Connections: http1Conns, requests: .init(), newHTTP2Connection: conn1, maxConcurrentStreams: 100)
         XCTAssertEqual(connectAction.request, .none)
@@ -461,7 +521,11 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
         var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator)
         let conn1ID = http1Conns.createNewConnection(on: el1)
-        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator, lifecycleState: .running)
+        var state = HTTPConnectionPool.HTTP2StateMachine(
+            idGenerator: idGenerator,
+            retryConnectionEstablishment: true,
+            lifecycleState: .running
+        )
 
         let conn1 = HTTPConnectionPool.Connection.__testOnly_connection(id: conn1ID, eventLoop: el1)
 
@@ -491,7 +555,11 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
         var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator)
         let conn1ID = http1Conns.createNewConnection(on: el1)
-        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator, lifecycleState: .running)
+        var state = HTTPConnectionPool.HTTP2StateMachine(
+            idGenerator: idGenerator,
+            retryConnectionEstablishment: true,
+            lifecycleState: .running
+        )
 
         let conn1 = HTTPConnectionPool.Connection.__testOnly_connection(id: conn1ID, eventLoop: el1)
         let connectAction = state.migrateFromHTTP1(
@@ -532,7 +600,11 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
         var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator)
         let conn1ID = http1Conns.createNewConnection(on: el1)
-        var state = HTTPConnectionPool.HTTP2StateMachine(idGenerator: idGenerator, lifecycleState: .running)
+        var state = HTTPConnectionPool.HTTP2StateMachine(
+            idGenerator: idGenerator,
+            retryConnectionEstablishment: true,
+            lifecycleState: .running
+        )
 
         let conn1 = HTTPConnectionPool.Connection.__testOnly_connection(id: conn1ID, eventLoop: el1)
         let connectAction1 = state.migrateFromHTTP1(
@@ -592,7 +664,11 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let el1 = elg.next()
         var connections = MockConnectionPool()
         var queuer = MockRequestQueuer()
-        var state = HTTPConnectionPool.StateMachine(idGenerator: .init(), maximumConcurrentHTTP1Connections: 8)
+        var state = HTTPConnectionPool.StateMachine(
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 8,
+            retryConnectionEstablishment: true
+        )
 
         /// first 8 request should create a new connection
         var connectionIDs: [HTTPConnectionPool.Connection.ID] = []
@@ -678,7 +754,11 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let el1 = elg.next()
         var connections = MockConnectionPool()
         var queuer = MockRequestQueuer()
-        var state = HTTPConnectionPool.StateMachine(idGenerator: .init(), maximumConcurrentHTTP1Connections: 8)
+        var state = HTTPConnectionPool.StateMachine(
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 8,
+            retryConnectionEstablishment: true
+        )
 
         /// create a new connection
         let mockRequest = MockHTTPRequest(eventLoop: el1)
@@ -720,7 +800,11 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let el1 = elg.next()
         var connections = MockConnectionPool()
         var queuer = MockRequestQueuer()
-        var state = HTTPConnectionPool.StateMachine(idGenerator: .init(), maximumConcurrentHTTP1Connections: 8)
+        var state = HTTPConnectionPool.StateMachine(
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 8,
+            retryConnectionEstablishment: true
+        )
 
         /// first 8 request should create a new connection
         var connectionIDs: [HTTPConnectionPool.Connection.ID] = []
@@ -855,7 +939,11 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let el2 = elg.next()
         var connections = MockConnectionPool()
         var queuer = MockRequestQueuer()
-        var state = HTTPConnectionPool.StateMachine(idGenerator: .init(), maximumConcurrentHTTP1Connections: 8)
+        var state = HTTPConnectionPool.StateMachine(
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 8,
+            retryConnectionEstablishment: true
+        )
 
         // create http2 connection
         let mockRequest = MockHTTPRequest(eventLoop: el1)
@@ -921,7 +1009,11 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let el2 = elg.next()
         var connections = MockConnectionPool()
         var queuer = MockRequestQueuer()
-        var state = HTTPConnectionPool.StateMachine(idGenerator: .init(), maximumConcurrentHTTP1Connections: 8)
+        var state = HTTPConnectionPool.StateMachine(
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 8,
+            retryConnectionEstablishment: true
+        )
 
         // create http2 connection
         let mockRequest = MockHTTPRequest(eventLoop: el1)
@@ -993,7 +1085,11 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let el2 = elg.next()
         var connections = MockConnectionPool()
         var queuer = MockRequestQueuer()
-        var state = HTTPConnectionPool.StateMachine(idGenerator: .init(), maximumConcurrentHTTP1Connections: 8)
+        var state = HTTPConnectionPool.StateMachine(
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 8,
+            retryConnectionEstablishment: true
+        )
 
         var connectionIDs: [HTTPConnectionPool.Connection.ID] = []
         for el in [el1, el2, el2] {

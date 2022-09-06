@@ -541,7 +541,8 @@ extension MockConnectionPool {
     ) throws -> (Self, HTTPConnectionPool.StateMachine) {
         var state = HTTPConnectionPool.StateMachine(
             idGenerator: .init(),
-            maximumConcurrentHTTP1Connections: maxNumberOfConnections
+            maximumConcurrentHTTP1Connections: maxNumberOfConnections,
+            retryConnectionEstablishment: true
         )
         var connections = MockConnectionPool()
         var queuer = MockRequestQueuer()
@@ -604,7 +605,8 @@ extension MockConnectionPool {
     ) throws -> (Self, HTTPConnectionPool.StateMachine) {
         var state = HTTPConnectionPool.StateMachine(
             idGenerator: .init(),
-            maximumConcurrentHTTP1Connections: 8
+            maximumConcurrentHTTP1Connections: 8,
+            retryConnectionEstablishment: true
         )
         var connections = MockConnectionPool()
         var queuer = MockRequestQueuer()
