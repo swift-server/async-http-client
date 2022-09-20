@@ -146,10 +146,6 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             XCTAssertNoThrow(try queuer.queue(mockRequest, id: request.id))
         }
 
-        // timeout all queued requests except for two
-
-        // fail all connection attempts
-
         // the first failure should cancel all requests because we have disabled connection establishtment retry
         let randomConnectionID = connections.randomStartingConnection()!
         XCTAssertNoThrow(try connections.failConnectionCreation(randomConnectionID))
