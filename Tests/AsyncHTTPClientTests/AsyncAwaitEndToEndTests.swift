@@ -409,7 +409,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                     return XCTFail("unexpected error \(error)")
                 }
                 // a race between deadline and connect timer can result in either error
-                XCTAssertTrue([.deadlineExceeded, .connectTimeout].contains(error))
+                XCTAssertTrue([.deadlineExceeded, .connectTimeout].contains(error), "unexpected error \(error)")
             }
         }
         #endif
