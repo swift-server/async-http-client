@@ -3463,4 +3463,9 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(response?.version, .http1_1)
         XCTAssertEqual(response?.body?.readableBytes, 10_000)
     }
+
+    func testShutdownWithFutures() {
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        XCTAssertNoThrow(try httpClient.shutdown().wait())
+    }
 }

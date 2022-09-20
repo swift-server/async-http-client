@@ -213,6 +213,28 @@ public class HTTPClient {
     }
     #endif
 
+    /// Shuts down the ``HTTPClient`` and releases its resources.
+    ///
+    /// - note: You cannot use this method if you sharted the ``HTTPClient`` with
+    ///         ``init(eventLoopGroupProvider: .createNew)`` because that will shut down the ``EventLoopGroup`` the
+    ///         returned future would run in.
+    public func shutdown() -> EventLoopFuture<Void> {
+        switch self.eventLoopGroupProvider {
+        case .shared(let group):
+            let promise = group.any().makePromise(of: Void.self)
+            self.shutdown(queue: .global()) { error in
+                if let error = error {
+                    promise.fail(error)
+                } else {
+                    promise.succeed(())
+                }
+            }
+            return promise.futureResult
+        case .createNew:
+            preconditionFailure("Cannot use the shutdown() method which returns a future when owning the EventLoopGroup. Please use the one of the other shutdown methods.")
+        }
+    }
+
     private func shutdownEventLoop(queue: DispatchQueue, _ callback: @escaping ShutdownCallback) {
         self.stateLock.withLock {
             switch self.eventLoopGroupProvider {
