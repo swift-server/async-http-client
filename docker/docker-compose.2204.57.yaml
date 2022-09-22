@@ -1,0 +1,17 @@
+version: "3"
+
+services:
+
+  runtime-setup:
+    image: async-http-client:22.04-5.7
+    build:
+      args:
+        base_image: "swift:5.7-jammy"
+
+  test:
+    image: async-http-client:22.04-5.7
+    environment: []
+      #- SANITIZER_ARG=--sanitize=thread
+
+  shell:
+    image: async-http-client:22.04-5.7
