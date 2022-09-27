@@ -29,7 +29,7 @@ final class Transaction: @unchecked Sendable {
     let preferredEventLoop: EventLoop
     let requestOptions: RequestOptions
 
-    private let stateLock = Lock()
+    private let stateLock = NIOLock()
     private var state: StateMachine
 
     init(

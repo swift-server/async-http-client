@@ -235,7 +235,7 @@ class TestConnectionCreator {
     }
 
     private var state: State = .idle
-    private let lock = Lock()
+    private let lock = NIOLock()
 
     init() {}
 
@@ -428,7 +428,7 @@ class TestHTTP2ConnectionDelegate: HTTP2ConnectionDelegate {
         self.lock.withLock { self._maxStreamSetting }
     }
 
-    private let lock = Lock()
+    private let lock = NIOLock()
     private var _hitStreamClosed: Int = 0
     private var _hitGoAwayReceived: Int = 0
     private var _hitConnectionClosed: Int = 0
@@ -439,19 +439,19 @@ class TestHTTP2ConnectionDelegate: HTTP2ConnectionDelegate {
     func http2Connection(_: HTTP2Connection, newMaxStreamSetting: Int) {}
 
     func http2ConnectionStreamClosed(_: HTTP2Connection, availableStreams: Int) {
-        self.lock.withLockVoid {
+        self.lock.withLock {
             self._hitStreamClosed += 1
         }
     }
 
     func http2ConnectionGoAwayReceived(_: HTTP2Connection) {
-        self.lock.withLockVoid {
+        self.lock.withLock {
             self._hitGoAwayReceived += 1
         }
     }
 
     func http2ConnectionClosed(_: HTTP2Connection) {
-        self.lock.withLockVoid {
+        self.lock.withLock {
             self._hitConnectionClosed += 1
         }
     }

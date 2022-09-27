@@ -22,7 +22,7 @@ protocol HTTPConnectionPoolDelegate {
 }
 
 final class HTTPConnectionPool {
-    private let stateLock = Lock()
+    private let stateLock = NIOLock()
     private var _state: StateMachine
     /// The connection idle timeout timers. Protected by the stateLock
     private var _idleTimer = [Connection.ID: Scheduled<Void>]()

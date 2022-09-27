@@ -657,7 +657,7 @@ extension HTTPClient {
 
         private var _isCancelled: Bool = false
         private var _taskDelegate: HTTPClientTaskDelegate?
-        private let lock = Lock()
+        private let lock = NIOLock()
         private let makeOrGetFileIOThreadPool: () -> NIOThreadPool
 
         /// The shared thread pool of a ``HTTPClient`` used for file IO. It is lazily created on first access.

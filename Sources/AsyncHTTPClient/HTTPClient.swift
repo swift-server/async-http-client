@@ -75,10 +75,10 @@ public class HTTPClient {
 
     /// Shared thread pool used for file IO. It is lazily created on first access of ``Task/fileIOThreadPool``.
     private var fileIOThreadPool: NIOThreadPool?
-    private let fileIOThreadPoolLock = Lock()
+    private let fileIOThreadPoolLock = NIOLock()
 
     private var state: State
-    private let stateLock = Lock()
+    private let stateLock = NIOLock()
 
     internal static let loggingDisabled = Logger(label: "AHC-do-not-log", factory: { _ in SwiftLogNoOpLogHandler() })
 
@@ -169,7 +169,7 @@ public class HTTPClient {
             Current eventLoop: \(eventLoop)
             """)
         }
-        let errorStorageLock = Lock()
+        let errorStorageLock = NIOLock()
         let errorStorage: UnsafeMutableTransferBox<Error?> = .init(nil)
         let continuation = DispatchWorkItem {}
         self.shutdown(requiresCleanClose: requiresCleanClose, queue: DispatchQueue(label: "async-http-client.shutdown")) { error in
@@ -256,7 +256,7 @@ public class HTTPClient {
     }
 
     private func shutdownFileIOThreadPool(queue: DispatchQueue, _ callback: @escaping ShutdownCallback) {
-        self.fileIOThreadPoolLock.withLockVoid {
+        self.fileIOThreadPoolLock.withLock {
             guard let fileIOThreadPool = fileIOThreadPool else {
                 callback(nil)
                 return

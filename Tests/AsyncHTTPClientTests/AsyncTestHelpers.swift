@@ -45,7 +45,7 @@ final class AsyncSequenceWriter<Element>: AsyncSequence, @unchecked Sendable {
     }
 
     private var _state = State.buffering(.init(), nil)
-    private let lock = Lock()
+    private let lock = NIOLock()
 
     public var hasDemand: Bool {
         self.lock.withLock {
