@@ -595,12 +595,12 @@ class HTTP1ConnectionTests: XCTestCase {
             var _reads = 0
             var _channel: Channel?
 
-            let lock: Lock
+            let lock: NIOLock
             let backpressurePromise: EventLoopPromise<Void>
             let messageReceived: EventLoopPromise<Void>
 
             init(eventLoop: EventLoop) {
-                self.lock = Lock()
+                self.lock = NIOLock()
                 self.backpressurePromise = eventLoop.makePromise()
                 self.messageReceived = eventLoop.makePromise()
             }
@@ -612,7 +612,7 @@ class HTTP1ConnectionTests: XCTestCase {
             }
 
             func willExecuteOnChannel(_ channel: Channel) {
-                self.lock.withLockVoid {
+                self.lock.withLock {
                     self._channel = channel
                 }
             }
@@ -623,7 +623,7 @@ class HTTP1ConnectionTests: XCTestCase {
 
             func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
                 // We count a number of reads received.
-                self.lock.withLockVoid {
+                self.lock.withLock {
                     self._reads += 1
                 }
                 // We need to notify the test when first byte of the message is arrived.
@@ -805,7 +805,7 @@ class AfterRequestCloseConnectionChannelHandler: ChannelInboundHandler {
 }
 
 class MockConnectionDelegate: HTTP1ConnectionDelegate {
-    private var lock = Lock()
+    private var lock = NIOLock()
 
     private var _hitConnectionReleased = 0
     private var _hitConnectionClosed = 0
@@ -821,13 +821,13 @@ class MockConnectionDelegate: HTTP1ConnectionDelegate {
     init() {}
 
     func http1ConnectionReleased(_: HTTP1Connection) {
-        self.lock.withLockVoid {
+        self.lock.withLock {
             self._hitConnectionReleased += 1
         }
     }
 
     func http1ConnectionClosed(_: HTTP1Connection) {
-        self.lock.withLockVoid {
+        self.lock.withLock {
             self._hitConnectionClosed += 1
         }
     }
