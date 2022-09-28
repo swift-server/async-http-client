@@ -99,7 +99,10 @@ def createLinuxMain(testsDirectory, allTestSubDirectories, files)
       file.write '@testable import ' + testSubDirectory + "\n"
     end
     file.write "\n"
-    file.write "XCTMain([\n"
+    file.write "@main\n"
+    file.write "struct LinuxMain {\n"
+    file.write "    static func main() {\n"
+    file.write "        XCTMain([\n"
 
     testCases = []
     for classes in files
@@ -109,9 +112,11 @@ def createLinuxMain(testsDirectory, allTestSubDirectories, files)
     end
 
     for testCase in testCases.sort { |x, y| x <=> y }
-      file.write '    testCase(' + testCase + ".allTests),\n"
+      file.write '            testCase(' + testCase + ".allTests),\n"
     end
-    file.write "])\n"
+    file.write "        ])\n"
+    file.write "    }\n"
+    file.write "}\n"
     file.write "#endif\n"
   end
 end
