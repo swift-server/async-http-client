@@ -6,7 +6,8 @@ services:
     image: async-http-client:22.04-5.7
     build:
       args:
-        base_image: "swift:5.7-jammy"
+        ubuntu_version: "jammy"
+        swift_version: "5.7"
 
   test:
     image: async-http-client:22.04-5.7
