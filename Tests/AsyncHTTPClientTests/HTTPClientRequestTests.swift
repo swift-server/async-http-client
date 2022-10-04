@@ -551,29 +551,4 @@ extension Collection {
     }
 }
 
-@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-struct AsyncSequenceFromSyncSequence<Wrapped: Sequence & Sendable>: AsyncSequence, Sendable {
-    typealias Element = Wrapped.Element
-    struct AsyncIterator: AsyncIteratorProtocol {
-        fileprivate var iterator: Wrapped.Iterator
-        mutating func next() async throws -> Wrapped.Element? {
-            self.iterator.next()
-        }
-    }
-
-    fileprivate let wrapped: Wrapped
-
-    func makeAsyncIterator() -> AsyncIterator {
-        .init(iterator: self.wrapped.makeIterator())
-    }
-}
-
-@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-extension Sequence where Self: Sendable {
-    /// Turns `self` into an `AsyncSequence` by wending each element of `self` asynchronously.
-    func asAsyncSequence() -> AsyncSequenceFromSyncSequence<Self> {
-        .init(wrapped: self)
-    }
-}
-
 #endif

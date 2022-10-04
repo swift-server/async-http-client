@@ -33,98 +33,74 @@ public struct HTTPClientResponse: Sendable {
     /// The body of this HTTP response.
     public var body: Body
 
-    /// A representation of the response body for an HTTP response.
-    ///
-    /// The body is streamed as an `AsyncSequence` of `ByteBuffer`, where each `ByteBuffer` contains
-    /// an arbitrarily large chunk of data. The boundaries between `ByteBuffer` objects in the sequence
-    /// are entirely synthetic and have no semantic meaning.
-    public struct Body: Sendable {
-        private let bag: Transaction
-        private let reference: ResponseRef
-
-        fileprivate init(_ transaction: Transaction) {
-            self.bag = transaction
-            self.reference = ResponseRef(transaction: transaction)
-        }
-    }
-
     init(
         bag: Transaction,
         version: HTTPVersion,
         status: HTTPResponseStatus,
         headers: HTTPHeaders
     ) {
-        self.body = Body(bag)
         self.version = version
         self.status = status
         self.headers = headers
+        self.body = Body(TransactionBody(bag))
+    }
+    
+    @inlinable public init(){
+        self.version = .http1_1
+        self.status = .ok
+        self.headers = [:]
+        self.body = Body()
     }
 }
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-extension HTTPClientResponse.Body: AsyncSequence {
-    public typealias Element = AsyncIterator.Element
-
-    public struct AsyncIterator: AsyncIteratorProtocol {
-        private let stream: IteratorStream
-
-        fileprivate init(stream: IteratorStream) {
-            self.stream = stream
-        }
-
-        public mutating func next() async throws -> ByteBuffer? {
-            try await self.stream.next()
-        }
-    }
-
-    public func makeAsyncIterator() -> AsyncIterator {
-        AsyncIterator(stream: IteratorStream(bag: self.bag))
-    }
-}
-
-@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-extension HTTPClientResponse.Body {
-    /// The purpose of this object is to inform the transaction about the response body being deinitialized.
-    /// If the users has not called `makeAsyncIterator` on the body, before it is deinited, the http
-    /// request needs to be cancelled.
-    fileprivate final class ResponseRef: Sendable {
-        private let transaction: Transaction
-
-        init(transaction: Transaction) {
-            self.transaction = transaction
-        }
-
-        deinit {
-            self.transaction.responseBodyDeinited()
-        }
-    }
-}
-
-@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-extension HTTPClientResponse.Body {
-    internal class IteratorStream {
-        struct ID: Hashable {
-            private let objectID: ObjectIdentifier
-
-            init(_ object: IteratorStream) {
-                self.objectID = ObjectIdentifier(object)
+extension HTTPClientResponse {
+    /// A representation of the response body for an HTTP response.
+    ///
+    /// The body is streamed as an `AsyncSequence` of `ByteBuffer`, where each `ByteBuffer` contains
+    /// an arbitrarily large chunk of data. The boundaries between `ByteBuffer` objects in the sequence
+    /// are entirely synthetic and have no semantic meaning.
+    public struct Body: AsyncSequence, Sendable {
+        public typealias Element = ByteBuffer
+        @usableFromInline typealias Storage = Either<TransactionBody, AnyAsyncSequence<ByteBuffer>>
+        public struct AsyncIterator: AsyncIteratorProtocol {
+            @usableFromInline var storage: Storage.AsyncIterator
+            
+            @inlinable init(storage: Storage.AsyncIterator) {
+                self.storage = storage
+            }
+            
+            @inlinable public mutating func next() async throws -> ByteBuffer? {
+                try await storage.next()
             }
         }
+        
+        @usableFromInline var storage: Storage
 
-        private var id: ID { ID(self) }
-        private let bag: Transaction
-
-        init(bag: Transaction) {
-            self.bag = bag
+        @inlinable public func makeAsyncIterator() -> AsyncIterator {
+            .init(storage: storage.makeAsyncIterator())
         }
+    }
+}
 
-        deinit {
-            self.bag.responseBodyIteratorDeinited(streamID: self.id)
-        }
-
-        func next() async throws -> ByteBuffer? {
-            try await self.bag.nextResponsePart(streamID: self.id)
-        }
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+extension HTTPClientResponse.Body {
+    @inlinable init(_ body: TransactionBody) {
+        self.storage = .a(body)
+    }
+    
+    @inlinable public init<SequenceOfBytes>(
+        _ sequenceOfBytes: SequenceOfBytes
+    ) where SequenceOfBytes: AsyncSequence & Sendable, SequenceOfBytes.Element == ByteBuffer {
+        self.storage = .b(AnyAsyncSequence(sequenceOfBytes))
+    }
+    
+    public init() {
+        self.init(EmptyCollection().asAsyncSequence())
+    }
+    
+    public init(_ byteBuffer: ByteBuffer) {
+        self.init(CollectionOfOne(byteBuffer).asAsyncSequence())
     }
 }
 
