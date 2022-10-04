@@ -367,6 +367,12 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
         case error(Error)
     }
 
+    struct ResponseTooBigError: Error, CustomStringConvertible {
+        var description: String {
+            return "ResponseTooBigError: writing response part would exceed internal storage capacity."
+        }
+    }
+
     var state = State.idle
     let request: HTTPClient.Request
 
@@ -397,6 +403,10 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
         case .head(let head):
             self.state = .body(head, part)
         case .body(let head, var body):
+            if body.writerIndex + part.readableBytes > UInt32.max {
+                return task.eventLoop.makeFailedFuture(ResponseTooBigError())
+            }
+
             // The compiler can't prove that `self.state` is dead here (and it kinda isn't, there's
             // a cross-module call in the way) so we need to drop the original reference to `body` in
             // `self.state` or we'll get a CoW. To fix that we temporarily set the state to `.end` (which
