@@ -367,8 +367,8 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
         case error(Error)
     }
 
-    struct ResponseTooBigError: Error, CustomStringConvertible {
-        var description: String {
+    public struct ResponseTooBigError: Error, CustomStringConvertible {
+        public var description: String {
             return "ResponseTooBigError: writing response part would exceed internal storage capacity."
         }
     }
