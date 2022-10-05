@@ -408,7 +408,7 @@ class HTTPClientRequestTests: XCTestCase {
             let asyncSequence = ByteBuffer(string: "post body")
                 .readableBytesView
                 .chunked(maxChunkSize: 2)
-                .asAsyncSequence()
+                .async
                 .map { ByteBuffer($0) }
 
             request.body = .stream(asyncSequence, length: .unknown)
@@ -449,7 +449,7 @@ class HTTPClientRequestTests: XCTestCase {
             let asyncSequence = ByteBuffer(string: "post body")
                 .readableBytesView
                 .chunked(maxChunkSize: 2)
-                .asAsyncSequence()
+                .async
                 .map { ByteBuffer($0) }
 
             request.body = .stream(asyncSequence, length: .known(9))

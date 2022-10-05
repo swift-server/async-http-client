@@ -96,11 +96,11 @@ extension HTTPClientResponse.Body {
     }
     
     public init() {
-        self.init(EmptyCollection().asAsyncSequence())
+        self.init(EmptyCollection().async)
     }
     
     public init(_ byteBuffer: ByteBuffer) {
-        self.init(CollectionOfOne(byteBuffer).asAsyncSequence())
+        self.init(CollectionOfOne(byteBuffer).async)
     }
 }
 
