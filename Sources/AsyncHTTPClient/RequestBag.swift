@@ -276,14 +276,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             self.delegate.didReceiveBodyPart(task: self.task, buffer)
                 .hop(to: self.task.eventLoop)
                 .whenComplete {
-                    switch $0 {
-                    case .success:
-                        self.consumeMoreBodyData0(resultOfPreviousConsume: $0)
-                    case .failure(let error):
-                        // if in the response stream consumption an error has occurred, we need to
-                        // cancel the running request and fail the task.
-                        self.fail(error)
-                    }
+                    self.consumeMoreBodyData0(resultOfPreviousConsume: $0)
                 }
 
         case .succeedRequest:
@@ -325,18 +318,13 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             self.delegate.didReceiveBodyPart(task: self.task, byteBuffer)
                 .hop(to: self.task.eventLoop)
                 .whenComplete { result in
-                    switch result {
-                    case .success:
-                        if self.consumeBodyPartStackDepth < Self.maxConsumeBodyPartStackDepth {
+                    if self.consumeBodyPartStackDepth < Self.maxConsumeBodyPartStackDepth {
+                        self.consumeMoreBodyData0(resultOfPreviousConsume: result)
+                    } else {
+                        // We need to unwind the stack, let's take a break.
+                        self.task.eventLoop.execute {
                             self.consumeMoreBodyData0(resultOfPreviousConsume: result)
-                        } else {
-                            // We need to unwind the stack, let's take a break.
-                            self.task.eventLoop.execute {
-                                self.consumeMoreBodyData0(resultOfPreviousConsume: result)
-                            }
                         }
-                    case .failure(let error):
-                        self.fail(error)
                     }
                 }
 
