@@ -365,6 +365,19 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
     var socketAddress: SocketAddress {
         return self.serverChannel.localAddress!
     }
+    
+        
+    var baseURL: String {
+        let scheme: String = {
+            switch mode {
+            case .http1_1, .refuse:
+                return "http"
+            case .http2:
+                return "https"
+            }
+        }()
+        return "\(scheme)://localhost:\(self.port)/"
+    }
 
     private let mode: Mode
     private let sslContext: NIOSSLContext?

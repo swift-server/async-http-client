@@ -356,7 +356,7 @@ extension HTTPClient {
 ///
 /// This ``HTTPClientResponseDelegate`` buffers a complete HTTP response in memory. It does not stream the response body in.
 /// The resulting ``Response`` type is ``HTTPClient/Response``.
-public class ResponseAccumulator: HTTPClientResponseDelegate {
+final public class ResponseAccumulator: HTTPClientResponseDelegate {
     public typealias Response = HTTPClient.Response
 
     enum State {
@@ -366,9 +366,33 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
         case end
         case error(Error)
     }
+    
+    public struct ResponseTooBigError: Error, CustomStringConvertible {
+        var maxBodySize: Int
+        
+        public var description: String {
+            return "ResponseTooBigError: received response body exceeds maximum accepted size of \(maxBodySize) bytes"
+        }
+    }
 
     var state = State.idle
     let request: HTTPClient.Request
+    
+    static let maxByteBufferSize = Int(UInt32.max)
+    
+    /// Maximum size in bytes of the HTTP response body that ``ResponseAccumulator`` will accept
+    /// until it will abort the request and throw an ``ResponseTooBigError``.
+    /// 
+    /// Default is 2^32.
+    /// - precondition: not allowed to exceed 2^32 because ``ByteBuffer`` can not store more bytes
+    public var maxBodySize: Int = maxByteBufferSize {
+        didSet {
+            precondition(
+                maxBodySize <= Self.maxByteBufferSize,
+                "maxBodyLength is not allowed to exceed 2^32 because ByteBuffer can not store more bytes"
+            )
+        }
+    }
 
     public init(request: HTTPClient.Request) {
         self.request = request
@@ -377,6 +401,14 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
     public func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         switch self.state {
         case .idle:
+            if let contentLength = head.headers.first(name: "Content-Length"),
+               let announcedBodySize = Int(contentLength),
+               announcedBodySize > self.maxBodySize {
+                let error = ResponseTooBigError(maxBodySize: maxBodySize)
+                self.state = .error(error)
+                return task.eventLoop.makeFailedFuture(error)
+            }
+                
             self.state = .head(head)
         case .head:
             preconditionFailure("head already set")
@@ -395,8 +427,20 @@ public class ResponseAccumulator: HTTPClientResponseDelegate {
         case .idle:
             preconditionFailure("no head received before body")
         case .head(let head):
+            guard part.readableBytes <= self.maxBodySize else {
+                let error = ResponseTooBigError(maxBodySize: self.maxBodySize)
+                self.state = .error(error)
+                return task.eventLoop.makeFailedFuture(error)
+            }
             self.state = .body(head, part)
         case .body(let head, var body):
+            let newBufferSize = body.writerIndex + part.readableBytes
+            guard newBufferSize <= self.maxBodySize else {
+                let error = ResponseTooBigError(maxBodySize: self.maxBodySize)
+                self.state = .error(error)
+                return task.eventLoop.makeFailedFuture(error)
+            }
+            
             // The compiler can't prove that `self.state` is dead here (and it kinda isn't, there's
             // a cross-module call in the way) so we need to drop the original reference to `body` in
             // `self.state` or we'll get a CoW. To fix that we temporarily set the state to `.end` (which
