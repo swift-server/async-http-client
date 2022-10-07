@@ -152,7 +152,7 @@ httpClient.execute(request: request, deadline: .now() + .milliseconds(1))
 ```
 
 ### Streaming
-When dealing with larger amount of data, it's critical to stream the response body instead of aggregating in-memory. 
+When dealing with larger amount of data, it's critical to stream the response body instead of aggregating in-memory.
 The following example demonstrates how to count the number of bytes in a streaming response body:
 
 #### Using Swift Concurrency
@@ -172,7 +172,7 @@ do {
     for try await buffer in response.body {
         // for this example, we are just interested in the size of the fragment
         receivedBytes += buffer.readableBytes
-        
+
         if let expectedBytes = expectedBytes {
             // if the body size is known, we calculate a progress indicator
             let progress = Double(receivedBytes) / Double(expectedBytes)
@@ -181,9 +181,9 @@ do {
     }
     print("did receive \(receivedBytes) bytes")
 } catch {
-    print("request failed:", error) 
+    print("request failed:", error)
 }
-// it is important to shutdown the httpClient after all requests are done, even if one failed 
+// it is important to shutdown the httpClient after all requests are done, even if one failed
 try await httpClient.shutdown()
 ```
 
@@ -211,17 +211,17 @@ class CountingDelegate: HTTPClientResponseDelegate {
     }
 
     func didReceiveHead(
-        task: HTTPClient.Task<Response>, 
+        task: HTTPClient.Task<Response>,
         _ head: HTTPResponseHead
     ) -> EventLoopFuture<Void> {
-        // this is executed when we receive HTTP response head part of the request 
-        // (it contains response code and headers), called once in case backpressure 
+        // this is executed when we receive HTTP response head part of the request
+        // (it contains response code and headers), called once in case backpressure
         // is needed, all reads will be paused until returned future is resolved
         return task.eventLoop.makeSucceededFuture(())
     }
 
     func didReceiveBodyPart(
-        task: HTTPClient.Task<Response>, 
+        task: HTTPClient.Task<Response>,
         _ buffer: ByteBuffer
     ) -> EventLoopFuture<Void> {
         // this is executed when we receive parts of the response body, could be called zero or more times
@@ -283,8 +283,8 @@ Connecting to servers bound to socket paths is easy:
 ```swift
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
 httpClient.execute(
-    .GET, 
-    socketPath: "/tmp/myServer.socket", 
+    .GET,
+    socketPath: "/tmp/myServer.socket",
     urlPath: "/path/to/resource"
 ).whenComplete (...)
 ```
@@ -293,9 +293,9 @@ Connecting over TLS to a unix domain socket path is possible as well:
 ```swift
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
 httpClient.execute(
-    .POST, 
-    secureSocketPath: "/tmp/myServer.socket", 
-    urlPath: "/path/to/resource", 
+    .POST,
+    secureSocketPath: "/tmp/myServer.socket",
+    urlPath: "/path/to/resource",
     body: .string("hello")
 ).whenComplete (...)
 ```
@@ -303,11 +303,11 @@ httpClient.execute(
 Direct URLs can easily be constructed to be executed in other scenarios:
 ```swift
 let socketPathBasedURL = URL(
-    httpURLWithSocketPath: "/tmp/myServer.socket", 
+    httpURLWithSocketPath: "/tmp/myServer.socket",
     uri: "/path/to/resource"
 )
 let secureSocketPathBasedURL = URL(
-    httpsURLWithSocketPath: "/tmp/myServer.socket", 
+    httpsURLWithSocketPath: "/tmp/myServer.socket",
     uri: "/path/to/resource"
 )
 ```
@@ -326,3 +326,14 @@ let client = HTTPClient(
 ## Security
 
 Please have a look at [SECURITY.md](SECURITY.md) for AsyncHTTPClient's security process.
+
+## Supported Versions
+
+The most recent versions of AsyncHTTPClient support Swift 5.5 and newer. The minimum Swift version supported by AsyncHTTPClient releases are detailed below:
+
+AsyncHTTPClient     | Minimum Swift Version
+--------------------|----------------------
+`1.0.0 ..< 1.5.0`   | 5.0
+`1.5.0 ..< 1.10.0`  | 5.2
+`1.10.0 ..< 1.13.0` | 5.4
+`1.13.0 ...`        | 5.5

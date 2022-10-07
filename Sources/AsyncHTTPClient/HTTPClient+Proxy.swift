@@ -25,7 +25,7 @@ extension HTTPClient.Configuration {
     /// If a `TLSConfiguration` is used in conjunction with `HTTPClient.Configuration.Proxy`,
     /// TLS will be established _after_ successful proxy, between your client
     /// and the destination server.
-    public struct Proxy: NIOSendable {
+    public struct Proxy: NIOSendable, Hashable {
         enum ProxyType: Hashable {
             case http(HTTPClient.Authorization?)
             case socks

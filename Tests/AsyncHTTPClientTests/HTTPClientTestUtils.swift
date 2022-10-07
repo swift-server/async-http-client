@@ -1118,7 +1118,7 @@ struct CollectEverythingLogHandler: LogHandler {
             var metadata: [String: String]
         }
 
-        var lock = Lock()
+        var lock = NIOLock()
         var logs: [Entry] = []
 
         var allEntries: [Entry] {

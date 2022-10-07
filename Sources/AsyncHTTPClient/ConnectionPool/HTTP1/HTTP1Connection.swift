@@ -57,11 +57,11 @@ final class HTTP1Connection {
         channel: Channel,
         connectionID: HTTPConnectionPool.Connection.ID,
         delegate: HTTP1ConnectionDelegate,
-        configuration: HTTPClient.Configuration,
+        decompression: HTTPClient.Decompression,
         logger: Logger
     ) throws -> HTTP1Connection {
         let connection = HTTP1Connection(channel: channel, connectionID: connectionID, delegate: delegate)
-        try connection.start(configuration: configuration, logger: logger)
+        try connection.start(decompression: decompression, logger: logger)
         return connection
     }
 
@@ -101,7 +101,7 @@ final class HTTP1Connection {
         self.channel.write(request, promise: nil)
     }
 
-    private func start(configuration: HTTPClient.Configuration, logger: Logger) throws {
+    private func start(decompression: HTTPClient.Decompression, logger: Logger) throws {
         self.channel.eventLoop.assertInEventLoop()
 
         guard case .initialized = self.state else {
@@ -127,7 +127,7 @@ final class HTTP1Connection {
             try sync.addHandler(requestEncoder)
             try sync.addHandler(ByteToMessageHandler(responseDecoder))
 
-            if case .enabled(let limit) = configuration.decompression {
+            if case .enabled(let limit) = decompression {
                 let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
                 try sync.addHandler(decompressHandler)
             }

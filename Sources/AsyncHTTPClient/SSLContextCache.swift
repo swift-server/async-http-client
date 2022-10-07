@@ -19,7 +19,7 @@ import NIOCore
 import NIOSSL
 
 final class SSLContextCache {
-    private let lock = Lock()
+    private let lock = NIOLock()
     private var sslContextCache = LRUCache<BestEffortHashableTLSConfiguration, NIOSSLContext>()
     private let offloadQueue = DispatchQueue(label: "io.github.swift-server.AsyncHTTPClient.SSLContextCache")
 }

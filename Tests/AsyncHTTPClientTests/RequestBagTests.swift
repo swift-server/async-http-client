@@ -455,6 +455,73 @@ final class RequestBagTests: XCTestCase {
         }
     }
 
+    func testDidReceiveBodyPartFailedPromise() {
+        let embeddedEventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+        let logger = Logger(label: "test")
+
+        var maybeRequest: HTTPClient.Request?
+
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(
+            url: "https://swift.org",
+            method: .POST,
+            body: .byteBuffer(.init(bytes: [1]))
+        ))
+        guard let request = maybeRequest else { return XCTFail("Expected to have a request") }
+
+        struct MyError: Error, Equatable {}
+        final class Delegate: HTTPClientResponseDelegate {
+            typealias Response = Void
+            let didFinishPromise: EventLoopPromise<Void>
+            init(didFinishPromise: EventLoopPromise<Void>) {
+                self.didFinishPromise = didFinishPromise
+            }
+
+            func didReceiveBodyPart(task: HTTPClient.Task<Void>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+                task.eventLoop.makeFailedFuture(MyError())
+            }
+
+            func didReceiveError(task: HTTPClient.Task<Void>, _ error: Error) {
+                self.didFinishPromise.fail(error)
+            }
+
+            func didFinishRequest(task: AsyncHTTPClient.HTTPClient.Task<Void>) throws {
+                XCTFail("\(#function) should not be called")
+                self.didFinishPromise.succeed(())
+            }
+        }
+        let delegate = Delegate(didFinishPromise: embeddedEventLoop.makePromise())
+        var maybeRequestBag: RequestBag<Delegate>?
+        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embeddedEventLoop),
+            task: .init(eventLoop: embeddedEventLoop, logger: logger),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(),
+            delegate: delegate
+        ))
+        guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
+
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
+
+        executor.runRequest(bag)
+
+        bag.resumeRequestBodyStream()
+        XCTAssertNoThrow(try executor.receiveRequestBody { XCTAssertEqual($0, ByteBuffer(bytes: [1])) })
+
+        bag.receiveResponseHead(.init(version: .http1_1, status: .ok))
+
+        bag.succeedRequest([ByteBuffer([1])])
+
+        XCTAssertThrowsError(try delegate.didFinishPromise.futureResult.wait()) { error in
+            XCTAssertEqualTypeAndValue(error, MyError())
+        }
+        XCTAssertThrowsError(try bag.task.futureResult.wait()) { error in
+            XCTAssertEqualTypeAndValue(error, MyError())
+        }
+    }
+
     func testHTTPUploadIsCancelledEvenThoughRequestSucceeds() {
         let embeddedEventLoop = EmbeddedEventLoop()
         defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }

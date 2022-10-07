@@ -35,7 +35,7 @@ extension HTTPConnectionPool {
 
         private var state: State = .active
         private var _pools: [Key: HTTPConnectionPool] = [:]
-        private let lock = Lock()
+        private let lock = NIOLock()
 
         private let sslContextCache = SSLContextCache()
 
