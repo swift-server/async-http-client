@@ -2677,8 +2677,8 @@ class HTTPClientTests: XCTestCase {
         let delegate = TestDelegate()
 
         XCTAssertThrowsError(try httpClient.execute(request: request, delegate: delegate).wait()) {
-            XCTAssertEqual(.connectTimeout, $0 as? HTTPClientError)
-            XCTAssertEqual(.connectTimeout, delegate.error as? HTTPClientError)
+            XCTAssertEqualTypeAndValue($0, HTTPClientError.connectTimeout)
+            XCTAssertEqualTypeAndValue(delegate.error, HTTPClientError.connectTimeout)
         }
     }
 
