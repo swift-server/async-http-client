@@ -37,7 +37,7 @@ class HTTP2ConnectionTests: XCTestCase {
             channel: embedded,
             connectionID: 0,
             delegate: TestHTTP2ConnectionDelegate(),
-            configuration: .init(),
+            decompression: .disabled,
             logger: logger
         ).wait())
     }
