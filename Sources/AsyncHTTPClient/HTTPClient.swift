@@ -985,7 +985,7 @@ extension HTTPClient.Configuration {
         }
     }
 
-    public struct HTTPVersion: NIOSendable {
+    public struct HTTPVersion: NIOSendable, Hashable {
         internal enum Configuration {
             case http1Only
             case automatic
