@@ -365,8 +365,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
     var socketAddress: SocketAddress {
         return self.serverChannel.localAddress!
     }
-    
-        
+
     var baseURL: String {
         let scheme: String = {
             switch mode {

@@ -35,6 +35,7 @@ extension RequestBagTests {
             ("testFailsTaskWhenTaskIsWaitingForMoreFromServer", testFailsTaskWhenTaskIsWaitingForMoreFromServer),
             ("testChannelBecomingWritableDoesntCrashCancelledTask", testChannelBecomingWritableDoesntCrashCancelledTask),
             ("testDidReceiveBodyPartFailedPromise", testDidReceiveBodyPartFailedPromise),
+            ("testDidReceiveBodyPartFailedPromise", testDidReceiveBodyPartFailedPromise),
             ("testHTTPUploadIsCancelledEvenThoughRequestSucceeds", testHTTPUploadIsCancelledEvenThoughRequestSucceeds),
             ("testRaceBetweenConnectionCloseAndDemandMoreData", testRaceBetweenConnectionCloseAndDemandMoreData),
             ("testRedirectWith3KBBody", testRedirectWith3KBBody),

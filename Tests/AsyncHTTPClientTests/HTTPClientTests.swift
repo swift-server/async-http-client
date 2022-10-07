@@ -3091,13 +3091,13 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNoThrow(try future.wait())
         XCTAssertNil(try delegate.next().wait())
     }
-    
+
     func testResponseAccumulatorMaxBodySizeLimitExceedingWithContentLength() throws {
         let httpBin = HTTPBin(.http1_1(ssl: false, compress: false)) { _ in HTTPEchoHandler() }
         defer { XCTAssertNoThrow(try httpBin.shutdown()) }
-        
+
         let body = ByteBuffer(bytes: 0..<11)
-        
+
         var request = try Request(url: httpBin.baseURL)
         request.body = .byteBuffer(body)
         let delegate = ResponseAccumulator(request: request)
@@ -3109,13 +3109,13 @@ class HTTPClientTests: XCTestCase {
             XCTAssertTrue(error is ResponseAccumulator.ResponseTooBigError, "unexpected error \(error)")
         }
     }
-    
+
     func testResponseAccumulatorMaxBodySizeLimitNotExceedingWithContentLength() throws {
         let httpBin = HTTPBin(.http1_1(ssl: false, compress: false)) { _ in HTTPEchoHandler() }
         defer { XCTAssertNoThrow(try httpBin.shutdown()) }
-        
+
         let body = ByteBuffer(bytes: 0..<10)
-        
+
         var request = try Request(url: httpBin.baseURL)
         request.body = .byteBuffer(body)
         let delegate = ResponseAccumulator(request: request)
@@ -3124,16 +3124,16 @@ class HTTPClientTests: XCTestCase {
             request: request,
             delegate: delegate
         ).wait()
-        
+
         XCTAssertEqual(response.body, body)
     }
-    
+
     func testResponseAccumulatorMaxBodySizeLimitExceedingWithTransferEncodingChuncked() throws {
         let httpBin = HTTPBin(.http1_1(ssl: false, compress: false)) { _ in HTTPEchoHandler() }
         defer { XCTAssertNoThrow(try httpBin.shutdown()) }
-        
+
         let body = ByteBuffer(bytes: 0..<11)
-        
+
         var request = try Request(url: httpBin.baseURL)
         request.body = .stream { writer in
             writer.write(.byteBuffer(body))
@@ -3147,13 +3147,13 @@ class HTTPClientTests: XCTestCase {
             XCTAssertTrue(error is ResponseAccumulator.ResponseTooBigError, "unexpected error \(error)")
         }
     }
-    
+
     func testResponseAccumulatorMaxBodySizeLimitNotExceedingWithTransferEncodingChuncked() throws {
         let httpBin = HTTPBin(.http1_1(ssl: false, compress: false)) { _ in HTTPEchoHandler() }
         defer { XCTAssertNoThrow(try httpBin.shutdown()) }
-        
+
         let body = ByteBuffer(bytes: 0..<10)
-        
+
         var request = try Request(url: httpBin.baseURL)
         request.body = .stream { writer in
             writer.write(.byteBuffer(body))
@@ -3164,7 +3164,7 @@ class HTTPClientTests: XCTestCase {
             request: request,
             delegate: delegate
         ).wait()
-        
+
         XCTAssertEqual(response.body, body)
     }
 
