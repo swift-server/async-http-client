@@ -454,7 +454,7 @@ final class RequestBagTests: XCTestCase {
             XCTAssertEqual($0 as? HTTPClientError, .cancelled)
         }
     }
-    
+
     func testDidReceiveBodyPartFailedPromise() {
         let embeddedEventLoop = EmbeddedEventLoop()
         defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
@@ -468,7 +468,7 @@ final class RequestBagTests: XCTestCase {
             body: .byteBuffer(.init(bytes: [1]))
         ))
         guard let request = maybeRequest else { return XCTFail("Expected to have a request") }
-        
+
         struct MyError: Error, Equatable {}
         final class Delegate: HTTPClientResponseDelegate {
             typealias Response = Void
@@ -476,13 +476,16 @@ final class RequestBagTests: XCTestCase {
             init(didFinishPromise: EventLoopPromise<Void>) {
                 self.didFinishPromise = didFinishPromise
             }
+
             func didReceiveBodyPart(task: HTTPClient.Task<Void>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
                 task.eventLoop.makeFailedFuture(MyError())
             }
+
             func didReceiveError(task: HTTPClient.Task<Void>, _ error: Error) {
                 self.didFinishPromise.fail(error)
             }
-            func didFinishRequest(task: AsyncHTTPClient.HTTPClient.Task<Void>) throws -> Void {
+
+            func didFinishRequest(task: AsyncHTTPClient.HTTPClient.Task<Void>) throws {
                 XCTFail("\(#function) should not be called")
                 self.didFinishPromise.succeed(())
             }
@@ -506,11 +509,10 @@ final class RequestBagTests: XCTestCase {
 
         bag.resumeRequestBodyStream()
         XCTAssertNoThrow(try executor.receiveRequestBody { XCTAssertEqual($0, ByteBuffer(bytes: [1])) })
-        
-        bag.receiveResponseHead(.init(version: .http1_1, status: .ok))
-        
-        bag.succeedRequest([ByteBuffer([1])])
 
+        bag.receiveResponseHead(.init(version: .http1_1, status: .ok))
+
+        bag.succeedRequest([ByteBuffer([1])])
 
         XCTAssertThrowsError(try delegate.didFinishPromise.futureResult.wait()) { error in
             XCTAssertEqualTypeAndValue(error, MyError())
