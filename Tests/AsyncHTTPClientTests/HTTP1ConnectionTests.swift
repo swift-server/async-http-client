@@ -35,7 +35,7 @@ class HTTP1ConnectionTests: XCTestCase {
             channel: embedded,
             connectionID: 0,
             delegate: MockHTTP1ConnectionDelegate(),
-            configuration: .init(decompression: .enabled(limit: .ratio(4))),
+            decompression: .enabled(limit: .ratio(4)),
             logger: logger
         ))
 
@@ -58,7 +58,7 @@ class HTTP1ConnectionTests: XCTestCase {
             channel: embedded,
             connectionID: 0,
             delegate: MockHTTP1ConnectionDelegate(),
-            configuration: .init(decompression: .disabled),
+            decompression: .disabled,
             logger: logger
         ))
 
@@ -82,7 +82,7 @@ class HTTP1ConnectionTests: XCTestCase {
             channel: embedded,
             connectionID: 0,
             delegate: MockHTTP1ConnectionDelegate(),
-            configuration: .init(),
+            decompression: .disabled,
             logger: logger
         ))
     }
@@ -106,7 +106,7 @@ class HTTP1ConnectionTests: XCTestCase {
                     channel: $0,
                     connectionID: 0,
                     delegate: delegate,
-                    configuration: .init(decompression: .disabled),
+                    decompression: .disabled,
                     logger: logger
                 )
             }
@@ -206,7 +206,7 @@ class HTTP1ConnectionTests: XCTestCase {
             channel: XCTUnwrap(maybeChannel),
             connectionID: 0,
             delegate: connectionDelegate,
-            configuration: .init(),
+            decompression: .disabled,
             logger: logger
         ) }.wait())
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection here") }
@@ -260,7 +260,7 @@ class HTTP1ConnectionTests: XCTestCase {
             channel: XCTUnwrap(maybeChannel),
             connectionID: 0,
             delegate: connectionDelegate,
-            configuration: .init(),
+            decompression: .disabled,
             logger: logger
         ) }.wait())
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection here") }
@@ -332,7 +332,7 @@ class HTTP1ConnectionTests: XCTestCase {
             channel: XCTUnwrap(maybeChannel),
             connectionID: 0,
             delegate: connectionDelegate,
-            configuration: .init(),
+            decompression: .disabled,
             logger: logger
         ) }.wait())
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection here") }
@@ -377,7 +377,7 @@ class HTTP1ConnectionTests: XCTestCase {
             channel: embedded,
             connectionID: 0,
             delegate: connectionDelegate,
-            configuration: .init(decompression: .enabled(limit: .ratio(4))),
+            decompression: .enabled(limit: .ratio(4)),
             logger: logger
         ))
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection at this point.") }
@@ -442,7 +442,7 @@ class HTTP1ConnectionTests: XCTestCase {
             channel: embedded,
             connectionID: 0,
             delegate: connectionDelegate,
-            configuration: .init(decompression: .enabled(limit: .ratio(4))),
+            decompression: .enabled(limit: .ratio(4)),
             logger: logger
         ))
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection at this point.") }
@@ -504,7 +504,7 @@ class HTTP1ConnectionTests: XCTestCase {
             channel: embedded,
             connectionID: 0,
             delegate: connectionDelegate,
-            configuration: .init(decompression: .enabled(limit: .ratio(4))),
+            decompression: .enabled(limit: .ratio(4)),
             logger: logger
         ))
 
@@ -539,7 +539,7 @@ class HTTP1ConnectionTests: XCTestCase {
             channel: embedded,
             connectionID: 0,
             delegate: connectionDelegate,
-            configuration: .init(decompression: .enabled(limit: .ratio(4))),
+            decompression: .enabled(limit: .ratio(4)),
             logger: logger
         ))
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection at this point.") }
@@ -691,7 +691,7 @@ class HTTP1ConnectionTests: XCTestCase {
             channel: channel,
             connectionID: 0,
             delegate: connectionDelegate,
-            configuration: .init(),
+            decompression: .disabled,
             logger: logger
         ) }.wait())
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection at this point") }
