@@ -119,10 +119,16 @@ final class HTTP2Connection {
         channel: Channel,
         connectionID: HTTPConnectionPool.Connection.ID,
         delegate: HTTP2ConnectionDelegate,
-        configuration: HTTPClient.Configuration,
+        decompression: HTTPClient.Decompression,
         logger: Logger
     ) -> EventLoopFuture<(HTTP2Connection, Int)> {
-        let connection = HTTP2Connection(channel: channel, connectionID: connectionID, decompression: configuration.decompression, delegate: delegate, logger: logger)
+        let connection = HTTP2Connection(
+            channel: channel,
+            connectionID: connectionID,
+            decompression: decompression,
+            delegate: delegate,
+            logger: logger
+        )
         return connection.start().map { maxStreams in (connection, maxStreams) }
     }
 

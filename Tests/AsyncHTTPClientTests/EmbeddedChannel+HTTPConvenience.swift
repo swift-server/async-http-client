@@ -77,7 +77,7 @@ extension EmbeddedChannel {
             channel: self,
             connectionID: 1,
             delegate: connectionDelegate,
-            configuration: .init(),
+            decompression: .disabled,
             logger: logger
         )
 
