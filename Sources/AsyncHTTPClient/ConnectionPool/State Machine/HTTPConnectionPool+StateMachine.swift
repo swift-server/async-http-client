@@ -96,7 +96,9 @@ extension HTTPConnectionPool {
 
         let idGenerator: Connection.ID.Generator
         let maximumConcurrentHTTP1Connections: Int
-        let retryConnectionEstablishment: Bool
+        /// The property was introduced to fail fast during testing.
+        /// Otherwise this should always be true and not turned off.
+        private let retryConnectionEstablishment: Bool
 
         init(
             idGenerator: Connection.ID.Generator,

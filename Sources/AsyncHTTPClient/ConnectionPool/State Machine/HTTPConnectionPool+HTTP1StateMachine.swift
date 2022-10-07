@@ -30,6 +30,8 @@ extension HTTPConnectionPool {
 
         private(set) var requests: RequestQueue
         private(set) var lifecycleState: StateMachine.LifecycleState
+        /// The property was introduced to fail fast during testing.
+        /// Otherwise this should always be true and not turned off.
         private let retryConnectionEstablishment: Bool
 
         init(
@@ -225,7 +227,7 @@ extension HTTPConnectionPool {
             case .running:
                 guard self.retryConnectionEstablishment else {
                     guard let (index, _) = self.connections.failConnection(connectionID) else {
-                        preconditionFailure("Failed to create a connection that is unknown to us?")
+                        preconditionFailure("A connection attempt failed, that the state machine knows nothing about. Somewhere state was lost.")
                     }
                     self.connections.removeConnection(at: index)
 

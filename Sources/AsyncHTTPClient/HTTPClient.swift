@@ -977,8 +977,11 @@ extension HTTPClient.Configuration {
 
         /// If true, ``HTTPClient`` will try to create new connections on connection failure with an exponential backoff.
         /// Requests will only fail after the ``HTTPClient/Configuration/Timeout-swift.struct/connect`` timeout exceeded.
-        /// If false, requests will fail immediately after a connection could not be established.
-        /// Defaults to `true`
+        /// If false, all requests that have no assigned connection will fail immediately after a connection could not be established.
+        /// Defaults to `true`.
+        /// - warning: We highly recommend leaving this on.
+        /// It is very common that connections establishment is flaky at scale.
+        /// ``HTTPClient`` will automatically mitigate these kind of issues if this flag is turned on.
         var retryConnectionEstablishment: Bool
 
         public init(idleTimeout: TimeAmount = .seconds(60)) {
