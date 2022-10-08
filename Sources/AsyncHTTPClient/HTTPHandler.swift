@@ -387,6 +387,7 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
     /// - precondition: not allowed to exceed 2^32 because ``ByteBuffer`` can not store more bytes
     public var maxBodySize: Int = maxByteBufferSize {
         didSet {
+            precondition(self.maxBodySize >= 0, "maxBodyLength is not allowed to be negative")
             precondition(
                 self.maxBodySize <= Self.maxByteBufferSize,
                 "maxBodyLength is not allowed to exceed 2^32 because ByteBuffer can not store more bytes"
