@@ -497,8 +497,9 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             defer { XCTAssertNoThrow(try serverChannel.close().wait()) }
             let port = serverChannel.localAddress!.port!
 
-            var config = HTTPClient.Configuration()
-            config.timeout.connect = .seconds(3)
+            let config = HTTPClient.Configuration()
+                .enableFastFailureModeForTesting()
+            
             let localClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: config)
             defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
             let request = HTTPClientRequest(url: "https://localhost:\(port)")

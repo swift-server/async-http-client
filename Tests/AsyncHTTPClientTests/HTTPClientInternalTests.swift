@@ -429,8 +429,8 @@ class HTTPClientInternalTests: XCTestCase {
         let el2 = elg.next()
 
         let httpBin = HTTPBin(.refuse)
-        var config = HTTPClient.Configuration()
-        config.networkFrameworkWaitForConnectivity = false
+        let config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
         let client = HTTPClient(eventLoopGroupProvider: .shared(elg), configuration: config)
 
         defer {
@@ -588,5 +588,15 @@ class HTTPClientInternalTests: XCTestCase {
         let threadPools = delegates.map { $0.fileIOThreadPool }
         let firstThreadPool = threadPools.first ?? nil
         XCTAssert(threadPools.dropFirst().allSatisfy { $0 === firstThreadPool })
+    }
+}
+
+
+extension HTTPClient.Configuration {
+    func enableFastFailureModeForTesting() -> Self {
+        var copy = self
+        copy.networkFrameworkWaitForConnectivity = false
+        copy.connectionPool.retryConnectionEstablishment = false
+        return copy
     }
 }

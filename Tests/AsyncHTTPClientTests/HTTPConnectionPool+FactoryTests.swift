@@ -77,7 +77,8 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
         let factory = HTTPConnectionPool.ConnectionFactory(
             key: .init(request),
             tlsConfiguration: nil,
-            clientConfiguration: .init(proxy: .socksServer(host: "127.0.0.1", port: server!.localAddress!.port!)),
+            clientConfiguration: .init(proxy: .socksServer(host: "127.0.0.1", port: server!.localAddress!.port!))
+                .enableFastFailureModeForTesting(),
             sslContextCache: .init()
         )
 
@@ -113,7 +114,8 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
         let factory = HTTPConnectionPool.ConnectionFactory(
             key: .init(request),
             tlsConfiguration: nil,
-            clientConfiguration: .init(proxy: .server(host: "127.0.0.1", port: server!.localAddress!.port!)),
+            clientConfiguration: .init(proxy: .server(host: "127.0.0.1", port: server!.localAddress!.port!))
+                .enableFastFailureModeForTesting(),
             sslContextCache: .init()
         )
 
@@ -151,7 +153,8 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
         let factory = HTTPConnectionPool.ConnectionFactory(
             key: .init(request),
             tlsConfiguration: nil,
-            clientConfiguration: .init(tlsConfiguration: tlsConfig),
+            clientConfiguration: .init(tlsConfiguration: tlsConfig)
+                .enableFastFailureModeForTesting(),
             sslContextCache: .init()
         )
 

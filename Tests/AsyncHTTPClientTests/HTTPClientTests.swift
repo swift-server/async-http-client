@@ -58,6 +58,7 @@ class HTTPClientTests: XCTestCase {
         })
         backgroundLogger.logLevel = .trace
         self.defaultClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                        configuration: HTTPClient.Configuration().enableFastFailureModeForTesting(),
                                         backgroundActivityLogger: backgroundLogger)
     }
 
@@ -778,14 +779,21 @@ class HTTPClientTests: XCTestCase {
         let res = try localClient.get(url: "http://test/ok").wait()
         XCTAssertEqual(res.status, .ok)
     }
-
+    
     func testProxyPlaintextWithIncorrectlyAuthorization() throws {
         let localHTTPBin = HTTPBin(proxy: .simulate(authorization: "Basic YWxhZGRpbjpvcGVuc2VzYW1l"))
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(proxy: .server(host: "localhost",
-                                                                         port: localHTTPBin.port,
-                                                                         authorization: .basic(username: "aladdin",
-                                                                                               password: "opensesamefoo"))))
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: .init(
+                proxy: .server(
+                    host: "localhost",
+                    port: localHTTPBin.port,
+                    authorization: .basic(
+                        username: "aladdin",
+                        password: "opensesamefoo")
+                )
+            ).enableFastFailureModeForTesting()
+        )
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
             XCTAssertNoThrow(try localHTTPBin.shutdown())
@@ -1228,11 +1236,9 @@ class HTTPClientTests: XCTestCase {
     }
 
     func testStressGetHttpsSSLError() throws {
-        var config = HTTPClient.Configuration()
-        config.networkFrameworkWaitForConnectivity = false
-
+        
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: config)
+                                     configuration: HTTPClient.Configuration().enableFastFailureModeForTesting())
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
         }
@@ -1292,8 +1298,8 @@ class HTTPClientTests: XCTestCase {
         defer { XCTAssertNoThrow(try serverChannel.close().wait()) }
         let port = serverChannel.localAddress!.port!
 
-        var config = HTTPClient.Configuration()
-        config.timeout.connect = .seconds(2)
+        let config = HTTPClient.Configuration().enableFastFailureModeForTesting()
+        
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: config)
         defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
         XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(port)").wait()) { error in
@@ -1332,8 +1338,8 @@ class HTTPClientTests: XCTestCase {
         defer { XCTAssertNoThrow(try serverChannel.close().wait()) }
         let port = serverChannel.localAddress!.port!
 
-        var config = HTTPClient.Configuration()
-        config.timeout.connect = .seconds(3)
+        let config = HTTPClient.Configuration().enableFastFailureModeForTesting()
+        
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: config)
         defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
 
