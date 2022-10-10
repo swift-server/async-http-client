@@ -3100,11 +3100,9 @@ class HTTPClientTests: XCTestCase {
 
         var request = try Request(url: httpBin.baseURL)
         request.body = .byteBuffer(body)
-        let delegate = ResponseAccumulator(request: request)
-        delegate.maxBodySize = 10
         XCTAssertThrowsError(try self.defaultClient.execute(
             request: request,
-            delegate: delegate
+            delegate: ResponseAccumulator(request: request, maxBodySize: 10)
         ).wait()) { error in
             XCTAssertTrue(error is ResponseAccumulator.ResponseTooBigError, "unexpected error \(error)")
         }
@@ -3118,14 +3116,28 @@ class HTTPClientTests: XCTestCase {
 
         var request = try Request(url: httpBin.baseURL)
         request.body = .byteBuffer(body)
-        let delegate = ResponseAccumulator(request: request)
-        delegate.maxBodySize = 10
         let response = try self.defaultClient.execute(
             request: request,
-            delegate: delegate
+            delegate: ResponseAccumulator(request: request, maxBodySize: 10)
         ).wait()
 
         XCTAssertEqual(response.body, body)
+    }
+
+    func testResponseAccumulatorMaxBodySizeLimitExceedingWithContentLengthButMethodIsHead() throws {
+        let httpBin = HTTPBin(.http1_1(ssl: false, compress: false)) { _ in HTTPEchoHeaders() }
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
+
+        let body = ByteBuffer(bytes: 0..<11)
+
+        var request = try Request(url: httpBin.baseURL, method: .HEAD)
+        request.body = .byteBuffer(body)
+        let response = try self.defaultClient.execute(
+            request: request,
+            delegate: ResponseAccumulator(request: request, maxBodySize: 10)
+        ).wait()
+
+        XCTAssertEqual(response.body ?? ByteBuffer(), ByteBuffer())
     }
 
     func testResponseAccumulatorMaxBodySizeLimitExceedingWithTransferEncodingChuncked() throws {
@@ -3138,11 +3150,9 @@ class HTTPClientTests: XCTestCase {
         request.body = .stream { writer in
             writer.write(.byteBuffer(body))
         }
-        let delegate = ResponseAccumulator(request: request)
-        delegate.maxBodySize = 10
         XCTAssertThrowsError(try self.defaultClient.execute(
             request: request,
-            delegate: delegate
+            delegate: ResponseAccumulator(request: request, maxBodySize: 10)
         ).wait()) { error in
             XCTAssertTrue(error is ResponseAccumulator.ResponseTooBigError, "unexpected error \(error)")
         }
@@ -3158,11 +3168,9 @@ class HTTPClientTests: XCTestCase {
         request.body = .stream { writer in
             writer.write(.byteBuffer(body))
         }
-        let delegate = ResponseAccumulator(request: request)
-        delegate.maxBodySize = 10
         let response = try self.defaultClient.execute(
             request: request,
-            delegate: delegate
+            delegate: ResponseAccumulator(request: request, maxBodySize: 10)
         ).wait()
 
         XCTAssertEqual(response.body, body)

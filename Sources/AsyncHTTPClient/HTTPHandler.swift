@@ -368,7 +368,10 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
     }
 
     public struct ResponseTooBigError: Error, CustomStringConvertible {
-        var maxBodySize: Int
+        public var maxBodySize: Int
+        public init(maxBodySize: Int) {
+            self.maxBodySize = maxBodySize
+        }
 
         public var description: String {
             return "ResponseTooBigError: received response body exceeds maximum accepted size of \(self.maxBodySize) bytes"
@@ -385,24 +388,35 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
     ///
     /// Default is 2^32.
     /// - precondition: not allowed to exceed 2^32 because ``ByteBuffer`` can not store more bytes
-    public var maxBodySize: Int = maxByteBufferSize {
-        didSet {
-            precondition(self.maxBodySize >= 0, "maxBodyLength is not allowed to be negative")
-            precondition(
-                self.maxBodySize <= Self.maxByteBufferSize,
-                "maxBodyLength is not allowed to exceed 2^32 because ByteBuffer can not store more bytes"
-            )
-        }
+    public let maxBodySize: Int
+
+    public convenience init(request: HTTPClient.Request) {
+        self.init(request: request, maxBodySize: Self.maxByteBufferSize)
     }
 
-    public init(request: HTTPClient.Request) {
+    /// - Parameters:
+    ///   - request: The corresponding request of the response this delegate will be accumulating.
+    ///   - maxBodySize: Maximum size in bytes of the HTTP response body that ``ResponseAccumulator`` will accept
+    ///   until it will abort the request and throw an ``ResponseTooBigError``.
+    ///   Default is 2^32.
+    /// - precondition: maxBodySize is not allowed to exceed 2^32 because ``ByteBuffer`` can not store more bytes
+    /// - warning: You can use ``ResponseAccumulator`` for just one request.
+    /// If you start another request, you need to initiate another ``ResponseAccumulator``.
+    public init(request: HTTPClient.Request, maxBodySize: Int) {
+        precondition(maxBodySize >= 0, "maxBodyLength is not allowed to be negative")
+        precondition(
+            maxBodySize <= Self.maxByteBufferSize,
+            "maxBodyLength is not allowed to exceed 2^32 because ByteBuffer can not store more bytes"
+        )
         self.request = request
+        self.maxBodySize = maxBodySize
     }
 
     public func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         switch self.state {
         case .idle:
-            if let contentLength = head.headers.first(name: "Content-Length"),
+            if self.request.method != .HEAD,
+               let contentLength = head.headers.first(name: "Content-Length"),
                let announcedBodySize = Int(contentLength),
                announcedBodySize > self.maxBodySize {
                 let error = ResponseTooBigError(maxBodySize: maxBodySize)

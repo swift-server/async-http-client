@@ -134,6 +134,7 @@ extension HTTPClientTests {
             ("testBiDirectionalStreaming", testBiDirectionalStreaming),
             ("testResponseAccumulatorMaxBodySizeLimitExceedingWithContentLength", testResponseAccumulatorMaxBodySizeLimitExceedingWithContentLength),
             ("testResponseAccumulatorMaxBodySizeLimitNotExceedingWithContentLength", testResponseAccumulatorMaxBodySizeLimitNotExceedingWithContentLength),
+            ("testResponseAccumulatorMaxBodySizeLimitExceedingWithContentLengthButMethodIsHead", testResponseAccumulatorMaxBodySizeLimitExceedingWithContentLengthButMethodIsHead),
             ("testResponseAccumulatorMaxBodySizeLimitExceedingWithTransferEncodingChuncked", testResponseAccumulatorMaxBodySizeLimitExceedingWithTransferEncodingChuncked),
             ("testResponseAccumulatorMaxBodySizeLimitNotExceedingWithTransferEncodingChuncked", testResponseAccumulatorMaxBodySizeLimitNotExceedingWithTransferEncodingChuncked),
             ("testBiDirectionalStreamingEarly200", testBiDirectionalStreamingEarly200),

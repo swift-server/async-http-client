@@ -1331,6 +1331,25 @@ class HTTPEchoHandler: ChannelInboundHandler {
     }
 }
 
+final class HTTPEchoHeaders: ChannelInboundHandler {
+    typealias InboundIn = HTTPServerRequestPart
+    typealias OutboundOut = HTTPServerResponsePart
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        let request = self.unwrapInboundIn(data)
+        switch request {
+        case .head(let requestHead):
+            context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok, headers: requestHead.headers))), promise: nil)
+        case .body:
+            break
+        case .end:
+            context.writeAndFlush(self.wrapOutboundOut(.end(nil))).whenSuccess {
+                context.close(promise: nil)
+            }
+        }
+    }
+}
+
 final class HTTP200DelayedHandler: ChannelInboundHandler {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
