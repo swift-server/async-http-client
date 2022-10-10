@@ -404,6 +404,7 @@ extension HTTPConnectionPool {
         }
 
         mutating func failedToCreateNewConnection(_ error: Error, connectionID: Connection.ID) -> Action {
+            // TODO: switch over state https://github.com/swift-server/async-http-client/issues/638
             self.failedConsecutiveConnectionAttempts += 1
             self.lastConnectFailure = error
 
@@ -426,18 +427,6 @@ extension HTTPConnectionPool {
 
         mutating func waitingForConnectivity(_ error: Error, connectionID: Connection.ID) -> Action {
             self.lastConnectFailure = error
-
-            guard self.retryConnectionEstablishment else {
-                guard let (index, _) = self.connections.failConnection(connectionID) else {
-                    preconditionFailure("Failed to create a connection that is unknown to us?")
-                }
-                _ = self.connections.closeConnection(at: index)
-
-                return .init(
-                    request: self.failAllRequests(reason: error),
-                    connection: .none
-                )
-            }
 
             return .init(request: .none, connection: .none)
         }

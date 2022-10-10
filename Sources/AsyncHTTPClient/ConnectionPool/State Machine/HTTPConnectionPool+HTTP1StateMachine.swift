@@ -261,13 +261,6 @@ extension HTTPConnectionPool {
         mutating func waitingForConnectivity(_ error: Error, connectionID: Connection.ID) -> Action {
             self.lastConnectFailure = error
 
-            guard self.retryConnectionEstablishment else {
-                return .init(
-                    request: self.failAllRequests(reason: error),
-                    connection: .none
-                )
-            }
-
             return .init(request: .none, connection: .none)
         }
 
