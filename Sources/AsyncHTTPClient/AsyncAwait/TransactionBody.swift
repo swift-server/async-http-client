@@ -24,7 +24,7 @@ import NIOCore
     init(_ transaction: Transaction) {
         self.transaction = transaction
     }
-    
+
     deinit {
         self.transaction.responseBodyDeinited()
     }
@@ -53,6 +53,7 @@ extension TransactionBody: AsyncSequence {
         deinit {
             self.transaction.responseBodyIteratorDeinited(streamID: self.id)
         }
+
         // TODO: this should be @inlinable
         @usableFromInline func next() async throws -> ByteBuffer? {
             try await self.transaction.nextResponsePart(streamID: self.id)

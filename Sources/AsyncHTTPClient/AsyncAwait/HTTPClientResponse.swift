@@ -44,7 +44,7 @@ public struct HTTPClientResponse: Sendable {
         self.headers = headers
         self.body = Body(TransactionBody(bag))
     }
-    
+
     @inlinable public init(
         version: HTTPVersion = .http1_1,
         status: HTTPResponseStatus = .ok,
@@ -69,20 +69,20 @@ extension HTTPClientResponse {
         public typealias Element = ByteBuffer
         public struct AsyncIterator: AsyncIteratorProtocol {
             @usableFromInline var storage: Storage.AsyncIterator
-            
+
             @inlinable init(storage: Storage.AsyncIterator) {
                 self.storage = storage
             }
-            
+
             @inlinable public mutating func next() async throws -> ByteBuffer? {
-                try await storage.next()
+                try await self.storage.next()
             }
         }
-        
+
         @usableFromInline var storage: Storage
 
         @inlinable public func makeAsyncIterator() -> AsyncIterator {
-            .init(storage: storage.makeAsyncIterator())
+            .init(storage: self.storage.makeAsyncIterator())
         }
     }
 }
@@ -98,7 +98,7 @@ extension HTTPClientResponse.Body {
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body.Storage: AsyncSequence {
     @usableFromInline typealias Element = ByteBuffer
-    
+
     @inlinable func makeAsyncIterator() -> AsyncIterator {
         switch self {
         case .transaction(let transaction):
@@ -130,27 +130,26 @@ extension HTTPClientResponse.Body.Storage.AsyncIterator: AsyncIteratorProtocol {
     }
 }
 
-
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body {
     init(_ body: TransactionBody) {
         self.init(.transaction(body.singleIteratorPrecondition))
     }
-    
+
     @usableFromInline init(_ storage: Storage) {
         self.storage = storage
     }
-    
+
     public init() {
         self = .stream(EmptyCollection<ByteBuffer>().async)
     }
-    
+
     @inlinable public static func stream<SequenceOfBytes>(
         _ sequenceOfBytes: SequenceOfBytes
     ) -> Self where SequenceOfBytes: AsyncSequence & Sendable, SequenceOfBytes.Element == ByteBuffer {
         self.init(.anyAsyncSequence(AnyAsyncSequence(sequenceOfBytes.singleIteratorPrecondition)))
     }
-    
+
     public static func bytes(_ byteBuffer: ByteBuffer) -> Self {
         .stream(CollectionOfOne(byteBuffer).async)
     }

@@ -21,17 +21,18 @@ struct AsyncLazySequence<Base: Sequence>: AsyncSequence {
         @inlinable init(iterator: Base.Iterator) {
             self.iterator = iterator
         }
+
         @inlinable mutating func next() async throws -> Base.Element? {
             self.iterator.next()
         }
     }
 
     @usableFromInline var base: Base
-    
+
     @inlinable init(base: Base) {
         self.base = base
     }
-    
+
     @inlinable func makeAsyncIterator() -> AsyncIterator {
         .init(iterator: self.base.makeIterator())
     }
@@ -49,5 +50,3 @@ extension Sequence {
         .init(base: self)
     }
 }
-
-

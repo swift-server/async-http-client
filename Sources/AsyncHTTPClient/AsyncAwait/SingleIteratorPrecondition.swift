@@ -23,17 +23,17 @@ import Atomics
     @inlinable init(base: Base) {
         self.base = base
     }
+
     @inlinable func makeAsyncIterator() -> Base.AsyncIterator {
         precondition(
             self.didCreateIterator.exchange(true, ordering: .relaxed) == false
         )
-        return base.makeAsyncIterator()
+        return self.base.makeAsyncIterator()
     }
 }
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension SingleIteratorPrecondition: @unchecked Sendable where Base: Sendable {}
-
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension AsyncSequence {
