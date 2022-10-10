@@ -366,6 +366,18 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
         return self.serverChannel.localAddress!
     }
 
+    var baseURL: String {
+        let scheme: String = {
+            switch mode {
+            case .http1_1, .refuse:
+                return "http"
+            case .http2:
+                return "https"
+            }
+        }()
+        return "\(scheme)://localhost:\(self.port)/"
+    }
+
     private let mode: Mode
     private let sslContext: NIOSSLContext?
     private var serverChannel: Channel!
@@ -1311,6 +1323,25 @@ class HTTPEchoHandler: ChannelInboundHandler {
             context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok, headers: requestHead.headers))), promise: nil)
         case .body(let bytes):
             context.writeAndFlush(self.wrapOutboundOut(.body(.byteBuffer(bytes))), promise: nil)
+        case .end:
+            context.writeAndFlush(self.wrapOutboundOut(.end(nil))).whenSuccess {
+                context.close(promise: nil)
+            }
+        }
+    }
+}
+
+final class HTTPEchoHeaders: ChannelInboundHandler {
+    typealias InboundIn = HTTPServerRequestPart
+    typealias OutboundOut = HTTPServerResponsePart
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        let request = self.unwrapInboundIn(data)
+        switch request {
+        case .head(let requestHead):
+            context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok, headers: requestHead.headers))), promise: nil)
+        case .body:
+            break
         case .end:
             context.writeAndFlush(self.wrapOutboundOut(.end(nil))).whenSuccess {
                 context.close(promise: nil)

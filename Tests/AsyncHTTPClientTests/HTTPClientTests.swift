@@ -2677,8 +2677,8 @@ class HTTPClientTests: XCTestCase {
         let delegate = TestDelegate()
 
         XCTAssertThrowsError(try httpClient.execute(request: request, delegate: delegate).wait()) {
-            XCTAssertEqual(.connectTimeout, $0 as? HTTPClientError)
-            XCTAssertEqual(.connectTimeout, delegate.error as? HTTPClientError)
+            XCTAssertEqualTypeAndValue($0, HTTPClientError.connectTimeout)
+            XCTAssertEqualTypeAndValue(delegate.error, HTTPClientError.connectTimeout)
         }
     }
 
@@ -3090,6 +3090,90 @@ class HTTPClientTests: XCTestCase {
 
         XCTAssertNoThrow(try future.wait())
         XCTAssertNil(try delegate.next().wait())
+    }
+
+    func testResponseAccumulatorMaxBodySizeLimitExceedingWithContentLength() throws {
+        let httpBin = HTTPBin(.http1_1(ssl: false, compress: false)) { _ in HTTPEchoHandler() }
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
+
+        let body = ByteBuffer(bytes: 0..<11)
+
+        var request = try Request(url: httpBin.baseURL)
+        request.body = .byteBuffer(body)
+        XCTAssertThrowsError(try self.defaultClient.execute(
+            request: request,
+            delegate: ResponseAccumulator(request: request, maxBodySize: 10)
+        ).wait()) { error in
+            XCTAssertTrue(error is ResponseAccumulator.ResponseTooBigError, "unexpected error \(error)")
+        }
+    }
+
+    func testResponseAccumulatorMaxBodySizeLimitNotExceedingWithContentLength() throws {
+        let httpBin = HTTPBin(.http1_1(ssl: false, compress: false)) { _ in HTTPEchoHandler() }
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
+
+        let body = ByteBuffer(bytes: 0..<10)
+
+        var request = try Request(url: httpBin.baseURL)
+        request.body = .byteBuffer(body)
+        let response = try self.defaultClient.execute(
+            request: request,
+            delegate: ResponseAccumulator(request: request, maxBodySize: 10)
+        ).wait()
+
+        XCTAssertEqual(response.body, body)
+    }
+
+    func testResponseAccumulatorMaxBodySizeLimitExceedingWithContentLengthButMethodIsHead() throws {
+        let httpBin = HTTPBin(.http1_1(ssl: false, compress: false)) { _ in HTTPEchoHeaders() }
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
+
+        let body = ByteBuffer(bytes: 0..<11)
+
+        var request = try Request(url: httpBin.baseURL, method: .HEAD)
+        request.body = .byteBuffer(body)
+        let response = try self.defaultClient.execute(
+            request: request,
+            delegate: ResponseAccumulator(request: request, maxBodySize: 10)
+        ).wait()
+
+        XCTAssertEqual(response.body ?? ByteBuffer(), ByteBuffer())
+    }
+
+    func testResponseAccumulatorMaxBodySizeLimitExceedingWithTransferEncodingChuncked() throws {
+        let httpBin = HTTPBin(.http1_1(ssl: false, compress: false)) { _ in HTTPEchoHandler() }
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
+
+        let body = ByteBuffer(bytes: 0..<11)
+
+        var request = try Request(url: httpBin.baseURL)
+        request.body = .stream { writer in
+            writer.write(.byteBuffer(body))
+        }
+        XCTAssertThrowsError(try self.defaultClient.execute(
+            request: request,
+            delegate: ResponseAccumulator(request: request, maxBodySize: 10)
+        ).wait()) { error in
+            XCTAssertTrue(error is ResponseAccumulator.ResponseTooBigError, "unexpected error \(error)")
+        }
+    }
+
+    func testResponseAccumulatorMaxBodySizeLimitNotExceedingWithTransferEncodingChuncked() throws {
+        let httpBin = HTTPBin(.http1_1(ssl: false, compress: false)) { _ in HTTPEchoHandler() }
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
+
+        let body = ByteBuffer(bytes: 0..<10)
+
+        var request = try Request(url: httpBin.baseURL)
+        request.body = .stream { writer in
+            writer.write(.byteBuffer(body))
+        }
+        let response = try self.defaultClient.execute(
+            request: request,
+            delegate: ResponseAccumulator(request: request, maxBodySize: 10)
+        ).wait()
+
+        XCTAssertEqual(response.body, body)
     }
 
     // In this test, we test that a request can continue to stream its body after the response head and end
