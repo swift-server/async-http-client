@@ -591,7 +591,6 @@ class HTTPClientInternalTests: XCTestCase {
     }
 }
 
-
 extension HTTPClient.Configuration {
     func enableFastFailureModeForTesting() -> Self {
         var copy = self

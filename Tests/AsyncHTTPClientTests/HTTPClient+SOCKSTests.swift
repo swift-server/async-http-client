@@ -77,7 +77,7 @@ class HTTPClientSOCKSTests: XCTestCase {
         let socksBin = try MockSOCKSServer(expectedURL: "/socks/test", expectedResponse: "it works!")
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: .init(
-                                        proxy: .socksServer(host: "localhost", port: socksBin.port)
+                                         proxy: .socksServer(host: "localhost", port: socksBin.port)
                                      ).enableFastFailureModeForTesting())
 
         defer {

@@ -499,7 +499,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
             let config = HTTPClient.Configuration()
                 .enableFastFailureModeForTesting()
-            
+
             let localClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: config)
             defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
             let request = HTTPClientRequest(url: "https://localhost:\(port)")

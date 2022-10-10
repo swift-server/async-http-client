@@ -77,12 +77,12 @@ extension HTTPClientTests {
             ("testWorksWhenServerClosesConnectionAfterReceivingRequest", testWorksWhenServerClosesConnectionAfterReceivingRequest),
             ("testSubsequentRequestsWorkWithServerSendingConnectionClose", testSubsequentRequestsWorkWithServerSendingConnectionClose),
             ("testSubsequentRequestsWorkWithServerAlternatingBetweenKeepAliveAndClose", testSubsequentRequestsWorkWithServerAlternatingBetweenKeepAliveAndClose),
-            
+
             ("testStressGetHttpsSSLError", testStressGetHttpsSSLError),
             ("testSelfSignedCertificateIsRejectedWithCorrectError", testSelfSignedCertificateIsRejectedWithCorrectError),
             ("testSelfSignedCertificateIsRejectedWithCorrectErrorIfRequestDeadlineIsExceeded", testSelfSignedCertificateIsRejectedWithCorrectErrorIfRequestDeadlineIsExceeded),
             ("testFailingConnectionIsReleased", testFailingConnectionIsReleased),
-            
+
             ("testStressGetClose", testStressGetClose),
             ("testManyConcurrentRequestsWork", testManyConcurrentRequestsWork),
             ("testRepeatedRequestsWorkWhenServerAlwaysCloses", testRepeatedRequestsWorkWhenServerAlwaysCloses),
@@ -103,7 +103,7 @@ extension HTTPClientTests {
             ("testUseExistingConnectionOnDifferentEL", testUseExistingConnectionOnDifferentEL),
             ("testWeRecoverFromServerThatClosesTheConnectionOnUs", testWeRecoverFromServerThatClosesTheConnectionOnUs),
             ("testPoolClosesIdleConnections", testPoolClosesIdleConnections),
-            
+
             ("testAvoidLeakingTLSHandshakeCompletionPromise", testAvoidLeakingTLSHandshakeCompletionPromise),
             ("testAsyncShutdown", testAsyncShutdown),
             ("testAsyncShutdownDefaultQueue", testAsyncShutdownDefaultQueue),
@@ -125,7 +125,7 @@ extension HTTPClientTests {
             ("testContentLengthTooLongFails", testContentLengthTooLongFails),
             ("testContentLengthTooShortFails", testContentLengthTooShortFails),
             ("testBodyUploadAfterEndFails", testBodyUploadAfterEndFails),
-            
+
             ("testDoubleError", testDoubleError),
             ("testSSLHandshakeErrorPropagation", testSSLHandshakeErrorPropagation),
             ("testSSLHandshakeErrorPropagationDelayedClose", testSSLHandshakeErrorPropagationDelayedClose),
@@ -144,7 +144,7 @@ extension HTTPClientTests {
             ("testCloseWhileBackpressureIsExertedIsFine", testCloseWhileBackpressureIsExertedIsFine),
             ("testErrorAfterCloseWhileBackpressureExerted", testErrorAfterCloseWhileBackpressureExerted),
             ("testRequestSpecificTLS", testRequestSpecificTLS),
-            
+
             ("testRequestWithHeaderTransferEncodingIdentityDoesNotFail", testRequestWithHeaderTransferEncodingIdentityDoesNotFail),
             ("testMassiveDownload", testMassiveDownload),
             ("testShutdownWithFutures", testShutdownWithFutures),
