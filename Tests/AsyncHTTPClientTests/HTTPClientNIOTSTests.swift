@@ -57,6 +57,7 @@ class HTTPClientNIOTSTests: XCTestCase {
         let httpBin = HTTPBin(.http1_1(ssl: true))
         var config = HTTPClient.Configuration()
         config.networkFrameworkWaitForConnectivity = false
+        config.connectionPool.retryConnectionEstablishment = false
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: config)
         defer {
@@ -85,6 +86,7 @@ class HTTPClientNIOTSTests: XCTestCase {
         let httpBin = HTTPBin(.http1_1(ssl: false))
         var config = HTTPClient.Configuration()
         config.networkFrameworkWaitForConnectivity = false
+        config.connectionPool.retryConnectionEstablishment = false
 
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: config)
@@ -140,6 +142,7 @@ class HTTPClientNIOTSTests: XCTestCase {
 
         var clientConfig = HTTPClient.Configuration(tlsConfiguration: tlsConfig)
         clientConfig.networkFrameworkWaitForConnectivity = false
+        clientConfig.connectionPool.retryConnectionEstablishment = false
         let httpClient = HTTPClient(
             eventLoopGroupProvider: .shared(self.clientGroup),
             configuration: clientConfig

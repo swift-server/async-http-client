@@ -18,6 +18,7 @@ import NIOHTTP2
 extension HTTPConnectionPool {
     struct HTTP2StateMachine {
         typealias Action = HTTPConnectionPool.StateMachine.Action
+        typealias RequestAction = HTTPConnectionPool.StateMachine.RequestAction
         typealias ConnectionMigrationAction = HTTPConnectionPool.StateMachine.ConnectionMigrationAction
         typealias EstablishedAction = HTTPConnectionPool.StateMachine.EstablishedAction
         typealias EstablishedConnectionAction = HTTPConnectionPool.StateMachine.EstablishedConnectionAction
@@ -33,9 +34,13 @@ extension HTTPConnectionPool {
         private let idGenerator: Connection.ID.Generator
 
         private(set) var lifecycleState: StateMachine.LifecycleState
+        /// The property was introduced to fail fast during testing.
+        /// Otherwise this should always be true and not turned off.
+        private let retryConnectionEstablishment: Bool
 
         init(
             idGenerator: Connection.ID.Generator,
+            retryConnectionEstablishment: Bool,
             lifecycleState: StateMachine.LifecycleState
         ) {
             self.idGenerator = idGenerator
@@ -43,6 +48,7 @@ extension HTTPConnectionPool {
 
             self.connections = HTTP2Connections(generator: idGenerator)
             self.lifecycleState = lifecycleState
+            self.retryConnectionEstablishment = retryConnectionEstablishment
         }
 
         mutating func migrateFromHTTP1(
@@ -398,8 +404,21 @@ extension HTTPConnectionPool {
         }
 
         mutating func failedToCreateNewConnection(_ error: Error, connectionID: Connection.ID) -> Action {
+            // TODO: switch over state https://github.com/swift-server/async-http-client/issues/638
             self.failedConsecutiveConnectionAttempts += 1
             self.lastConnectFailure = error
+
+            guard self.retryConnectionEstablishment else {
+                guard let (index, _) = self.connections.failConnection(connectionID) else {
+                    preconditionFailure("A connection attempt failed, that the state machine knows nothing about. Somewhere state was lost.")
+                }
+                self.connections.removeConnection(at: index)
+
+                return .init(
+                    request: self.failAllRequests(reason: error),
+                    connection: .none
+                )
+            }
 
             let eventLoop = self.connections.backoffNextConnectionAttempt(connectionID)
             let backoff = calculateBackoff(failedAttempt: self.failedConsecutiveConnectionAttempts)
@@ -408,6 +427,7 @@ extension HTTPConnectionPool {
 
         mutating func waitingForConnectivity(_ error: Error, connectionID: Connection.ID) -> Action {
             self.lastConnectFailure = error
+
             return .init(request: .none, connection: .none)
         }
 
@@ -419,6 +439,14 @@ extension HTTPConnectionPool {
                 preconditionFailure("Backing off a connection that is unknown to us?")
             }
             return self.nextActionForFailedConnection(at: index, on: context.eventLoop)
+        }
+
+        private mutating func failAllRequests(reason error: Error) -> RequestAction {
+            let allRequests = self.requests.removeAll()
+            guard !allRequests.isEmpty else {
+                return .none
+            }
+            return .failRequestsAndCancelTimeouts(allRequests, error)
         }
 
         mutating func timeoutRequest(_ requestID: Request.ID) -> Action {

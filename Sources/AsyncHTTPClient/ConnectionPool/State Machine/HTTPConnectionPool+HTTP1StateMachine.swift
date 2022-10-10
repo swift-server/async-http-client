@@ -17,6 +17,7 @@ import NIOCore
 extension HTTPConnectionPool {
     struct HTTP1StateMachine {
         typealias Action = HTTPConnectionPool.StateMachine.Action
+        typealias RequestAction = HTTPConnectionPool.StateMachine.RequestAction
         typealias ConnectionMigrationAction = HTTPConnectionPool.StateMachine.ConnectionMigrationAction
         typealias EstablishedAction = HTTPConnectionPool.StateMachine.EstablishedAction
         typealias EstablishedConnectionAction = HTTPConnectionPool.StateMachine.EstablishedConnectionAction
@@ -29,16 +30,21 @@ extension HTTPConnectionPool {
 
         private(set) var requests: RequestQueue
         private(set) var lifecycleState: StateMachine.LifecycleState
+        /// The property was introduced to fail fast during testing.
+        /// Otherwise this should always be true and not turned off.
+        private let retryConnectionEstablishment: Bool
 
         init(
             idGenerator: Connection.ID.Generator,
             maximumConcurrentConnections: Int,
+            retryConnectionEstablishment: Bool,
             lifecycleState: StateMachine.LifecycleState
         ) {
             self.connections = HTTP1Connections(
                 maximumConcurrentConnections: maximumConcurrentConnections,
                 generator: idGenerator
             )
+            self.retryConnectionEstablishment = retryConnectionEstablishment
 
             self.requests = RequestQueue()
             self.lifecycleState = lifecycleState
@@ -219,6 +225,17 @@ extension HTTPConnectionPool {
 
             switch self.lifecycleState {
             case .running:
+                guard self.retryConnectionEstablishment else {
+                    guard let (index, _) = self.connections.failConnection(connectionID) else {
+                        preconditionFailure("A connection attempt failed, that the state machine knows nothing about. Somewhere state was lost.")
+                    }
+                    self.connections.removeConnection(at: index)
+
+                    return .init(
+                        request: self.failAllRequests(reason: error),
+                        connection: .none
+                    )
+                }
                 // We don't care how many waiting requests we have at this point, we will schedule a
                 // retry. More tasks, may appear until the backoff has completed. The final
                 // decision about the retry will be made in `connectionCreationBackoffDone(_:)`
@@ -521,6 +538,14 @@ extension HTTPConnectionPool {
             }
             self.connections.removeConnection(at: index)
             return .none
+        }
+
+        private mutating func failAllRequests(reason error: Error) -> RequestAction {
+            let allRequests = self.requests.removeAll()
+            guard !allRequests.isEmpty else {
+                return .none
+            }
+            return .failRequestsAndCancelTimeouts(allRequests, error)
         }
 
         // MARK: HTTP2
