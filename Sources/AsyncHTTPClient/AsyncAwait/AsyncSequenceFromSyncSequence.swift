@@ -2,7 +2,7 @@
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2021 Apple Inc. and the AsyncHTTPClient project authors
+// Copyright (c) 2022 Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -44,7 +44,7 @@ extension AsyncLazySequence.AsyncIterator: Sendable where Base.Iterator: Sendabl
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension Sequence {
-    /// Turns `self` into an `AsyncSequence` by wending each element of `self` asynchronously.
+    /// Turns `self` into an `AsyncSequence` by vending each element of `self` asynchronously.
     @inlinable var async: AsyncLazySequence<Self> {
         .init(base: self)
     }

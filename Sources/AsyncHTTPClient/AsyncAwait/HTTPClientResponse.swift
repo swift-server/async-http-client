@@ -45,11 +45,16 @@ public struct HTTPClientResponse: Sendable {
         self.body = Body(TransactionBody(bag))
     }
     
-    @inlinable public init(){
-        self.version = .http1_1
-        self.status = .ok
-        self.headers = [:]
-        self.body = Body()
+    @inlinable public init(
+        version: HTTPVersion = .http1_1,
+        status: HTTPResponseStatus = .ok,
+        headers: HTTPHeaders = [:],
+        body: Body = Body()
+    ) {
+        self.version = version
+        self.status = status
+        self.headers = headers
+        self.body = body
     }
 }
 
@@ -62,7 +67,6 @@ extension HTTPClientResponse {
     /// are entirely synthetic and have no semantic meaning.
     public struct Body: AsyncSequence, Sendable {
         public typealias Element = ByteBuffer
-        @usableFromInline typealias Storage = Either<TransactionBody, AnyAsyncSequence<ByteBuffer>>
         public struct AsyncIterator: AsyncIteratorProtocol {
             @usableFromInline var storage: Storage.AsyncIterator
             
@@ -85,22 +89,70 @@ extension HTTPClientResponse {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body {
-    @inlinable init(_ body: TransactionBody) {
-        self.storage = .a(body)
+    @usableFromInline enum Storage: Sendable {
+        case transaction(SingleIteratorPrecondition<TransactionBody>)
+        case anyAsyncSequence(AnyAsyncSequence<ByteBuffer>)
+    }
+}
+
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+extension HTTPClientResponse.Body.Storage: AsyncSequence {
+    @usableFromInline typealias Element = ByteBuffer
+    
+    @inlinable func makeAsyncIterator() -> AsyncIterator {
+        switch self {
+        case .transaction(let transaction):
+            return .transaction(transaction.makeAsyncIterator())
+        case .anyAsyncSequence(let anyAsyncSequence):
+            return .anyAsyncSequence(anyAsyncSequence.makeAsyncIterator())
+        }
+    }
+}
+
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+extension HTTPClientResponse.Body.Storage {
+    @usableFromInline enum AsyncIterator {
+        case transaction(SingleIteratorPrecondition<TransactionBody>.AsyncIterator)
+        case anyAsyncSequence(AnyAsyncSequence<ByteBuffer>.AsyncIterator)
+    }
+}
+
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+extension HTTPClientResponse.Body.Storage.AsyncIterator: AsyncIteratorProtocol {
+    @inlinable mutating func next() async throws -> ByteBuffer? {
+        switch self {
+        case .transaction(let iterator):
+            return try await iterator.next()
+        case .anyAsyncSequence(var iterator):
+            defer { self = .anyAsyncSequence(iterator) }
+            return try await iterator.next()
+        }
+    }
+}
+
+
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+extension HTTPClientResponse.Body {
+    init(_ body: TransactionBody) {
+        self.init(.transaction(body.singleIteratorPrecondition))
     }
     
-    @inlinable public init<SequenceOfBytes>(
-        _ sequenceOfBytes: SequenceOfBytes
-    ) where SequenceOfBytes: AsyncSequence & Sendable, SequenceOfBytes.Element == ByteBuffer {
-        self.storage = .b(AnyAsyncSequence(sequenceOfBytes))
+    @usableFromInline init(_ storage: Storage) {
+        self.storage = storage
     }
     
     public init() {
-        self.init(EmptyCollection().async)
+        self = .stream(EmptyCollection<ByteBuffer>().async)
     }
     
-    public init(_ byteBuffer: ByteBuffer) {
-        self.init(CollectionOfOne(byteBuffer).async)
+    @inlinable public static func stream<SequenceOfBytes>(
+        _ sequenceOfBytes: SequenceOfBytes
+    ) -> Self where SequenceOfBytes: AsyncSequence & Sendable, SequenceOfBytes.Element == ByteBuffer {
+        self.init(.anyAsyncSequence(AnyAsyncSequence(sequenceOfBytes.singleIteratorPrecondition)))
+    }
+    
+    public static func bytes(_ byteBuffer: ByteBuffer) -> Self {
+        .stream(CollectionOfOne(byteBuffer).async)
     }
 }
 
