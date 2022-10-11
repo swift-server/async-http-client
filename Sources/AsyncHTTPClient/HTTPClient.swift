@@ -875,7 +875,7 @@ public class HTTPClient {
     }
 
     /// Specifies decompression settings.
-    public enum Decompression: NIOSendable {
+    public enum Decompression: Sendable {
         /// Decompression is disabled.
         case disabled
         /// Decompression is enabled.
@@ -911,7 +911,7 @@ extension HTTPClient: @unchecked Sendable {}
 
 extension HTTPClient.Configuration {
     /// Timeout configuration.
-    public struct Timeout: NIOSendable {
+    public struct Timeout: Sendable {
         /// Specifies connect timeout. If no connect timeout is given, a default 30 seconds timeout will applied.
         public var connect: TimeAmount?
         /// Specifies read timeout.
@@ -934,7 +934,7 @@ extension HTTPClient.Configuration {
     }
 
     /// Specifies redirect processing settings.
-    public struct RedirectConfiguration: NIOSendable {
+    public struct RedirectConfiguration: Sendable {
         enum Mode {
             /// Redirects are not followed.
             case disallow
@@ -966,7 +966,7 @@ extension HTTPClient.Configuration {
     }
 
     /// Connection pool configuration.
-    public struct ConnectionPool: Hashable, NIOSendable {
+    public struct ConnectionPool: Hashable, Sendable {
         /// Specifies amount of time connections are kept idle in the pool. After this time has passed without a new
         /// request the connections are closed.
         public var idleTimeout: TimeAmount
@@ -995,7 +995,7 @@ extension HTTPClient.Configuration {
         }
     }
 
-    public struct HTTPVersion: NIOSendable, Hashable {
+    public struct HTTPVersion: Sendable, Hashable {
         internal enum Configuration {
             case http1Only
             case automatic
