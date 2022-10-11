@@ -20,7 +20,7 @@ import NIOHTTP1
 import NIOSSL
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-final class Transaction: @unchecked Sendable {
+@usableFromInline final class Transaction: @unchecked Sendable {
     let logger: Logger
 
     let request: HTTPClientRequest.Prepared
@@ -334,7 +334,7 @@ extension Transaction {
         }
     }
 
-    func nextResponsePart(streamID: HTTPClientResponse.Body.IteratorStream.ID) async throws -> ByteBuffer? {
+    func nextResponsePart(streamID: TransactionBody.AsyncIterator.ID) async throws -> ByteBuffer? {
         try await withCheckedThrowingContinuation { continuation in
             let action = self.stateLock.withLock {
                 self.state.consumeNextResponsePart(streamID: streamID, continuation: continuation)
@@ -355,7 +355,7 @@ extension Transaction {
         }
     }
 
-    func responseBodyIteratorDeinited(streamID: HTTPClientResponse.Body.IteratorStream.ID) {
+    func responseBodyIteratorDeinited(streamID: TransactionBody.AsyncIterator.ID) {
         let action = self.stateLock.withLock {
             self.state.responseBodyIteratorDeinited(streamID: streamID)
         }

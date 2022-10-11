@@ -408,7 +408,7 @@ class HTTPClientRequestTests: XCTestCase {
             let asyncSequence = ByteBuffer(string: "post body")
                 .readableBytesView
                 .chunked(maxChunkSize: 2)
-                .asAsyncSequence()
+                .async
                 .map { ByteBuffer($0) }
 
             request.body = .stream(asyncSequence, length: .unknown)
@@ -449,7 +449,7 @@ class HTTPClientRequestTests: XCTestCase {
             let asyncSequence = ByteBuffer(string: "post body")
                 .readableBytesView
                 .chunked(maxChunkSize: 2)
-                .asAsyncSequence()
+                .async
                 .map { ByteBuffer($0) }
 
             request.body = .stream(asyncSequence, length: .known(9))
@@ -548,31 +548,6 @@ extension Collection {
     /// - Parameter maxChunkSize: size of each chunk except the last one which can be smaller if not enough elements are remaining.
     func chunked(maxChunkSize: Int) -> ChunkedSequence<Self> {
         .init(wrapped: self, maxChunkSize: maxChunkSize)
-    }
-}
-
-@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-struct AsyncSequenceFromSyncSequence<Wrapped: Sequence & Sendable>: AsyncSequence, Sendable {
-    typealias Element = Wrapped.Element
-    struct AsyncIterator: AsyncIteratorProtocol {
-        fileprivate var iterator: Wrapped.Iterator
-        mutating func next() async throws -> Wrapped.Element? {
-            self.iterator.next()
-        }
-    }
-
-    fileprivate let wrapped: Wrapped
-
-    func makeAsyncIterator() -> AsyncIterator {
-        .init(iterator: self.wrapped.makeIterator())
-    }
-}
-
-@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-extension Sequence where Self: Sendable {
-    /// Turns `self` into an `AsyncSequence` by wending each element of `self` asynchronously.
-    func asAsyncSequence() -> AsyncSequenceFromSyncSequence<Self> {
-        .init(wrapped: self)
     }
 }
 

@@ -216,7 +216,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 ByteBuffer(string: "1"),
                 ByteBuffer(string: "2"),
                 ByteBuffer(string: "34"),
-            ].asAsyncSequence(), length: .unknown)
+            ].async, length: .unknown)
 
             guard let response = await XCTAssertNoThrowWithResult(
                 try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
@@ -241,7 +241,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
             var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/")
             request.method = .POST
-            request.body = .stream("1234".utf8.asAsyncSequence(), length: .unknown)
+            request.body = .stream("1234".utf8.async, length: .unknown)
 
             guard let response = await XCTAssertNoThrowWithResult(
                 try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
@@ -614,7 +614,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 ByteBuffer(string: "1"),
                 ByteBuffer(string: "2"),
                 ByteBuffer(string: "34"),
-            ].asAsyncSequence(), length: .unknown)
+            ].async, length: .unknown)
 
             guard let response1 = await XCTAssertNoThrowWithResult(
                 try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)

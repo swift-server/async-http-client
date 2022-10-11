@@ -30,7 +30,7 @@ extension Transaction {
             case queued(CheckedContinuation<HTTPClientResponse, Error>, HTTPRequestScheduler)
             case deadlineExceededWhileQueued(CheckedContinuation<HTTPClientResponse, Error>)
             case executing(ExecutionContext, RequestStreamState, ResponseStreamState)
-            case finished(error: Error?, HTTPClientResponse.Body.IteratorStream.ID?)
+            case finished(error: Error?, TransactionBody.AsyncIterator.ID?)
         }
 
         fileprivate enum RequestStreamState {
@@ -52,9 +52,9 @@ extension Transaction {
             // We are waiting for the user to create a response body iterator and to call next on
             // it for the first time.
             case waitingForResponseIterator(CircularBuffer<ByteBuffer>, next: Next)
-            case buffering(HTTPClientResponse.Body.IteratorStream.ID, CircularBuffer<ByteBuffer>, next: Next)
-            case waitingForRemote(HTTPClientResponse.Body.IteratorStream.ID, CheckedContinuation<ByteBuffer?, Error>)
-            case finished(HTTPClientResponse.Body.IteratorStream.ID, CheckedContinuation<ByteBuffer?, Error>)
+            case buffering(TransactionBody.AsyncIterator.ID, CircularBuffer<ByteBuffer>, next: Next)
+            case waitingForRemote(TransactionBody.AsyncIterator.ID, CheckedContinuation<ByteBuffer?, Error>)
+            case finished(TransactionBody.AsyncIterator.ID, CheckedContinuation<ByteBuffer?, Error>)
         }
 
         private var state: State
@@ -510,7 +510,7 @@ extension Transaction {
             }
         }
 
-        mutating func responseBodyIteratorDeinited(streamID: HTTPClientResponse.Body.IteratorStream.ID) -> FailAction {
+        mutating func responseBodyIteratorDeinited(streamID: TransactionBody.AsyncIterator.ID) -> FailAction {
             switch self.state {
             case .initialized, .queued, .deadlineExceededWhileQueued, .executing(_, _, .waitingForResponseHead):
                 preconditionFailure("Got notice about a deinited response body iterator, before we even received a response. Invalid state: \(self.state)")
@@ -536,7 +536,7 @@ extension Transaction {
         }
 
         mutating func consumeNextResponsePart(
-            streamID: HTTPClientResponse.Body.IteratorStream.ID,
+            streamID: TransactionBody.AsyncIterator.ID,
             continuation: CheckedContinuation<ByteBuffer?, Error>
         ) -> ConsumeAction {
             switch self.state {
@@ -639,8 +639,8 @@ extension Transaction {
         }
 
         private func verifyStreamIDIsEqual(
-            registered: HTTPClientResponse.Body.IteratorStream.ID,
-            this: HTTPClientResponse.Body.IteratorStream.ID,
+            registered: TransactionBody.AsyncIterator.ID,
+            this: TransactionBody.AsyncIterator.ID,
             file: StaticString = #file,
             line: UInt = #line
         ) {
