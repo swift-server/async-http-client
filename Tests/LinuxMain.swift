@@ -30,6 +30,7 @@ struct LinuxMain {
     static func main() {
         XCTMain([
             testCase(AsyncAwaitEndToEndTests.allTests),
+            testCase(ConnectionPoolSizeConfigValueIsRespectedTests.allTests),
             testCase(HTTP1ClientChannelHandlerTests.allTests),
             testCase(HTTP1ConnectionStateMachineTests.allTests),
             testCase(HTTP1ConnectionTests.allTests),
@@ -56,11 +57,16 @@ struct LinuxMain {
             testCase(HTTPConnectionPool_RequestQueueTests.allTests),
             testCase(HTTPRequestStateMachineTests.allTests),
             testCase(LRUCacheTests.allTests),
+            testCase(NoBytesSentOverBodyLimitTests.allTests),
+            testCase(RacePoolIdleConnectionsAndGetTests.allTests),
             testCase(RequestBagTests.allTests),
             testCase(RequestValidationTests.allTests),
+            testCase(ResponseDelayGetTests.allTests),
             testCase(SOCKSEventsHandlerTests.allTests),
             testCase(SSLContextCacheTests.allTests),
+            testCase(StressGetHttpsTests.allTests),
             testCase(TLSEventsHandlerTests.allTests),
+            testCase(TestIdleTimeoutNoReuse.allTests),
             testCase(TransactionTests.allTests),
             testCase(Transaction_StateMachineTests.allTests),
         ])

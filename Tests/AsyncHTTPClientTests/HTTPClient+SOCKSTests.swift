@@ -76,7 +76,9 @@ class HTTPClientSOCKSTests: XCTestCase {
     func testProxySOCKS() throws {
         let socksBin = try MockSOCKSServer(expectedURL: "/socks/test", expectedResponse: "it works!")
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(proxy: .socksServer(host: "localhost", port: socksBin.port)))
+                                     configuration: .init(
+                                         proxy: .socksServer(host: "localhost", port: socksBin.port)
+                                     ).enableFastFailureModeForTesting())
 
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
@@ -90,8 +92,8 @@ class HTTPClientSOCKSTests: XCTestCase {
     }
 
     func testProxySOCKSBogusAddress() throws {
-        var config = HTTPClient.Configuration(proxy: .socksServer(host: "127.0.."))
-        config.networkFrameworkWaitForConnectivity = false
+        let config = HTTPClient.Configuration(proxy: .socksServer(host: "127.0.."))
+            .enableFastFailureModeForTesting()
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: config)
 
@@ -104,8 +106,8 @@ class HTTPClientSOCKSTests: XCTestCase {
     // there is no socks server, so we should fail
     func testProxySOCKSFailureNoServer() throws {
         let localHTTPBin = HTTPBin()
-        var config = HTTPClient.Configuration(proxy: .socksServer(host: "localhost", port: localHTTPBin.port))
-        config.networkFrameworkWaitForConnectivity = false
+        let config = HTTPClient.Configuration(proxy: .socksServer(host: "localhost", port: localHTTPBin.port))
+            .enableFastFailureModeForTesting()
 
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: config)
@@ -118,8 +120,8 @@ class HTTPClientSOCKSTests: XCTestCase {
 
     // speak to a server that doesn't speak SOCKS
     func testProxySOCKSFailureInvalidServer() throws {
-        var config = HTTPClient.Configuration(proxy: .socksServer(host: "localhost"))
-        config.networkFrameworkWaitForConnectivity = false
+        let config = HTTPClient.Configuration(proxy: .socksServer(host: "localhost"))
+            .enableFastFailureModeForTesting()
 
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: config)
@@ -132,8 +134,8 @@ class HTTPClientSOCKSTests: XCTestCase {
     // test a handshake failure with a misbehaving server
     func testProxySOCKSMisbehavingServer() throws {
         let socksBin = try MockSOCKSServer(expectedURL: "/socks/test", expectedResponse: "it works!", misbehave: true)
-        var config = HTTPClient.Configuration(proxy: .socksServer(host: "localhost", port: socksBin.port))
-        config.networkFrameworkWaitForConnectivity = false
+        let config = HTTPClient.Configuration(proxy: .socksServer(host: "localhost", port: socksBin.port))
+            .enableFastFailureModeForTesting()
 
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: config)

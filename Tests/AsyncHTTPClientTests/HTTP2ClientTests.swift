@@ -287,7 +287,7 @@ class HTTP2ClientTests: XCTestCase {
         )
 
         XCTAssertThrowsError(try task.futureResult.timeout(after: .seconds(2)).wait()) {
-            XCTAssertEqual($0 as? HTTPClientError, .cancelled)
+            XCTAssertEqualTypeAndValue($0, HTTPClientError.cancelled)
         }
     }
 

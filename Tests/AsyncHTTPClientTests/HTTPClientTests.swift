@@ -29,60 +29,7 @@ import NIOTestUtils
 import NIOTransportServices
 import XCTest
 
-class HTTPClientTests: XCTestCase {
-    typealias Request = HTTPClient.Request
-
-    var clientGroup: EventLoopGroup!
-    var serverGroup: EventLoopGroup!
-    var defaultHTTPBin: HTTPBin<HTTPBinHandler>!
-    var defaultClient: HTTPClient!
-    var backgroundLogStore: CollectEverythingLogHandler.LogStore!
-
-    var defaultHTTPBinURLPrefix: String {
-        return "http://localhost:\(self.defaultHTTPBin.port)/"
-    }
-
-    override func setUp() {
-        XCTAssertNil(self.clientGroup)
-        XCTAssertNil(self.serverGroup)
-        XCTAssertNil(self.defaultHTTPBin)
-        XCTAssertNil(self.defaultClient)
-        XCTAssertNil(self.backgroundLogStore)
-
-        self.clientGroup = getDefaultEventLoopGroup(numberOfThreads: 1)
-        self.serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-        self.defaultHTTPBin = HTTPBin()
-        self.backgroundLogStore = CollectEverythingLogHandler.LogStore()
-        var backgroundLogger = Logger(label: "\(#function)", factory: { _ in
-            CollectEverythingLogHandler(logStore: self.backgroundLogStore!)
-        })
-        backgroundLogger.logLevel = .trace
-        self.defaultClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                        backgroundActivityLogger: backgroundLogger)
-    }
-
-    override func tearDown() {
-        if let defaultClient = self.defaultClient {
-            XCTAssertNoThrow(try defaultClient.syncShutdown())
-            self.defaultClient = nil
-        }
-
-        XCTAssertNotNil(self.defaultHTTPBin)
-        XCTAssertNoThrow(try self.defaultHTTPBin.shutdown())
-        self.defaultHTTPBin = nil
-
-        XCTAssertNotNil(self.clientGroup)
-        XCTAssertNoThrow(try self.clientGroup.syncShutdownGracefully())
-        self.clientGroup = nil
-
-        XCTAssertNotNil(self.serverGroup)
-        XCTAssertNoThrow(try self.serverGroup.syncShutdownGracefully())
-        self.serverGroup = nil
-
-        XCTAssertNotNil(self.backgroundLogStore)
-        self.backgroundLogStore = nil
-    }
-
+final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
     func testRequestURI() throws {
         let request1 = try Request(url: "https://someserver.com:8888/some/path?foo=bar")
         XCTAssertEqual(request1.url.host, "someserver.com")
@@ -781,11 +728,19 @@ class HTTPClientTests: XCTestCase {
 
     func testProxyPlaintextWithIncorrectlyAuthorization() throws {
         let localHTTPBin = HTTPBin(proxy: .simulate(authorization: "Basic YWxhZGRpbjpvcGVuc2VzYW1l"))
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(proxy: .server(host: "localhost",
-                                                                         port: localHTTPBin.port,
-                                                                         authorization: .basic(username: "aladdin",
-                                                                                               password: "opensesamefoo"))))
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: .init(
+                proxy: .server(
+                    host: "localhost",
+                    port: localHTTPBin.port,
+                    authorization: .basic(
+                        username: "aladdin",
+                        password: "opensesamefoo"
+                    )
+                )
+            ).enableFastFailureModeForTesting()
+        )
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
             XCTAssertNoThrow(try localHTTPBin.shutdown())
@@ -1208,31 +1163,9 @@ class HTTPClientTests: XCTestCase {
         }
     }
 
-    func testStressGetHttps() throws {
-        let localHTTPBin = HTTPBin(.http1_1(ssl: true))
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
-        defer {
-            XCTAssertNoThrow(try localClient.syncShutdown())
-            XCTAssertNoThrow(try localHTTPBin.shutdown())
-        }
-
-        let eventLoop = localClient.eventLoopGroup.next()
-        let requestCount = 200
-        var futureResults = [EventLoopFuture<HTTPClient.Response>]()
-        for _ in 1...requestCount {
-            let req = try HTTPClient.Request(url: "https://localhost:\(localHTTPBin.port)/get", method: .GET, headers: ["X-internal-delay": "100"])
-            futureResults.append(localClient.execute(request: req))
-        }
-        XCTAssertNoThrow(try EventLoopFuture<HTTPClient.Response>.andAllSucceed(futureResults, on: eventLoop).wait())
-    }
-
     func testStressGetHttpsSSLError() throws {
-        var config = HTTPClient.Configuration()
-        config.networkFrameworkWaitForConnectivity = false
-
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: config)
+                                     configuration: HTTPClient.Configuration().enableFastFailureModeForTesting())
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
         }
@@ -1292,8 +1225,8 @@ class HTTPClientTests: XCTestCase {
         defer { XCTAssertNoThrow(try serverChannel.close().wait()) }
         let port = serverChannel.localAddress!.port!
 
-        var config = HTTPClient.Configuration()
-        config.timeout.connect = .seconds(2)
+        let config = HTTPClient.Configuration().enableFastFailureModeForTesting()
+
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: config)
         defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
         XCTAssertThrowsError(try localClient.get(url: "https://localhost:\(port)").wait()) { error in
@@ -1332,8 +1265,8 @@ class HTTPClientTests: XCTestCase {
         defer { XCTAssertNoThrow(try serverChannel.close().wait()) }
         let port = serverChannel.localAddress!.port!
 
-        var config = HTTPClient.Configuration()
-        config.timeout.connect = .seconds(3)
+        let config = HTTPClient.Configuration().enableFastFailureModeForTesting()
+
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: config)
         defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
 
@@ -1370,25 +1303,6 @@ class HTTPClientTests: XCTestCase {
                 return
             }
         }
-    }
-
-    func testResponseDelayGet() throws {
-        let req = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get",
-                                         method: .GET,
-                                         headers: ["X-internal-delay": "2000"],
-                                         body: nil)
-        let start = NIODeadline.now()
-        let response = try self.defaultClient.execute(request: req).wait()
-        XCTAssertGreaterThanOrEqual(.now() - start, .milliseconds(1_900 /* 1.9 seconds */ ))
-        XCTAssertEqual(response.status, .ok)
-    }
-
-    func testIdleTimeoutNoReuse() throws {
-        var req = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get", method: .GET)
-        XCTAssertNoThrow(try self.defaultClient.execute(request: req, deadline: .now() + .seconds(2)).wait())
-        req.headers.add(name: "X-internal-delay", value: "2500")
-        try self.defaultClient.eventLoopGroup.next().scheduleTask(in: .milliseconds(250)) {}.futureResult.wait()
-        XCTAssertNoThrow(try self.defaultClient.execute(request: req).timeout(after: .seconds(10)).wait())
     }
 
     func testStressGetClose() throws {
@@ -1922,18 +1836,6 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNoThrow(try localClient.get(url: self.defaultHTTPBinURLPrefix + "get").wait())
         Thread.sleep(forTimeInterval: 0.2)
         XCTAssertEqual(self.defaultHTTPBin.activeConnections, 0)
-    }
-
-    func testRacePoolIdleConnectionsAndGet() {
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(connectionPool: .init(idleTimeout: .milliseconds(10))))
-        defer {
-            XCTAssertNoThrow(try localClient.syncShutdown())
-        }
-        for _ in 1...500 {
-            XCTAssertNoThrow(try localClient.get(url: self.defaultHTTPBinURLPrefix + "get").wait())
-            Thread.sleep(forTimeInterval: 0.01 + .random(in: -0.05...0.05))
-        }
     }
 
     func testAvoidLeakingTLSHandshakeCompletionPromise() {
@@ -2818,54 +2720,6 @@ class HTTPClientTests: XCTestCase {
         XCTAssertNoThrow(try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "get").wait())
     }
 
-    func testNoBytesSentOverBodyLimit() throws {
-        let server = NIOHTTP1TestServer(group: self.serverGroup)
-        defer {
-            XCTAssertNoThrow(try server.stop())
-        }
-
-        let tooLong = "XBAD BAD BAD NOT HTTP/1.1\r\n\r\n"
-
-        let request = try Request(
-            url: "http://localhost:\(server.serverPort)",
-            body: .stream(length: 1) { streamWriter in
-                streamWriter.write(.byteBuffer(ByteBuffer(string: tooLong)))
-            }
-        )
-
-        let future = self.defaultClient.execute(request: request)
-
-        // Okay, what happens here needs an explanation:
-        //
-        // In the request state machine, we should start the request, which will lead to an
-        // invocation of `context.write(HTTPRequestHead)`. Since we will receive a streamed request
-        // body a `context.flush()` will be issued. Further the request stream will be started.
-        // Since the request stream immediately produces to much data, the request will be failed
-        // and the connection will be closed.
-        //
-        // Even though a flush was issued after the request head, there is no guarantee that the
-        // request head was written to the network. For this reason we must accept not receiving a
-        // request and receiving a request head.
-
-        do {
-            _ = try server.receiveHead()
-
-            // A request head was sent. We expect the request now to fail with a parsing error,
-            // since the client ended the connection to early (from the server's point of view.)
-            XCTAssertThrowsError(try server.readInbound()) {
-                XCTAssertEqual($0 as? HTTPParserError, HTTPParserError.invalidEOFState)
-            }
-        } catch {
-            // TBD: We sadly can't verify the error type, since it is private in `NIOTestUtils`:
-            //      NIOTestUtils.BlockingQueue<Element>.TimeoutError
-        }
-
-        // request must always be failed with this error
-        XCTAssertThrowsError(try future.wait()) {
-            XCTAssertEqual($0 as? HTTPClientError, .bodyLengthMismatch)
-        }
-    }
-
     func testDoubleError() throws {
         // This is needed to that connection pool will not get into closed state when we release
         // second connection.
@@ -3474,49 +3328,6 @@ class HTTPClientTests: XCTestCase {
         XCTAssertEqual(thirdResponse.status, .ok)
         XCTAssertEqual(firstConnectionNumber, secondConnectionNumber, "Identical TLS configurations did not use the same connection")
         XCTAssertNotEqual(thirdConnectionNumber, firstConnectionNumber, "Different TLS configurations did not use different connections.")
-    }
-
-    func testConnectionPoolSizeConfigValueIsRespected() {
-        let numberOfRequestsPerThread = 1000
-        let numberOfParallelWorkers = 16
-        let poolSize = 12
-
-        let httpBin = HTTPBin()
-        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
-
-        let group = MultiThreadedEventLoopGroup(numberOfThreads: 4)
-        defer { XCTAssertNoThrow(try group.syncShutdownGracefully()) }
-
-        let configuration = HTTPClient.Configuration(
-            connectionPool: .init(
-                idleTimeout: .seconds(30),
-                concurrentHTTP1ConnectionsPerHostSoftLimit: poolSize
-            )
-        )
-        let client = HTTPClient(eventLoopGroupProvider: .shared(group), configuration: configuration)
-        defer { XCTAssertNoThrow(try client.syncShutdown()) }
-
-        let g = DispatchGroup()
-        for workerID in 0..<numberOfParallelWorkers {
-            DispatchQueue(label: "\(#file):\(#line):worker-\(workerID)").async(group: g) {
-                func makeRequest() {
-                    let url = "http://127.0.0.1:\(httpBin.port)"
-                    XCTAssertNoThrow(try client.get(url: url).wait())
-                }
-                for _ in 0..<numberOfRequestsPerThread {
-                    makeRequest()
-                }
-            }
-        }
-        let timeout = DispatchTime.now() + .seconds(60)
-        switch g.wait(timeout: timeout) {
-        case .success:
-            break
-        case .timedOut:
-            XCTFail("Timed out")
-        }
-
-        XCTAssertEqual(httpBin.createdConnections, poolSize)
     }
 
     func testRequestWithHeaderTransferEncodingIdentityDoesNotFail() {
