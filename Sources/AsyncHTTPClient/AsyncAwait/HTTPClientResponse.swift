@@ -90,7 +90,7 @@ extension HTTPClientResponse {
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body {
     @usableFromInline enum Storage: Sendable {
-        case transaction(SingleIteratorPrecondition<TransactionBody>)
+        case transaction(TransactionBody)
         case anyAsyncSequence(AnyAsyncSequence<ByteBuffer>)
     }
 }
@@ -112,7 +112,7 @@ extension HTTPClientResponse.Body.Storage: AsyncSequence {
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body.Storage {
     @usableFromInline enum AsyncIterator {
-        case transaction(SingleIteratorPrecondition<TransactionBody>.AsyncIterator)
+        case transaction(TransactionBody.AsyncIterator)
         case anyAsyncSequence(AnyAsyncSequence<ByteBuffer>.AsyncIterator)
     }
 }
@@ -133,7 +133,7 @@ extension HTTPClientResponse.Body.Storage.AsyncIterator: AsyncIteratorProtocol {
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body {
     init(_ body: TransactionBody) {
-        self.init(.transaction(body.singleIteratorPrecondition))
+        self.init(.transaction(body))
     }
 
     @usableFromInline init(_ storage: Storage) {
