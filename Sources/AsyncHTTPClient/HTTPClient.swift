@@ -904,10 +904,8 @@ extension HTTPClient.EventLoopGroupProvider: Sendable {}
 extension HTTPClient.EventLoopPreference: Sendable {}
 #endif
 
-#if swift(>=5.5) && canImport(_Concurrency)
 // HTTPClient is thread-safe because its shared mutable state is protected through a lock
 extension HTTPClient: @unchecked Sendable {}
-#endif
 
 extension HTTPClient.Configuration {
     /// Timeout configuration.

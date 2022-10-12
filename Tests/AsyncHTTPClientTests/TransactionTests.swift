@@ -21,14 +21,11 @@ import NIOHTTP1
 import NIOPosix
 import XCTest
 
-#if compiler(>=5.5.2) && canImport(_Concurrency)
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 typealias PreparedRequest = HTTPClientRequest.Prepared
-#endif
 
 final class TransactionTests: XCTestCase {
     func testCancelAsyncRequest() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let embeddedEventLoop = EmbeddedEventLoop()
@@ -60,11 +57,9 @@ final class TransactionTests: XCTestCase {
             }
             XCTAssertEqual(queuer.hitCancelCount, 1)
         }
-        #endif
     }
 
     func testResponseStreamingWorks() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let embeddedEventLoop = EmbeddedEventLoop()
@@ -123,11 +118,9 @@ final class TransactionTests: XCTestCase {
             let result = try await part
             XCTAssertNil(result)
         }
-        #endif
     }
 
     func testIgnoringResponseBodyWorks() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let embeddedEventLoop = EmbeddedEventLoop()
@@ -174,11 +167,9 @@ final class TransactionTests: XCTestCase {
             transaction.receiveResponseBodyParts([ByteBuffer(string: "foo bar")])
             transaction.succeedRequest(nil)
         }
-        #endif
     }
 
     func testWriteBackpressureWorks() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let embeddedEventLoop = EmbeddedEventLoop()
@@ -248,11 +239,9 @@ final class TransactionTests: XCTestCase {
             let result = try await part
             XCTAssertNil(result)
         }
-        #endif
     }
 
     func testSimpleGetRequest() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
@@ -306,11 +295,9 @@ final class TransactionTests: XCTestCase {
                 RequestInfo(data: "", requestNumber: 1, connectionNumber: 0)
             )
         }
-        #endif
     }
 
     func testSimplePostRequest() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let embeddedEventLoop = EmbeddedEventLoop()
@@ -346,11 +333,9 @@ final class TransactionTests: XCTestCase {
             XCTAssertEqual(response.version, .http1_1)
             XCTAssertEqual(response.headers, ["foo": "bar"])
         }
-        #endif
     }
 
     func testPostStreamFails() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let embeddedEventLoop = EmbeddedEventLoop()
@@ -391,11 +376,9 @@ final class TransactionTests: XCTestCase {
             }
             XCTAssertNoThrow(try executor.receiveCancellation())
         }
-        #endif
     }
 
     func testResponseStreamFails() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest(timeout: 30) {
             let embeddedEventLoop = EmbeddedEventLoop()
@@ -456,11 +439,9 @@ final class TransactionTests: XCTestCase {
                 XCTAssertEqual($0 as? HTTPClientError, .readTimeout)
             }
         }
-        #endif
     }
 
     func testBiDirectionalStreamingHTTP2() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
@@ -531,11 +512,8 @@ final class TransactionTests: XCTestCase {
             XCTAssertNil(final)
             XCTAssertEqual(delegate.hitStreamClosed, 1)
         }
-        #endif
     }
 }
-
-#if compiler(>=5.5.2) && canImport(_Concurrency)
 
 // This needs a small explanation. If an iterator is a struct, it can't be used across multiple
 // tasks. Since we want to wait for things to happen in tests, we need to `async let`, which creates
@@ -567,7 +545,7 @@ actor SharedIterator<Wrapped: AsyncSequence> where Wrapped.Element: Sendable {
 
 /// non fail-able promise that only supports one observer
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-fileprivate actor Promise<Value> {
+private actor Promise<Value> {
     private enum State {
         case initialised
         case fulfilled(Value)
@@ -633,4 +611,3 @@ extension Transaction {
         return (await transactionPromise.value, task)
     }
 }
-#endif

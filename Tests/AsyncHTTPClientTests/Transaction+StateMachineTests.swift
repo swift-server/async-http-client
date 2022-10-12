@@ -20,7 +20,6 @@ import XCTest
 
 final class Transaction_StateMachineTests: XCTestCase {
     func testRequestWasQueuedAfterWillExecuteRequestWasCalled() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
@@ -46,11 +45,9 @@ final class Transaction_StateMachineTests: XCTestCase {
 
             await XCTAssertThrowsError(try await withCheckedThrowingContinuation(workaround))
         }
-        #endif
     }
 
     func testRequestBodyStreamWasPaused() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
@@ -69,12 +66,10 @@ final class Transaction_StateMachineTests: XCTestCase {
 
             await XCTAssertThrowsError(try await withCheckedThrowingContinuation(workaround))
         }
-        #endif
     }
 
     func testQueuedRequestGetsRemovedWhenDeadlineExceeded() {
         struct MyError: Error, Equatable {}
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
@@ -102,12 +97,10 @@ final class Transaction_StateMachineTests: XCTestCase {
                 XCTAssertEqualTypeAndValue($0, MyError())
             }
         }
-        #endif
     }
 
     func testDeadlineExceededAndFullyFailedRequestCanBeCanceledWithNoEffect() {
         struct MyError: Error, Equatable {}
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
@@ -140,11 +133,9 @@ final class Transaction_StateMachineTests: XCTestCase {
                 XCTAssertEqualTypeAndValue($0, MyError())
             }
         }
-        #endif
     }
 
     func testScheduledRequestGetsRemovedWhenDeadlineExceeded() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
@@ -167,11 +158,9 @@ final class Transaction_StateMachineTests: XCTestCase {
 
             await XCTAssertThrowsError(try await withCheckedThrowingContinuation(workaround))
         }
-        #endif
     }
 
     func testDeadlineExceededRaceWithRequestWillExecute() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
@@ -201,11 +190,9 @@ final class Transaction_StateMachineTests: XCTestCase {
                 XCTAssertEqualTypeAndValue($0, HTTPClientError.deadlineExceeded)
             }
         }
-        #endif
     }
 
     func testRequestWithHeadReceivedGetNotCancelledWhenDeadlineExceeded() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
@@ -231,11 +218,9 @@ final class Transaction_StateMachineTests: XCTestCase {
 
             await XCTAssertThrowsError(try await withCheckedThrowingContinuation(workaround))
         }
-        #endif
     }
 }
 
-#if compiler(>=5.5.2) && canImport(_Concurrency)
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension Transaction.StateMachine.StartExecutionAction: Equatable {
     public static func == (lhs: Self, rhs: Self) -> Bool {
@@ -286,4 +271,3 @@ extension Transaction.StateMachine.NextWriteAction: Equatable {
         }
     }
 }
-#endif

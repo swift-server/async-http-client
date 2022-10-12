@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if compiler(>=5.5.2) && canImport(_Concurrency)
 import struct Foundation.URL
 import NIOCore
 import NIOHTTP1
@@ -122,5 +121,3 @@ extension HTTPClientRequest {
         return newRequest
     }
 }
-
-#endif

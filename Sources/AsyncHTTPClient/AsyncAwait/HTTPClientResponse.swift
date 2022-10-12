@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if compiler(>=5.5.2) && canImport(_Concurrency)
 import NIOCore
 import NIOHTTP1
 
@@ -154,5 +153,3 @@ extension HTTPClientResponse.Body {
         .stream(CollectionOfOne(byteBuffer).async)
     }
 }
-
-#endif

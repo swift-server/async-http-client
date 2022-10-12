@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if compiler(>=5.5.2) && canImport(_Concurrency)
 import NIOConcurrencyHelpers
 import NIOCore
 
@@ -192,4 +191,3 @@ final class AsyncSequenceWriter<Element>: AsyncSequence, @unchecked Sendable {
         }
     }
 }
-#endif

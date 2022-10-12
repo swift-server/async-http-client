@@ -14,8 +14,6 @@
 
 import NIOCore
 
-#if compiler(>=5.5.2) && canImport(_Concurrency)
-
 extension HTTPClient {
     /// Shuts down the client and `EventLoopGroup` if it was created by the client.
     @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
@@ -32,5 +30,3 @@ extension HTTPClient {
         }
     }
 }
-
-#endif

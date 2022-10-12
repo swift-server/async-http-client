@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if compiler(>=5.5.2) && canImport(_Concurrency)
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -362,4 +361,3 @@ extension Transaction {
         self.performFailAction(action)
     }
 }
-#endif
