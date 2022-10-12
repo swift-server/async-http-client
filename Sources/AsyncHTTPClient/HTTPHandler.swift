@@ -311,7 +311,7 @@ extension HTTPClient {
     }
 
     /// HTTP authentication.
-    public struct Authorization: Hashable, NIOSendable {
+    public struct Authorization: Hashable, Sendable {
         private enum Scheme: Hashable {
             case Basic(String)
             case Bearer(String)

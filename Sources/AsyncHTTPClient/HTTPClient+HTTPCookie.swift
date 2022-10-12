@@ -23,7 +23,7 @@ import NIOCore
 
 extension HTTPClient {
     /// A representation of an HTTP cookie.
-    public struct Cookie: NIOSendable {
+    public struct Cookie: Sendable {
         /// The name of the cookie.
         public var name: String
         /// The cookie's string value.
