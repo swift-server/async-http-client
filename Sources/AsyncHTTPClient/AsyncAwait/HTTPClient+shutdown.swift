@@ -30,4 +30,3 @@ extension HTTPClient {
         }
     }
 }
-

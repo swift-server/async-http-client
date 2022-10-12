@@ -545,7 +545,7 @@ actor SharedIterator<Wrapped: AsyncSequence> where Wrapped.Element: Sendable {
 
 /// non fail-able promise that only supports one observer
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-fileprivate actor Promise<Value> {
+private actor Promise<Value> {
     private enum State {
         case initialised
         case fulfilled(Value)
