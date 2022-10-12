@@ -56,6 +56,4 @@ extension SSLContextCache {
     }
 }
 
-#if swift(>=5.5) && canImport(_Concurrency)
 extension SSLContextCache: @unchecked Sendable {}
-#endif

@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if compiler(>=5.5.2) && canImport(_Concurrency)
 import NIOCore
 import NIOHTTP1
 
@@ -424,5 +423,3 @@ extension HTTPClientRequest.Body {
         internal var storage: RequestBodyLength
     }
 }
-
-#endif

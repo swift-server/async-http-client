@@ -26,6 +26,4 @@ final class UnsafeMutableTransferBox<Wrapped> {
     }
 }
 
-#if swift(>=5.5) && canImport(_Concurrency)
 extension UnsafeMutableTransferBox: @unchecked Sendable {}
-#endif

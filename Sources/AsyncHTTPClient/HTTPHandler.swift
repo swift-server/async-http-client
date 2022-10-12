@@ -779,9 +779,7 @@ extension HTTPClient {
     }
 }
 
-#if swift(>=5.5) && canImport(_Concurrency)
 extension HTTPClient.Task: @unchecked Sendable {}
-#endif
 
 internal struct TaskCancelEvent {}
 

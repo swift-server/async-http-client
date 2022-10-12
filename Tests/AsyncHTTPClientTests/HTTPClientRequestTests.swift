@@ -17,16 +17,13 @@ import NIOCore
 import XCTest
 
 class HTTPClientRequestTests: XCTestCase {
-    #if compiler(>=5.5.2) && canImport(_Concurrency)
     @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
     private typealias Request = HTTPClientRequest
 
     @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
     private typealias PreparedRequest = HTTPClientRequest.Prepared
-    #endif
 
     func testCustomHeadersAreRespected() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "https://example.com/get")
@@ -58,11 +55,9 @@ class HTTPClientRequestTests: XCTestCase {
             guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
             XCTAssertEqual(buffer, ByteBuffer())
         }
-        #endif
     }
 
     func testUnixScheme() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "unix://%2Fexample%2Ffolder.sock/some_path")
@@ -89,11 +84,9 @@ class HTTPClientRequestTests: XCTestCase {
             guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
             XCTAssertEqual(buffer, ByteBuffer())
         }
-        #endif
     }
 
     func testHTTPUnixScheme() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http+unix://%2Fexample%2Ffolder.sock/some_path")
@@ -120,11 +113,9 @@ class HTTPClientRequestTests: XCTestCase {
             guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
             XCTAssertEqual(buffer, ByteBuffer())
         }
-        #endif
     }
 
     func testHTTPSUnixScheme() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "https+unix://%2Fexample%2Ffolder.sock/some_path")
@@ -151,11 +142,9 @@ class HTTPClientRequestTests: XCTestCase {
             guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
             XCTAssertEqual(buffer, ByteBuffer())
         }
-        #endif
     }
 
     func testGetWithoutBody() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let request = Request(url: "https://example.com/get")
@@ -181,11 +170,9 @@ class HTTPClientRequestTests: XCTestCase {
             guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
             XCTAssertEqual(buffer, ByteBuffer())
         }
-        #endif
     }
 
     func testPostWithoutBody() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
@@ -216,11 +203,9 @@ class HTTPClientRequestTests: XCTestCase {
             guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
             XCTAssertEqual(buffer, ByteBuffer())
         }
-        #endif
     }
 
     func testPostWithEmptyByteBuffer() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
@@ -252,11 +237,9 @@ class HTTPClientRequestTests: XCTestCase {
             guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
             XCTAssertEqual(buffer, ByteBuffer())
         }
-        #endif
     }
 
     func testPostWithByteBuffer() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
@@ -287,11 +270,9 @@ class HTTPClientRequestTests: XCTestCase {
             guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
             XCTAssertEqual(buffer, .init(string: "post body"))
         }
-        #endif
     }
 
     func testPostWithSequenceOfUnknownLength() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
@@ -323,11 +304,9 @@ class HTTPClientRequestTests: XCTestCase {
             guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
             XCTAssertEqual(buffer, .init(string: "post body"))
         }
-        #endif
     }
 
     func testPostWithSequenceWithFixedLength() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
@@ -360,11 +339,9 @@ class HTTPClientRequestTests: XCTestCase {
             guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
             XCTAssertEqual(buffer, .init(string: "post body"))
         }
-        #endif
     }
 
     func testPostWithRandomAccessCollection() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
@@ -396,11 +373,9 @@ class HTTPClientRequestTests: XCTestCase {
             guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
             XCTAssertEqual(buffer, .init(string: "post body"))
         }
-        #endif
     }
 
     func testPostWithAsyncSequenceOfUnknownLength() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
@@ -437,11 +412,9 @@ class HTTPClientRequestTests: XCTestCase {
             guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
             XCTAssertEqual(buffer, .init(string: "post body"))
         }
-        #endif
     }
 
     func testPostWithAsyncSequenceWithKnownLength() {
-        #if compiler(>=5.5.2) && canImport(_Concurrency)
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
@@ -478,11 +451,9 @@ class HTTPClientRequestTests: XCTestCase {
             guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
             XCTAssertEqual(buffer, .init(string: "post body"))
         }
-        #endif
     }
 }
 
-#if compiler(>=5.5.2) && canImport(_Concurrency)
 private struct LengthMismatch: Error {
     var announcedLength: Int
     var actualLength: Int
@@ -550,5 +521,3 @@ extension Collection {
         .init(wrapped: self, maxChunkSize: maxChunkSize)
     }
 }
-
-#endif

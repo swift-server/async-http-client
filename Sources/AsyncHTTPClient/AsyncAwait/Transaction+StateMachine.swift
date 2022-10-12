@@ -11,7 +11,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //===----------------------------------------------------------------------===//
-#if compiler(>=5.5.2) && canImport(_Concurrency)
+
 import Logging
 import NIOCore
 import NIOHTTP1
@@ -765,5 +765,3 @@ extension Transaction {
         }
     }
 }
-
-#endif
