@@ -20,7 +20,7 @@ import NIOPosix
 public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     /// The response type for this delegate: the total count of bytes as reported by the response
     /// "Content-Length" header (if available) and the count of bytes downloaded.
-    public struct Progress {
+    public struct Progress: Sendable {
         public var totalBytes: Int?
         public var receivedBytes: Int
     }
