@@ -1331,7 +1331,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
 func XCTAssertEqualTypeAndValue<Left, Right: Equatable>(
     _ lhs: @autoclosure () throws -> Left,
     _ rhs: @autoclosure () throws -> Right,
-    file: StaticString = #file,
+    file: StaticString = #filePath,
     line: UInt = #line
 ) {
     XCTAssertNoThrow(try {

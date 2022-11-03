@@ -52,7 +52,7 @@ final class ConnectionPoolSizeConfigValueIsRespectedTests: XCTestCaseHTTPClientT
 
         let g = DispatchGroup()
         for workerID in 0..<numberOfParallelWorkers {
-            DispatchQueue(label: "\(#file):\(#line):worker-\(workerID)").async(group: g) {
+            DispatchQueue(label: "\(#filePath):\(#line):worker-\(workerID)").async(group: g) {
                 func makeRequest() {
                     let url = "http://127.0.0.1:\(httpBin.port)"
                     XCTAssertNoThrow(try client.get(url: url).wait())
