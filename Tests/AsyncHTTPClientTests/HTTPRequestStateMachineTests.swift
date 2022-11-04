@@ -746,7 +746,7 @@ extension HTTPRequestStateMachine.Action {
     fileprivate func assertFailRequest<Error>(
         _ expectedError: Error,
         _ expectedFinalStreamAction: HTTPRequestStateMachine.Action.FinalFailedRequestAction,
-        file: StaticString = #file,
+        file: StaticString = #filePath,
         line: UInt = #line
     ) where Error: Swift.Error & Equatable {
         guard case .failRequest(let actualError, let actualFinalStreamAction) = self else {
