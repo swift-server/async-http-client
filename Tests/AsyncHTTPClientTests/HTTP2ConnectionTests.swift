@@ -41,6 +41,28 @@ class HTTP2ConnectionTests: XCTestCase {
             logger: logger
         ).wait())
     }
+    
+    func testConnectionToleratesShutdownEventsAfterAlreadyClosed() {
+        let embedded = EmbeddedChannel()
+        XCTAssertNoThrow(try embedded.connect(to: SocketAddress(ipAddress: "127.0.0.1", port: 3000)).wait())
+        
+        let logger = Logger(label: "test.http2.connection")
+        let connection = HTTP2Connection(
+            channel: embedded,
+            connectionID: 0,
+            decompression: .disabled,
+            delegate: TestHTTP2ConnectionDelegate(),
+            logger: logger
+        )
+        _ = connection.start()
+        
+        XCTAssertNoThrow(try embedded.close().wait())
+        // to really destroy the channel we need to tick once
+        embedded.embeddedEventLoop.run()
+        
+        // should not crash
+        connection.shutdown()
+    }
 
     func testSimpleGetRequest() {
         let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)

@@ -111,7 +111,7 @@ final class HTTP2Connection {
 
     deinit {
         guard case .closed = self.state else {
-            preconditionFailure("Connection must be closed, before we can deinit it")
+            preconditionFailure("Connection must be closed, before we can deinit it. Current state: \(self.state)")
         }
     }
 
@@ -164,15 +164,23 @@ final class HTTP2Connection {
         return promise.futureResult
     }
 
-    private func start() -> EventLoopFuture<Int> {
+    func start() -> EventLoopFuture<Int> {
         self.channel.eventLoop.assertInEventLoop()
 
         let readyToAcceptConnectionsPromise = self.channel.eventLoop.makePromise(of: Int.self)
 
         self.state = .starting(readyToAcceptConnectionsPromise)
         self.channel.closeFuture.whenComplete { _ in
-            self.state = .closed
-            self.delegate.http2ConnectionClosed(self)
+            switch self.state {
+            case .initialized, .closed:
+                preconditionFailure("invalid state \(self.state)")
+            case .starting(let readyToAcceptConnectionsPromise):
+                self.state = .closed
+                readyToAcceptConnectionsPromise.fail(HTTPClientError.remoteConnectionClosed)
+            case .active, .closing:
+                self.state = .closed
+                self.delegate.http2ConnectionClosed(self)
+            }
         }
 
         do {
@@ -258,16 +266,25 @@ final class HTTP2Connection {
     private func shutdown0() {
         self.channel.eventLoop.assertInEventLoop()
 
-        self.state = .closing
+        switch self.state {
+        case .active, .starting:
+            self.state = .closing
 
-        // inform all open streams, that the currently running request should be cancelled.
-        self.openStreams.forEach { box in
-            box.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
+            // inform all open streams, that the currently running request should be cancelled.
+            self.openStreams.forEach { box in
+                box.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
+            }
+
+            // inform the idle connection handler, that connection should be closed, once all streams
+            // are closed.
+            self.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
+            
+        case .closed:
+            // we are already closed and we need to tolerate this
+            break
+        case .initialized, .closing:
+            preconditionFailure("invalid state \(self.state)")
         }
-
-        // inform the idle connection handler, that connection should be closed, once all streams
-        // are closed.
-        self.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
     }
 }
 
