@@ -267,7 +267,7 @@ final class HTTP2Connection {
         self.channel.eventLoop.assertInEventLoop()
 
         switch self.state {
-        case .active, .starting:
+        case .active:
             self.state = .closing
 
             // inform all open streams, that the currently running request should be cancelled.
@@ -279,10 +279,11 @@ final class HTTP2Connection {
             // are closed.
             self.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
             
-        case .closed:
-            // we are already closed and we need to tolerate this
+        case .closed, .closing:
+            // we are already closing/closed and we need to tolerate this
             break
-        case .initialized, .closing:
+            
+        case .initialized, .starting:
             preconditionFailure("invalid state \(self.state)")
         }
     }
