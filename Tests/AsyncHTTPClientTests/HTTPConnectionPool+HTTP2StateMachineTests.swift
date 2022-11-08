@@ -194,6 +194,44 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         XCTAssertEqual(state.connectionCreationBackoffDone(newConnectionID), .none)
     }
 
+    func testConnectionFailureWhileShuttingDown() {
+        struct SomeError: Error, Equatable {}
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
+
+        var state = HTTPConnectionPool.HTTP2StateMachine(
+            idGenerator: .init(),
+            retryConnectionEstablishment: false,
+            lifecycleState: .running
+        )
+
+        let mockRequest = MockHTTPRequest(eventLoop: elg.next())
+        let request = HTTPConnectionPool.Request(mockRequest)
+
+        let action = state.executeRequest(request)
+        XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), action.request)
+
+        // 1. connection attempt
+        guard case .createConnection(let connectionID, on: let connectionEL) = action.connection else {
+            return XCTFail("Unexpected connection action: \(action.connection)")
+        }
+        XCTAssert(connectionEL === mockRequest.eventLoop) // XCTAssertIdentical not available on Linux
+
+        // 2. initialise shutdown
+        let shutdownAction = state.shutdown()
+        XCTAssertEqual(shutdownAction.connection, .cleanupConnections(.init(), isShutdown: .no))
+        guard case .failRequestsAndCancelTimeouts(let requestsToFail, let requestError) = shutdownAction.request else {
+            return XCTFail("Unexpected request action: \(action.request)")
+        }
+        XCTAssertEqualTypeAndValue(requestError, HTTPClientError.cancelled)
+        XCTAssertEqualTypeAndValue(requestsToFail, [request])
+
+        // 3. connection attempt fails
+        let failedConnectAction = state.failedToCreateNewConnection(SomeError(), connectionID: connectionID)
+        XCTAssertEqual(failedConnectAction.request, .none)
+        XCTAssertEqual(failedConnectAction.connection, .cleanupConnections(.init(), isShutdown: .yes(unclean: true)))
+    }
+
     func testConnectionFailureWithoutRetry() {
         struct SomeError: Error, Equatable {}
         let elg = EmbeddedEventLoopGroup(loops: 4)
