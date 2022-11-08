@@ -54,7 +54,7 @@ class HTTP2ConnectionTests: XCTestCase {
             delegate: TestHTTP2ConnectionDelegate(),
             logger: logger
         )
-        let startFuture = connection.start0()
+        let startFuture = connection._start0()
 
         XCTAssertNoThrow(try embedded.close().wait())
         // to really destroy the channel we need to tick once
