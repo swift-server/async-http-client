@@ -59,7 +59,7 @@ class HTTP2ConnectionTests: XCTestCase {
         XCTAssertNoThrow(try embedded.close().wait())
         // to really destroy the channel we need to tick once
         embedded.embeddedEventLoop.run()
-        
+
         XCTAssertThrowsError(try startFuture.wait())
 
         // should not crash
