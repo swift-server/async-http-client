@@ -278,11 +278,11 @@ final class HTTP2Connection {
             // inform the idle connection handler, that connection should be closed, once all streams
             // are closed.
             self.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
-            
+
         case .closed, .closing:
             // we are already closing/closed and we need to tolerate this
             break
-            
+
         case .initialized, .starting:
             preconditionFailure("invalid state \(self.state)")
         }
