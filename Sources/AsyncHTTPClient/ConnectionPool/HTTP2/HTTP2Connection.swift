@@ -129,7 +129,7 @@ final class HTTP2Connection {
             delegate: delegate,
             logger: logger
         )
-        return connection.start().map { maxStreams in (connection, maxStreams) }
+        return connection.start0().map { maxStreams in (connection, maxStreams) }
     }
 
     func executeRequest(_ request: HTTPExecutableRequest) {
@@ -164,7 +164,7 @@ final class HTTP2Connection {
         return promise.futureResult
     }
 
-    func start() -> EventLoopFuture<Int> {
+    func start0() -> EventLoopFuture<Int> {
         self.channel.eventLoop.assertInEventLoop()
 
         let readyToAcceptConnectionsPromise = self.channel.eventLoop.makePromise(of: Int.self)
