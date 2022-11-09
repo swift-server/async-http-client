@@ -404,25 +404,34 @@ extension HTTPConnectionPool {
         }
 
         mutating func failedToCreateNewConnection(_ error: Error, connectionID: Connection.ID) -> Action {
-            // TODO: switch over state https://github.com/swift-server/async-http-client/issues/638
             self.failedConsecutiveConnectionAttempts += 1
             self.lastConnectFailure = error
 
-            guard self.retryConnectionEstablishment else {
-                guard let (index, _) = self.connections.failConnection(connectionID) else {
+            switch self.lifecycleState {
+            case .running:
+                guard self.retryConnectionEstablishment else {
+                    guard let (index, _) = self.connections.failConnection(connectionID) else {
+                        preconditionFailure("A connection attempt failed, that the state machine knows nothing about. Somewhere state was lost.")
+                    }
+                    self.connections.removeConnection(at: index)
+
+                    return .init(
+                        request: self.failAllRequests(reason: error),
+                        connection: .none
+                    )
+                }
+
+                let eventLoop = self.connections.backoffNextConnectionAttempt(connectionID)
+                let backoff = calculateBackoff(failedAttempt: self.failedConsecutiveConnectionAttempts)
+                return .init(request: .none, connection: .scheduleBackoffTimer(connectionID, backoff: backoff, on: eventLoop))
+            case .shuttingDown:
+                guard let (index, context) = self.connections.failConnection(connectionID) else {
                     preconditionFailure("A connection attempt failed, that the state machine knows nothing about. Somewhere state was lost.")
                 }
-                self.connections.removeConnection(at: index)
-
-                return .init(
-                    request: self.failAllRequests(reason: error),
-                    connection: .none
-                )
+                return self.nextActionForFailedConnection(at: index, on: context.eventLoop)
+            case .shutDown:
+                preconditionFailure("If the pool is already shutdown, all connections must have been torn down.")
             }
-
-            let eventLoop = self.connections.backoffNextConnectionAttempt(connectionID)
-            let backoff = calculateBackoff(failedAttempt: self.failedConsecutiveConnectionAttempts)
-            return .init(request: .none, connection: .scheduleBackoffTimer(connectionID, backoff: backoff, on: eventLoop))
         }
 
         mutating func waitingForConnectivity(_ error: Error, connectionID: Connection.ID) -> Action {
