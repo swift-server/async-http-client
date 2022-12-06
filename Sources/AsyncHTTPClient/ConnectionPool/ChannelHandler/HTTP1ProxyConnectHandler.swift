@@ -165,7 +165,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
             if (self.targetPort != self.scheme.defaultPort) {
                 host += ":\(self.targetPort)"
             }
-            head.headers.replaceOrAdd(name: "host", value: host)
+            head.headers.add(name: "host", value: host)
         }
         if let authorization = self.proxyAuthorization {
             head.headers.replaceOrAdd(name: "proxy-authorization", value: authorization.headerValue)
