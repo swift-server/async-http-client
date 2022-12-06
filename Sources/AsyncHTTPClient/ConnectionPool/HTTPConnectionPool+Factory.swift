@@ -195,6 +195,7 @@ extension HTTPConnectionPool.ConnectionFactory {
             let encoder = HTTPRequestEncoder()
             let decoder = ByteToMessageHandler(HTTPResponseDecoder(leftOverBytesStrategy: .dropBytes))
             let proxyHandler = HTTP1ProxyConnectHandler(
+                scheme: self.key.scheme,
                 target: self.key.connectionTarget,
                 proxyAuthorization: proxy.authorization,
                 deadline: deadline
