@@ -597,6 +597,134 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
         }
     }
+
+    func testRejectsInvalidCharactersInHeaderFieldNames_http1() {
+        self._rejectsInvalidCharactersInHeaderFieldNames(mode: .http1_1(ssl: true))
+    }
+
+    func testRejectsInvalidCharactersInHeaderFieldNames_http2() {
+        self._rejectsInvalidCharactersInHeaderFieldNames(mode: .http2(compress: false))
+    }
+
+    private func _rejectsInvalidCharactersInHeaderFieldNames(mode: HTTPBin<HTTPBinHandler>.Mode) {
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
+        XCTAsyncTest {
+            let bin = HTTPBin(mode)
+            defer { XCTAssertNoThrow(try bin.shutdown()) }
+            let client = makeDefaultHTTPClient()
+            defer { XCTAssertNoThrow(try client.syncShutdown()) }
+            let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+
+            // The spec in [RFC 9110](https://httpwg.org/specs/rfc9110.html#fields.values) defines the valid
+            // characters as the following:
+            //
+            // ```
+            // field-name     = token
+            //
+            // token          = 1*tchar
+            //
+            // tchar          = "!" / "#" / "$" / "%" / "&" / "'" / "*"
+            //                / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
+            //                / DIGIT / ALPHA
+            //                ; any VCHAR, except delimiters
+            let weirdAllowedFieldName = "!#$%&'*+-.^_`|~0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+            var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/get")
+            request.headers.add(name: weirdAllowedFieldName, value: "present")
+
+            // This should work fine.
+            guard let response = await XCTAssertNoThrowWithResult(
+                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+            ) else {
+                return
+            }
+
+            XCTAssertEqual(response.status, .ok)
+
+            // Now, let's confirm all other bytes are rejected. We want to stay within the ASCII space as the HTTPHeaders type will forbid anything else.
+            for byte in UInt8(0)...UInt8(127) {
+                // Skip bytes that we already believe are allowed.
+                if weirdAllowedFieldName.utf8.contains(byte) {
+                    continue
+                }
+                let forbiddenFieldName = weirdAllowedFieldName + String(decoding: [byte], as: UTF8.self)
+
+                var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/get")
+                request.headers.add(name: forbiddenFieldName, value: "present")
+
+                await XCTAssertThrowsError(try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)) { error in
+                    XCTAssertEqual(error as? HTTPClientError, .invalidHeaderFieldNames([forbiddenFieldName]))
+                }
+            }
+        }
+    }
+
+    func testRejectsInvalidCharactersInHeaderFieldValues_http1() {
+        self._rejectsInvalidCharactersInHeaderFieldValues(mode: .http1_1(ssl: true))
+    }
+
+    func testRejectsInvalidCharactersInHeaderFieldValues_http2() {
+        self._rejectsInvalidCharactersInHeaderFieldValues(mode: .http2(compress: false))
+    }
+
+    private func _rejectsInvalidCharactersInHeaderFieldValues(mode: HTTPBin<HTTPBinHandler>.Mode) {
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
+        XCTAsyncTest {
+            let bin = HTTPBin(mode)
+            defer { XCTAssertNoThrow(try bin.shutdown()) }
+            let client = makeDefaultHTTPClient()
+            defer { XCTAssertNoThrow(try client.syncShutdown()) }
+            let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+
+            // We reject all ASCII control characters except HTAB and tolerate everything else.
+            let weirdAllowedFieldValue = "!\" \t#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+
+            var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/get")
+            request.headers.add(name: "Weird-Value", value: weirdAllowedFieldValue)
+
+            // This should work fine.
+            guard let response = await XCTAssertNoThrowWithResult(
+                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+            ) else {
+                return
+            }
+
+            XCTAssertEqual(response.status, .ok)
+
+            // Now, let's confirm all other bytes in the ASCII range ar rejected
+            for byte in UInt8(0)...UInt8(127) {
+                // Skip bytes that we already believe are allowed.
+                if weirdAllowedFieldValue.utf8.contains(byte) {
+                    continue
+                }
+                let forbiddenFieldValue = weirdAllowedFieldValue + String(decoding: [byte], as: UTF8.self)
+
+                var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/get")
+                request.headers.add(name: "Weird-Value", value: forbiddenFieldValue)
+
+                await XCTAssertThrowsError(try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)) { error in
+                    XCTAssertEqual(error as? HTTPClientError, .invalidHeaderFieldValues([forbiddenFieldValue]))
+                }
+            }
+
+            // All the bytes outside the ASCII range are fine though.
+            for byte in UInt8(128)...UInt8(255) {
+                let evenWeirderAllowedValue = weirdAllowedFieldValue + String(decoding: [byte], as: UTF8.self)
+
+                var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/get")
+                request.headers.add(name: "Weird-Value", value: evenWeirderAllowedValue)
+
+                // This should work fine.
+                guard let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                ) else {
+                    return
+                }
+
+                XCTAssertEqual(response.status, .ok)
+            }
+        }
+    }
 }
 
 extension AsyncSequence where Element == ByteBuffer {
