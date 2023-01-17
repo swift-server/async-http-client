@@ -135,6 +135,8 @@ extension HTTPClientTests {
             ("testCloseWhileBackpressureIsExertedIsFine", testCloseWhileBackpressureIsExertedIsFine),
             ("testErrorAfterCloseWhileBackpressureExerted", testErrorAfterCloseWhileBackpressureExerted),
             ("testRequestSpecificTLS", testRequestSpecificTLS),
+            ("testRejectsInvalidCharactersInHeaderFieldNames_http1", testRejectsInvalidCharactersInHeaderFieldNames_http1),
+            ("testRejectsInvalidCharactersInHeaderFieldValues_http1", testRejectsInvalidCharactersInHeaderFieldValues_http1),
         ]
     }
 }
