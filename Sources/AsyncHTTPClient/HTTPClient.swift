@@ -924,6 +924,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case uncleanShutdown
         case traceRequestWithBody
         case invalidHeaderFieldNames([String])
+        case invalidHeaderFieldValues([String])
         case bodyLengthMismatch
         case writeAfterRequestSent
         @available(*, deprecated, message: "AsyncHTTPClient now silently corrects invalid headers.")
@@ -988,6 +989,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let traceRequestWithBody = HTTPClientError(code: .traceRequestWithBody)
     /// Header field names contain invalid characters.
     public static func invalidHeaderFieldNames(_ names: [String]) -> HTTPClientError { return HTTPClientError(code: .invalidHeaderFieldNames(names)) }
+    /// Header field values contain invalid characters.
+    public static func invalidHeaderFieldValues(_ values: [String]) -> HTTPClientError { return HTTPClientError(code: .invalidHeaderFieldValues(values)) }
     /// Body length is not equal to `Content-Length`.
     public static let bodyLengthMismatch = HTTPClientError(code: .bodyLengthMismatch)
     /// Body part was written after request was fully sent.
