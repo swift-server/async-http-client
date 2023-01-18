@@ -3,16 +3,16 @@ version: "3"
 services:
 
   runtime-setup:
-    image: async-http-client:20.04-main
+    image: async-http-client:22.04-main
     build:
       args:
-        base_image: "swiftlang/swift:nightly-main-focal"
+        base_image: "swiftlang/swift:nightly-main-jammy"
 
   test:
-    image: async-http-client:20.04-main
+    image: async-http-client:22.04-main
     environment:
       - IMPORT_CHECK_ARG=--explicit-target-dependency-import-check error
       #- SANITIZER_ARG=--sanitize=thread
 
   shell:
-    image: async-http-client:20.04-main
+    image: async-http-client:22.04-main
