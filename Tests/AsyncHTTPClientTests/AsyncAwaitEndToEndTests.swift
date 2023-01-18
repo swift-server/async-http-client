@@ -416,9 +416,9 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 XCTAssertNoThrow(try serverChannel.close().wait())
             }
             let port = serverChannel.localAddress!.port!
-            let firstClientChannel = try ClientBootstrap(group: self.serverGroup)
+            let firstClientChannel = try await ClientBootstrap(group: self.serverGroup)
                 .connect(host: "127.0.0.1", port: port)
-                .wait()
+                .get()
             defer {
                 XCTAssertNoThrow(try firstClientChannel.close().wait())
             }
@@ -464,7 +464,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 .childChannelInitializer { channel in
                     channel.pipeline.addHandler(NIOSSLServerHandler(context: sslContext))
                 }
-            let serverChannel = try server.bind(host: "localhost", port: 0).wait()
+            let serverChannel = try await server.bind(host: "localhost", port: 0).get()
             defer { XCTAssertNoThrow(try serverChannel.close().wait()) }
             let port = serverChannel.localAddress!.port!
 
