@@ -133,10 +133,13 @@ final class HTTP1Connection {
             }
 
             let channelHandler = HTTP1ClientChannelHandler(
-                connection: self,
                 eventLoop: channel.eventLoop,
-                logger: logger
+                backgroundLogger: logger,
+                connectionIdLoggerMetadata: "\(self.id)"
             )
+            channelHandler.onRequestCompleted = {
+                self.taskCompleted()
+            }
 
             try sync.addHandler(channelHandler)
         } catch {

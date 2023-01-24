@@ -35,8 +35,8 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         didSet {
             if let newRequest = self.request {
                 var requestLogger = newRequest.logger
-                requestLogger[metadataKey: "ahc-connection-id"] = "\(self.connection.id)"
-                requestLogger[metadataKey: "ahc-el"] = "\(self.connection.channel.eventLoop)"
+                requestLogger[metadataKey: "ahc-connection-id"] = connectionIdLoggerMetadata
+                requestLogger[metadataKey: "ahc-el"] = "\(self.eventLoop)"
                 self.logger = requestLogger
 
                 if let idleReadTimeout = newRequest.requestOptions.idleReadTimeout {
@@ -59,15 +59,15 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
     private let backgroundLogger: Logger
     private var logger: Logger
-
-    let connection: HTTP1Connection
-    let eventLoop: EventLoop
-
-    init(connection: HTTP1Connection, eventLoop: EventLoop, logger: Logger) {
-        self.connection = connection
+    private let eventLoop: EventLoop
+    private let connectionIdLoggerMetadata: Logger.MetadataValue
+    
+    var onRequestCompleted: () -> () = {}
+    init(eventLoop: EventLoop, backgroundLogger: Logger, connectionIdLoggerMetadata: Logger.MetadataValue) {
         self.eventLoop = eventLoop
-        self.backgroundLogger = logger
-        self.logger = self.backgroundLogger
+        self.backgroundLogger = backgroundLogger
+        self.logger = backgroundLogger
+        self.connectionIdLoggerMetadata = connectionIdLoggerMetadata
     }
 
     func handlerAdded(context: ChannelHandlerContext) {
@@ -274,7 +274,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                         if shouldClose {
                             context.close(promise: nil)
                         } else {
-                            self.connection.taskCompleted()
+                            self.onRequestCompleted()
                         }
 
                         oldRequest.succeedRequest(buffer)
@@ -286,7 +286,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
                 context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: writePromise)
             case .informConnectionIsIdle:
-                self.connection.taskCompleted()
+                self.onRequestCompleted()
                 oldRequest.succeedRequest(buffer)
             }
 
@@ -303,7 +303,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                 oldRequest.fail(error)
 
             case .informConnectionIsIdle:
-                self.connection.taskCompleted()
+                self.onRequestCompleted()
                 oldRequest.fail(error)
 
             case .failWritePromise(let writePromise):
@@ -328,6 +328,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             // we must check if the request is still present here.
             guard let request = self.request else { return }
             request.requestHeadSent()
+            
             request.resumeRequestBodyStream()
         } else {
             context.write(self.wrapOutboundOut(.head(head)), promise: nil)

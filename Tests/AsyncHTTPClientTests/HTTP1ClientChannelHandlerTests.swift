@@ -526,6 +526,82 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
             XCTAssertTrue(error is FailEndHandler.Error)
         }
     }
+    
+    func test() throws {
+        
+        final class ChangeWritabilityOnFlush: ChannelOutboundHandler {
+            typealias OutboundIn = Any
+            func flush(context: ChannelHandlerContext) {
+                (context.channel as! EmbeddedChannel).isWritable = false
+                context.fireChannelWritabilityChanged()
+            }
+        }
+        
+        final class Request: HTTPExecutableRequest {
+            var logger: Logging.Logger { Logger(label: "request")}
+            
+            var requestHead: NIOHTTP1.HTTPRequestHead
+            
+            var requestFramingMetadata: AsyncHTTPClient.RequestFramingMetadata = .init(connectionClose: false, body: .fixedSize(1))
+            
+            var requestOptions: AsyncHTTPClient.RequestOptions = .forTests()
+            
+            init(requestHead: NIOHTTP1.HTTPRequestHead = .init(version: .http1_1, method: .GET, uri: "http://localhost/")) {
+                self.requestHead = requestHead
+            }
+            
+            func willExecuteRequest(_: AsyncHTTPClient.HTTPRequestExecutor) {
+                print(#function)
+            }
+            
+            func requestHeadSent() {
+                print(#function)
+            }
+            
+            func resumeRequestBodyStream() {
+                print(#function)
+            }
+            
+            func pauseRequestBodyStream() {
+                print(#function)
+            }
+            
+            func receiveResponseHead(_ head: NIOHTTP1.HTTPResponseHead) {
+                print(#function)
+            }
+            
+            func receiveResponseBodyParts(_ buffer: NIOCore.CircularBuffer<NIOCore.ByteBuffer>) {
+                print(#function)
+            }
+            
+            func succeedRequest(_ buffer: NIOCore.CircularBuffer<NIOCore.ByteBuffer>?) {
+                print(#function)
+            }
+            
+            func fail(_ error: Error) {
+                print(#function)
+            }
+        }
+        let eventLoopGroup = EmbeddedEventLoopGroup(loops: 1)
+        let eventLoop = eventLoopGroup.next() as! EmbeddedEventLoop
+        let handler = HTTP1ClientChannelHandler(
+            eventLoop: eventLoop,
+            backgroundLogger: Logger(label: "no-op", factory: SwiftLogNoOpLogHandler.init),
+            connectionIdLoggerMetadata: "test connection"
+        )
+        handler.onRequestCompleted = {
+            print("onRequestCompleted")
+        }
+        let channel = EmbeddedChannel(handlers: [
+            ChangeWritabilityOnFlush(),
+            handler,
+        ], loop: eventLoop)
+        try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80))
+        
+        let request = Request()
+        try channel.writeOutbound(request)
+        
+    }
 }
 
 class TestBackpressureWriter {

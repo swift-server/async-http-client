@@ -244,6 +244,9 @@ final class HTTP2Connection {
                     self.channel.closeFuture.whenComplete { _ in
                         self.openStreams.remove(box)
                     }
+                    channel.closeFuture.whenComplete { result in
+                        print("H2 closed", result)
+                    }
 
                     channel.write(request, promise: nil)
                     return channel.eventLoop.makeSucceededVoidFuture()
