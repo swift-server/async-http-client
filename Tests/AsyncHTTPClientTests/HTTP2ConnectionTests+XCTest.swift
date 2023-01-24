@@ -30,6 +30,7 @@ extension HTTP2ConnectionTests {
             ("testSimpleGetRequest", testSimpleGetRequest),
             ("testEveryDoneRequestLeadsToAStreamAvailableCall", testEveryDoneRequestLeadsToAStreamAvailableCall),
             ("testCancelAllRunningRequests", testCancelAllRunningRequests),
+            ("testChildStreamsAreRemovedFromTheOpenChannelListOnceTheRequestIsDone", testChildStreamsAreRemovedFromTheOpenChannelListOnceTheRequestIsDone),
         ]
     }
 }
