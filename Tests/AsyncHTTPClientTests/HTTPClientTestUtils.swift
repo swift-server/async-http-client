@@ -385,7 +385,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
                 return self.socketAddress.pathname!
             }
         }()
-        
+
         return "\(scheme)://\(host):\(self.port)/"
     }
 

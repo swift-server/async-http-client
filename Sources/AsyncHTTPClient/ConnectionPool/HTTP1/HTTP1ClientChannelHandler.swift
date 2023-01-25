@@ -35,7 +35,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         didSet {
             if let newRequest = self.request {
                 var requestLogger = newRequest.logger
-                requestLogger[metadataKey: "ahc-connection-id"] = connectionIdLoggerMetadata
+                requestLogger[metadataKey: "ahc-connection-id"] = self.connectionIdLoggerMetadata
                 requestLogger[metadataKey: "ahc-el"] = "\(self.eventLoop)"
                 self.logger = requestLogger
 
@@ -61,8 +61,8 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     private var logger: Logger
     private let eventLoop: EventLoop
     private let connectionIdLoggerMetadata: Logger.MetadataValue
-    
-    var onRequestCompleted: () -> () = {}
+
+    var onRequestCompleted: () -> Void = {}
     init(eventLoop: EventLoop, backgroundLogger: Logger, connectionIdLoggerMetadata: Logger.MetadataValue) {
         self.eventLoop = eventLoop
         self.backgroundLogger = backgroundLogger
@@ -330,7 +330,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             // we must check if the request is still present here.
             guard let request = self.request else { return }
             request.requestHeadSent()
-            
+
             request.resumeRequestBodyStream()
         } else {
             context.write(self.wrapOutboundOut(.head(head)), promise: nil)

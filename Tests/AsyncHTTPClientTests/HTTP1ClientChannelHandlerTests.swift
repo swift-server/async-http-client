@@ -526,7 +526,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
             XCTAssertTrue(error is FailEndHandler.Error)
         }
     }
-    
+
     func testChannelBecomesNonWritableDuringHeaderWrite() throws {
         try XCTSkipIf(true, "this currently fails and will be fixed in follow up PR")
         final class ChangeWritabilityOnFlush: ChannelOutboundHandler {
@@ -549,8 +549,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
             handler,
         ], loop: eventLoop)
         try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).wait()
-        
-        
+
         let request = MockHTTPExecutableRequest()
         // non empty body is important to trigger this bug as we otherwise finish the request in a single flush
         request.requestFramingMetadata.body = .fixedSize(1)

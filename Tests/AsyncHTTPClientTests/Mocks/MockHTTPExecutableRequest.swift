@@ -31,6 +31,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
             case succeedRequest
             case fail
         }
+
         case willExecuteRequest(HTTPRequestExecutor)
         case requestHeadSent
         case resumeRequestBodyStream
@@ -39,7 +40,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
         case receiveResponseBodyParts(CircularBuffer<ByteBuffer>)
         case succeedRequest(CircularBuffer<ByteBuffer>?)
         case fail(Error)
-        
+
         var kind: Kind {
             switch self {
             case .willExecuteRequest: return .willExecuteRequest
@@ -53,33 +54,32 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
             }
         }
     }
-    
+
     var logger: Logging.Logger = Logger(label: "request")
     var requestHead: NIOHTTP1.HTTPRequestHead
     var requestFramingMetadata: RequestFramingMetadata
     var requestOptions: RequestOptions = .forTests()
-    
+
     /// if true and ``HTTPExecutableRequest`` method is called without setting a corresponding callback on `self` e.g.
     /// If ``HTTPExecutableRequest\.willExecuteRequest(_:)`` is called but ``willExecuteRequestCallback`` is not set,
     /// ``XCTestFail(_:)`` will be called to fail the current test.
     var raiseErrorIfUnimplementedMethodIsCalled: Bool = true
     private var file: StaticString
     private var line: UInt
-    
-    var willExecuteRequestCallback: ((_: HTTPRequestExecutor) -> ())?
-    var requestHeadSentCallback: (() -> ())?
-    var resumeRequestBodyStreamCallback: (() -> ())?
-    var pauseRequestBodyStreamCallback: (() -> ())?
-    var receiveResponseHeadCallback: ((_ head: HTTPResponseHead) -> ())?
-    var receiveResponseBodyPartsCallback: ((_ buffer: CircularBuffer<ByteBuffer>) -> ())?
-    var succeedRequestCallback: ((_ buffer: CircularBuffer<ByteBuffer>?) -> ())?
-    var failCallback: ((_ error: Error) -> ())?
-    
-    
+
+    var willExecuteRequestCallback: ((HTTPRequestExecutor) -> Void)?
+    var requestHeadSentCallback: (() -> Void)?
+    var resumeRequestBodyStreamCallback: (() -> Void)?
+    var pauseRequestBodyStreamCallback: (() -> Void)?
+    var receiveResponseHeadCallback: ((HTTPResponseHead) -> Void)?
+    var receiveResponseBodyPartsCallback: ((CircularBuffer<ByteBuffer>) -> Void)?
+    var succeedRequestCallback: ((CircularBuffer<ByteBuffer>?) -> Void)?
+    var failCallback: ((Error) -> Void)?
+
     /// captures all ``HTTPExecutableRequest`` method calls in the order of occurrence, including arguments.
     /// If you are not interested in the arguments you can use `events.map(\.kind)` to get all events without arguments.
     private(set) var events: [Event] = []
-    
+
     init(
         head: NIOHTTP1.HTTPRequestHead = .init(version: .http1_1, method: .GET, uri: "http://localhost/"),
         framingMetadata: RequestFramingMetadata = .init(connectionClose: false, body: .fixedSize(0)),
@@ -91,12 +91,12 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
         self.file = file
         self.line = line
     }
-    
+
     private func calledUnimplementedMethod(_ name: String) {
-        guard raiseErrorIfUnimplementedMethodIsCalled else { return }
-        XCTFail("\(name) invoked but it is not implemented", file: file, line: line)
+        guard self.raiseErrorIfUnimplementedMethodIsCalled else { return }
+        XCTFail("\(name) invoked but it is not implemented", file: self.file, line: self.line)
     }
-    
+
     func willExecuteRequest(_ executor: HTTPRequestExecutor) {
         self.events.append(.willExecuteRequest(executor))
         guard let willExecuteRequestCallback = willExecuteRequestCallback else {
@@ -104,6 +104,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
         }
         willExecuteRequestCallback(executor)
     }
+
     func requestHeadSent() {
         self.events.append(.requestHeadSent)
         guard let requestHeadSentCallback = requestHeadSentCallback else {
@@ -111,6 +112,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
         }
         requestHeadSentCallback()
     }
+
     func resumeRequestBodyStream() {
         self.events.append(.resumeRequestBodyStream)
         guard let resumeRequestBodyStreamCallback = resumeRequestBodyStreamCallback else {
@@ -118,6 +120,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
         }
         resumeRequestBodyStreamCallback()
     }
+
     func pauseRequestBodyStream() {
         self.events.append(.pauseRequestBodyStream)
         guard let pauseRequestBodyStreamCallback = pauseRequestBodyStreamCallback else {
@@ -125,6 +128,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
         }
         pauseRequestBodyStreamCallback()
     }
+
     func receiveResponseHead(_ head: HTTPResponseHead) {
         self.events.append(.receiveResponseHead(head))
         guard let receiveResponseHeadCallback = receiveResponseHeadCallback else {
@@ -132,6 +136,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
         }
         receiveResponseHeadCallback(head)
     }
+
     func receiveResponseBodyParts(_ buffer: CircularBuffer<NIOCore.ByteBuffer>) {
         self.events.append(.receiveResponseBodyParts(buffer))
         guard let receiveResponseBodyPartsCallback = receiveResponseBodyPartsCallback else {
@@ -139,6 +144,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
         }
         receiveResponseBodyPartsCallback(buffer)
     }
+
     func succeedRequest(_ buffer: CircularBuffer<NIOCore.ByteBuffer>?) {
         self.events.append(.succeedRequest(buffer))
         guard let succeedRequestCallback = succeedRequestCallback else {
@@ -146,6 +152,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
         }
         succeedRequestCallback(buffer)
     }
+
     func fail(_ error: Error) {
         self.events.append(.fail(error))
         guard let failCallback = failCallback else {
