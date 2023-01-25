@@ -108,6 +108,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
         let action = self.state.writabilityChanged(writable: context.channel.isWritable)
         self.run(action, context: context)
+        context.fireChannelWritabilityChanged()
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -156,6 +157,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             metadata: req.requestFramingMetadata
         )
         self.run(action, context: context)
+        promise?.succeed(())
     }
 
     func read(context: ChannelHandlerContext) {
@@ -434,6 +436,11 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         self.run(action, context: context)
     }
 }
+
+#if swift(>=5.6)
+@available(*, unavailable)
+extension HTTP1ClientChannelHandler: Sendable {}
+#endif
 
 extension HTTP1ClientChannelHandler: HTTPRequestExecutor {
     func writeRequestBodyPart(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {

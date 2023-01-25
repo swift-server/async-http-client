@@ -528,58 +528,12 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
     }
     
     func test() throws {
-        
         final class ChangeWritabilityOnFlush: ChannelOutboundHandler {
             typealias OutboundIn = Any
             func flush(context: ChannelHandlerContext) {
+                context.flush()
                 (context.channel as! EmbeddedChannel).isWritable = false
                 context.fireChannelWritabilityChanged()
-            }
-        }
-        
-        final class Request: HTTPExecutableRequest {
-            var logger: Logging.Logger { Logger(label: "request")}
-            
-            var requestHead: NIOHTTP1.HTTPRequestHead
-            
-            var requestFramingMetadata: AsyncHTTPClient.RequestFramingMetadata = .init(connectionClose: false, body: .fixedSize(1))
-            
-            var requestOptions: AsyncHTTPClient.RequestOptions = .forTests()
-            
-            init(requestHead: NIOHTTP1.HTTPRequestHead = .init(version: .http1_1, method: .GET, uri: "http://localhost/")) {
-                self.requestHead = requestHead
-            }
-            
-            func willExecuteRequest(_: AsyncHTTPClient.HTTPRequestExecutor) {
-                print(#function)
-            }
-            
-            func requestHeadSent() {
-                print(#function)
-            }
-            
-            func resumeRequestBodyStream() {
-                print(#function)
-            }
-            
-            func pauseRequestBodyStream() {
-                print(#function)
-            }
-            
-            func receiveResponseHead(_ head: NIOHTTP1.HTTPResponseHead) {
-                print(#function)
-            }
-            
-            func receiveResponseBodyParts(_ buffer: NIOCore.CircularBuffer<NIOCore.ByteBuffer>) {
-                print(#function)
-            }
-            
-            func succeedRequest(_ buffer: NIOCore.CircularBuffer<NIOCore.ByteBuffer>?) {
-                print(#function)
-            }
-            
-            func fail(_ error: Error) {
-                print(#function)
             }
         }
         let eventLoopGroup = EmbeddedEventLoopGroup(loops: 1)
@@ -596,11 +550,152 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
             ChangeWritabilityOnFlush(),
             handler,
         ], loop: eventLoop)
-        try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80))
+        try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).wait()
         
-        let request = Request()
+        
+        let request = HTTPTestRequest()
+        // non empty body is important to trigger this bug as we otherwise finish the request in a single flush
+        request.requestFramingMetadata.body = .fixedSize(1)
+        request.raiseErrorIfUnimplementedMethodIsCalled = false
         try channel.writeOutbound(request)
+        XCTAssertEqual(request.events.map(\.kind), [.willExecuteRequest, .requestHeadSent])
+    }
+}
+
+final class HTTPTestRequest: HTTPExecutableRequest {
+    enum Event {
+        /// ``Event`` without associated values
+        enum Kind: Hashable {
+            case willExecuteRequest
+            case requestHeadSent
+            case resumeRequestBodyStream
+            case pauseRequestBodyStream
+            case receiveResponseHead
+            case receiveResponseBodyParts
+            case succeedRequest
+            case fail
+        }
+        case willExecuteRequest(HTTPRequestExecutor)
+        case requestHeadSent
+        case resumeRequestBodyStream
+        case pauseRequestBodyStream
+        case receiveResponseHead(HTTPResponseHead)
+        case receiveResponseBodyParts(CircularBuffer<ByteBuffer>)
+        case succeedRequest(CircularBuffer<ByteBuffer>?)
+        case fail(Error)
         
+        var kind: Kind {
+            switch self {
+            case .willExecuteRequest: return .willExecuteRequest
+            case .requestHeadSent: return .requestHeadSent
+            case .resumeRequestBodyStream: return .resumeRequestBodyStream
+            case .pauseRequestBodyStream: return .pauseRequestBodyStream
+            case .receiveResponseHead: return .receiveResponseHead
+            case .receiveResponseBodyParts: return .receiveResponseBodyParts
+            case .succeedRequest: return .succeedRequest
+            case .fail: return .fail
+            }
+        }
+    }
+    
+    var logger: Logging.Logger = Logger(label: "request")
+    var requestHead: NIOHTTP1.HTTPRequestHead
+    var requestFramingMetadata: RequestFramingMetadata
+    var requestOptions: RequestOptions = .forTests()
+    
+    /// if true and ``HTTPExecutableRequest`` method is called without setting a corisbonding callback on `self` e.g.
+    /// If ``HTTPExecutableRequest\.willExecuteRequest(_:)`` is called but ``willExecuteRequestCallback`` is not set,
+    /// ``XCTestFail(_:)`` will be called to fail the current test.
+    var raiseErrorIfUnimplementedMethodIsCalled: Bool = true
+    private var file: StaticString
+    private var line: UInt
+    
+    var willExecuteRequestCallback: ((_: HTTPRequestExecutor) -> ())?
+    var requestHeadSentCallback: (() -> ())?
+    var resumeRequestBodyStreamCallback: (() -> ())?
+    var pauseRequestBodyStreamCallback: (() -> ())?
+    var receiveResponseHeadCallback: ((_ head: HTTPResponseHead) -> ())?
+    var receiveResponseBodyPartsCallback: ((_ buffer: CircularBuffer<ByteBuffer>) -> ())?
+    var succeedRequestCallback: ((_ buffer: CircularBuffer<ByteBuffer>?) -> ())?
+    var failCallback: ((_ error: Error) -> ())?
+    
+    
+    /// captures all ``HTTPExecutableRequest`` method calls in the order of occurrence, including arguments.
+    /// If you are not interested in the arguments you can use `events.map(\.kind)` to get all events without arguments.
+    private(set) var events: [Event] = []
+    
+    init(
+        head: NIOHTTP1.HTTPRequestHead = .init(version: .http1_1, method: .GET, uri: "http://localhost/"),
+        framingMetadata: RequestFramingMetadata = .init(connectionClose: false, body: .fixedSize(0)),
+        file: StaticString = #file,
+        line: UInt = #line
+    ) {
+        self.requestHead = head
+        self.requestFramingMetadata = framingMetadata
+        self.file = file
+        self.line = line
+    }
+    
+    private func calledUnimplementedMethod(_ name: String) {
+        guard raiseErrorIfUnimplementedMethodIsCalled else { return }
+        XCTFail("\(name) invoked but it is not implemented", file: file, line: line)
+    }
+    
+    func willExecuteRequest(_ executor: HTTPRequestExecutor) {
+        self.events.append(.willExecuteRequest(executor))
+        guard let willExecuteRequestCallback = willExecuteRequestCallback else {
+            return self.calledUnimplementedMethod(#function)
+        }
+        willExecuteRequestCallback(executor)
+    }
+    func requestHeadSent() {
+        self.events.append(.requestHeadSent)
+        guard let requestHeadSentCallback = requestHeadSentCallback else {
+            return self.calledUnimplementedMethod(#function)
+        }
+        requestHeadSentCallback()
+    }
+    func resumeRequestBodyStream() {
+        self.events.append(.resumeRequestBodyStream)
+        guard let resumeRequestBodyStreamCallback = resumeRequestBodyStreamCallback else {
+            return self.calledUnimplementedMethod(#function)
+        }
+        resumeRequestBodyStreamCallback()
+    }
+    func pauseRequestBodyStream() {
+        self.events.append(.pauseRequestBodyStream)
+        guard let pauseRequestBodyStreamCallback = pauseRequestBodyStreamCallback else {
+            return self.calledUnimplementedMethod(#function)
+        }
+        pauseRequestBodyStreamCallback()
+    }
+    func receiveResponseHead(_ head: HTTPResponseHead) {
+        self.events.append(.receiveResponseHead(head))
+        guard let receiveResponseHeadCallback = receiveResponseHeadCallback else {
+            return self.calledUnimplementedMethod(#function)
+        }
+        receiveResponseHeadCallback(head)
+    }
+    func receiveResponseBodyParts(_ buffer: CircularBuffer<NIOCore.ByteBuffer>) {
+        self.events.append(.receiveResponseBodyParts(buffer))
+        guard let receiveResponseBodyPartsCallback = receiveResponseBodyPartsCallback else {
+            return self.calledUnimplementedMethod(#function)
+        }
+        receiveResponseBodyPartsCallback(buffer)
+    }
+    func succeedRequest(_ buffer: CircularBuffer<NIOCore.ByteBuffer>?) {
+        self.events.append(.succeedRequest(buffer))
+        guard let succeedRequestCallback = succeedRequestCallback else {
+            return self.calledUnimplementedMethod(#function)
+        }
+        succeedRequestCallback(buffer)
+    }
+    func fail(_ error: Error) {
+        self.events.append(.fail(error))
+        guard let failCallback = failCallback else {
+            return self.calledUnimplementedMethod(#function)
+        }
+        failCallback(error)
     }
 }
 

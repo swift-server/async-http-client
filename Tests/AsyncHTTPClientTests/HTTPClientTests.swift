@@ -3364,43 +3364,17 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         XCTAssertNoThrow(try httpClient.shutdown().wait())
     }
     
-    func testMassiveHeader() throws {
-        //let httpBin = HTTPBin(.http2(compress: false))
-        let httpBin = HTTPBin(.http1_1())
-        defer {
-            print("bin shutdown started")
-            XCTAssertNoThrow(try httpBin.shutdown())
-            print("bin shutdown complete")
-        }
-        let factory = { (label: String) -> LogHandler in StreamLogHandler.standardOutput(label: label) }
-        var bgLogger = Logger(label: "BG", factory: factory)
-        bgLogger.logLevel = .trace
-        let localClient = HTTPClient(
-            eventLoopGroupProvider: .shared(self.clientGroup),
-            configuration: .init(
-                certificateVerification: .none
-            ),
-            backgroundActivityLogger: bgLogger
-        )
-        defer {
-            print("client shutdown started")
-            XCTAssertNoThrow(try localClient.syncShutdown())
-            print("client shutdown complete")
-        }
-        var rqLogger = Logger(label: "RQ", factory: factory)
-        rqLogger.logLevel = .trace
-        
-        var request = try HTTPClient.Request(url: httpBin.baseURL, method: .POST)
-        // add 4 Megabyte header
-        let headerValue = String(repeating: "0", count: 1024 * 4)
-        // non empty body is important to trigger this bug as we otherwise finish the request in a single flush
-        request.body = .byteBuffer(ByteBuffer(bytes: [0]))
-        for headerID in 0..<(1024) {
+    func testMassiveHeaderHTTP1() throws {
+        var request = try HTTPClient.Request(url: defaultHTTPBin.baseURL, method: .POST)
+        // add ~64 KB header
+        let headerValue = String(repeating: "0", count: 1024)
+        for headerID in 0..<(64) {
             request.headers.replaceOrAdd(name: "larg-header-\(headerID)", value: headerValue)
         }
-        let requests = (0..<1).map { _ in
-            localClient.execute(request: request, deadline: .now() + .seconds(10), logger: rqLogger)
-        }
-        XCTAssertNoThrow(try EventLoopFuture.whenAllSucceed(requests, on: clientGroup.any()).wait())
+        
+        // non empty body is important to trigger this bug as we otherwise finish the request in a single flush
+        request.body = .byteBuffer(ByteBuffer(bytes: [0]))
+        
+        XCTAssertNoThrow(try defaultClient.execute(request: request).wait())
     }
 }
