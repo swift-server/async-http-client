@@ -59,7 +59,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
     var requestFramingMetadata: RequestFramingMetadata
     var requestOptions: RequestOptions = .forTests()
     
-    /// if true and ``HTTPExecutableRequest`` method is called without setting a corisbonding callback on `self` e.g.
+    /// if true and ``HTTPExecutableRequest`` method is called without setting a corresponding callback on `self` e.g.
     /// If ``HTTPExecutableRequest\.willExecuteRequest(_:)`` is called but ``willExecuteRequestCallback`` is not set,
     /// ``XCTestFail(_:)`` will be called to fail the current test.
     var raiseErrorIfUnimplementedMethodIsCalled: Bool = true
