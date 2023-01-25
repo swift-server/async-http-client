@@ -157,7 +157,6 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             metadata: req.requestFramingMetadata
         )
         self.run(action, context: context)
-        promise?.succeed(())
     }
 
     func read(context: ChannelHandlerContext) {

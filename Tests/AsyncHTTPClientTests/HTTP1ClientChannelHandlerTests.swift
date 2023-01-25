@@ -554,7 +554,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         // non empty body is important to trigger this bug as we otherwise finish the request in a single flush
         request.requestFramingMetadata.body = .fixedSize(1)
         request.raiseErrorIfUnimplementedMethodIsCalled = false
-        try channel.writeOutbound(request)
+        channel.writeAndFlush(request, promise: nil)
         XCTAssertEqual(request.events.map(\.kind), [.willExecuteRequest, .requestHeadSent])
     }
 }
