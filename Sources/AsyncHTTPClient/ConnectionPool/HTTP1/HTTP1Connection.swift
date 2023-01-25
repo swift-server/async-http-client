@@ -137,7 +137,7 @@ final class HTTP1Connection {
                 backgroundLogger: logger,
                 connectionIdLoggerMetadata: "\(self.id)"
             )
-            channelHandler.onRequestCompleted = {
+            channelHandler.onConnectionIdle = {
                 self.taskCompleted()
             }
 
