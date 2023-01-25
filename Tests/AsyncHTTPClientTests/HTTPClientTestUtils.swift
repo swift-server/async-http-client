@@ -568,8 +568,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
                         initialSettings: [
                             // TODO: make max concurrent streams configurable
                             HTTP2Setting(parameter: .maxConcurrentStreams, value: 10),
-                            HTTP2Setting(parameter: .maxHeaderListSize, value: 1024 * 1024 * 16),
-                            HTTP2Setting(parameter: .maxFrameSize, value: 1024 * 1024 * 8),
+                            HTTP2Setting(parameter: .maxHeaderListSize, value: HPACKDecoder.defaultMaxHeaderListSize),
                         ]
                     )
                     let multiplexer = HTTP2StreamMultiplexer(

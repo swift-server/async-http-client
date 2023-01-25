@@ -544,9 +544,6 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
             backgroundLogger: Logger(label: "no-op", factory: SwiftLogNoOpLogHandler.init),
             connectionIdLoggerMetadata: "test connection"
         )
-        handler.onRequestCompleted = {
-            print("onRequestCompleted")
-        }
         let channel = EmbeddedChannel(handlers: [
             ChangeWritabilityOnFlush(),
             handler,

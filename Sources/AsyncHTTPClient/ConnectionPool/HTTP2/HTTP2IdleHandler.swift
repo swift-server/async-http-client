@@ -62,8 +62,7 @@ final class HTTP2IdleHandler<Delegate: HTTP2IdleHandlerDelegate>: ChannelDuplexH
         let frame = self.unwrapInboundIn(data)
 
         switch frame.payload {
-        case .goAway(_, let errorCode, _):
-            print(errorCode)
+        case .goAway:
             let action = self.state.goAwayReceived()
             self.run(action, context: context)
 
