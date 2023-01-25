@@ -3378,7 +3378,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         XCTAssertNoThrow(try defaultClient.execute(request: request).wait())
     }
-    
+
     func testMassiveHeaderHTTP2() throws {
         try XCTSkipIf(true, "this currently crashes and will be fixed in follow up PR")
         let bin = HTTPBin(.http2(settings: [
@@ -3387,14 +3387,14 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             .init(parameter: .maxFrameSize, value: 1024 * 256),
         ]))
         defer { XCTAssertNoThrow(try bin.shutdown()) }
-        
+
         let client = HTTPClient(
             eventLoopGroupProvider: .shared(clientGroup),
             configuration: .init(certificateVerification: .none)
         )
-        
+
         defer { XCTAssertNoThrow(try client.syncShutdown()) }
-        
+
         var request = try HTTPClient.Request(url: bin.baseURL, method: .POST)
         // add ~200 KB header
         let headerValue = String(repeating: "0", count: 1024)
