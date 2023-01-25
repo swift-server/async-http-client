@@ -3388,14 +3388,9 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         ]))
         defer { XCTAssertNoThrow(try bin.shutdown()) }
         
-        let loggerFactor = StreamLogHandler.standardOutput(label:)
-        var bgLogger = Logger(label: "BG", factory: loggerFactor)
-        bgLogger.logLevel = .trace
-        
         let client = HTTPClient(
             eventLoopGroupProvider: .shared(clientGroup),
-            configuration: .init(certificateVerification: .none),
-            backgroundActivityLogger: bgLogger
+            configuration: .init(certificateVerification: .none)
         )
         
         defer { XCTAssertNoThrow(try client.syncShutdown()) }
@@ -3410,8 +3405,6 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         // non empty body is important to trigger this bug as we otherwise finish the request in a single flush
         request.body = .byteBuffer(ByteBuffer(bytes: [0]))
 
-        var rqLogger = Logger(label: "RQ", factory: loggerFactor)
-        rqLogger.logLevel = .trace
-        XCTAssertNoThrow(try client.execute(request: request, logger: rqLogger).wait())
+        XCTAssertNoThrow(try client.execute(request: request).wait())
     }
 }
