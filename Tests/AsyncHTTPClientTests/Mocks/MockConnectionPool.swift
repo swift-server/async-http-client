@@ -548,7 +548,7 @@ extension MockConnectionPool {
         var queuer = MockRequestQueuer()
 
         for _ in 0..<numberOfConnections {
-            let mockRequest = MockHTTPRequest(eventLoop: eventLoop ?? elg.next())
+            let mockRequest = MockHTTPScheduableRequest(eventLoop: eventLoop ?? elg.next())
             let request = HTTPConnectionPool.Request(mockRequest)
             let action = state.executeRequest(request)
 
@@ -613,7 +613,7 @@ extension MockConnectionPool {
 
         // 1. Schedule one request to create a connection
 
-        let mockRequest = MockHTTPRequest(eventLoop: eventLoop ?? elg.next())
+        let mockRequest = MockHTTPScheduableRequest(eventLoop: eventLoop ?? elg.next())
         let request = HTTPConnectionPool.Request(mockRequest)
         let executeAction = state.executeRequest(request)
 
@@ -666,7 +666,7 @@ extension MockConnectionPool {
 
 /// A request that can be used when testing the `HTTPConnectionPool.StateMachine`
 /// with the `MockConnectionPool`.
-class MockHTTPRequest: HTTPSchedulableRequest {
+final class MockHTTPScheduableRequest: HTTPSchedulableRequest {
     let logger: Logger
     let connectionDeadline: NIODeadline
     let requestOptions: RequestOptions

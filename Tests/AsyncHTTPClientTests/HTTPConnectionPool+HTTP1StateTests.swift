@@ -37,7 +37,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         // for the first eight requests, the pool should try to create new connections.
 
         for _ in 0..<8 {
-            let mockRequest = MockHTTPRequest(eventLoop: elg.next())
+            let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
             let request = HTTPConnectionPool.Request(mockRequest)
             let action = state.executeRequest(request)
             guard case .createConnection(let connectionID, let connectionEL) = action.connection else {
@@ -53,7 +53,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         // the next eight requests should only be queued.
 
         for _ in 0..<8 {
-            let mockRequest = MockHTTPRequest(eventLoop: elg.next())
+            let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
             let request = HTTPConnectionPool.Request(mockRequest)
             let action = state.executeRequest(request)
             guard case .none = action.connection else {
@@ -120,7 +120,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         // for the first eight requests, the pool should try to create new connections.
 
         for _ in 0..<8 {
-            let mockRequest = MockHTTPRequest(eventLoop: elg.next())
+            let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
             let request = HTTPConnectionPool.Request(mockRequest)
             let action = state.executeRequest(request)
             guard case .createConnection(let connectionID, let connectionEL) = action.connection else {
@@ -136,7 +136,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         // the next eight requests should only be queued.
 
         for _ in 0..<8 {
-            let mockRequest = MockHTTPRequest(eventLoop: elg.next())
+            let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
             let request = HTTPConnectionPool.Request(mockRequest)
             let action = state.executeRequest(request)
             guard case .none = action.connection else {
@@ -181,7 +181,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             retryConnectionEstablishment: true
         )
 
-        let mockRequest = MockHTTPRequest(eventLoop: elg.next())
+        let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
         let request = HTTPConnectionPool.Request(mockRequest)
 
         let action = state.executeRequest(request)
@@ -239,7 +239,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             retryConnectionEstablishment: true
         )
 
-        let mockRequest = MockHTTPRequest(eventLoop: elg.next())
+        let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
         let request = HTTPConnectionPool.Request(mockRequest)
 
         let executeAction = state.executeRequest(request)
@@ -276,7 +276,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             retryConnectionEstablishment: true
         )
 
-        let mockRequest = MockHTTPRequest(eventLoop: elg.next())
+        let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
         let request = HTTPConnectionPool.Request(mockRequest)
 
         let executeAction = state.executeRequest(request)
@@ -310,7 +310,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         XCTAssertEqual(cleanupContext.connectBackoff, [])
 
         // 4. execute another request
-        let finalMockRequest = MockHTTPRequest(eventLoop: elg.next())
+        let finalMockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
         let finalRequest = HTTPConnectionPool.Request(finalMockRequest)
         let failAction = state.executeRequest(finalRequest)
         XCTAssertEqual(failAction.connection, .none)
@@ -339,7 +339,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
                 return XCTFail("Expected to still have connections available")
             }
 
-            let mockRequest = MockHTTPRequest(eventLoop: eventLoop)
+            let mockRequest = MockHTTPScheduableRequest(eventLoop: eventLoop)
             let request = HTTPConnectionPool.Request(mockRequest)
             let action = state.executeRequest(request)
 
@@ -359,7 +359,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         var queuer = MockRequestQueuer()
         for _ in 0..<100 {
             let eventLoop = elg.next()
-            let mockRequest = MockHTTPRequest(eventLoop: eventLoop, requiresEventLoopForChannel: false)
+            let mockRequest = MockHTTPScheduableRequest(eventLoop: eventLoop, requiresEventLoopForChannel: false)
             let request = HTTPConnectionPool.Request(mockRequest)
             let action = state.executeRequest(request)
 
@@ -418,7 +418,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
 
             // 10% of the cases enforce the eventLoop
             let elRequired = (0..<10).randomElement().flatMap { $0 == 0 ? true : false }!
-            let mockRequest = MockHTTPRequest(eventLoop: reqEventLoop, requiresEventLoopForChannel: elRequired)
+            let mockRequest = MockHTTPScheduableRequest(eventLoop: reqEventLoop, requiresEventLoopForChannel: elRequired)
             let request = HTTPConnectionPool.Request(mockRequest)
 
             let action = state.executeRequest(request)
@@ -482,7 +482,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         XCTAssertEqual(connections.parked, 8)
 
         // close a leased connection == abort
-        let mockRequest = MockHTTPRequest(eventLoop: elg.next())
+        let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
         let request = HTTPConnectionPool.Request(mockRequest)
         guard let connectionToAbort = connections.newestParkedConnection else {
             return XCTFail("Expected to have a parked connection")
@@ -536,7 +536,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
                 return XCTFail("Expected to still have connections available")
             }
 
-            let mockRequest = MockHTTPRequest(eventLoop: eventLoop)
+            let mockRequest = MockHTTPScheduableRequest(eventLoop: eventLoop)
             let request = HTTPConnectionPool.Request(mockRequest)
             let action = state.executeRequest(request)
 
@@ -553,7 +553,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         for _ in 0..<100 {
             let eventLoop = elg.next()
 
-            let mockRequest = MockHTTPRequest(eventLoop: eventLoop, requiresEventLoopForChannel: false)
+            let mockRequest = MockHTTPScheduableRequest(eventLoop: eventLoop, requiresEventLoopForChannel: false)
             let request = HTTPConnectionPool.Request(mockRequest)
             let action = state.executeRequest(request)
 
@@ -667,7 +667,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             retryConnectionEstablishment: true
         )
 
-        let mockRequest = MockHTTPRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
+        let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
         let request = HTTPConnectionPool.Request(mockRequest)
 
         let executeAction = state.executeRequest(request)
@@ -706,7 +706,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             retryConnectionEstablishment: true
         )
 
-        let mockRequest = MockHTTPRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
+        let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
         let request = HTTPConnectionPool.Request(mockRequest)
 
         let executeAction = state.executeRequest(request)
@@ -738,7 +738,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             retryConnectionEstablishment: true
         )
 
-        let mockRequest = MockHTTPRequest(eventLoop: eventLoop.next(), requiresEventLoopForChannel: false)
+        let mockRequest = MockHTTPScheduableRequest(eventLoop: eventLoop.next(), requiresEventLoopForChannel: false)
         let request = HTTPConnectionPool.Request(mockRequest)
 
         let executeAction = state.executeRequest(request)
@@ -762,7 +762,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             retryConnectionEstablishment: true
         )
 
-        let mockRequest1 = MockHTTPRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
+        let mockRequest1 = MockHTTPScheduableRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
         let request1 = HTTPConnectionPool.Request(mockRequest1)
 
         let executeAction1 = state.executeRequest(request1)
@@ -773,7 +773,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
 
         XCTAssertEqual(executeAction1.request, .scheduleRequestTimeout(for: request1, on: mockRequest1.eventLoop))
 
-        let mockRequest2 = MockHTTPRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
+        let mockRequest2 = MockHTTPScheduableRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
         let request2 = HTTPConnectionPool.Request(mockRequest2)
 
         let executeAction2 = state.executeRequest(request2)

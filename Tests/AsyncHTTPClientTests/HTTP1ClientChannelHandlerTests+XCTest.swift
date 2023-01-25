@@ -33,6 +33,7 @@ extension HTTP1ClientChannelHandlerTests {
             ("testFailHTTPRequestWithContentLengthBecauseOfChannelInactiveWaitingForDemand", testFailHTTPRequestWithContentLengthBecauseOfChannelInactiveWaitingForDemand),
             ("testWriteHTTPHeadFails", testWriteHTTPHeadFails),
             ("testHandlerClosesChannelIfLastActionIsSendEndAndItFails", testHandlerClosesChannelIfLastActionIsSendEndAndItFails),
+            ("testChannelBecomesNonWritableDuringHeaderWrite", testChannelBecomesNonWritableDuringHeaderWrite),
         ]
     }
 }
