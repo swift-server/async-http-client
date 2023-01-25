@@ -183,9 +183,19 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
     private func run(_ action: HTTP1ConnectionStateMachine.Action, context: ChannelHandlerContext) {
         switch action {
-        case .sendRequestHead(let head, startBody: let startBody):
-            self.sendRequestHead(head, startBody: startBody, context: context)
-
+        case .sendRequestHead(let head, let sendEnd):
+            self.sendRequestHead(head, sendEnd: sendEnd, context: context)
+        case .notifyRequestHeadSendSuccessfully(let resumeRequestBodyStream, let startIdleTimer):
+            
+            request!.requestHeadSent()
+            if resumeRequestBodyStream {
+                request!.resumeRequestBodyStream()
+            }
+            if startIdleTimer {
+                if let timeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
+                    self.runTimeoutAction(timeoutAction, context: context)
+                }
+            }
         case .sendBodyPart(let part, let writePromise):
             context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: writePromise)
 
@@ -320,32 +330,15 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         }
     }
 
-    private func sendRequestHead(_ head: HTTPRequestHead, startBody: Bool, context: ChannelHandlerContext) {
-        if startBody {
-            context.writeAndFlush(self.wrapOutboundOut(.head(head)), promise: nil)
-
-            // The above write might trigger an error, which may lead to a call to `errorCaught`,
-            // which in turn, may fail the request and pop it from the handler. For this reason
-            // we must check if the request is still present here.
-            guard let request = self.request else { return }
-            request.requestHeadSent()
-
-            request.resumeRequestBodyStream()
-        } else {
+    private func sendRequestHead(_ head: HTTPRequestHead, sendEnd: Bool, context: ChannelHandlerContext) {
+        if sendEnd {
             context.write(self.wrapOutboundOut(.head(head)), promise: nil)
             context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
             context.flush()
-
-            // The above write might trigger an error, which may lead to a call to `errorCaught`,
-            // which in turn, may fail the request and pop it from the handler. For this reason
-            // we must check if the request is still present here.
-            guard let request = self.request else { return }
-            request.requestHeadSent()
-
-            if let timeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
-                self.runTimeoutAction(timeoutAction, context: context)
-            }
+        } else {
+            context.writeAndFlush(self.wrapOutboundOut(.head(head)), promise: nil)
         }
+        self.run(self.state.headSent(), context: context)
     }
 
     private func runTimeoutAction(_ action: IdleReadStateMachine.Action, context: ChannelHandlerContext) {
