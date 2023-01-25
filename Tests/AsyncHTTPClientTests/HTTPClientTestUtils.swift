@@ -343,7 +343,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
                 return compress
             }
         }
-        
+
         var httpSettings: HTTP2Settings {
             switch self {
             case .http1_1, .http2(_, nil), .refuse:

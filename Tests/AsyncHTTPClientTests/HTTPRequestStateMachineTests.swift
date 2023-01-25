@@ -670,13 +670,13 @@ extension HTTPRequestStateMachine.Action: Equatable {
         switch (lhs, rhs) {
         case (.sendRequestHead(let lhsHead, let lhsStartBody), .sendRequestHead(let rhsHead, let rhsStartBody)):
             return lhsHead == rhsHead && lhsStartBody == rhsStartBody
-            
+
         case (
             .notifyRequestHeadSendSuccessfully(let lhsResumeRequestBodyStream, let lhsStartIdleTimer),
             .notifyRequestHeadSendSuccessfully(let rhsResumeRequestBodyStream, let rhsStartIdleTimer)
         ):
             return lhsResumeRequestBodyStream == rhsResumeRequestBodyStream && lhsStartIdleTimer == rhsStartIdleTimer
-            
+
         case (.sendBodyPart(let lhsData, let lhsPromise), .sendBodyPart(let rhsData, let rhsPromise)):
             return lhsData == rhsData && lhsPromise?.futureResult == rhsPromise?.futureResult
 

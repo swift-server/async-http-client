@@ -23,21 +23,21 @@ struct HTTPRequestStateMachine {
         ///  - `.waitForChannelToBecomeWritable` (if the channel becomes non writable while sending the header)
         ///  - `.sendingHead` if the channel is writable
         case initialized
-        
+
         /// Waiting for the channel to be writable. Valid transitions are:
         ///  - `.running(.streaming, .waitingForHead)` (once the Channel is writable again and if a request body is expected)
         ///  - `.running(.endSent, .waitingForHead)` (once the Channel is writable again and no request body is expected)
         ///  - `.failed` (if a connection error occurred)
         case waitForChannelToBecomeWritable(HTTPRequestHead, RequestFramingMetadata)
-        
+
         /// A request is on the wire. Valid transitions are:
         ///  - `.finished`
         ///  - `.failed`
         case running(RequestState, ResponseState)
-        
+
         /// The request has completed successfully
         case finished
-        
+
         /// The request has failed
         case failed(Error)
 
@@ -715,12 +715,12 @@ struct HTTPRequestStateMachine {
             return .sendRequestHead(head, sendEnd: false)
         }
     }
-    
+
     mutating func headSent() -> Action {
         switch self.state {
         case .initialized, .waitForChannelToBecomeWritable, .finished:
             preconditionFailure("Not a valid transition after `.sendingHeader`: \(self.state)")
-            
+
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, producer: .paused), let responseState):
             let startProducing = self.isChannelWritable && expectedBodyLength != sentBodyBytes
             self.state = .running(.streaming(
@@ -738,10 +738,9 @@ struct HTTPRequestStateMachine {
             preconditionFailure("request body producing can not start before we have successfully send the header \(self.state)")
         case .failed:
             return .wait
-            
+
         case .modifying:
             preconditionFailure("Invalid state: \(self.state)")
-        
         }
     }
 }

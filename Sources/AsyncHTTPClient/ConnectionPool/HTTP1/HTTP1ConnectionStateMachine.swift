@@ -354,9 +354,9 @@ struct HTTP1ConnectionStateMachine {
             return state.modify(with: action)
         }
     }
-    
+
     mutating func headSent() -> Action {
-        guard case .inRequest(var requestStateMachine, let close) = state else {
+        guard case .inRequest(var requestStateMachine, let close) = self.state else {
             return .wait
         }
         return self.avoidingStateMachineCoW { state in
@@ -479,7 +479,6 @@ extension HTTP1ConnectionStateMachine.State {
 
         case .failSendStreamFinished(let error, let writePromise):
             return .failSendStreamFinished(error, writePromise)
-
         }
     }
 }

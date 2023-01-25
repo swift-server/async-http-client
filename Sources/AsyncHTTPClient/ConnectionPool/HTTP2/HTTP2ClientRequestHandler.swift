@@ -143,9 +143,9 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         case .sendRequestHead(let head, let sendEnd):
             self.sendRequestHead(head, sendEnd: sendEnd, context: context)
         case .notifyRequestHeadSendSuccessfully(let resumeRequestBodyStream, let startIdleTimer):
-            request!.requestHeadSent()
+            self.request!.requestHeadSent()
             if resumeRequestBodyStream {
-                request!.resumeRequestBodyStream()
+                self.request!.resumeRequestBodyStream()
             }
             if startIdleTimer {
                 if let timeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {

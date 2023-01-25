@@ -345,7 +345,7 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
             XCTAssertEqual(embedded.isActive, false)
         }
     }
-    
+
     func testChannelBecomesNonWritableDuringHeaderWrite() throws {
         final class ChangeWritabilityOnFlush: ChannelOutboundHandler {
             typealias OutboundIn = Any

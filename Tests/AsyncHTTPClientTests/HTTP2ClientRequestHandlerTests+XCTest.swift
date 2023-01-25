@@ -30,6 +30,7 @@ extension HTTP2ClientRequestHandlerTests {
             ("testIdleReadTimeout", testIdleReadTimeout),
             ("testIdleReadTimeoutIsCanceledIfRequestIsCanceled", testIdleReadTimeoutIsCanceledIfRequestIsCanceled),
             ("testWriteHTTPHeadFails", testWriteHTTPHeadFails),
+            ("testChannelBecomesNonWritableDuringHeaderWrite", testChannelBecomesNonWritableDuringHeaderWrite),
         ]
     }
 }

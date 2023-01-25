@@ -179,7 +179,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         XCTAssertEqual(newRequestAction, .sendRequestHead(requestHead, sendEnd: true))
 
         XCTAssertEqual(state.channelInactive(), .failRequest(HTTPClientError.remoteConnectionClosed, .none))
-        
+
         XCTAssertEqual(state.headSent(), .wait)
     }
 
@@ -306,7 +306,7 @@ extension HTTP1ConnectionStateMachine.Action: Equatable {
 
         case (.sendRequestHead(let lhsHead, let lhsStartBody), .sendRequestHead(let rhsHead, let rhsStartBody)):
             return lhsHead == rhsHead && lhsStartBody == rhsStartBody
-            
+
         case (
             .notifyRequestHeadSendSuccessfully(let lhsResumeRequestBodyStream, let lhsStartIdleTimer),
             .notifyRequestHeadSendSuccessfully(let rhsResumeRequestBodyStream, let rhsStartIdleTimer)
