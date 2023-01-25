@@ -3378,4 +3378,40 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         XCTAssertNoThrow(try defaultClient.execute(request: request).wait())
     }
+    
+    func testMassiveHeaderHTTP2() throws {
+        try XCTSkipIf(true, "this currently crashes and will be fixed in follow up PR")
+        let bin = HTTPBin(.http2(settings: [
+            .init(parameter: .maxConcurrentStreams, value: 100),
+            .init(parameter: .maxHeaderListSize, value: 1024 * 256),
+            .init(parameter: .maxFrameSize, value: 1024 * 256),
+        ]))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+        
+        let loggerFactor = StreamLogHandler.standardOutput(label:)
+        var bgLogger = Logger(label: "BG", factory: loggerFactor)
+        bgLogger.logLevel = .trace
+        
+        let client = HTTPClient(
+            eventLoopGroupProvider: .shared(clientGroup),
+            configuration: .init(certificateVerification: .none),
+            backgroundActivityLogger: bgLogger
+        )
+        
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+        
+        var request = try HTTPClient.Request(url: bin.baseURL, method: .POST)
+        // add ~200 KB header
+        let headerValue = String(repeating: "0", count: 1024)
+        for headerID in 0..<200 {
+            request.headers.replaceOrAdd(name: "larg-header-\(headerID)", value: headerValue)
+        }
+
+        // non empty body is important to trigger this bug as we otherwise finish the request in a single flush
+        request.body = .byteBuffer(ByteBuffer(bytes: [0]))
+
+        var rqLogger = Logger(label: "RQ", factory: loggerFactor)
+        rqLogger.logLevel = .trace
+        XCTAssertNoThrow(try client.execute(request: request, logger: rqLogger).wait())
+    }
 }
