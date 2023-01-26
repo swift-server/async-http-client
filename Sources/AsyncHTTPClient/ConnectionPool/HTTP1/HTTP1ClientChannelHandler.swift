@@ -62,7 +62,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     private let eventLoop: EventLoop
     private let connectionIdLoggerMetadata: Logger.MetadataValue
 
-    var onRequestCompleted: () -> Void = {}
+    var onConnectionIdle: () -> Void = {}
     init(eventLoop: EventLoop, backgroundLogger: Logger, connectionIdLoggerMetadata: Logger.MetadataValue) {
         self.eventLoop = eventLoop
         self.backgroundLogger = backgroundLogger
@@ -285,7 +285,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                         if shouldClose {
                             context.close(promise: nil)
                         } else {
-                            self.onRequestCompleted()
+                            self.onConnectionIdle()
                         }
 
                         oldRequest.succeedRequest(buffer)
@@ -297,7 +297,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
                 context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: writePromise)
             case .informConnectionIsIdle:
-                self.onRequestCompleted()
+                self.onConnectionIdle()
                 oldRequest.succeedRequest(buffer)
             }
 
@@ -314,7 +314,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                 oldRequest.fail(error)
 
             case .informConnectionIsIdle:
-                self.onRequestCompleted()
+                self.onConnectionIdle()
                 oldRequest.fail(error)
 
             case .failWritePromise(let writePromise):
