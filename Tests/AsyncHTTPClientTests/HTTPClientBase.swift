@@ -39,7 +39,7 @@ class XCTestCaseHTTPClientTestsBaseClass: XCTestCase {
     var backgroundLogStore: CollectEverythingLogHandler.LogStore!
 
     var defaultHTTPBinURLPrefix: String {
-        return "http://localhost:\(self.defaultHTTPBin.port)/"
+        self.defaultHTTPBin.baseURL
     }
 
     override func setUp() {

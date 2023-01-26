@@ -3363,4 +3363,19 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
         XCTAssertNoThrow(try httpClient.shutdown().wait())
     }
+
+    func testMassiveHeaderHTTP1() throws {
+        try XCTSkipIf(true, "this currently crashes and will be fixed in follow up PR")
+        var request = try HTTPClient.Request(url: defaultHTTPBin.baseURL, method: .POST)
+        // add ~64 KB header
+        let headerValue = String(repeating: "0", count: 1024)
+        for headerID in 0..<64 {
+            request.headers.replaceOrAdd(name: "larg-header-\(headerID)", value: headerValue)
+        }
+
+        // non empty body is important to trigger this bug as we otherwise finish the request in a single flush
+        request.body = .byteBuffer(ByteBuffer(bytes: [0]))
+
+        XCTAssertNoThrow(try defaultClient.execute(request: request).wait())
+    }
 }

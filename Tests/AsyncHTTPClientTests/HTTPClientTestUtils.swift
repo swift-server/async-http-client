@@ -375,7 +375,18 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
                 return "https"
             }
         }()
-        return "\(scheme)://localhost:\(self.port)/"
+        let host: String = {
+            switch self.socketAddress {
+            case .v4:
+                return self.socketAddress.ipAddress!
+            case .v6:
+                return "[\(self.socketAddress.ipAddress!)]"
+            case .unixDomainSocket:
+                return self.socketAddress.pathname!
+            }
+        }()
+
+        return "\(scheme)://\(host):\(self.port)/"
     }
 
     private let mode: Mode

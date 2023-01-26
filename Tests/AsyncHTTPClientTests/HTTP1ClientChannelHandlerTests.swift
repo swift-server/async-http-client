@@ -526,6 +526,37 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
             XCTAssertTrue(error is FailEndHandler.Error)
         }
     }
+
+    func testChannelBecomesNonWritableDuringHeaderWrite() throws {
+        try XCTSkipIf(true, "this currently fails and will be fixed in follow up PR")
+        final class ChangeWritabilityOnFlush: ChannelOutboundHandler {
+            typealias OutboundIn = Any
+            func flush(context: ChannelHandlerContext) {
+                context.flush()
+                (context.channel as! EmbeddedChannel).isWritable = false
+                context.fireChannelWritabilityChanged()
+            }
+        }
+        let eventLoopGroup = EmbeddedEventLoopGroup(loops: 1)
+        let eventLoop = eventLoopGroup.next() as! EmbeddedEventLoop
+        let handler = HTTP1ClientChannelHandler(
+            eventLoop: eventLoop,
+            backgroundLogger: Logger(label: "no-op", factory: SwiftLogNoOpLogHandler.init),
+            connectionIdLoggerMetadata: "test connection"
+        )
+        let channel = EmbeddedChannel(handlers: [
+            ChangeWritabilityOnFlush(),
+            handler,
+        ], loop: eventLoop)
+        try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).wait()
+
+        let request = MockHTTPExecutableRequest()
+        // non empty body is important to trigger this bug as we otherwise finish the request in a single flush
+        request.requestFramingMetadata.body = .fixedSize(1)
+        request.raiseErrorIfUnimplementedMethodIsCalled = false
+        channel.writeAndFlush(request, promise: nil)
+        XCTAssertEqual(request.events.map(\.kind), [.willExecuteRequest, .requestHeadSent])
+    }
 }
 
 class TestBackpressureWriter {
