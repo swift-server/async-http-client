@@ -144,7 +144,6 @@ extension HTTPClientTests {
             ("testMassiveDownload", testMassiveDownload),
             ("testShutdownWithFutures", testShutdownWithFutures),
             ("testMassiveHeaderHTTP1", testMassiveHeaderHTTP1),
-            ("testMassiveHeaderHTTP2", testMassiveHeaderHTTP2),
         ]
     }
 }
