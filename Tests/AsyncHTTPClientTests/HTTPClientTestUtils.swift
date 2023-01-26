@@ -329,15 +329,30 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
         // supports http1.1 connections only, which can be either plain text or encrypted
         case http1_1(ssl: Bool = false, compress: Bool = false)
         // supports http1.1 and http2 connections which must be always encrypted
-        case http2(compress: Bool)
+        case http2(
+            compress: Bool = false,
+            settings: HTTP2Settings? = nil
+        )
 
         // supports request decompression and http response compression
         var compress: Bool {
             switch self {
             case .refuse:
                 return false
-            case .http1_1(ssl: _, compress: let compress), .http2(compress: let compress):
+            case .http1_1(ssl: _, compress: let compress), .http2(compress: let compress, _):
                 return compress
+            }
+        }
+
+        var httpSettings: HTTP2Settings {
+            switch self {
+            case .http1_1, .http2(_, nil), .refuse:
+                return [
+                    HTTP2Setting(parameter: .maxConcurrentStreams, value: 10),
+                    HTTP2Setting(parameter: .maxHeaderListSize, value: HPACKDecoder.defaultMaxHeaderListSize),
+                ]
+            case .http2(_, .some(let customSettings)):
+                return customSettings
             }
         }
     }
@@ -565,11 +580,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
                     // Successful upgrade to HTTP/2. Let the user configure the pipeline.
                     let http2Handler = NIOHTTP2Handler(
                         mode: .server,
-                        initialSettings: [
-                            // TODO: make max concurrent streams configurable
-                            HTTP2Setting(parameter: .maxConcurrentStreams, value: 10),
-                            HTTP2Setting(parameter: .maxHeaderListSize, value: HPACKDecoder.defaultMaxHeaderListSize),
-                        ]
+                        initialSettings: self.mode.httpSettings
                     )
                     let multiplexer = HTTP2StreamMultiplexer(
                         mode: .server,
