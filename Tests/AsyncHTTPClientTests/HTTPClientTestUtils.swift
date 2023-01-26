@@ -348,7 +348,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
             switch self {
             case .http1_1, .http2(_, nil), .refuse:
                 return [
-                    HTTP2Setting(parameter: .maxConcurrentStreams, value: 100),
+                    HTTP2Setting(parameter: .maxConcurrentStreams, value: 10),
                     HTTP2Setting(parameter: .maxHeaderListSize, value: HPACKDecoder.defaultMaxHeaderListSize),
                 ]
             case .http2(_, .some(let customSettings)):
