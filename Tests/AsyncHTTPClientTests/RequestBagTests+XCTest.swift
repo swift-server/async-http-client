@@ -40,6 +40,7 @@ extension RequestBagTests {
             ("testRedirectWith3KBBody", testRedirectWith3KBBody),
             ("testRedirectWith4KBBodyAnnouncedInResponseHead", testRedirectWith4KBBodyAnnouncedInResponseHead),
             ("testRedirectWith4KBBodyNotAnnouncedInResponseHead", testRedirectWith4KBBodyNotAnnouncedInResponseHead),
+            ("testWeDontLeakTheRequestIfTheRequestWriterWasCapturedByAPromise", testWeDontLeakTheRequestIfTheRequestWriterWasCapturedByAPromise),
         ]
     }
 }
