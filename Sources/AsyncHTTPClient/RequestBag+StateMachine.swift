@@ -29,15 +29,15 @@ extension HTTPClient {
 extension RequestBag {
     struct StateMachine {
         fileprivate enum State {
-            case initialized
-            case queued(HTTPRequestScheduler)
+            case initialized(RedirectHandler<Delegate.Response>?)
+            case queued(HTTPRequestScheduler, RedirectHandler<Delegate.Response>?)
             /// if the deadline was exceeded while in the `.queued(_:)` state,
             /// we wait until the request pool fails the request with a potential more descriptive error message,
             /// if a connection failure has occured while the request was queued.
             case deadlineExceededWhileQueued
             case executing(HTTPRequestExecutor, RequestStreamState, ResponseStreamState)
             case finished(error: Error?)
-            case redirected(HTTPRequestExecutor, Int, HTTPResponseHead, URL)
+            case redirected(HTTPRequestExecutor, RedirectHandler<Delegate.Response>, Int, HTTPResponseHead, URL)
             case modifying
         }
 
@@ -55,23 +55,22 @@ extension RequestBag {
                 case eof
             }
 
-            case initialized
+            case initialized(RedirectHandler<Delegate.Response>?)
             case buffering(CircularBuffer<ByteBuffer>, next: Next)
             case waitingForRemote
         }
 
-        private var state: State = .initialized
-        private let redirectHandler: RedirectHandler<Delegate.Response>?
+        private var state: State
 
         init(redirectHandler: RedirectHandler<Delegate.Response>?) {
-            self.redirectHandler = redirectHandler
+            self.state = .initialized(redirectHandler)
         }
     }
 }
 
 extension RequestBag.StateMachine {
     mutating func requestWasQueued(_ scheduler: HTTPRequestScheduler) {
-        guard case .initialized = self.state else {
+        guard case .initialized(let redirectHandler) = self.state else {
             // There might be a race between `requestWasQueued` and `willExecuteRequest`:
             //
             // If the request is created and passed to the HTTPClient on thread A, it will move into
@@ -91,7 +90,7 @@ extension RequestBag.StateMachine {
             return
         }
 
-        self.state = .queued(scheduler)
+        self.state = .queued(scheduler, redirectHandler)
     }
 
     enum WillExecuteRequestAction {
@@ -102,8 +101,8 @@ extension RequestBag.StateMachine {
 
     mutating func willExecuteRequest(_ executor: HTTPRequestExecutor) -> WillExecuteRequestAction {
         switch self.state {
-        case .initialized, .queued:
-            self.state = .executing(executor, .initialized, .initialized)
+        case .initialized(let redirectHandler), .queued(_, let redirectHandler):
+            self.state = .executing(executor, .initialized, .initialized(redirectHandler))
             return .none
         case .deadlineExceededWhileQueued:
             let error: Error = HTTPClientError.deadlineExceeded
@@ -127,8 +126,8 @@ extension RequestBag.StateMachine {
         case .initialized, .queued, .deadlineExceededWhileQueued:
             preconditionFailure("A request stream can only be resumed, if the request was started")
 
-        case .executing(let executor, .initialized, .initialized):
-            self.state = .executing(executor, .producing, .initialized)
+        case .executing(let executor, .initialized, .initialized(let redirectHandler)):
+            self.state = .executing(executor, .producing, .initialized(redirectHandler))
             return .startWriter
 
         case .executing(_, .producing, _):
@@ -299,11 +298,11 @@ extension RequestBag.StateMachine {
         case .initialized, .queued, .deadlineExceededWhileQueued:
             preconditionFailure("How can we receive a response, if the request hasn't started yet.")
         case .executing(let executor, let requestState, let responseState):
-            guard case .initialized = responseState else {
+            guard case .initialized(let redirectHandler) = responseState else {
                 preconditionFailure("If we receive a response, we must not have received something else before")
             }
 
-            if let redirectURL = self.redirectHandler?.redirectTarget(
+            if let redirectHandler = redirectHandler, let redirectURL = redirectHandler.redirectTarget(
                 status: head.status,
                 responseHeaders: head.headers
             ) {
@@ -312,11 +311,11 @@ extension RequestBag.StateMachine {
                 // smaller than 3kb.
                 switch head.contentLength {
                 case .some(0...(HTTPClient.maxBodySizeRedirectResponse)), .none:
-                    self.state = .redirected(executor, 0, head, redirectURL)
+                    self.state = .redirected(executor, redirectHandler, 0, head, redirectURL)
                     return .signalBodyDemand(executor)
                 case .some:
                     self.state = .finished(error: HTTPClientError.cancelled)
-                    return .redirect(executor, self.redirectHandler!, head, redirectURL)
+                    return .redirect(executor, redirectHandler, head, redirectURL)
                 }
             } else {
                 self.state = .executing(executor, requestState, .buffering(.init(), next: .askExecutorForMore))
@@ -369,15 +368,15 @@ extension RequestBag.StateMachine {
             } else {
                 return .none
             }
-        case .redirected(let executor, var receivedBytes, let head, let redirectURL):
+        case .redirected(let executor, let redirectHandler, var receivedBytes, let head, let redirectURL):
             let partsLength = buffer.reduce(into: 0) { $0 += $1.readableBytes }
             receivedBytes += partsLength
 
             if receivedBytes > HTTPClient.maxBodySizeRedirectResponse {
                 self.state = .finished(error: HTTPClientError.cancelled)
-                return .redirect(executor, self.redirectHandler!, head, redirectURL)
+                return .redirect(executor, redirectHandler, head, redirectURL)
             } else {
-                self.state = .redirected(executor, receivedBytes, head, redirectURL)
+                self.state = .redirected(executor, redirectHandler, receivedBytes, head, redirectURL)
                 return .signalBodyDemand(executor)
             }
 
@@ -428,9 +427,9 @@ extension RequestBag.StateMachine {
             self.state = .executing(executor, requestState, .buffering(newChunks, next: .eof))
             return .consume(first)
 
-        case .redirected(_, _, let head, let redirectURL):
+        case .redirected(_, let redirectHandler, _, let head, let redirectURL):
             self.state = .finished(error: nil)
-            return .redirect(self.redirectHandler!, head, redirectURL)
+            return .redirect(redirectHandler, head, redirectURL)
 
         case .finished(error: .some):
             return .none
@@ -553,7 +552,7 @@ extension RequestBag.StateMachine {
 
     mutating func deadlineExceeded() -> DeadlineExceededAction {
         switch self.state {
-        case .queued(let queuer):
+        case .queued(let queuer, _):
             /// We do not fail the request immediately because we want to give the scheduler a chance of throwing a better error message
             /// We therefore depend on the scheduler failing the request after we cancel the request.
             self.state = .deadlineExceededWhileQueued
@@ -582,7 +581,7 @@ extension RequestBag.StateMachine {
         case .initialized:
             self.state = .finished(error: error)
             return .failTask(error, nil, nil)
-        case .queued(let queuer):
+        case .queued(let queuer, _):
             self.state = .finished(error: error)
             return .failTask(error, queuer, nil)
         case .executing(let executor, let requestState, .buffering(_, next: .eof)):

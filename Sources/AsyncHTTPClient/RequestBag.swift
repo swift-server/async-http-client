@@ -33,7 +33,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
     }
 
     private let delegate: Delegate
-    private let request: HTTPClient.Request
+    private var request: HTTPClient.Request
 
     // the request state is synchronized on the task eventLoop
     private var state: StateMachine
@@ -126,6 +126,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             guard let body = self.request.body else {
                 preconditionFailure("Expected to have a body, if the `HTTPRequestStateMachine` resume a request stream")
             }
+            self.request.body = nil
 
             let writer = HTTPClient.Body.StreamWriter {
                 self.writeNextRequestPart($0)
