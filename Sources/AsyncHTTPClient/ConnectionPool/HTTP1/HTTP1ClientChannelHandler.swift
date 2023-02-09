@@ -186,10 +186,14 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         case .sendRequestHead(let head, let sendEnd):
             self.sendRequestHead(head, sendEnd: sendEnd, context: context)
         case .notifyRequestHeadSendSuccessfully(let resumeRequestBodyStream, let startIdleTimer):
-
+            // We can force unwrap the request here, as we have just validated in the state machine,
+            // that the request is neither failed nor finished yet
             self.request!.requestHeadSent()
-            if resumeRequestBodyStream {
-                self.request!.resumeRequestBodyStream()
+            if resumeRequestBodyStream, let request = self.request {
+                // The above request head send notification might lead the request to mark itself as
+                // cancelled, which in turn might pop the request of the handler. For this reason we
+                // must check if the request is still present here.
+                request.resumeRequestBodyStream()
             }
             if startIdleTimer {
                 if let timeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
