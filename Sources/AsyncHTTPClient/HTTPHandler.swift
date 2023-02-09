@@ -379,7 +379,8 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
     }
 
     var state = State.idle
-    let request: HTTPClient.Request
+    let requestMethod: HTTPMethod
+    let requestHost: String
 
     static let maxByteBufferSize = Int(UInt32.max)
 
@@ -408,14 +409,15 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
             maxBodySize <= Self.maxByteBufferSize,
             "maxBodyLength is not allowed to exceed 2^32 because ByteBuffer can not store more bytes"
         )
-        self.request = request
+        self.requestMethod = request.method
+        self.requestHost = request.host
         self.maxBodySize = maxBodySize
     }
 
     public func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         switch self.state {
         case .idle:
-            if self.request.method != .HEAD,
+            if self.requestMethod != .HEAD,
                let contentLength = head.headers.first(name: "Content-Length"),
                let announcedBodySize = Int(contentLength),
                announcedBodySize > self.maxBodySize {
@@ -481,9 +483,9 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
         case .idle:
             preconditionFailure("no head received before end")
         case .head(let head):
-            return Response(host: self.request.host, status: head.status, version: head.version, headers: head.headers, body: nil)
+            return Response(host: self.requestHost, status: head.status, version: head.version, headers: head.headers, body: nil)
         case .body(let head, let body):
-            return Response(host: self.request.host, status: head.status, version: head.version, headers: head.headers, body: body)
+            return Response(host: self.requestHost, status: head.status, version: head.version, headers: head.headers, body: body)
         case .end:
             preconditionFailure("request already processed")
         case .error(let error):
