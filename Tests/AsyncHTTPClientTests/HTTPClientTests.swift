@@ -3405,32 +3405,32 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         XCTAssertNoThrow(try client.execute(request: request).wait())
     }
-    
+
     func testCancelingHTTP1RequestAfterHeaderSend() throws {
         var request = try HTTPClient.Request(url: self.defaultHTTPBin.baseURL + "/wait", method: .POST)
         // non-empty body is important
         request.body = .byteBuffer(ByteBuffer([1]))
-        
+
         class CancelAfterHeadSend: HTTPClientResponseDelegate {
             init() {}
-            func didFinishRequest(task: AsyncHTTPClient.HTTPClient.Task<Void>) throws -> Void { }
+            func didFinishRequest(task: AsyncHTTPClient.HTTPClient.Task<Void>) throws {}
             func didSendRequestHead(task: HTTPClient.Task<Void>, _ head: HTTPRequestHead) {
                 task.cancel()
             }
         }
         XCTAssertThrowsError(try defaultClient.execute(request: request, delegate: CancelAfterHeadSend()).wait())
     }
-    
+
     func testCancelingHTTP2RequestAfterHeaderSend() throws {
         let bin = HTTPBin(.http2())
         defer { XCTAssertNoThrow(try bin.shutdown()) }
         var request = try HTTPClient.Request(url: bin.baseURL + "/wait", method: .POST)
         // non-empty body is important
         request.body = .byteBuffer(ByteBuffer([1]))
-        
+
         class CancelAfterHeadSend: HTTPClientResponseDelegate {
             init() {}
-            func didFinishRequest(task: AsyncHTTPClient.HTTPClient.Task<Void>) throws -> Void { }
+            func didFinishRequest(task: AsyncHTTPClient.HTTPClient.Task<Void>) throws {}
             func didSendRequestHead(task: HTTPClient.Task<Void>, _ head: HTTPRequestHead) {
                 task.cancel()
             }
