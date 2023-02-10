@@ -347,7 +347,6 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
     }
 
     func testChannelBecomesNonWritableDuringHeaderWrite() throws {
-        try XCTSkipIf(true, "this currently fails and will be fixed in follow up PR")
         final class ChangeWritabilityOnFlush: ChannelOutboundHandler {
             typealias OutboundIn = Any
             func flush(context: ChannelHandlerContext) {
