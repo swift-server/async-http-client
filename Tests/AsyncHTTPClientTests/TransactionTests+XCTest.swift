@@ -26,6 +26,7 @@ extension TransactionTests {
     static var allTests: [(String, (TransactionTests) -> () throws -> Void)] {
         return [
             ("testCancelAsyncRequest", testCancelAsyncRequest),
+            ("testDeadlineExceededWhileQueuedAndExecutorImmediatelyCancelsTask", testDeadlineExceededWhileQueuedAndExecutorImmediatelyCancelsTask),
             ("testResponseStreamingWorks", testResponseStreamingWorks),
             ("testIgnoringResponseBodyWorks", testIgnoringResponseBodyWorks),
             ("testWriteBackpressureWorks", testWriteBackpressureWorks),
