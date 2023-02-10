@@ -58,6 +58,55 @@ final class TransactionTests: XCTestCase {
             XCTAssertEqual(queuer.hitCancelCount, 1)
         }
     }
+    
+    func testDeadlineExceededWhileQueuedAndExecutorImmediatelyCancelsTask() {
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
+        XCTAsyncTest {
+            let embeddedEventLoop = EmbeddedEventLoop()
+            defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+
+            var request = HTTPClientRequest(url: "https://localhost/")
+            request.method = .GET
+            var maybePreparedRequest: PreparedRequest?
+            XCTAssertNoThrow(maybePreparedRequest = try PreparedRequest(request))
+            guard let preparedRequest = maybePreparedRequest else {
+                return XCTFail("Expected to have a request here.")
+            }
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
+                request: preparedRequest,
+                preferredEventLoop: embeddedEventLoop
+            )
+
+            let queuer = MockTaskQueuer()
+            transaction.requestWasQueued(queuer)
+            
+            transaction.deadlineExceeded()
+            
+            struct Executor: HTTPRequestExecutor {
+                func writeRequestBodyPart(_: NIOCore.IOData, request: AsyncHTTPClient.HTTPExecutableRequest, promise: NIOCore.EventLoopPromise<Void>?) {
+                    XCTFail()
+                }
+                
+                func finishRequestBodyStream(_ task: AsyncHTTPClient.HTTPExecutableRequest, promise: NIOCore.EventLoopPromise<Void>?) {
+                    XCTFail()
+                }
+                
+                func demandResponseBodyStream(_ task: AsyncHTTPClient.HTTPExecutableRequest) {
+                    XCTFail()
+                }
+                
+                func cancelRequest(_ task: AsyncHTTPClient.HTTPExecutableRequest) {
+                    task.fail(HTTPClientError.cancelled)
+                }
+            }
+            
+            transaction.willExecuteRequest(Executor())
+            
+            await XCTAssertThrowsError(try await responseTask.value) { error in
+                XCTAssertEqualTypeAndValue(error, HTTPClientError.deadlineExceeded)
+            }
+        }
+    }
 
     func testResponseStreamingWorks() {
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }

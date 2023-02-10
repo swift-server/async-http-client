@@ -207,7 +207,9 @@ extension Transaction {
                 self.state = .executing(context, .requestHeadSent, .waitingForResponseHead)
                 return .none
             case .deadlineExceededWhileQueued(let continuation):
-                return .cancelAndFail(executor, continuation, with: HTTPClientError.deadlineExceeded)
+                let error = HTTPClientError.deadlineExceeded
+                state = .finished(error: error, nil)
+                return .cancelAndFail(executor, continuation, with: error)
 
             case .finished(error: .some, .none):
                 return .cancel(executor)
