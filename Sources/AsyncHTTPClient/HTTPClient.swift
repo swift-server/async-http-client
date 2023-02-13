@@ -139,17 +139,29 @@ public class HTTPClient {
                 """)
             case .upAndRunning:
                 preconditionFailure("""
-                Client not shut down before the deinit. Please call client.syncShutdown() when no \
+                Client not shut down before the deinit. Please call client.shutdown() when no \
                 longer needed. Otherwise memory will leak.
                 """)
             }
         }
     }
 
+    #if swift(>=5.7)
     /// Shuts down the client and `EventLoopGroup` if it was created by the client.
+    ///
+    /// This method blocks the thread indefinitely, prefer using ``shutdown()-96ayw``.
+    @available(*, noasync, message: "syncShutdown() can block indefinitely, prefer shutdown()", renamed: "shutdown()")
     public func syncShutdown() throws {
         try self.syncShutdown(requiresCleanClose: false)
     }
+    #else
+    /// Shuts down the client and `EventLoopGroup` if it was created by the client.
+    ///
+    /// This method blocks the thread indefinitely, prefer using ``shutdown()-96ayw``.
+    public func syncShutdown() throws {
+        try self.syncShutdown(requiresCleanClose: false)
+    }
+    #endif
 
     /// Shuts down the client and `EventLoopGroup` if it was created by the client.
     ///
