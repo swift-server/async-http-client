@@ -71,7 +71,7 @@ httpClient.get(url: "https://apple.com/").whenComplete { result in
 }
 ```
 
-You should always shut down ``HTTPClient`` instances you created using ``HTTPClient/syncShutdown()``. Please note that you must not call ``HTTPClient/syncShutdown()`` before all requests of the HTTP client have finished, or else the in-flight requests will likely fail because their network connections are interrupted.
+You should always shut down ``HTTPClient`` instances you created using ``HTTPClient/shutdown()-96ayw()``. Please note that you must not call ``HTTPClient/shutdown()-96ayw()`` before all requests of the HTTP client have finished, or else the in-flight requests will likely fail because their network connections are interrupted.
 
 ### async/await examples
 

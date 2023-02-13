@@ -140,9 +140,23 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
     private func run(_ action: HTTPRequestStateMachine.Action, context: ChannelHandlerContext) {
         switch action {
-        case .sendRequestHead(let head, let startBody):
-            self.sendRequestHead(head, startBody: startBody, context: context)
-
+        case .sendRequestHead(let head, let sendEnd):
+            self.sendRequestHead(head, sendEnd: sendEnd, context: context)
+        case .notifyRequestHeadSendSuccessfully(let resumeRequestBodyStream, let startIdleTimer):
+            // We can force unwrap the request here, as we have just validated in the state machine,
+            // that the request is neither failed nor finished yet
+            self.request!.requestHeadSent()
+            if resumeRequestBodyStream, let request = self.request {
+                // The above request head send notification might lead the request to mark itself as
+                // cancelled, which in turn might pop the request of the handler. For this reason we
+                // must check if the request is still present here.
+                request.resumeRequestBodyStream()
+            }
+            if startIdleTimer {
+                if let timeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
+                    self.runTimeoutAction(timeoutAction, context: context)
+                }
+            }
         case .pauseRequestBodyStream:
             // We can force unwrap the request here, as we have just validated in the state machine,
             // that the request is neither failed nor finished yet
@@ -210,31 +224,15 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         }
     }
 
-    private func sendRequestHead(_ head: HTTPRequestHead, startBody: Bool, context: ChannelHandlerContext) {
-        if startBody {
-            context.writeAndFlush(self.wrapOutboundOut(.head(head)), promise: nil)
-
-            // The above write might trigger an error, which may lead to a call to `errorCaught`,
-            // which in turn, may fail the request and pop it from the handler. For this reason
-            // we must check if the request is still present here.
-            guard let request = self.request else { return }
-            request.requestHeadSent()
-            request.resumeRequestBodyStream()
-        } else {
+    private func sendRequestHead(_ head: HTTPRequestHead, sendEnd: Bool, context: ChannelHandlerContext) {
+        if sendEnd {
             context.write(self.wrapOutboundOut(.head(head)), promise: nil)
             context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
             context.flush()
-
-            // The above write might trigger an error, which may lead to a call to `errorCaught`,
-            // which in turn, may fail the request and pop it from the handler. For this reason
-            // we must check if the request is still present here.
-            guard let request = self.request else { return }
-            request.requestHeadSent()
-
-            if let timeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
-                self.runTimeoutAction(timeoutAction, context: context)
-            }
+        } else {
+            context.writeAndFlush(self.wrapOutboundOut(.head(head)), promise: nil)
         }
+        self.run(self.state.headSent(), context: context)
     }
 
     private func runSuccessfulFinalAction(_ action: HTTPRequestStateMachine.Action.FinalSuccessfulRequestAction, context: ChannelHandlerContext) {
