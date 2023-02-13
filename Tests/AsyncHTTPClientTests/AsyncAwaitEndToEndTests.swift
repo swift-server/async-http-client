@@ -725,6 +725,26 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             }
         }
     }
+
+    func testUsingGetMethodInsteadOfWait() {
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
+        XCTAsyncTest {
+            let bin = HTTPBin(.http2(compress: false))
+            defer { XCTAssertNoThrow(try bin.shutdown()) }
+            let client = makeDefaultHTTPClient()
+            defer { XCTAssertNoThrow(try client.syncShutdown()) }
+            let request = try HTTPClient.Request(url: "https://localhost:\(bin.port)/get")
+
+            guard let response = await XCTAssertNoThrowWithResult(
+                try await client.execute(request: request).get()
+            ) else {
+                return
+            }
+
+            XCTAssertEqual(response.status, .ok)
+            XCTAssertEqual(response.version, .http2)
+        }
+    }
 }
 
 extension AsyncSequence where Element == ByteBuffer {

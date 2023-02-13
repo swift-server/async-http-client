@@ -750,12 +750,32 @@ extension HTTPClient {
             return self.promise.futureResult
         }
 
+        #if swift(>=5.7)
         /// Waits for execution of this request to complete.
         ///
-        /// - returns: The value of the `EventLoopFuture` when it completes.
-        /// - throws: The error value of the `EventLoopFuture` if it errors.
+        /// - returns: The value of  ``futureResult`` when it completes.
+        /// - throws: The error value of ``futureResult`` if it errors.
+        @available(*, noasync, message: "wait() can block indefinitely, prefer get()", renamed: "get()")
         public func wait() throws -> Response {
             return try self.promise.futureResult.wait()
+        }
+        #else
+        /// Waits for execution of this request to complete.
+        ///
+        /// - returns: The value of ``futureResult`` when it completes.
+        /// - throws: The error value of ``futureResult`` if it errors.
+        public func wait() throws -> Response {
+            return try self.promise.futureResult.wait()
+        }
+        #endif
+
+        /// Provides the result of this request.
+        ///
+        /// - returns: The value of ``futureResult`` when it completes.
+        /// - throws: The error value of ``futureResult`` if it errors.
+        @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+        public func get() async throws -> Response {
+            return try await self.promise.futureResult.get()
         }
 
         /// Cancels the request execution.
