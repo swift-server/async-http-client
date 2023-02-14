@@ -237,21 +237,25 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
     private func runSuccessfulFinalAction(_ action: HTTPRequestStateMachine.Action.FinalSuccessfulRequestAction, context: ChannelHandlerContext) {
         switch action {
-        case .close:
-            context.close(promise: nil)
+        case .close, .none:
+            // The actions returned here come from an `HTTPRequestStateMachine` that assumes http/1.1
+            // semantics. For this reason we can ignore the close here, since an h2 stream is closed
+            // after every request anyway.
+            break
 
         case .sendRequestEnd(let writePromise):
             context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: writePromise)
-
-        case .none:
-            break
         }
     }
 
     private func runFailedFinalAction(_ action: HTTPRequestStateMachine.Action.FinalFailedRequestAction, context: ChannelHandlerContext, error: Error) {
+        // We must close the http2 stream after the request has finished. Since the request failed,
+        // we have no idea what the h2 streams state was. To be on the save side, we explicitly close
+        // the h2 stream. This will break a reference cycle in HTTP2Connection.
+        context.close(promise: nil)
+
         switch action {
         case .close(let writePromise):
-            context.close(promise: nil)
             writePromise?.fail(error)
 
         case .none:

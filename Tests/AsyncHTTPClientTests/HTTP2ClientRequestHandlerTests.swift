@@ -335,6 +335,7 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
 
             // the handler only writes once the channel is writable
             XCTAssertEqual(try embedded.readOutbound(as: HTTPClientRequestPart.self), .none)
+            XCTAssertTrue(embedded.isActive)
             embedded.isWritable = true
             embedded.pipeline.fireChannelWritabilityChanged()
 
@@ -342,7 +343,7 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
                 XCTAssertEqual($0 as? WriteError, WriteError())
             }
 
-            XCTAssertEqual(embedded.isActive, false)
+            XCTAssertFalse(embedded.isActive)
         }
     }
 

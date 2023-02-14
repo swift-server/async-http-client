@@ -77,7 +77,7 @@ final class HTTP2Connection {
 
     /// We use this channel set to remember, which open streams we need to inform that
     /// we want to close the connection. The channels shall than cancel their currently running
-    /// request.
+    /// request. This property must only be accessed from the connections `EventLoop`.
     private var openStreams = Set<ChannelBox>()
     let id: HTTPConnectionPool.Connection.ID
     let decompression: HTTPClient.Decompression
@@ -241,7 +241,7 @@ final class HTTP2Connection {
                     // before.
                     let box = ChannelBox(channel)
                     self.openStreams.insert(box)
-                    self.channel.closeFuture.whenComplete { _ in
+                    channel.closeFuture.whenComplete { _ in
                         self.openStreams.remove(box)
                     }
 
@@ -286,6 +286,11 @@ final class HTTP2Connection {
         case .initialized, .starting:
             preconditionFailure("invalid state \(self.state)")
         }
+    }
+
+    func __forTesting_getStreamChannels() -> [Channel] {
+        self.channel.eventLoop.preconditionInEventLoop()
+        return self.openStreams.map { $0.channel }
     }
 }
 

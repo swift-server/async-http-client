@@ -243,6 +243,99 @@ class HTTP2ConnectionTests: XCTestCase {
 
         XCTAssertNoThrow(try http2Connection.closeFuture.wait())
     }
+
+    func testChildStreamsAreRemovedFromTheOpenChannelListOnceTheRequestIsDone() {
+        class SucceedPromiseOnRequestHandler: ChannelInboundHandler {
+            typealias InboundIn = HTTPServerRequestPart
+            typealias OutboundOut = HTTPServerResponsePart
+
+            let dataArrivedPromise: EventLoopPromise<Void>
+            let triggerResponseFuture: EventLoopFuture<Void>
+
+            init(dataArrivedPromise: EventLoopPromise<Void>, triggerResponseFuture: EventLoopFuture<Void>) {
+                self.dataArrivedPromise = dataArrivedPromise
+                self.triggerResponseFuture = triggerResponseFuture
+            }
+
+            func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+                self.dataArrivedPromise.succeed(())
+
+                self.triggerResponseFuture.hop(to: context.eventLoop).whenSuccess {
+                    switch self.unwrapInboundIn(data) {
+                    case .head:
+                        context.write(self.wrapOutboundOut(.head(.init(version: .http2, status: .ok))), promise: nil)
+                        context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+                    case .body, .end:
+                        break
+                    }
+                }
+            }
+        }
+
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        let eventLoop = eventLoopGroup.next()
+        defer { XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully()) }
+
+        let serverReceivedRequestPromise = eventLoop.makePromise(of: Void.self)
+        let triggerResponsePromise = eventLoop.makePromise(of: Void.self)
+        let httpBin = HTTPBin(.http2(compress: false)) { _ in
+            SucceedPromiseOnRequestHandler(
+                dataArrivedPromise: serverReceivedRequestPromise,
+                triggerResponseFuture: triggerResponsePromise.futureResult
+            )
+        }
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
+
+        let connectionCreator = TestConnectionCreator()
+        let delegate = TestHTTP2ConnectionDelegate()
+        var maybeHTTP2Connection: HTTP2Connection?
+        XCTAssertNoThrow(maybeHTTP2Connection = try connectionCreator.createHTTP2Connection(
+            to: httpBin.port,
+            delegate: delegate,
+            on: eventLoop
+        ))
+        guard let http2Connection = maybeHTTP2Connection else {
+            return XCTFail("Expected to have an HTTP2 connection here.")
+        }
+
+        var maybeRequest: HTTPClient.Request?
+        var maybeRequestBag: RequestBag<ResponseAccumulator>?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://localhost:\(httpBin.port)"))
+        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+            request: XCTUnwrap(maybeRequest),
+            eventLoopPreference: .indifferent,
+            task: .init(eventLoop: eventLoop, logger: .init(label: "test")),
+            redirectHandler: nil,
+            connectionDeadline: .distantFuture,
+            requestOptions: .forTests(),
+            delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
+        ))
+        guard let requestBag = maybeRequestBag else {
+            return XCTFail("Expected to have a request bag at this point")
+        }
+
+        http2Connection.executeRequest(requestBag)
+
+        XCTAssertNoThrow(try serverReceivedRequestPromise.futureResult.wait())
+        var channelCount: Int?
+        XCTAssertNoThrow(channelCount = try eventLoop.submit { http2Connection.__forTesting_getStreamChannels().count }.wait())
+        XCTAssertEqual(channelCount, 1)
+        triggerResponsePromise.succeed(())
+
+        XCTAssertNoThrow(try requestBag.task.futureResult.wait())
+
+        // this is racy. for this reason we allow a couple of tries
+        var retryCount = 0
+        let maxRetries = 1000
+        while retryCount < maxRetries {
+            XCTAssertNoThrow(channelCount = try eventLoop.submit { http2Connection.__forTesting_getStreamChannels().count }.wait())
+            if channelCount == 0 {
+                break
+            }
+            retryCount += 1
+        }
+        XCTAssertLessThan(retryCount, maxRetries)
+    }
 }
 
 class TestConnectionCreator {
