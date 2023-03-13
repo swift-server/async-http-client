@@ -372,7 +372,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                     channel.pipeline.removeHandler(tlsEventHandler).map { (channel, negotiated) }
                 }
             } catch {
-                precondition(channel.isActive == false, "if the channel is still active then TLSEventsHandler must be present but got error \(error)")
+                assert(channel.isActive == false, "if the channel is still active then TLSEventsHandler must be present but got error \(error)")
                 return channel.eventLoop.makeFailedFuture(HTTPClientError.remoteConnectionClosed)
             }
         }
