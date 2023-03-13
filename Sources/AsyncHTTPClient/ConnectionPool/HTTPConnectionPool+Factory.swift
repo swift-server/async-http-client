@@ -361,14 +361,19 @@ extension HTTPConnectionPool.ConnectionFactory {
         var channelFuture = bootstrapFuture.flatMap { bootstrap -> EventLoopFuture<Channel> in
             return bootstrap.connect(target: self.key.connectionTarget)
         }.flatMap { channel -> EventLoopFuture<(Channel, String?)> in
-            // It is save to use `try!` here, since we are sure, that a `TLSEventsHandler` exists
-            // within the pipeline. It is added in `makeTLSBootstrap`.
-            let tlsEventHandler = try! channel.pipeline.syncOperations.handler(type: TLSEventsHandler.self)
-
-            // The tlsEstablishedFuture is set as soon as the TLSEventsHandler is in a
-            // pipeline. It is created in TLSEventsHandler's handlerAdded method.
-            return tlsEventHandler.tlsEstablishedFuture!.flatMap { negotiated in
-                channel.pipeline.removeHandler(tlsEventHandler).map { (channel, negotiated) }
+            do {
+                // if the channel is closed before flatMap is executed, all ChannelHandler are removed
+                // and TLSEventsHandler is therefore not present either
+                let tlsEventHandler = try channel.pipeline.syncOperations.handler(type: TLSEventsHandler.self)
+                
+                // The tlsEstablishedFuture is set as soon as the TLSEventsHandler is in a
+                // pipeline. It is created in TLSEventsHandler's handlerAdded method.
+                return tlsEventHandler.tlsEstablishedFuture!.flatMap { negotiated in
+                    channel.pipeline.removeHandler(tlsEventHandler).map { (channel, negotiated) }
+                }
+            } catch {
+                precondition(channel.isActive == false, "if the channel is still active then TLSEventsHandler must be present but got error \(error)")
+                return channel.eventLoop.makeFailedFuture(HTTPClientError.remoteConnectionClosed)
             }
         }
 
