@@ -365,7 +365,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                 // if the channel is closed before flatMap is executed, all ChannelHandler are removed
                 // and TLSEventsHandler is therefore not present either
                 let tlsEventHandler = try channel.pipeline.syncOperations.handler(type: TLSEventsHandler.self)
-                
+
                 // The tlsEstablishedFuture is set as soon as the TLSEventsHandler is in a
                 // pipeline. It is created in TLSEventsHandler's handlerAdded method.
                 return tlsEventHandler.tlsEstablishedFuture!.flatMap { negotiated in
