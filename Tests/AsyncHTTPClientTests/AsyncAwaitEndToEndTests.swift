@@ -615,8 +615,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             ) else { return }
             XCTAssertEqual(response.headers["content-length"], ["6"])
             await XCTAssertThrowsError(
-                try await response.body.collect(maxBytes: 1)
-            )
+                try await response.body.collect(maxBytes: 1))
         }
     }
 }
