@@ -335,6 +335,7 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
 
             // the handler only writes once the channel is writable
             XCTAssertEqual(try embedded.readOutbound(as: HTTPClientRequestPart.self), .none)
+            XCTAssertTrue(embedded.isActive)
             embedded.isWritable = true
             embedded.pipeline.fireChannelWritabilityChanged()
 
@@ -342,7 +343,35 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
                 XCTAssertEqual($0 as? WriteError, WriteError())
             }
 
-            XCTAssertEqual(embedded.isActive, false)
+            XCTAssertFalse(embedded.isActive)
         }
+    }
+
+    func testChannelBecomesNonWritableDuringHeaderWrite() throws {
+        final class ChangeWritabilityOnFlush: ChannelOutboundHandler {
+            typealias OutboundIn = Any
+            func flush(context: ChannelHandlerContext) {
+                context.flush()
+                (context.channel as! EmbeddedChannel).isWritable = false
+                context.fireChannelWritabilityChanged()
+            }
+        }
+        let eventLoopGroup = EmbeddedEventLoopGroup(loops: 1)
+        let eventLoop = eventLoopGroup.next() as! EmbeddedEventLoop
+        let handler = HTTP2ClientRequestHandler(
+            eventLoop: eventLoop
+        )
+        let channel = EmbeddedChannel(handlers: [
+            ChangeWritabilityOnFlush(),
+            handler,
+        ], loop: eventLoop)
+        try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).wait()
+
+        let request = MockHTTPExecutableRequest()
+        // non empty body is important to trigger this bug as we otherwise finish the request in a single flush
+        request.requestFramingMetadata.body = .fixedSize(1)
+        request.raiseErrorIfUnimplementedMethodIsCalled = false
+        channel.writeAndFlush(request, promise: nil)
+        XCTAssertEqual(request.events.map(\.kind), [.willExecuteRequest, .requestHeadSent])
     }
 }

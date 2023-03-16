@@ -1008,7 +1008,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let url = "http://127.0.0.1:\(server?.localAddress?.port ?? -1)/hello"
         let g = DispatchGroup()
         for workerID in 0..<numberOfParallelWorkers {
-            DispatchQueue(label: "\(#file):\(#line):worker-\(workerID)").async(group: g) {
+            DispatchQueue(label: "\(#fileID):\(#line):worker-\(workerID)").async(group: g) {
                 func makeRequest() {
                     XCTAssertNoThrow(try self.defaultClient.get(url: url).wait())
                 }
@@ -3362,5 +3362,79 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
     func testShutdownWithFutures() {
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
         XCTAssertNoThrow(try httpClient.shutdown().wait())
+    }
+
+    func testMassiveHeaderHTTP1() throws {
+        var request = try HTTPClient.Request(url: defaultHTTPBin.baseURL, method: .POST)
+        // add ~64 KB header
+        let headerValue = String(repeating: "0", count: 1024)
+        for headerID in 0..<64 {
+            request.headers.replaceOrAdd(name: "larg-header-\(headerID)", value: headerValue)
+        }
+
+        // non empty body is important to trigger this bug as we otherwise finish the request in a single flush
+        request.body = .byteBuffer(ByteBuffer(bytes: [0]))
+
+        XCTAssertNoThrow(try defaultClient.execute(request: request).wait())
+    }
+
+    func testMassiveHeaderHTTP2() throws {
+        let bin = HTTPBin(.http2(settings: [
+            .init(parameter: .maxConcurrentStreams, value: 100),
+            .init(parameter: .maxHeaderListSize, value: 1024 * 256),
+            .init(parameter: .maxFrameSize, value: 1024 * 256),
+        ]))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        let client = HTTPClient(
+            eventLoopGroupProvider: .shared(clientGroup),
+            configuration: .init(certificateVerification: .none)
+        )
+
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        var request = try HTTPClient.Request(url: bin.baseURL, method: .POST)
+        // add ~200 KB header
+        let headerValue = String(repeating: "0", count: 1024)
+        for headerID in 0..<200 {
+            request.headers.replaceOrAdd(name: "larg-header-\(headerID)", value: headerValue)
+        }
+
+        // non empty body is important to trigger this bug as we otherwise finish the request in a single flush
+        request.body = .byteBuffer(ByteBuffer(bytes: [0]))
+
+        XCTAssertNoThrow(try client.execute(request: request).wait())
+    }
+
+    func testCancelingHTTP1RequestAfterHeaderSend() throws {
+        var request = try HTTPClient.Request(url: self.defaultHTTPBin.baseURL + "/wait", method: .POST)
+        // non-empty body is important
+        request.body = .byteBuffer(ByteBuffer([1]))
+
+        class CancelAfterHeadSend: HTTPClientResponseDelegate {
+            init() {}
+            func didFinishRequest(task: AsyncHTTPClient.HTTPClient.Task<Void>) throws {}
+            func didSendRequestHead(task: HTTPClient.Task<Void>, _ head: HTTPRequestHead) {
+                task.cancel()
+            }
+        }
+        XCTAssertThrowsError(try defaultClient.execute(request: request, delegate: CancelAfterHeadSend()).wait())
+    }
+
+    func testCancelingHTTP2RequestAfterHeaderSend() throws {
+        let bin = HTTPBin(.http2())
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+        var request = try HTTPClient.Request(url: bin.baseURL + "/wait", method: .POST)
+        // non-empty body is important
+        request.body = .byteBuffer(ByteBuffer([1]))
+
+        class CancelAfterHeadSend: HTTPClientResponseDelegate {
+            init() {}
+            func didFinishRequest(task: AsyncHTTPClient.HTTPClient.Task<Void>) throws {}
+            func didSendRequestHead(task: HTTPClient.Task<Void>, _ head: HTTPRequestHead) {
+                task.cancel()
+            }
+        }
+        XCTAssertThrowsError(try defaultClient.execute(request: request, delegate: CancelAfterHeadSend()).wait())
     }
 }

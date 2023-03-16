@@ -45,6 +45,11 @@ extension AsyncAwaitEndToEndTests {
             ("testShutdown", testShutdown),
             ("testCancelingBodyDoesNotCrash", testCancelingBodyDoesNotCrash),
             ("testAsyncSequenceReuse", testAsyncSequenceReuse),
+            ("testRejectsInvalidCharactersInHeaderFieldNames_http1", testRejectsInvalidCharactersInHeaderFieldNames_http1),
+            ("testRejectsInvalidCharactersInHeaderFieldNames_http2", testRejectsInvalidCharactersInHeaderFieldNames_http2),
+            ("testRejectsInvalidCharactersInHeaderFieldValues_http1", testRejectsInvalidCharactersInHeaderFieldValues_http1),
+            ("testRejectsInvalidCharactersInHeaderFieldValues_http2", testRejectsInvalidCharactersInHeaderFieldValues_http2),
+            ("testUsingGetMethodInsteadOfWait", testUsingGetMethodInsteadOfWait),
         ]
     }
 }

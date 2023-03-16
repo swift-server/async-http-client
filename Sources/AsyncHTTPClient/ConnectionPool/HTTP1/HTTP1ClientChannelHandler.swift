@@ -35,8 +35,8 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         didSet {
             if let newRequest = self.request {
                 var requestLogger = newRequest.logger
-                requestLogger[metadataKey: "ahc-connection-id"] = "\(self.connection.id)"
-                requestLogger[metadataKey: "ahc-el"] = "\(self.connection.channel.eventLoop)"
+                requestLogger[metadataKey: "ahc-connection-id"] = self.connectionIdLoggerMetadata
+                requestLogger[metadataKey: "ahc-el"] = "\(self.eventLoop)"
                 self.logger = requestLogger
 
                 if let idleReadTimeout = newRequest.requestOptions.idleReadTimeout {
@@ -59,15 +59,15 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
     private let backgroundLogger: Logger
     private var logger: Logger
+    private let eventLoop: EventLoop
+    private let connectionIdLoggerMetadata: Logger.MetadataValue
 
-    let connection: HTTP1Connection
-    let eventLoop: EventLoop
-
-    init(connection: HTTP1Connection, eventLoop: EventLoop, logger: Logger) {
-        self.connection = connection
+    var onConnectionIdle: () -> Void = {}
+    init(eventLoop: EventLoop, backgroundLogger: Logger, connectionIdLoggerMetadata: Logger.MetadataValue) {
         self.eventLoop = eventLoop
-        self.backgroundLogger = logger
-        self.logger = self.backgroundLogger
+        self.backgroundLogger = backgroundLogger
+        self.logger = backgroundLogger
+        self.connectionIdLoggerMetadata = connectionIdLoggerMetadata
     }
 
     func handlerAdded(context: ChannelHandlerContext) {
@@ -108,6 +108,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
         let action = self.state.writabilityChanged(writable: context.channel.isWritable)
         self.run(action, context: context)
+        context.fireChannelWritabilityChanged()
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -182,9 +183,23 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
     private func run(_ action: HTTP1ConnectionStateMachine.Action, context: ChannelHandlerContext) {
         switch action {
-        case .sendRequestHead(let head, startBody: let startBody):
-            self.sendRequestHead(head, startBody: startBody, context: context)
-
+        case .sendRequestHead(let head, let sendEnd):
+            self.sendRequestHead(head, sendEnd: sendEnd, context: context)
+        case .notifyRequestHeadSendSuccessfully(let resumeRequestBodyStream, let startIdleTimer):
+            // We can force unwrap the request here, as we have just validated in the state machine,
+            // that the request is neither failed nor finished yet
+            self.request!.requestHeadSent()
+            if resumeRequestBodyStream, let request = self.request {
+                // The above request head send notification might lead the request to mark itself as
+                // cancelled, which in turn might pop the request of the handler. For this reason we
+                // must check if the request is still present here.
+                request.resumeRequestBodyStream()
+            }
+            if startIdleTimer {
+                if let timeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
+                    self.runTimeoutAction(timeoutAction, context: context)
+                }
+            }
         case .sendBodyPart(let part, let writePromise):
             context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: writePromise)
 
@@ -274,7 +289,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                         if shouldClose {
                             context.close(promise: nil)
                         } else {
-                            self.connection.taskCompleted()
+                            self.onConnectionIdle()
                         }
 
                         oldRequest.succeedRequest(buffer)
@@ -286,7 +301,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
                 context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: writePromise)
             case .informConnectionIsIdle:
-                self.connection.taskCompleted()
+                self.onConnectionIdle()
                 oldRequest.succeedRequest(buffer)
             }
 
@@ -303,7 +318,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                 oldRequest.fail(error)
 
             case .informConnectionIsIdle:
-                self.connection.taskCompleted()
+                self.onConnectionIdle()
                 oldRequest.fail(error)
 
             case .failWritePromise(let writePromise):
@@ -319,31 +334,15 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         }
     }
 
-    private func sendRequestHead(_ head: HTTPRequestHead, startBody: Bool, context: ChannelHandlerContext) {
-        if startBody {
-            context.writeAndFlush(self.wrapOutboundOut(.head(head)), promise: nil)
-
-            // The above write might trigger an error, which may lead to a call to `errorCaught`,
-            // which in turn, may fail the request and pop it from the handler. For this reason
-            // we must check if the request is still present here.
-            guard let request = self.request else { return }
-            request.requestHeadSent()
-            request.resumeRequestBodyStream()
-        } else {
+    private func sendRequestHead(_ head: HTTPRequestHead, sendEnd: Bool, context: ChannelHandlerContext) {
+        if sendEnd {
             context.write(self.wrapOutboundOut(.head(head)), promise: nil)
             context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
             context.flush()
-
-            // The above write might trigger an error, which may lead to a call to `errorCaught`,
-            // which in turn, may fail the request and pop it from the handler. For this reason
-            // we must check if the request is still present here.
-            guard let request = self.request else { return }
-            request.requestHeadSent()
-
-            if let timeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
-                self.runTimeoutAction(timeoutAction, context: context)
-            }
+        } else {
+            context.writeAndFlush(self.wrapOutboundOut(.head(head)), promise: nil)
         }
+        self.run(self.state.headSent(), context: context)
     }
 
     private func runTimeoutAction(_ action: IdleReadStateMachine.Action, context: ChannelHandlerContext) {
@@ -433,6 +432,11 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         self.run(action, context: context)
     }
 }
+
+#if swift(>=5.6)
+@available(*, unavailable)
+extension HTTP1ClientChannelHandler: Sendable {}
+#endif
 
 extension HTTP1ClientChannelHandler: HTTPRequestExecutor {
     func writeRequestBodyPart(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {

@@ -207,7 +207,9 @@ extension Transaction {
                 self.state = .executing(context, .requestHeadSent, .waitingForResponseHead)
                 return .none
             case .deadlineExceededWhileQueued(let continuation):
-                return .cancelAndFail(executor, continuation, with: HTTPClientError.deadlineExceeded)
+                let error = HTTPClientError.deadlineExceeded
+                self.state = .finished(error: error, nil)
+                return .cancelAndFail(executor, continuation, with: error)
 
             case .finished(error: .some, .none):
                 return .cancel(executor)
@@ -641,7 +643,7 @@ extension Transaction {
         private func verifyStreamIDIsEqual(
             registered: TransactionBody.AsyncIterator.ID,
             this: TransactionBody.AsyncIterator.ID,
-            file: StaticString = #file,
+            file: StaticString = #fileID,
             line: UInt = #line
         ) {
             if registered != this {

@@ -17,6 +17,7 @@ import Logging
 import NIOCore
 import NIOEmbedded
 import NIOHTTP1
+import NIOPosix
 import XCTest
 
 final class RequestBagTests: XCTestCase {
@@ -835,6 +836,54 @@ final class RequestBagTests: XCTestCase {
         executor.resetResponseStreamDemandSignal()
 
         XCTAssertTrue(redirectTriggered)
+    }
+
+    func testWeDontLeakTheRequestIfTheRequestWriterWasCapturedByAPromise() {
+        final class LeakDetector {}
+
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { XCTAssertNoThrow(try group.syncShutdownGracefully()) }
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(group))
+        defer { XCTAssertNoThrow(try httpClient.shutdown().wait()) }
+
+        let httpBin = HTTPBin()
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
+
+        var leakDetector = LeakDetector()
+
+        do {
+            var maybeRequest: HTTPClient.Request?
+            XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/", method: .POST))
+            guard var request = maybeRequest else { return XCTFail("Expected to have a request here") }
+
+            let writerPromise = group.any().makePromise(of: HTTPClient.Body.StreamWriter.self)
+            let donePromise = group.any().makePromise(of: Void.self)
+            request.body = .stream { [leakDetector] writer in
+                _ = leakDetector
+                writerPromise.succeed(writer)
+                return donePromise.futureResult
+            }
+
+            let resultFuture = httpClient.execute(request: request)
+            request.body = nil
+            writerPromise.futureResult.whenSuccess { writer in
+                writer.write(.byteBuffer(ByteBuffer(string: "hello"))).map {
+                    print("written")
+                }.cascade(to: donePromise)
+            }
+            XCTAssertNoThrow(try donePromise.futureResult.wait())
+            print("HTTP sent")
+
+            var result: HTTPClient.Response?
+            XCTAssertNoThrow(result = try resultFuture.wait())
+
+            XCTAssertEqual(.ok, result?.status)
+            let body = result?.body.map { String(buffer: $0) }
+            XCTAssertNotNil(body)
+            print("HTTP done")
+        }
+        XCTAssertTrue(isKnownUniquelyReferenced(&leakDetector))
     }
 }
 

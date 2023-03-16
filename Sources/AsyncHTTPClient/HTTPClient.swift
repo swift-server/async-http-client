@@ -139,17 +139,29 @@ public class HTTPClient {
                 """)
             case .upAndRunning:
                 preconditionFailure("""
-                Client not shut down before the deinit. Please call client.syncShutdown() when no \
+                Client not shut down before the deinit. Please call client.shutdown() when no \
                 longer needed. Otherwise memory will leak.
                 """)
             }
         }
     }
 
+    #if swift(>=5.7)
     /// Shuts down the client and `EventLoopGroup` if it was created by the client.
+    ///
+    /// This method blocks the thread indefinitely, prefer using ``shutdown()-96ayw``.
+    @available(*, noasync, message: "syncShutdown() can block indefinitely, prefer shutdown()", renamed: "shutdown()")
     public func syncShutdown() throws {
         try self.syncShutdown(requiresCleanClose: false)
     }
+    #else
+    /// Shuts down the client and `EventLoopGroup` if it was created by the client.
+    ///
+    /// This method blocks the thread indefinitely, prefer using ``shutdown()-96ayw``.
+    public func syncShutdown() throws {
+        try self.syncShutdown(requiresCleanClose: false)
+    }
+    #endif
 
     /// Shuts down the client and `EventLoopGroup` if it was created by the client.
     ///
@@ -1032,6 +1044,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case uncleanShutdown
         case traceRequestWithBody
         case invalidHeaderFieldNames([String])
+        case invalidHeaderFieldValues([String])
         case bodyLengthMismatch
         case writeAfterRequestSent
         @available(*, deprecated, message: "AsyncHTTPClient now silently corrects invalid headers.")
@@ -1100,6 +1113,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
             return "Trace request with body"
         case .invalidHeaderFieldNames:
             return "Invalid header field names"
+        case .invalidHeaderFieldValues:
+            return "Invalid header field values"
         case .bodyLengthMismatch:
             return "Body length mismatch"
         case .writeAfterRequestSent:
@@ -1166,6 +1181,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let traceRequestWithBody = HTTPClientError(code: .traceRequestWithBody)
     /// Header field names contain invalid characters.
     public static func invalidHeaderFieldNames(_ names: [String]) -> HTTPClientError { return HTTPClientError(code: .invalidHeaderFieldNames(names)) }
+    /// Header field values contain invalid characters.
+    public static func invalidHeaderFieldValues(_ values: [String]) -> HTTPClientError { return HTTPClientError(code: .invalidHeaderFieldValues(values)) }
     /// Body length is not equal to `Content-Length`.
     public static let bodyLengthMismatch = HTTPClientError(code: .bodyLengthMismatch)
     /// Body part was written after request was fully sent.

@@ -2,19 +2,13 @@
 This package provides an HTTP Client library built on top of SwiftNIO.
 
 This library provides the following:
-- First class support for Swift Concurrency (since version 1.9.0)
+- First class support for Swift Concurrency
 - Asynchronous and non-blocking request methods
 - Simple follow-redirects (cookie headers are dropped)
 - Streaming body download
 - TLS support
-- Automatic HTTP/2 over HTTPS (since version 1.7.0)
+- Automatic HTTP/2 over HTTPS
 - Cookie parsing (but not storage)
-
----
-
-**NOTE**: You will need [Xcode 13.2](https://apps.apple.com/gb/app/xcode/id497799835?mt=12) or [Swift 5.5.2](https://swift.org/download/#swift-552) to try out `AsyncHTTPClient`s new async/await APIs.
-
----
 
 ## Getting Started
 
@@ -69,7 +63,7 @@ httpClient.get(url: "https://apple.com/").whenComplete { result in
 }
 ```
 
-You should always shut down `HTTPClient` instances you created using `try httpClient.syncShutdown()`. Please note that you must not call `httpClient.syncShutdown` before all requests of the HTTP client have finished, or else the in-flight requests will likely fail because their network connections are interrupted.
+You should always shut down `HTTPClient` instances you created using `try httpClient.shutdown()`. Please note that you must not call `httpClient.shutdown` before all requests of the HTTP client have finished, or else the in-flight requests will likely fail because their network connections are interrupted.
 
 ### async/await examples
 

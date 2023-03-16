@@ -1,0 +1,18 @@
+version: "3"
+
+services:
+
+  runtime-setup:
+    image: async-http-client:22.04-5.8
+    build:
+      args:
+        base_image: "swiftlang/swift:nightly-5.8-jammy"
+
+  test:
+    image: async-http-client:22.04-5.8
+    environment:
+      - IMPORT_CHECK_ARG=--explicit-target-dependency-import-check error
+      #- SANITIZER_ARG=--sanitize=thread
+
+  shell:
+    image: async-http-client:22.04-5.8

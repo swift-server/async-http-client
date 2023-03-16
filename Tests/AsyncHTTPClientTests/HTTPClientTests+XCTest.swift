@@ -143,6 +143,10 @@ extension HTTPClientTests {
             ("testRequestWithHeaderTransferEncodingIdentityDoesNotFail", testRequestWithHeaderTransferEncodingIdentityDoesNotFail),
             ("testMassiveDownload", testMassiveDownload),
             ("testShutdownWithFutures", testShutdownWithFutures),
+            ("testMassiveHeaderHTTP1", testMassiveHeaderHTTP1),
+            ("testMassiveHeaderHTTP2", testMassiveHeaderHTTP2),
+            ("testCancelingHTTP1RequestAfterHeaderSend", testCancelingHTTP1RequestAfterHeaderSend),
+            ("testCancelingHTTP2RequestAfterHeaderSend", testCancelingHTTP2RequestAfterHeaderSend),
         ]
     }
 }

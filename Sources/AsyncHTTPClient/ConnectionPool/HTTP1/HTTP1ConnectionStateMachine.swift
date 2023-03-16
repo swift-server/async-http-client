@@ -57,7 +57,11 @@ struct HTTP1ConnectionStateMachine {
             case none
         }
 
-        case sendRequestHead(HTTPRequestHead, startBody: Bool)
+        case sendRequestHead(HTTPRequestHead, sendEnd: Bool)
+        case notifyRequestHeadSendSuccessfully(
+            resumeRequestBodyStream: Bool,
+            startIdleTimer: Bool
+        )
         case sendBodyPart(IOData, EventLoopPromise<Void>?)
         case sendRequestEnd(EventLoopPromise<Void>?)
         case failSendBodyPart(Error, EventLoopPromise<Void>?)
@@ -350,6 +354,17 @@ struct HTTP1ConnectionStateMachine {
             return state.modify(with: action)
         }
     }
+
+    mutating func headSent() -> Action {
+        guard case .inRequest(var requestStateMachine, let close) = self.state else {
+            return .wait
+        }
+        return self.avoidingStateMachineCoW { state in
+            let action = requestStateMachine.headSent()
+            state = .inRequest(requestStateMachine, close: close)
+            return state.modify(with: action)
+        }
+    }
 }
 
 extension HTTP1ConnectionStateMachine {
@@ -390,8 +405,10 @@ extension HTTP1ConnectionStateMachine {
 extension HTTP1ConnectionStateMachine.State {
     fileprivate mutating func modify(with action: HTTPRequestStateMachine.Action) -> HTTP1ConnectionStateMachine.Action {
         switch action {
-        case .sendRequestHead(let head, let startBody):
-            return .sendRequestHead(head, startBody: startBody)
+        case .sendRequestHead(let head, let sendEnd):
+            return .sendRequestHead(head, sendEnd: sendEnd)
+        case .notifyRequestHeadSendSuccessfully(let resumeRequestBodyStream, let startIdleTimer):
+            return .notifyRequestHeadSendSuccessfully(resumeRequestBodyStream: resumeRequestBodyStream, startIdleTimer: startIdleTimer)
         case .pauseRequestBodyStream:
             return .pauseRequestBodyStream
         case .resumeRequestBodyStream:

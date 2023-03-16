@@ -379,7 +379,8 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
     }
 
     var state = State.idle
-    let request: HTTPClient.Request
+    let requestMethod: HTTPMethod
+    let requestHost: String
 
     static let maxByteBufferSize = Int(UInt32.max)
 
@@ -408,14 +409,15 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
             maxBodySize <= Self.maxByteBufferSize,
             "maxBodyLength is not allowed to exceed 2^32 because ByteBuffer can not store more bytes"
         )
-        self.request = request
+        self.requestMethod = request.method
+        self.requestHost = request.host
         self.maxBodySize = maxBodySize
     }
 
     public func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
         switch self.state {
         case .idle:
-            if self.request.method != .HEAD,
+            if self.requestMethod != .HEAD,
                let contentLength = head.headers.first(name: "Content-Length"),
                let announcedBodySize = Int(contentLength),
                announcedBodySize > self.maxBodySize {
@@ -481,9 +483,9 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
         case .idle:
             preconditionFailure("no head received before end")
         case .head(let head):
-            return Response(host: self.request.host, status: head.status, version: head.version, headers: head.headers, body: nil)
+            return Response(host: self.requestHost, status: head.status, version: head.version, headers: head.headers, body: nil)
         case .body(let head, let body):
-            return Response(host: self.request.host, status: head.status, version: head.version, headers: head.headers, body: body)
+            return Response(host: self.requestHost, status: head.status, version: head.version, headers: head.headers, body: body)
         case .end:
             preconditionFailure("request already processed")
         case .error(let error):
@@ -697,9 +699,10 @@ extension HTTPClient {
     public final class Task<Response> {
         /// The `EventLoop` the delegate will be executed on.
         public let eventLoop: EventLoop
+        /// The `Logger` used by the `Task` for logging.
+        public let logger: Logger // We are okay to store the logger here because a Task is for only one request.
 
         let promise: EventLoopPromise<Response>
-        let logger: Logger // We are okay to store the logger here because a Task is for only one request.
 
         var isCancelled: Bool {
             self.lock.withLock { self._isCancelled }
@@ -747,12 +750,32 @@ extension HTTPClient {
             return self.promise.futureResult
         }
 
+        #if swift(>=5.7)
         /// Waits for execution of this request to complete.
         ///
-        /// - returns: The value of the `EventLoopFuture` when it completes.
-        /// - throws: The error value of the `EventLoopFuture` if it errors.
+        /// - returns: The value of  ``futureResult`` when it completes.
+        /// - throws: The error value of ``futureResult`` if it errors.
+        @available(*, noasync, message: "wait() can block indefinitely, prefer get()", renamed: "get()")
         public func wait() throws -> Response {
             return try self.promise.futureResult.wait()
+        }
+        #else
+        /// Waits for execution of this request to complete.
+        ///
+        /// - returns: The value of ``futureResult`` when it completes.
+        /// - throws: The error value of ``futureResult`` if it errors.
+        public func wait() throws -> Response {
+            return try self.promise.futureResult.wait()
+        }
+        #endif
+
+        /// Provides the result of this request.
+        ///
+        /// - returns: The value of ``futureResult`` when it completes.
+        /// - throws: The error value of ``futureResult`` if it errors.
+        @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+        public func get() async throws -> Response {
+            return try await self.promise.futureResult.get()
         }
 
         /// Cancels the request execution.

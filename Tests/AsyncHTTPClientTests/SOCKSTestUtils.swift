@@ -40,7 +40,7 @@ class MockSOCKSServer {
         self.channel.localAddress!.port!
     }
 
-    init(expectedURL: String, expectedResponse: String, misbehave: Bool = false, file: String = #file, line: UInt = #line) throws {
+    init(expectedURL: String, expectedResponse: String, misbehave: Bool = false, file: String = #filePath, line: UInt = #line) throws {
         let elg = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         let bootstrap: ServerBootstrap
         if misbehave {

@@ -65,7 +65,7 @@ extension XCTestCase {
 internal func XCTAssertThrowsError<T>(
     _ expression: @autoclosure () async throws -> T,
     verify: (Error) -> Void = { _ in },
-    file: StaticString = #file,
+    file: StaticString = #filePath,
     line: UInt = #line
 ) async {
     do {
@@ -79,7 +79,7 @@ internal func XCTAssertThrowsError<T>(
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 internal func XCTAssertNoThrowWithResult<Result>(
     _ expression: @autoclosure () async throws -> Result,
-    file: StaticString = #file,
+    file: StaticString = #filePath,
     line: UInt = #line
 ) async -> Result? {
     do {

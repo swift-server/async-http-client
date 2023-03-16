@@ -77,7 +77,7 @@ final class HTTP2Connection {
 
     /// We use this channel set to remember, which open streams we need to inform that
     /// we want to close the connection. The channels shall than cancel their currently running
-    /// request.
+    /// request. This property must only be accessed from the connections `EventLoop`.
     private var openStreams = Set<ChannelBox>()
     let id: HTTPConnectionPool.Connection.ID
     let decompression: HTTPClient.Decompression
@@ -111,7 +111,7 @@ final class HTTP2Connection {
 
     deinit {
         guard case .closed = self.state else {
-            preconditionFailure("Connection must be closed, before we can deinit it")
+            preconditionFailure("Connection must be closed, before we can deinit it. Current state: \(self.state)")
         }
     }
 
@@ -129,7 +129,7 @@ final class HTTP2Connection {
             delegate: delegate,
             logger: logger
         )
-        return connection.start().map { maxStreams in (connection, maxStreams) }
+        return connection._start0().map { maxStreams in (connection, maxStreams) }
     }
 
     func executeRequest(_ request: HTTPExecutableRequest) {
@@ -164,15 +164,23 @@ final class HTTP2Connection {
         return promise.futureResult
     }
 
-    private func start() -> EventLoopFuture<Int> {
+    func _start0() -> EventLoopFuture<Int> {
         self.channel.eventLoop.assertInEventLoop()
 
         let readyToAcceptConnectionsPromise = self.channel.eventLoop.makePromise(of: Int.self)
 
         self.state = .starting(readyToAcceptConnectionsPromise)
         self.channel.closeFuture.whenComplete { _ in
-            self.state = .closed
-            self.delegate.http2ConnectionClosed(self)
+            switch self.state {
+            case .initialized, .closed:
+                preconditionFailure("invalid state \(self.state)")
+            case .starting(let readyToAcceptConnectionsPromise):
+                self.state = .closed
+                readyToAcceptConnectionsPromise.fail(HTTPClientError.remoteConnectionClosed)
+            case .active, .closing:
+                self.state = .closed
+                self.delegate.http2ConnectionClosed(self)
+            }
         }
 
         do {
@@ -233,7 +241,7 @@ final class HTTP2Connection {
                     // before.
                     let box = ChannelBox(channel)
                     self.openStreams.insert(box)
-                    self.channel.closeFuture.whenComplete { _ in
+                    channel.closeFuture.whenComplete { _ in
                         self.openStreams.remove(box)
                     }
 
@@ -258,16 +266,31 @@ final class HTTP2Connection {
     private func shutdown0() {
         self.channel.eventLoop.assertInEventLoop()
 
-        self.state = .closing
+        switch self.state {
+        case .active:
+            self.state = .closing
 
-        // inform all open streams, that the currently running request should be cancelled.
-        self.openStreams.forEach { box in
-            box.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
+            // inform all open streams, that the currently running request should be cancelled.
+            self.openStreams.forEach { box in
+                box.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
+            }
+
+            // inform the idle connection handler, that connection should be closed, once all streams
+            // are closed.
+            self.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
+
+        case .closed, .closing:
+            // we are already closing/closed and we need to tolerate this
+            break
+
+        case .initialized, .starting:
+            preconditionFailure("invalid state \(self.state)")
         }
+    }
 
-        // inform the idle connection handler, that connection should be closed, once all streams
-        // are closed.
-        self.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
+    func __forTesting_getStreamChannels() -> [Channel] {
+        self.channel.eventLoop.preconditionInEventLoop()
+        return self.openStreams.map { $0.channel }
     }
 }
 

@@ -26,9 +26,11 @@ extension HTTP2ConnectionTests {
     static var allTests: [(String, (HTTP2ConnectionTests) -> () throws -> Void)] {
         return [
             ("testCreateNewConnectionFailureClosedIO", testCreateNewConnectionFailureClosedIO),
+            ("testConnectionToleratesShutdownEventsAfterAlreadyClosed", testConnectionToleratesShutdownEventsAfterAlreadyClosed),
             ("testSimpleGetRequest", testSimpleGetRequest),
             ("testEveryDoneRequestLeadsToAStreamAvailableCall", testEveryDoneRequestLeadsToAStreamAvailableCall),
             ("testCancelAllRunningRequests", testCancelAllRunningRequests),
+            ("testChildStreamsAreRemovedFromTheOpenChannelListOnceTheRequestIsDone", testChildStreamsAreRemovedFromTheOpenChannelListOnceTheRequestIsDone),
         ]
     }
 }

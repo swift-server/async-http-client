@@ -419,7 +419,7 @@ class HTTPConnectionPoolTests: XCTestCase {
 
         let dispatchGroup = DispatchGroup()
         for workerID in 0..<numberOfParallelWorkers {
-            DispatchQueue(label: "\(#file):\(#line):worker-\(workerID)").async(group: dispatchGroup) {
+            DispatchQueue(label: "\(#filePath):\(#line):worker-\(workerID)").async(group: dispatchGroup) {
                 func makeRequest() {
                     let url = "http://localhost:\(httpBin.port)"
                     var maybeRequest: HTTPClient.Request?
