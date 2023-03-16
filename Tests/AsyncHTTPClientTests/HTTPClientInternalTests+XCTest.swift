@@ -26,6 +26,7 @@ extension HTTPClientInternalTests {
     static var allTests: [(String, (HTTPClientInternalTests) -> () throws -> Void)] {
         return [
             ("testProxyStreaming", testProxyStreaming),
+            ("testProxyStreamingNoDeadlock", testProxyStreamingNoDeadlock),
             ("testProxyStreamingFailure", testProxyStreamingFailure),
             ("testRequestURITrailingSlash", testRequestURITrailingSlash),
             ("testChannelAndDelegateOnDifferentEventLoops", testChannelAndDelegateOnDifferentEventLoops),

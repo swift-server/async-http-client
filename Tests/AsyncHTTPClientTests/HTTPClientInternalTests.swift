@@ -73,6 +73,40 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertEqual("id: 0id: 1id: 2id: 3id: 4id: 5id: 6id: 7id: 8id: 9", data?.data)
     }
 
+    func testProxyStreamingNoDeadlock() throws {
+        let httpBin = HTTPBin()
+        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        let goSignalPromise = httpClient.eventLoopGroup.next().makePromise(of: Void.self)
+        let goSignal = goSignalPromise.futureResult
+
+        let body: HTTPClient.Body = .stream(length: 50) { writer in
+            goSignal.flatMap {
+                httpClient.get(url: "http://localhost:\(httpBin.port)/get")
+            }.flatMap { _ in
+                writer.write(IOData.byteBuffer(.of(bytes: .init(repeating: 0, count: 50))))
+            }
+        }
+
+        var allRequests = [EventLoopFuture<HTTPClient.Response>]()
+
+        // Make sure to exceed maximum number of concurrent connections
+        for _ in 1...50 {
+            allRequests.append(httpClient.post(url: "http://localhost:\(httpBin.port)/post", body: body))
+        }
+
+        // Now allow requests to actually send their body data
+        goSignalPromise.succeed(())
+
+        let everythingSucceeded = EventLoopFuture<HTTPClient.Response>.andAllSucceed(allRequests, on: httpClient.eventLoopGroup.next())
+
+        XCTAssertNoThrow(try everythingSucceeded.timeout(after: .seconds(5)).wait())
+    }
+
     func testProxyStreamingFailure() throws {
         let httpBin = HTTPBin()
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
