@@ -92,6 +92,7 @@ extension HTTPClientResponse {
         func collect(maxBytes: Int) async throws -> ByteBuffer {
             return try await self.collect(upTo: maxBytes)
         }
+    /// Accumulates `Body` of ``ByteBuffer``s into a single ``ByteBuffer``.
     }
 }
 
