@@ -96,20 +96,12 @@ extension HTTPClientResponse {
             .init(storage: self.storage.makeAsyncIterator())
         }
 
-        /// Accumulates `Body` of ``ByteBuffer``s into a single ``ByteBuffer``.
-        /// - Parameters:
-        ///   - maxBytes: The maximum number of bytes this method is allowed to accumulate
-        /// - Throws: `NIOTooManyBytesError` if the the sequence contains more than `maxBytes`.
-        /// - Returns: the number of bytes collected over time
-        func collect(maxBytes: Int) async throws -> ByteBuffer {
-            return try await self.collect(upTo: maxBytes)
-        }
     }
 }
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse {
-    /// Accumulates `Body` of ``ByteBuffer``s into a single ``ByteBuffer``.
+    /// Accumulates `AsyncSequence` of ``ByteBuffer``s into a single ``ByteBuffer``.
     /// - Parameters:
     ///   - maxBytes: The maximum number of bytes this method is allowed to accumulate
     /// - Throws: `NIOTooManyBytesError` if the the sequence contains more than `maxBytes`.
