@@ -114,7 +114,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             ) else { return }
             XCTAssertEqual(response.headers["content-length"], ["4"])
             guard let body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(maxBytes: 1024)
+                try await response.collect(upTo: 1024)
             ) else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
         }
@@ -137,7 +137,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             ) else { return }
             XCTAssertEqual(response.headers["content-length"], [])
             guard let body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(maxBytes: 1024)
+                try await response.collect(upTo: 1024)
             ) else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
         }
@@ -160,7 +160,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             ) else { return }
             XCTAssertEqual(response.headers["content-length"], [])
             guard let body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(maxBytes: 1024)
+                try await response.collect(upTo: 1024)
             ) else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
         }
@@ -183,7 +183,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             ) else { return }
             XCTAssertEqual(response.headers["content-length"], ["4"])
             guard let body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(maxBytes: 1024)
+                try await response.collect(upTo: 1024)
             ) else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
         }
@@ -210,7 +210,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             ) else { return }
             XCTAssertEqual(response.headers["content-length"], [])
             guard let body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(maxBytes: 1024)
+                try await response.collect(upTo: 1024)
             ) else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
         }
@@ -233,7 +233,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             ) else { return }
             XCTAssertEqual(response.headers["content-length"], [])
             guard let body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(maxBytes: 1024)
+                try await response.collect(upTo: 1024)
             ) else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
         }
@@ -522,7 +522,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             ) else {
                 return
             }
-            guard let body = await XCTAssertNoThrowWithResult(try await response.body.collect(maxBytes: 1024)) else { return }
+            guard let body = await XCTAssertNoThrowWithResult(try await response.collect(upTo: 1024)) else { return }
             var maybeRequestInfo: RequestInfo?
             XCTAssertNoThrow(maybeRequestInfo = try JSONDecoder().decode(RequestInfo.self, from: body))
             guard let requestInfo = maybeRequestInfo else { return }
@@ -583,7 +583,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             ) else { return }
             XCTAssertEqual(response1.headers["content-length"], [])
             guard let body = await XCTAssertNoThrowWithResult(
-                try await response1.body.collect(maxBytes: 1024)
+                try await response1.collect(upTo: 1024)
             ) else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
 
@@ -592,7 +592,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             ) else { return }
             XCTAssertEqual(response2.headers["content-length"], [])
             guard let body = await XCTAssertNoThrowWithResult(
-                try await response2.body.collect(maxBytes: 1024)
+                try await response2.collect(upTo: 1024)
             ) else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
         }
