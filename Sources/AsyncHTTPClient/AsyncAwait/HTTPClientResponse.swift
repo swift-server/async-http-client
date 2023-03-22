@@ -56,7 +56,8 @@ public struct HTTPClientResponse: Sendable {
         headers: HTTPHeaders,
         requestMethod: HTTPMethod
     ) {
-        self.init(version: version, status: status, headers: headers, body: .init(TransactionBody(bag)), requestMethod: requestMethod)
+        let contentLength = HTTPClientResponse.expectedContentLength(requestMethod: requestMethod, headers: headers, status: status)
+        self.init(version: version, status: status, headers: headers, body: .init(TransactionBody(bag, expextedContentLength: contentLength)), requestMethod: requestMethod)
     }
 
     @inlinable public init(
@@ -96,27 +97,40 @@ extension HTTPClientResponse {
             .init(storage: self.storage.makeAsyncIterator())
         }
 
+        /// Accumulates `Body` of ``ByteBuffer``s into a single ``ByteBuffer``.
+        /// - Parameters:
+        ///   - maxBytes: The maximum number of bytes this method is allowed to accumulate
+        /// - Throws: `NIOTooManyBytesError` if the the sequence contains more than `maxBytes`.
+        /// - Returns: the number of bytes collected over time
+        @inlinable public func collect(upTo maxBytes: Int) async throws -> ByteBuffer {
+            switch storage {
+            case .transaction(let transactionBody):
+                if let contentLength = transactionBody.expectedContentLength {
+                    print(maxBytes)
+                    print("contentLength", contentLength)
+                    if contentLength > maxBytes {
+                        throw NIOTooManyBytesError()
+                    }
+                }
+            case .anyAsyncSequence:
+                break
+            }
+            func collect<Body: AsyncSequence>(_ body: Body, maxBytes: Int) async throws -> ByteBuffer where Body.Element == ByteBuffer {
+                try await body.collect(upTo: maxBytes)
+            }
+            return try await collect(self, maxBytes: maxBytes)
+
+        }
+
     }
 }
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse {
-    /// Accumulates `AsyncSequence` of ``ByteBuffer``s into a single ``ByteBuffer``.
-    /// - Parameters:
-    ///   - maxBytes: The maximum number of bytes this method is allowed to accumulate
-    /// - Throws: `NIOTooManyBytesError` if the the sequence contains more than `maxBytes`.
-    /// - Returns: the number of bytes collected over time
-    @inlinable public func collect(upTo maxBytes: Int) async throws -> ByteBuffer {
-        if let contentLength = expectedContentLength() {
-            if contentLength > maxBytes {
-                throw NIOTooManyBytesError()
-            }
-        }
-        return try await self.body.collect(upTo: maxBytes)
-    }
-    @inlinable func expectedContentLength() -> Int? {
-        if let requestMethod = self.requestMethod {
-            if self.status == .notModified {
+//    need to pass in the arguments
+    static func expectedContentLength(requestMethod: HTTPMethod?, headers: HTTPHeaders, status: HTTPResponseStatus) -> Int? {
+        if let requestMethod {
+            if status == .notModified {
                return 0
            } else if requestMethod == .HEAD {
                return 0
@@ -173,10 +187,10 @@ extension HTTPClientResponse.Body.Storage.AsyncIterator: AsyncIteratorProtocol {
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body {
     init(_ body: TransactionBody) {
-        self.init(.transaction(body))
+        self.init(.transaction(body), expectedContentLength: body.expectedContentLength)
     }
 
-    @usableFromInline init(_ storage: Storage) {
+    @usableFromInline init(_ storage: Storage, expectedContentLength: Int?) {
         self.storage = storage
     }
 
@@ -187,7 +201,7 @@ extension HTTPClientResponse.Body {
     @inlinable public static func stream<SequenceOfBytes>(
         _ sequenceOfBytes: SequenceOfBytes
     ) -> Self where SequenceOfBytes: AsyncSequence & Sendable, SequenceOfBytes.Element == ByteBuffer {
-        self.init(.anyAsyncSequence(AnyAsyncSequence(sequenceOfBytes.singleIteratorPrecondition)))
+        self.init(.anyAsyncSequence(AnyAsyncSequence(sequenceOfBytes.singleIteratorPrecondition)), expectedContentLength: nil)
     }
 
     public static func bytes(_ byteBuffer: ByteBuffer) -> Self {
