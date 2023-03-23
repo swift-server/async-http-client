@@ -33,13 +33,11 @@ public struct HTTPClientResponse: Sendable {
     public var body: Body
 
 
-    @inlinable
-    init(
+    @inlinable init(
         version: HTTPVersion = .http1_1,
         status: HTTPResponseStatus = .ok,
         headers: HTTPHeaders = [:],
-        body: Body = Body(),
-        requestMethod: HTTPMethod?
+        body: Body = Body()
     ) {
         self.version = version
         self.status = status
@@ -55,16 +53,7 @@ public struct HTTPClientResponse: Sendable {
         requestMethod: HTTPMethod
     ) {
         let contentLength = HTTPClientResponse.expectedContentLength(requestMethod: requestMethod, headers: headers, status: status)
-        self.init(version: version, status: status, headers: headers, body: .init(TransactionBody(bag, expextedContentLength: contentLength)), requestMethod: requestMethod)
-    }
-
-    @inlinable public init(
-        version: HTTPVersion = .http1_1,
-        status: HTTPResponseStatus = .ok,
-        headers: HTTPHeaders = [:],
-        body: Body = Body()
-    ) {
-        self.init(version: version, status: status, headers: headers, body: body, requestMethod: nil)
+        self.init(version: version, status: status, headers: headers, body: .init(TransactionBody(bag, expextedContentLength: contentLength)))
     }
 }
 
@@ -134,8 +123,7 @@ extension HTTPClientResponse {
             return 0
         } else if requestMethod == .HEAD {
             return 0
-        }
-        else {
+        } else {
             let contentLength = headers["content-length"].first.flatMap({Int($0, radix: 10)})
             return contentLength
         }
