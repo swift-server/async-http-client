@@ -755,13 +755,11 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
             var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/")
             request.method = .GET
-            request.body = .bytes(ByteBuffer(string: "1235"))
+            request.body = .bytes(ByteBuffer(string: "1234"))
             
             guard var response = await XCTAssertNoThrowWithResult(
                 try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
             ) else { return }
-            response.headers.replaceOrAdd(name: "content-length", value: "1025")
-            XCTAssertEqual(response.headers["content-length"], ["1025"])
             await XCTAssertThrowsError(
                 try await response.body.collect(upTo: 3)
             ) {
