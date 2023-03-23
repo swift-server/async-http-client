@@ -116,12 +116,7 @@ extension HTTPClientResponse {
                 break
             }
 
-            /// <#Description#>
-            /// - Parameters:
-            ///   - body: <#body description#>
-            ///   - maxBytes: <#maxBytes description#>
-            /// - Throws: <#description#>
-            /// - Returns: <#description#>
+            /// calling collect function within here in order to ensure the correct nested type
             func collect<Body: AsyncSequence>(_ body: Body, maxBytes: Int) async throws -> ByteBuffer where Body.Element == ByteBuffer {
                 try await body.collect(upTo: maxBytes)
             }
