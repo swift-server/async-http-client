@@ -36,4 +36,14 @@ final class HTTPClientResponseTests: XCTestCase {
         let response = HTTPClientResponse.expectedContentLength(requestMethod: .HEAD, headers: ["content-length": "1025"], status: .ok)
         XCTAssertEqual(response, 0)
     }
+
+    func testResponseNoContentLengthHeader() {
+        let response = HTTPClientResponse.expectedContentLength(requestMethod: .GET, headers: [:], status: .ok)
+        XCTAssertEqual(response, nil)
+    }
+
+    func testResponseInvalidInteger() {
+        let response = HTTPClientResponse.expectedContentLength(requestMethod: .GET, headers: ["content-length": "none"], status: .ok)
+        XCTAssertEqual(response, nil)
+    }
 }

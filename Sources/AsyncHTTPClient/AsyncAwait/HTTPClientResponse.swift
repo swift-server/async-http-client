@@ -33,7 +33,7 @@ public struct HTTPClientResponse: Sendable {
     public var body: Body
 
 
-    @inlinable init(
+    @inlinable public init(
         version: HTTPVersion = .http1_1,
         status: HTTPResponseStatus = .ok,
         headers: HTTPHeaders = [:],
