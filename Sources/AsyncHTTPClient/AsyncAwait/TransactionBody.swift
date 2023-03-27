@@ -22,9 +22,9 @@ import NIOCore
     @usableFromInline let transaction: Transaction
     @usableFromInline let expectedContentLength: Int?
 
-    init(_ transaction: Transaction, expextedContentLength: Int?) {
+    init(_ transaction: Transaction, expectedContentLength: Int?) {
         self.transaction = transaction
-        self.expectedContentLength = expextedContentLength
+        self.expectedContentLength = expectedContentLength
     }
 
     deinit {

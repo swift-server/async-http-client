@@ -745,19 +745,16 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         }
     }
     
-    func testSimpleContentLengthError() {
+    func testSimpleContentLengthErrorNoBody() {
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
-            let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
+            let bin = HTTPBin(.http2(compress: false))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
             let client = makeDefaultHTTPClient()
             defer { XCTAssertNoThrow(try client.syncShutdown()) }
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
-            var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/")
-            request.method = .GET
-            request.body = .bytes(ByteBuffer(string: "1234"))
-            
-            guard var response = await XCTAssertNoThrowWithResult(
+            let request = HTTPClientRequest(url: "https://localhost:\(bin.port)/content-length-without-body")
+            guard let response = await XCTAssertNoThrowWithResult(
                 try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
             ) else { return }
             await XCTAssertThrowsError(

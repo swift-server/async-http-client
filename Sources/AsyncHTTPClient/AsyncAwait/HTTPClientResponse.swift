@@ -53,7 +53,7 @@ public struct HTTPClientResponse: Sendable {
         requestMethod: HTTPMethod
     ) {
         let contentLength = HTTPClientResponse.expectedContentLength(requestMethod: requestMethod, headers: headers, status: status)
-        self.init(version: version, status: status, headers: headers, body: .init(TransactionBody(bag, expextedContentLength: contentLength)))
+        self.init(version: version, status: status, headers: headers, body: .init(TransactionBody(bag, expectedContentLength: contentLength)))
     }
 }
 
