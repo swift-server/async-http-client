@@ -539,10 +539,14 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
             let localClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: config)
             defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
-            let request = HTTPClientRequest(url: "https://example.com:\(bin.port)/echo-headers")
+            let request = HTTPClientRequest(url: "https://example.com:\(bin.port)/echohostheader")
             let response = await XCTAssertNoThrowWithResult(try await localClient.execute(request, deadline: .now() + .seconds(2)))
             XCTAssertEqual(response?.status, .ok)
             XCTAssertEqual(response?.version, .http2)
+            var body = try await response?.body.collect(upTo: 1024)
+            let readableBytes = body?.readableBytes ?? 0
+            let responseInfo = try body?.readJSONDecodable(RequestInfo.self, length: readableBytes)
+            XCTAssertEqual(responseInfo?.data, "example.com\(bin.port == 443 ? "" : ":\(bin.port)")")
         }
     }
 

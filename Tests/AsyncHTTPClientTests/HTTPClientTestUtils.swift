@@ -343,7 +343,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
         )
 
         static func http1_1(ssl: Bool, compress: Bool = false) -> Self {
-            .http1_1(tlsConfiguration: ssl ? nil : TestTLS.serverConfiguration, compress: compress)
+            .http1_1(tlsConfiguration: ssl ? TestTLS.serverConfiguration : nil, compress: compress)
         }
 
         // supports request decompression and http response compression
