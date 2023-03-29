@@ -26,9 +26,9 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
     private static var maxConsumeBodyPartStackDepth: Int {
         50
     }
-    
+
     let poolKey: ConnectionPool.Key
-    
+
     let task: HTTPClient.Task<Delegate.Response>
     var eventLoop: EventLoop {
         self.task.eventLoop
@@ -395,7 +395,6 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
 }
 
 extension RequestBag: HTTPSchedulableRequest {
-
     var tlsConfiguration: TLSConfiguration? {
         self.request.tlsConfiguration
     }

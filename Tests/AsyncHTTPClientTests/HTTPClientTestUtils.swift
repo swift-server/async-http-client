@@ -341,7 +341,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
             compress: Bool = false,
             settings: HTTP2Settings? = nil
         )
-        
+
         static func http1_1(ssl: Bool, compress: Bool = false) -> Self {
             .http1_1(tlsConfiguration: ssl ? nil : TestTLS.serverConfiguration, compress: compress)
         }
@@ -367,7 +367,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
                 return customSettings
             }
         }
-        
+
         var tlsConfiguration: TLSConfiguration? {
             switch self {
             case .refuse:

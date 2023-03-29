@@ -91,7 +91,7 @@ extension TLSConfiguration {
         will make AsyncHTTPClient use NIO on BSD Sockets and not Network.framework (which is the preferred \
         platform networking stack).
         """
-        
+
         if let serverNameIndicatorOverride = serverNameIndicatorOverride {
             serverNameIndicatorOverride.withCString { serverNameIndicatorOverride in
                 sec_protocol_options_set_tls_server_name(options.securityProtocolOptions, serverNameIndicatorOverride)

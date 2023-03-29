@@ -17,7 +17,7 @@ import NIOCore
 struct RequestOptions {
     /// The maximal `TimeAmount` that is allowed to pass between `channelRead`s from the Channel.
     var idleReadTimeout: TimeAmount?
-    
+
     var dnsOverride: [String: String]
 
     init(idleReadTimeout: TimeAmount?, dnsOverride: [String: String]) {

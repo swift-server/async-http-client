@@ -28,7 +28,7 @@ extension String {
         var ipv6Address = in6_addr()
         return self.withCString { host in
             inet_pton(AF_INET, host, &ipv4Address) == 1 ||
-            inet_pton(AF_INET6, host, &ipv6Address) == 1
+                inet_pton(AF_INET6, host, &ipv6Address) == 1
         }
     }
 }

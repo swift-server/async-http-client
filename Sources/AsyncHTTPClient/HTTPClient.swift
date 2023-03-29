@@ -711,7 +711,7 @@ public class HTTPClient {
     public struct Configuration {
         /// TLS configuration, defaults to `TLSConfiguration.makeClientConfiguration()`.
         public var tlsConfiguration: Optional<TLSConfiguration>
-        
+
         /// Sometimes it can be useful to connect to one host e.g. `x.example.com` but
         /// request and validate the certificate chain as if we would connect to `y.example.com`.
         /// ``dnsOverride`` allows to do just that by mapping host names which we will request and validate the certificate chain, to a different
@@ -721,7 +721,7 @@ public class HTTPClient {
         /// `url` of `https://example.com/`, the ``HTTPClient`` will actually open a connection to `localhost` instead of `example.com`.
         /// ``HTTPClient`` will still request certificates from the server for `example.com` and validate them as if we would connect to `example.com`.
         public var dnsOverride: [String: String] = [:]
-        
+
         /// Enables following 3xx redirects automatically.
         ///
         /// Following redirects are supported:

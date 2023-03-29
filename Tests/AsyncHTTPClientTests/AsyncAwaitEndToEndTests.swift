@@ -491,7 +491,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             }
         }
     }
-    
+
     func testDnsOverride() {
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
@@ -517,7 +517,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             ///     },
             ///     issuerPrivateKey: .init(privateKey)
             /// )
-            ///```
+            /// ```
             let certPath = Bundle.module.path(forResource: "example.com.cert", ofType: "pem")!
             let keyPath = Bundle.module.path(forResource: "example.com.private-key", ofType: "pem")!
             let localhostCert = try NIOSSLCertificate.fromPEMFile(certPath)
@@ -531,12 +531,12 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             var config = HTTPClient.Configuration()
                 .enableFastFailureModeForTesting()
             var tlsConfig = TLSConfiguration.makeClientConfiguration()
-            
+
             tlsConfig.trustRoots = .certificates(localhostCert)
             config.tlsConfiguration = tlsConfig
             // this is the actual configuration under test
             config.dnsOverride = ["example.com": "localhost"]
-            
+
             let localClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: config)
             defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
             let request = HTTPClientRequest(url: "https://example.com:\(bin.port)/echo-headers")
