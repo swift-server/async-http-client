@@ -66,11 +66,11 @@ extension TLSConfiguration {
     ///
     /// - Parameter eventLoop: EventLoop to wait for creation of options on
     /// - Returns: Future holding NWProtocolTLS Options
-    func getNWProtocolTLSOptions(on eventLoop: EventLoop) -> EventLoopFuture<NWProtocolTLS.Options> {
+    func getNWProtocolTLSOptions(on eventLoop: EventLoop, serverNameIndicatorOverride: String?) -> EventLoopFuture<NWProtocolTLS.Options> {
         let promise = eventLoop.makePromise(of: NWProtocolTLS.Options.self)
         Self.tlsDispatchQueue.async {
             do {
-                let options = try self.getNWProtocolTLSOptions()
+                let options = try self.getNWProtocolTLSOptions(serverNameIndicatorOverride: serverNameIndicatorOverride)
                 promise.succeed(options)
             } catch {
                 promise.fail(error)
@@ -82,7 +82,7 @@ extension TLSConfiguration {
     /// create NWProtocolTLS.Options for use with NIOTransportServices from the NIOSSL TLSConfiguration
     ///
     /// - Returns: Equivalent NWProtocolTLS Options
-    func getNWProtocolTLSOptions() throws -> NWProtocolTLS.Options {
+    func getNWProtocolTLSOptions(serverNameIndicatorOverride: String?) throws -> NWProtocolTLS.Options {
         let options = NWProtocolTLS.Options()
 
         let useMTELGExplainer = """
@@ -91,6 +91,12 @@ extension TLSConfiguration {
         will make AsyncHTTPClient use NIO on BSD Sockets and not Network.framework (which is the preferred \
         platform networking stack).
         """
+        
+        if let serverNameIndicatorOverride = serverNameIndicatorOverride {
+            serverNameIndicatorOverride.withCString { serverNameIndicatorOverride in
+                sec_protocol_options_set_tls_server_name(options.securityProtocolOptions, serverNameIndicatorOverride)
+            }
+        }
 
         // minimum TLS protocol
         if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {

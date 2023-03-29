@@ -312,6 +312,10 @@ enum TemporaryFileHelpers {
 enum TestTLS {
     static let certificate = try! NIOSSLCertificate(bytes: Array(cert.utf8), format: .pem)
     static let privateKey = try! NIOSSLPrivateKey(bytes: Array(key.utf8), format: .pem)
+    static let serverConfiguration: TLSConfiguration = .makeServerConfiguration(
+        certificateChain: [.certificate(TestTLS.certificate)],
+        privateKey: .privateKey(TestTLS.privateKey)
+    )
 }
 
 internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
@@ -327,32 +331,52 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
         // refuses all connections
         case refuse
         // supports http1.1 connections only, which can be either plain text or encrypted
-        case http1_1(ssl: Bool = false, compress: Bool = false)
+        case http1_1(
+            tlsConfiguration: TLSConfiguration? = nil,
+            compress: Bool = false
+        )
         // supports http1.1 and http2 connections which must be always encrypted
         case http2(
+            tlsConfiguration: TLSConfiguration = TestTLS.serverConfiguration,
             compress: Bool = false,
             settings: HTTP2Settings? = nil
         )
+        
+        static func http1_1(ssl: Bool, compress: Bool = false) -> Self {
+            .http1_1(tlsConfiguration: ssl ? nil : TestTLS.serverConfiguration, compress: compress)
+        }
 
         // supports request decompression and http response compression
         var compress: Bool {
             switch self {
             case .refuse:
                 return false
-            case .http1_1(ssl: _, compress: let compress), .http2(compress: let compress, _):
+            case .http1_1(_, let compress), .http2(_, let compress, _):
                 return compress
             }
         }
 
         var httpSettings: HTTP2Settings {
             switch self {
-            case .http1_1, .http2(_, nil), .refuse:
+            case .http1_1, .http2(_, _, nil), .refuse:
                 return [
                     HTTP2Setting(parameter: .maxConcurrentStreams, value: 10),
                     HTTP2Setting(parameter: .maxHeaderListSize, value: HPACKDecoder.defaultMaxHeaderListSize),
                 ]
-            case .http2(_, .some(let customSettings)):
+            case .http2(_, _, .some(let customSettings)):
                 return customSettings
+            }
+        }
+        
+        var tlsConfiguration: TLSConfiguration? {
+            switch self {
+            case .refuse:
+                return nil
+            case .http1_1(let tlsConfiguration, _):
+                return tlsConfiguration
+            case .http2(var tlsConfiguration, _, _):
+                tlsConfiguration.applicationProtocols = NIOHTTP2SupportedALPNProtocols
+                return tlsConfiguration
             }
         }
     }
@@ -540,30 +564,8 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
         }
     }
 
-    private static func tlsConfiguration(for mode: Mode) -> TLSConfiguration? {
-        var configuration: TLSConfiguration?
-
-        switch mode {
-        case .refuse, .http1_1(ssl: false, compress: _):
-            break
-        case .http2:
-            configuration = .makeServerConfiguration(
-                certificateChain: [.certificate(TestTLS.certificate)],
-                privateKey: .privateKey(TestTLS.privateKey)
-            )
-            configuration!.applicationProtocols = NIOHTTP2SupportedALPNProtocols
-        case .http1_1(ssl: true, compress: _):
-            configuration = .makeServerConfiguration(
-                certificateChain: [.certificate(TestTLS.certificate)],
-                privateKey: .privateKey(TestTLS.privateKey)
-            )
-        }
-
-        return configuration
-    }
-
     private static func sslContext(for mode: Mode) -> NIOSSLContext? {
-        if let tlsConfiguration = self.tlsConfiguration(for: mode) {
+        if let tlsConfiguration = mode.tlsConfiguration {
             return try! NIOSSLContext(configuration: tlsConfiguration)
         }
         return nil

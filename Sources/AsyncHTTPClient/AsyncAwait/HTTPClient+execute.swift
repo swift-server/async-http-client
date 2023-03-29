@@ -77,7 +77,7 @@ extension HTTPClient {
 
         // this loop is there to follow potential redirects
         while true {
-            let preparedRequest = try HTTPClientRequest.Prepared(currentRequest)
+            let preparedRequest = try HTTPClientRequest.Prepared(currentRequest, dnsOverride: configuration.dnsOverride)
             let response = try await executeCancellable(preparedRequest, deadline: deadline, logger: logger)
 
             guard var redirectState = currentRedirectState else {
@@ -131,7 +131,7 @@ extension HTTPClient {
             return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<HTTPClientResponse, Swift.Error>) -> Void in
                 let transaction = Transaction(
                     request: request,
-                    requestOptions: .init(idleReadTimeout: nil),
+                    requestOptions: .fromClientConfiguration(self.configuration),
                     logger: logger,
                     connectionDeadline: .now() + (self.configuration.timeout.connectionCreationTimeout),
                     preferredEventLoop: eventLoop,

@@ -26,7 +26,9 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
     private static var maxConsumeBodyPartStackDepth: Int {
         50
     }
-
+    
+    let poolKey: ConnectionPool.Key
+    
     let task: HTTPClient.Task<Delegate.Response>
     var eventLoop: EventLoop {
         self.task.eventLoop
@@ -63,6 +65,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
          connectionDeadline: NIODeadline,
          requestOptions: RequestOptions,
          delegate: Delegate) throws {
+        self.poolKey = .init(request, dnsOverride: requestOptions.dnsOverride)
         self.eventLoopPreference = eventLoopPreference
         self.task = task
         self.state = .init(redirectHandler: redirectHandler)
@@ -392,9 +395,6 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
 }
 
 extension RequestBag: HTTPSchedulableRequest {
-    var poolKey: ConnectionPool.Key {
-        ConnectionPool.Key(self.request)
-    }
 
     var tlsConfiguration: TLSConfiguration? {
         self.request.tlsConfiguration

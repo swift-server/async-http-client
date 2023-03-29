@@ -409,7 +409,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         #if canImport(Network)
         if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), let tsBootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoop) {
             // create NIOClientTCPBootstrap with NIOTS TLS provider
-            let bootstrapFuture = tlsConfig.getNWProtocolTLSOptions(on: eventLoop).map {
+            let bootstrapFuture = tlsConfig.getNWProtocolTLSOptions(on: eventLoop, serverNameIndicatorOverride: key.serverNameIndicatorOverride).map {
                 options -> NIOClientTCPBootstrapProtocol in
 
                 tsBootstrap
@@ -434,7 +434,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         }
         #endif
 
-        let sslServerHostname = self.key.connectionTarget.sslServerHostname
+        let sslServerHostname = self.key.serverNameIndicatorOverride ?? self.key.connectionTarget.sslServerHostname
         let sslContextFuture = sslContextCache.sslContext(
             tlsConfiguration: tlsConfig,
             eventLoop: eventLoop,
