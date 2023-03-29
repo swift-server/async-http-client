@@ -67,6 +67,8 @@ let package = Package(
             resources: [
                 .copy("Resources/self_signed_cert.pem"),
                 .copy("Resources/self_signed_key.pem"),
+                .copy("Resources/example.com.cert.pem"),
+                .copy("Resources/example.com.private-key.pem"),
             ]
         ),
     ]
