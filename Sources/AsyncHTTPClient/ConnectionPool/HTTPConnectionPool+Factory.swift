@@ -281,7 +281,7 @@ extension HTTPConnectionPool.ConnectionFactory {
             }
             let tlsEventHandler = TLSEventsHandler(deadline: deadline)
 
-            let sslServerHostname = self.key.connectionTarget.sslServerHostname
+            let sslServerHostname = self.key.serverNameIndicator
             let sslContextFuture = self.sslContextCache.sslContext(
                 tlsConfiguration: tlsConfig,
                 eventLoop: channel.eventLoop,
@@ -434,7 +434,6 @@ extension HTTPConnectionPool.ConnectionFactory {
         }
         #endif
 
-        let sslServerHostname = self.key.serverNameIndicatorOverride ?? self.key.connectionTarget.sslServerHostname
         let sslContextFuture = sslContextCache.sslContext(
             tlsConfiguration: tlsConfig,
             eventLoop: eventLoop,
@@ -449,7 +448,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                         let sync = channel.pipeline.syncOperations
                         let sslHandler = try NIOSSLClientHandler(
                             context: sslContext,
-                            serverHostname: sslServerHostname
+                            serverHostname: self.key.serverNameIndicator
                         )
                         let tlsEventHandler = TLSEventsHandler(deadline: deadline)
 
@@ -485,6 +484,12 @@ extension Scheme {
         case .unix, .httpUnix, .httpsUnix:
             return false
         }
+    }
+}
+
+extension ConnectionPool.Key {
+    var serverNameIndicator: String? {
+        serverNameIndicatorOverride ?? connectionTarget.sslServerHostname
     }
 }
 
