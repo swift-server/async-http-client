@@ -37,7 +37,8 @@ class HTTPClientRequestTests: XCTestCase {
             XCTAssertEqual(preparedRequest.poolKey, .init(
                 scheme: .https,
                 connectionTarget: .domain(name: "example.com", port: 443),
-                tlsConfiguration: nil
+                tlsConfiguration: nil,
+                serverNameIndicatorOverride: nil
             ))
             XCTAssertEqual(preparedRequest.head, .init(
                 version: .http1_1,
@@ -69,7 +70,8 @@ class HTTPClientRequestTests: XCTestCase {
             XCTAssertEqual(preparedRequest.poolKey, .init(
                 scheme: .unix,
                 connectionTarget: .unixSocket(path: "/some_path"),
-                tlsConfiguration: nil
+                tlsConfiguration: nil,
+                serverNameIndicatorOverride: nil
             ))
             XCTAssertEqual(preparedRequest.head, .init(
                 version: .http1_1,
@@ -98,7 +100,8 @@ class HTTPClientRequestTests: XCTestCase {
             XCTAssertEqual(preparedRequest.poolKey, .init(
                 scheme: .httpUnix,
                 connectionTarget: .unixSocket(path: "/example/folder.sock"),
-                tlsConfiguration: nil
+                tlsConfiguration: nil,
+                serverNameIndicatorOverride: nil
             ))
             XCTAssertEqual(preparedRequest.head, .init(
                 version: .http1_1,
@@ -127,7 +130,8 @@ class HTTPClientRequestTests: XCTestCase {
             XCTAssertEqual(preparedRequest.poolKey, .init(
                 scheme: .httpsUnix,
                 connectionTarget: .unixSocket(path: "/example/folder.sock"),
-                tlsConfiguration: nil
+                tlsConfiguration: nil,
+                serverNameIndicatorOverride: nil
             ))
             XCTAssertEqual(preparedRequest.head, .init(
                 version: .http1_1,
@@ -155,7 +159,8 @@ class HTTPClientRequestTests: XCTestCase {
             XCTAssertEqual(preparedRequest.poolKey, .init(
                 scheme: .https,
                 connectionTarget: .domain(name: "example.com", port: 443),
-                tlsConfiguration: nil
+                tlsConfiguration: nil,
+                serverNameIndicatorOverride: nil
             ))
             XCTAssertEqual(preparedRequest.head, .init(
                 version: .http1_1,
@@ -184,7 +189,8 @@ class HTTPClientRequestTests: XCTestCase {
             XCTAssertEqual(preparedRequest.poolKey, .init(
                 scheme: .http,
                 connectionTarget: .domain(name: "example.com", port: 80),
-                tlsConfiguration: nil
+                tlsConfiguration: nil,
+                serverNameIndicatorOverride: nil
             ))
             XCTAssertEqual(preparedRequest.head, .init(
                 version: .http1_1,
@@ -218,7 +224,8 @@ class HTTPClientRequestTests: XCTestCase {
             XCTAssertEqual(preparedRequest.poolKey, .init(
                 scheme: .http,
                 connectionTarget: .domain(name: "example.com", port: 80),
-                tlsConfiguration: nil
+                tlsConfiguration: nil,
+                serverNameIndicatorOverride: nil
             ))
             XCTAssertEqual(preparedRequest.head, .init(
                 version: .http1_1,
@@ -252,7 +259,8 @@ class HTTPClientRequestTests: XCTestCase {
             XCTAssertEqual(preparedRequest.poolKey, .init(
                 scheme: .http,
                 connectionTarget: .domain(name: "example.com", port: 80),
-                tlsConfiguration: nil
+                tlsConfiguration: nil,
+                serverNameIndicatorOverride: nil
             ))
             XCTAssertEqual(preparedRequest.head, .init(
                 version: .http1_1,
@@ -286,7 +294,8 @@ class HTTPClientRequestTests: XCTestCase {
             XCTAssertEqual(preparedRequest.poolKey, .init(
                 scheme: .http,
                 connectionTarget: .domain(name: "example.com", port: 80),
-                tlsConfiguration: nil
+                tlsConfiguration: nil,
+                serverNameIndicatorOverride: nil
             ))
             XCTAssertEqual(preparedRequest.head, .init(
                 version: .http1_1,
@@ -321,7 +330,8 @@ class HTTPClientRequestTests: XCTestCase {
             XCTAssertEqual(preparedRequest.poolKey, .init(
                 scheme: .http,
                 connectionTarget: .domain(name: "example.com", port: 80),
-                tlsConfiguration: nil
+                tlsConfiguration: nil,
+                serverNameIndicatorOverride: nil
             ))
             XCTAssertEqual(preparedRequest.head, .init(
                 version: .http1_1,
@@ -355,7 +365,8 @@ class HTTPClientRequestTests: XCTestCase {
             XCTAssertEqual(preparedRequest.poolKey, .init(
                 scheme: .http,
                 connectionTarget: .domain(name: "example.com", port: 80),
-                tlsConfiguration: nil
+                tlsConfiguration: nil,
+                serverNameIndicatorOverride: nil
             ))
             XCTAssertEqual(preparedRequest.head, .init(
                 version: .http1_1,
@@ -394,7 +405,8 @@ class HTTPClientRequestTests: XCTestCase {
             XCTAssertEqual(preparedRequest.poolKey, .init(
                 scheme: .http,
                 connectionTarget: .domain(name: "example.com", port: 80),
-                tlsConfiguration: nil
+                tlsConfiguration: nil,
+                serverNameIndicatorOverride: nil
             ))
             XCTAssertEqual(preparedRequest.head, .init(
                 version: .http1_1,
@@ -433,7 +445,8 @@ class HTTPClientRequestTests: XCTestCase {
             XCTAssertEqual(preparedRequest.poolKey, .init(
                 scheme: .http,
                 connectionTarget: .domain(name: "example.com", port: 80),
-                tlsConfiguration: nil
+                tlsConfiguration: nil,
+                serverNameIndicatorOverride: nil
             ))
             XCTAssertEqual(preparedRequest.head, .init(
                 version: .http1_1,

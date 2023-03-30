@@ -14,6 +14,25 @@
 
 import NIOSSL
 
+#if canImport(Darwin)
+import Darwin.C
+#elseif os(Linux) || os(FreeBSD) || os(Android)
+import Glibc
+#else
+#error("unsupported target operating system")
+#endif
+
+extension String {
+    var isIPAddress: Bool {
+        var ipv4Address = in_addr()
+        var ipv6Address = in6_addr()
+        return self.withCString { host in
+            inet_pton(AF_INET, host, &ipv4Address) == 1 ||
+                inet_pton(AF_INET6, host, &ipv6Address) == 1
+        }
+    }
+}
+
 enum ConnectionPool {
     /// Used by the `ConnectionPool` to index its `HTTP1ConnectionProvider`s
     ///
@@ -24,15 +43,18 @@ enum ConnectionPool {
         var scheme: Scheme
         var connectionTarget: ConnectionTarget
         private var tlsConfiguration: BestEffortHashableTLSConfiguration?
+        var serverNameIndicatorOverride: String?
 
         init(
             scheme: Scheme,
             connectionTarget: ConnectionTarget,
-            tlsConfiguration: BestEffortHashableTLSConfiguration? = nil
+            tlsConfiguration: BestEffortHashableTLSConfiguration? = nil,
+            serverNameIndicatorOverride: String?
         ) {
             self.scheme = scheme
             self.connectionTarget = connectionTarget
             self.tlsConfiguration = tlsConfiguration
+            self.serverNameIndicatorOverride = serverNameIndicatorOverride
         }
 
         var description: String {
@@ -48,26 +70,44 @@ enum ConnectionPool {
             case .unixSocket(let socketPath):
                 hostDescription = socketPath
             }
-            return "\(self.scheme)://\(hostDescription) TLS-hash: \(hash)"
+            return "\(self.scheme)://\(hostDescription)\(self.serverNameIndicatorOverride.map { " SNI: \($0)" } ?? "") TLS-hash: \(hash) "
         }
     }
 }
 
+extension DeconstructedURL {
+    func applyDNSOverride(_ dnsOverride: [String: String]) -> (ConnectionTarget, serverNameIndicatorOverride: String?) {
+        guard
+            let originalHost = self.connectionTarget.host,
+            let hostOverride = dnsOverride[originalHost]
+        else {
+            return (self.connectionTarget, nil)
+        }
+        return (
+            .init(remoteHost: hostOverride, port: self.connectionTarget.port ?? self.scheme.defaultPort),
+            serverNameIndicatorOverride: originalHost.isIPAddress ? nil : originalHost
+        )
+    }
+}
+
 extension ConnectionPool.Key {
-    init(url: DeconstructedURL, tlsConfiguration: TLSConfiguration?) {
+    init(url: DeconstructedURL, tlsConfiguration: TLSConfiguration?, dnsOverride: [String: String]) {
+        let (connectionTarget, serverNameIndicatorOverride) = url.applyDNSOverride(dnsOverride)
         self.init(
             scheme: url.scheme,
-            connectionTarget: url.connectionTarget,
+            connectionTarget: connectionTarget,
             tlsConfiguration: tlsConfiguration.map {
                 BestEffortHashableTLSConfiguration(wrapping: $0)
-            }
+            },
+            serverNameIndicatorOverride: serverNameIndicatorOverride
         )
     }
 
-    init(_ request: HTTPClient.Request) {
+    init(_ request: HTTPClient.Request, dnsOverride: [String: String] = [:]) {
         self.init(
             url: request.deconstructedURL,
-            tlsConfiguration: request.tlsConfiguration
+            tlsConfiguration: request.tlsConfiguration,
+            dnsOverride: dnsOverride
         )
     }
 }
