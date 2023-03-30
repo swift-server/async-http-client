@@ -50,6 +50,7 @@ extension AsyncAwaitEndToEndTests {
             ("testRejectsInvalidCharactersInHeaderFieldValues_http1", testRejectsInvalidCharactersInHeaderFieldValues_http1),
             ("testRejectsInvalidCharactersInHeaderFieldValues_http2", testRejectsInvalidCharactersInHeaderFieldValues_http2),
             ("testUsingGetMethodInsteadOfWait", testUsingGetMethodInsteadOfWait),
+            ("testSimpleContentLengthErrorNoBody", testSimpleContentLengthErrorNoBody),
         ]
     }
 }
