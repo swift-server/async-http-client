@@ -33,15 +33,15 @@ public struct HTTPClientResponse: Sendable {
     public var body: Body
 
     init(
-        bag: Transaction,
         version: HTTPVersion,
         status: HTTPResponseStatus,
-        headers: HTTPHeaders
+        headers: HTTPHeaders,
+        body: Body.Storage.TransactionBody
     ) {
         self.version = version
         self.status = status
         self.headers = headers
-        self.body = Body(TransactionBody(bag))
+        self.body = Body(body)
     }
 
     @inlinable public init(
@@ -89,6 +89,8 @@ extension HTTPClientResponse {
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body {
     @usableFromInline enum Storage: Sendable {
+        @usableFromInline
+        typealias TransactionBody = Transaction.StateMachine<Transaction>.BodySequence
         case transaction(TransactionBody)
         case anyAsyncSequence(AnyAsyncSequence<ByteBuffer>)
     }
@@ -131,7 +133,7 @@ extension HTTPClientResponse.Body.Storage.AsyncIterator: AsyncIteratorProtocol {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body {
-    init(_ body: TransactionBody) {
+    init(_ body: Storage.TransactionBody) {
         self.init(.transaction(body))
     }
 

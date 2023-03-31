@@ -29,7 +29,7 @@ import NIOSSL
     let requestOptions: RequestOptions
 
     private let stateLock = NIOLock()
-    private var state: StateMachine
+    private var state: StateMachine<Transaction>
 
     init(
         request: HTTPClientRequest.Prepared,
@@ -224,21 +224,16 @@ extension Transaction: HTTPExecutableRequest {
 
     func receiveResponseHead(_ head: HTTPResponseHead) {
         let action = self.stateLock.withLock {
-            self.state.receiveResponseHead(head)
+            self.state.receiveResponseHead(head, delegate: self)
         }
 
         switch action {
         case .none:
             break
 
-        case .succeedResponseHead(let head, let continuation):
-            let asyncResponse = HTTPClientResponse(
-                bag: self,
-                version: head.version,
-                status: head.status,
-                headers: head.headers
-            )
-            continuation.resume(returning: asyncResponse)
+        case .succeedResponseHead(let response, let continuation):
+            
+            continuation.resume(returning: response)
         }
     }
 
@@ -275,7 +270,7 @@ extension Transaction: HTTPExecutableRequest {
         self.performFailAction(action)
     }
 
-    private func performFailAction(_ action: StateMachine.FailAction) {
+    private func performFailAction(_ action: StateMachine<Transaction>.FailAction) {
         switch action {
         case .none:
             break
@@ -303,7 +298,7 @@ extension Transaction: HTTPExecutableRequest {
         self.performDeadlineExceededAction(action)
     }
 
-    private func performDeadlineExceededAction(_ action: StateMachine.DeadlineExceededAction) {
+    private func performDeadlineExceededAction(_ action: StateMachine<Transaction>.DeadlineExceededAction) {
         switch action {
         case .cancel(let requestContinuation, let scheduler, let executor, let bodyStreamContinuation):
             requestContinuation.resume(throwing: HTTPClientError.deadlineExceeded)
@@ -359,5 +354,19 @@ extension Transaction {
             self.state.responseBodyIteratorDeinited(streamID: streamID)
         }
         self.performFailAction(action)
+    }
+}
+
+
+@available(macOS 10.15, *)
+extension Transaction: NIOAsyncSequenceProducerDelegate {
+    @inlinable
+    func produceMore() {
+        #warning("TODO: implement NIOAsyncSequenceProducerDelegate.produceMore")
+    }
+    
+    @inlinable
+    func didTerminate() {
+        #warning("TODO: implement NIOAsyncSequenceProducerDelegate.didTerminate")
     }
 }
