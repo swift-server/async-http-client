@@ -597,6 +597,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
         }
     }
+
     func testRejectsInvalidCharactersInHeaderFieldNames_http1() {
         self._rejectsInvalidCharactersInHeaderFieldNames(mode: .http1_1(ssl: true))
     }
@@ -744,7 +745,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             XCTAssertEqual(response.version, .http2)
         }
     }
-    
+
     func testSimpleContentLengthErrorNoBody() {
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
@@ -765,7 +766,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         }
     }
 }
-
 
 struct AnySendableSequence<Element>: @unchecked Sendable {
     private let wrapped: AnySequence<Element>

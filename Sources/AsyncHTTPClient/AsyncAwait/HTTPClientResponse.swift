@@ -32,7 +32,6 @@ public struct HTTPClientResponse: Sendable {
     /// The body of this HTTP response.
     public var body: Body
 
-
     @inlinable public init(
         version: HTTPVersion = .http1_1,
         status: HTTPResponseStatus = .ok,
@@ -94,7 +93,7 @@ extension HTTPClientResponse {
         /// - Throws: `NIOTooManyBytesError` if the the sequence contains more than `maxBytes`.
         /// - Returns: the number of bytes collected over time
         @inlinable public func collect(upTo maxBytes: Int) async throws -> ByteBuffer {
-            switch storage {
+            switch self.storage {
             case .transaction(let transactionBody):
                 if let contentLength = transactionBody.expectedContentLength {
                     if contentLength > maxBytes {
@@ -110,9 +109,7 @@ extension HTTPClientResponse {
                 try await body.collect(upTo: maxBytes)
             }
             return try await collect(self, maxBytes: maxBytes)
-
         }
-
     }
 }
 
@@ -124,7 +121,7 @@ extension HTTPClientResponse {
         } else if requestMethod == .HEAD {
             return 0
         } else {
-            let contentLength = headers["content-length"].first.flatMap({Int($0, radix: 10)})
+            let contentLength = headers["content-length"].first.flatMap { Int($0, radix: 10) }
             return contentLength
         }
     }
@@ -190,7 +187,7 @@ extension HTTPClientResponse.Body {
     @inlinable public static func stream<SequenceOfBytes>(
         _ sequenceOfBytes: SequenceOfBytes
     ) -> Self where SequenceOfBytes: AsyncSequence & Sendable, SequenceOfBytes.Element == ByteBuffer {
-        Self.init(storage: .anyAsyncSequence(AnyAsyncSequence(sequenceOfBytes.singleIteratorPrecondition)))
+        Self(storage: .anyAsyncSequence(AnyAsyncSequence(sequenceOfBytes.singleIteratorPrecondition)))
     }
 
     public static func bytes(_ byteBuffer: ByteBuffer) -> Self {

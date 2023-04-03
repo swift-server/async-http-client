@@ -12,16 +12,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-
-
 @testable import AsyncHTTPClient
 import Logging
 import NIOCore
 import XCTest
 
-
 final class HTTPClientResponseTests: XCTestCase {
-
     func testSimpleResponse() {
         let response = HTTPClientResponse.expectedContentLength(requestMethod: .GET, headers: ["content-length": "1025"], status: .ok)
         XCTAssertEqual(response, 1025)

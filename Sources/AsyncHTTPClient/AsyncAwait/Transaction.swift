@@ -237,7 +237,7 @@ extension Transaction: HTTPExecutableRequest {
                 version: head.version,
                 status: head.status,
                 headers: head.headers,
-                requestMethod: requestHead.method
+                requestMethod: self.requestHead.method
             )
             continuation.resume(returning: asyncResponse)
         }
