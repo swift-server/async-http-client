@@ -165,7 +165,7 @@ class HTTPClientNIOTSTests: XCTestCase {
             var tlsConfig = TLSConfiguration.makeClientConfiguration()
             tlsConfig.trustRoots = .file("not/a/certificate")
 
-            XCTAssertThrowsError(try tlsConfig.getNWProtocolTLSOptions()) { error in
+            XCTAssertThrowsError(try tlsConfig.getNWProtocolTLSOptions(serverNameIndicatorOverride: nil)) { error in
                 switch error {
                 case let error as NIOSSL.NIOSSLError where error == .failedToLoadCertificate:
                     break

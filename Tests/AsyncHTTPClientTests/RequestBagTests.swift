@@ -972,9 +972,13 @@ class MockTaskQueuer: HTTPRequestScheduler {
 }
 
 extension RequestOptions {
-    static func forTests(idleReadTimeout: TimeAmount? = nil) -> Self {
+    static func forTests(
+        idleReadTimeout: TimeAmount? = nil,
+        dnsOverride: [String: String] = [:]
+    ) -> Self {
         RequestOptions(
-            idleReadTimeout: idleReadTimeout
+            idleReadTimeout: idleReadTimeout,
+            dnsOverride: dnsOverride
         )
     }
 }

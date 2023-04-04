@@ -492,6 +492,64 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         }
     }
 
+    func testDnsOverride() {
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
+        XCTAsyncTest(timeout: 5) {
+            /// key + cert was created with the following code (depends on swift-certificates)
+            /// ```
+            /// let privateKey = P384.Signing.PrivateKey()
+            /// let name = try DistinguishedName {
+            ///     OrganizationName("Self Signed")
+            ///     CommonName("localhost")
+            /// }
+            /// let certificate = try Certificate(
+            ///     version: .v3,
+            ///     serialNumber: .init(),
+            ///     publicKey: .init(privateKey.publicKey),
+            ///     notValidBefore: Date(),
+            ///     notValidAfter: Date() + .days(365),
+            ///     issuer: name,
+            ///     subject: name,
+            ///     signatureAlgorithm: .ecdsaWithSHA384,
+            ///     extensions: try .init {
+            ///         SubjectAlternativeNames([.dnsName("example.com")])
+            ///         ExtendedKeyUsage([.serverAuth])
+            ///     },
+            ///     issuerPrivateKey: .init(privateKey)
+            /// )
+            /// ```
+            let certPath = Bundle.module.path(forResource: "example.com.cert", ofType: "pem")!
+            let keyPath = Bundle.module.path(forResource: "example.com.private-key", ofType: "pem")!
+            let localhostCert = try NIOSSLCertificate.fromPEMFile(certPath)
+            let configuration = TLSConfiguration.makeServerConfiguration(
+                certificateChain: localhostCert.map { .certificate($0) },
+                privateKey: .file(keyPath)
+            )
+            let bin = HTTPBin(.http2(tlsConfiguration: configuration))
+            defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+            var config = HTTPClient.Configuration()
+                .enableFastFailureModeForTesting()
+            var tlsConfig = TLSConfiguration.makeClientConfiguration()
+
+            tlsConfig.trustRoots = .certificates(localhostCert)
+            config.tlsConfiguration = tlsConfig
+            // this is the actual configuration under test
+            config.dnsOverride = ["example.com": "localhost"]
+
+            let localClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: config)
+            defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+            let request = HTTPClientRequest(url: "https://example.com:\(bin.port)/echohostheader")
+            let response = await XCTAssertNoThrowWithResult(try await localClient.execute(request, deadline: .now() + .seconds(2)))
+            XCTAssertEqual(response?.status, .ok)
+            XCTAssertEqual(response?.version, .http2)
+            var body = try await response?.body.collect(upTo: 1024)
+            let readableBytes = body?.readableBytes ?? 0
+            let responseInfo = try body?.readJSONDecodable(RequestInfo.self, length: readableBytes)
+            XCTAssertEqual(responseInfo?.data, "example.com\(bin.port == 443 ? "" : ":\(bin.port)")")
+        }
+    }
+
     func testInvalidURL() {
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
