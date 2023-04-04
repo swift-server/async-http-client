@@ -20,9 +20,11 @@ import NIOCore
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 @usableFromInline final class TransactionBody: Sendable {
     @usableFromInline let transaction: Transaction
+    @usableFromInline let expectedContentLength: Int?
 
-    init(_ transaction: Transaction) {
+    init(_ transaction: Transaction, expectedContentLength: Int?) {
         self.transaction = transaction
+        self.expectedContentLength = expectedContentLength
     }
 
     deinit {
