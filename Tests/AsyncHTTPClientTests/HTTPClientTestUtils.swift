@@ -945,6 +945,11 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                 // We're forcing this closed now.
                 self.shouldClose = true
                 self.resps.append(builder)
+            case "/content-length-without-body":
+                var headers = self.responseHeaders
+                headers.replaceOrAdd(name: "content-length", value: "1234")
+                context.writeAndFlush(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))), promise: nil)
+                return
             default:
                 context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .notFound))), promise: nil)
                 context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)

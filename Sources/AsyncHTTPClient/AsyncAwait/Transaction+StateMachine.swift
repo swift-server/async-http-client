@@ -336,7 +336,7 @@ extension Transaction {
         // MARK: - Response -
 
         enum ReceiveResponseHeadAction {
-            case succeedResponseHead(HTTPClientResponse, CheckedContinuation<HTTPClientResponse, Error>)
+            case succeedResponseHead(TransactionBody, CheckedContinuation<HTTPClientResponse, Error>)
             case none
         }
         
@@ -355,20 +355,13 @@ extension Transaction {
             case .executing(let context, let requestState, .waitingForResponseHead):
                 // The response head was received. Next we will wait for the consumer to create a
                 // response body stream.
-                let producer = TransactionBody.makeSequence(
+                let body = TransactionBody.makeSequence(
                     backPressureStrategy: .init(lowWatermark: 1, highWatermark: 1),
                     delegate: AnyAsyncSequenceProducerDelegate(delegate)
                 )
                 
-                let response: HTTPClientResponse = HTTPClientResponse(
-                    version: head.version,
-                    status: head.status,
-                    headers: head.headers,
-                    body: producer.sequence
-                )
-                
-                self.state = .executing(context, requestState, .streamingBody(producer.source))
-                return .succeedResponseHead(response, context.continuation)
+                self.state = .executing(context, requestState, .streamingBody(body.source))
+                return .succeedResponseHead(body.sequence, context.continuation)
 
             case .finished(error: .some):
                 // If the request failed before, we don't need to do anything in response to

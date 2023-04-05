@@ -44,6 +44,7 @@ struct LinuxMain {
             testCase(HTTPClientNIOTSTests.allTests),
             testCase(HTTPClientReproTests.allTests),
             testCase(HTTPClientRequestTests.allTests),
+            testCase(HTTPClientResponseTests.allTests),
             testCase(HTTPClientSOCKSTests.allTests),
             testCase(HTTPClientTests.allTests),
             testCase(HTTPClientUncleanSSLConnectionShutdownTests.allTests),

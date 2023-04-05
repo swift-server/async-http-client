@@ -230,8 +230,14 @@ extension Transaction: HTTPExecutableRequest {
         case .none:
             break
 
-        case .succeedResponseHead(let response, let continuation):
-            
+        case .succeedResponseHead(let body, let continuation):
+            let response: HTTPClientResponse = HTTPClientResponse(
+                requestMethod: self.requestHead.method,
+                version: head.version,
+                status: head.status,
+                headers: head.headers,
+                body: body
+            )
             continuation.resume(returning: response)
         }
     }

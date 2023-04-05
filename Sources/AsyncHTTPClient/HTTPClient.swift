@@ -645,7 +645,7 @@ public class HTTPClient {
                                 "ahc-el-preference": "\(eventLoopPreference)"])
 
         let failedTask: Task<Delegate.Response>? = self.stateLock.withLock {
-            switch state {
+            switch self.state {
             case .upAndRunning:
                 return nil
             case .shuttingDown, .shutDown:

@@ -211,13 +211,9 @@ final class Transaction_StateMachineTests: XCTestCase {
                 state.requestWasQueued(queuer)
                 let head = HTTPResponseHead(version: .http1_1, status: .ok)
                 let receiveResponseHeadAction = state.receiveResponseHead(head, delegate: NoOpAsyncSequenceProducerDelegate())
-                guard case .succeedResponseHead(let response, let continuation) = receiveResponseHeadAction else {
+                guard case .succeedResponseHead(_, let continuation) = receiveResponseHeadAction else {
                     return XCTFail("Unexpected action: \(receiveResponseHeadAction)")
                 }
-                
-                XCTAssertEqual(response.version, .http1_1)
-                XCTAssertEqual(response.status, .ok)
-                XCTAssertEqual(response.headers, [:])
 
                 let failAction = state.deadlineExceeded()
                 guard case .none = failAction else {
