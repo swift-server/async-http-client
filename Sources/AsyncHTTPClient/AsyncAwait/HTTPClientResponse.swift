@@ -36,7 +36,7 @@ public struct HTTPClientResponse: Sendable {
         version: HTTPVersion,
         status: HTTPResponseStatus,
         headers: HTTPHeaders,
-        body: Body.Storage.TransactionBody
+        body: TransactionBody
     ) {
         self.version = version
         self.status = status
@@ -87,10 +87,17 @@ extension HTTPClientResponse {
 }
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+@usableFromInline
+typealias TransactionBody = NIOThrowingAsyncSequenceProducer<
+    ByteBuffer,
+    Error,
+    NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark,
+    AnyAsyncSequenceProducerDelegate
+>
+
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body {
     @usableFromInline enum Storage: Sendable {
-        @usableFromInline
-        typealias TransactionBody = Transaction.StateMachine<Transaction>.BodySequence
         case transaction(TransactionBody)
         case anyAsyncSequence(AnyAsyncSequence<ByteBuffer>)
     }
@@ -133,7 +140,7 @@ extension HTTPClientResponse.Body.Storage.AsyncIterator: AsyncIteratorProtocol {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body {
-    init(_ body: Storage.TransactionBody) {
+    init(_ body: TransactionBody) {
         self.init(.transaction(body))
     }
 

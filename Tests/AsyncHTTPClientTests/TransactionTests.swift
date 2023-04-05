@@ -145,10 +145,10 @@ final class TransactionTests: XCTestCase {
             XCTAssertEqual(response.version, responseHead.version)
 
             let iterator = SharedIterator(response.body.filter { $0.readableBytes > 0 })
-
+            
+            XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
+            
             for i in 0..<100 {
-                XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
-
                 async let part = iterator.next()
 
                 XCTAssertNoThrow(try executor.receiveResponseDemand())
@@ -159,7 +159,6 @@ final class TransactionTests: XCTestCase {
                 XCTAssertEqual(result, ByteBuffer(integer: i))
             }
 
-            XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
             async let part = iterator.next()
             XCTAssertNoThrow(try executor.receiveResponseDemand())
             executor.resetResponseStreamDemandSignal()
@@ -569,24 +568,36 @@ final class TransactionTests: XCTestCase {
 // implicit tasks. Therefore we need to wrap our iterator struct.
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 actor SharedIterator<Wrapped: AsyncSequence> where Wrapped.Element: Sendable {
-    private var wrappedIterator: Wrapped.AsyncIterator
+    private enum State {
+        case initialized(Wrapped)
+        case created(Wrapped.AsyncIterator)
+    }
+    private var state: State
     private var nextCallInProgress: Bool = false
 
     init(_ sequence: Wrapped) {
-        self.wrappedIterator = sequence.makeAsyncIterator()
+        self.state = .initialized(sequence)
     }
 
     func next() async throws -> Wrapped.Element? {
         precondition(self.nextCallInProgress == false)
         self.nextCallInProgress = true
-        var iter = self.wrappedIterator
+        var iter: Wrapped.AsyncIterator = {
+            switch state {
+            case .initialized(let wrapped):
+                return wrapped.makeAsyncIterator()
+            case .created(let iterator):
+                return iterator
+            }
+        }()
+        
         defer {
             // auto-closure of `precondition(_:)` messes with actor isolation analyses in Swift 5.5
             // we therefore need to move the access to `self.nextCallInProgress` out of the auto-closure
             let nextCallInProgress = nextCallInProgress
             precondition(nextCallInProgress == true)
             self.nextCallInProgress = false
-            self.wrappedIterator = iter
+            self.state = .created(iter)
         }
         return try await iter.next()
     }

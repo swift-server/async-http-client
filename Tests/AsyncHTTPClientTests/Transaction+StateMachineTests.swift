@@ -24,7 +24,7 @@ struct NoOpAsyncSequenceProducerDelegate: NIOAsyncSequenceProducerDelegate {
 }
 
 final class Transaction_StateMachineTests: XCTestCase {
-    typealias TransactionStateMachine = Transaction.StateMachine<NoOpAsyncSequenceProducerDelegate>
+    typealias TransactionStateMachine = Transaction.StateMachine
     func testRequestWasQueuedAfterWillExecuteRequestWasCalled() {
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         let eventLoop = EmbeddedEventLoop()
@@ -210,7 +210,7 @@ final class Transaction_StateMachineTests: XCTestCase {
                 XCTAssertEqual(state.willExecuteRequest(executor), .none)
                 state.requestWasQueued(queuer)
                 let head = HTTPResponseHead(version: .http1_1, status: .ok)
-                let receiveResponseHeadAction = state.receiveResponseHead(head, delegate: .init())
+                let receiveResponseHeadAction = state.receiveResponseHead(head, delegate: NoOpAsyncSequenceProducerDelegate())
                 guard case .succeedResponseHead(let response, let continuation) = receiveResponseHeadAction else {
                     return XCTFail("Unexpected action: \(receiveResponseHeadAction)")
                 }
