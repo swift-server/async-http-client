@@ -342,6 +342,35 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             }
         }
     }
+    
+    func testCancelingResponseBody() {
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
+        XCTAsyncTest(timeout: 5) {
+            let bin = HTTPBin(.http2(compress: false)) { _ in
+                HTTPEchoHandler()
+            }
+            defer { XCTAssertNoThrow(try bin.shutdown()) }
+            let client = makeDefaultHTTPClient()
+            defer { XCTAssertNoThrow(try client.syncShutdown()) }
+            let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+            var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/handler")
+            request.method = .POST
+            let streamWriter = AsyncSequenceWriter<ByteBuffer>()
+            request.body = .stream(streamWriter, length: .unknown)
+            let response = try await client.execute(request, deadline: .now() + .seconds(2), logger: logger)
+            streamWriter.write(.init(bytes: [1]))
+            let task = Task<ByteBuffer, Error> {
+                try await response.body.collect(upTo: 1024 * 1024)
+            }
+            task.cancel()
+            
+            await XCTAssertThrowsError(try await task.value) { error in
+                XCTAssertEqual(error as? HTTPClientError, .cancelled)
+            }
+            
+            streamWriter.end()
+        }
+    }
 
     func testDeadline() {
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
