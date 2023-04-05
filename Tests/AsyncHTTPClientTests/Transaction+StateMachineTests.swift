@@ -24,13 +24,12 @@ struct NoOpAsyncSequenceProducerDelegate: NIOAsyncSequenceProducerDelegate {
 }
 
 final class Transaction_StateMachineTests: XCTestCase {
-    typealias TransactionStateMachine = Transaction.StateMachine
     func testRequestWasQueuedAfterWillExecuteRequestWasCalled() {
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
-                var state = TransactionStateMachine(continuation)
+                var state = Transaction.StateMachine(continuation)
                 let executor = MockRequestExecutor(eventLoop: eventLoop)
                 let queuer = MockTaskQueuer()
 
@@ -58,7 +57,7 @@ final class Transaction_StateMachineTests: XCTestCase {
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
-                var state = TransactionStateMachine(continuation)
+                var state = Transaction.StateMachine(continuation)
                 let executor = MockRequestExecutor(eventLoop: eventLoop)
 
                 XCTAssertEqual(state.willExecuteRequest(executor), .none)
@@ -79,7 +78,7 @@ final class Transaction_StateMachineTests: XCTestCase {
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
-                var state = TransactionStateMachine(continuation)
+                var state = Transaction.StateMachine(continuation)
                 let queuer = MockTaskQueuer()
 
                 state.requestWasQueued(queuer)
@@ -110,7 +109,7 @@ final class Transaction_StateMachineTests: XCTestCase {
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
-                var state = TransactionStateMachine(continuation)
+                var state = Transaction.StateMachine(continuation)
                 let queuer = MockTaskQueuer()
 
                 state.requestWasQueued(queuer)
@@ -146,7 +145,7 @@ final class Transaction_StateMachineTests: XCTestCase {
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
-                var state = TransactionStateMachine(continuation)
+                var state = Transaction.StateMachine(continuation)
                 let executor = MockRequestExecutor(eventLoop: eventLoop)
                 let queuer = MockTaskQueuer()
 
@@ -171,7 +170,7 @@ final class Transaction_StateMachineTests: XCTestCase {
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
-                var state = TransactionStateMachine(continuation)
+                var state = Transaction.StateMachine(continuation)
                 let expectedExecutor = MockRequestExecutor(eventLoop: eventLoop)
                 let queuer = MockTaskQueuer()
 
@@ -203,7 +202,7 @@ final class Transaction_StateMachineTests: XCTestCase {
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
-                var state = TransactionStateMachine(continuation)
+                var state = Transaction.StateMachine(continuation)
                 let executor = MockRequestExecutor(eventLoop: eventLoop)
                 let queuer = MockTaskQueuer()
 

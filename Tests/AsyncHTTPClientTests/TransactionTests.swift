@@ -568,36 +568,24 @@ final class TransactionTests: XCTestCase {
 // implicit tasks. Therefore we need to wrap our iterator struct.
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 actor SharedIterator<Wrapped: AsyncSequence> where Wrapped.Element: Sendable {
-    private enum State {
-        case initialized(Wrapped)
-        case created(Wrapped.AsyncIterator)
-    }
-    private var state: State
+    private var wrappedIterator: Wrapped.AsyncIterator
     private var nextCallInProgress: Bool = false
 
     init(_ sequence: Wrapped) {
-        self.state = .initialized(sequence)
+        self.wrappedIterator = sequence.makeAsyncIterator()
     }
 
     func next() async throws -> Wrapped.Element? {
         precondition(self.nextCallInProgress == false)
         self.nextCallInProgress = true
-        var iter: Wrapped.AsyncIterator = {
-            switch state {
-            case .initialized(let wrapped):
-                return wrapped.makeAsyncIterator()
-            case .created(let iterator):
-                return iterator
-            }
-        }()
-        
+        var iter = self.wrappedIterator
         defer {
             // auto-closure of `precondition(_:)` messes with actor isolation analyses in Swift 5.5
             // we therefore need to move the access to `self.nextCallInProgress` out of the auto-closure
             let nextCallInProgress = nextCallInProgress
             precondition(nextCallInProgress == true)
             self.nextCallInProgress = false
-            self.state = .created(iter)
+            self.wrappedIterator = iter
         }
         return try await iter.next()
     }
