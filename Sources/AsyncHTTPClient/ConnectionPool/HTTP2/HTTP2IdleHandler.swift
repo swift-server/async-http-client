@@ -35,9 +35,10 @@ final class HTTP2IdleHandler<Delegate: HTTP2IdleHandlerDelegate>: ChannelDuplexH
     let logger: Logger
     let delegate: Delegate
 
-    private var state: StateMachine = .init()
+    private var state: StateMachine
 
-    init(delegate: Delegate, logger: Logger) {
+    init(delegate: Delegate, logger: Logger, maximumConnectionUses: Int? = nil) {
+        self.state = StateMachine(maximumUses: maximumConnectionUses)
         self.delegate = delegate
         self.logger = logger
     }
@@ -140,19 +141,23 @@ extension HTTP2IdleHandler {
         }
 
         enum State {
-            case initialized
-            case connected
-            case active(openStreams: Int, maxStreams: Int)
+            case initialized(maximumUses: Int?)
+            case connected(remainingUses: Int?)
+            case active(openStreams: Int, maxStreams: Int, remainingUses: Int?)
             case closing(openStreams: Int, maxStreams: Int)
             case closed
         }
 
-        var state: State = .initialized
+        var state: State
+
+        init(maximumUses: Int?) {
+            self.state = .initialized(maximumUses: maximumUses)
+        }
 
         mutating func channelActive() {
             switch self.state {
-            case .initialized:
-                self.state = .connected
+            case .initialized(let maximumUses):
+                self.state = .connected(remainingUses: maximumUses)
 
             case .connected, .active, .closing, .closed:
                 break
@@ -171,17 +176,17 @@ extension HTTP2IdleHandler {
             case .initialized:
                 preconditionFailure("Invalid state: \(self.state)")
 
-            case .connected:
+            case .connected(let remainingUses):
                 // a settings frame might have multiple entries for `maxConcurrentStreams`. We are
                 // only interested in the last value! If no `maxConcurrentStreams` is set, we assume
                 // the http/2 default of 100.
                 let maxStreams = settings.last(where: { $0.parameter == .maxConcurrentStreams })?.value ?? 100
-                self.state = .active(openStreams: 0, maxStreams: maxStreams)
+                self.state = .active(openStreams: 0, maxStreams: maxStreams, remainingUses: remainingUses)
                 return .notifyConnectionNewMaxStreamsSettings(maxStreams)
 
-            case .active(openStreams: let openStreams, maxStreams: let maxStreams):
+            case .active(openStreams: let openStreams, maxStreams: let maxStreams, remainingUses: let remainingUses):
                 if let newMaxStreams = settings.last(where: { $0.parameter == .maxConcurrentStreams })?.value, newMaxStreams != maxStreams {
-                    self.state = .active(openStreams: openStreams, maxStreams: newMaxStreams)
+                    self.state = .active(openStreams: openStreams, maxStreams: newMaxStreams, remainingUses: remainingUses)
                     return .notifyConnectionNewMaxStreamsSettings(newMaxStreams)
                 }
                 return .nothing
@@ -205,7 +210,7 @@ extension HTTP2IdleHandler {
                 self.state = .closing(openStreams: 0, maxStreams: 0)
                 return .notifyConnectionGoAwayReceived(close: true)
 
-            case .active(let openStreams, let maxStreams):
+            case .active(let openStreams, let maxStreams, _):
                 self.state = .closing(openStreams: openStreams, maxStreams: maxStreams)
                 return .notifyConnectionGoAwayReceived(close: openStreams == 0)
 
@@ -228,7 +233,7 @@ extension HTTP2IdleHandler {
                 self.state = .closing(openStreams: 0, maxStreams: 0)
                 return .close
 
-            case .active(let openStreams, let maxStreams):
+            case .active(let openStreams, let maxStreams, _):
                 if openStreams == 0 {
                     self.state = .closed
                     return .close
@@ -247,10 +252,19 @@ extension HTTP2IdleHandler {
             case .initialized, .connected:
                 preconditionFailure("Invalid state: \(self.state)")
 
-            case .active(var openStreams, let maxStreams):
+            case .active(var openStreams, let maxStreams, let remainingUses):
                 openStreams += 1
-                self.state = .active(openStreams: openStreams, maxStreams: maxStreams)
-                return .nothing
+                let remainingUses = remainingUses.map { $0 - 1 }
+                self.state = .active(openStreams: openStreams, maxStreams: maxStreams, remainingUses: remainingUses)
+
+                if remainingUses == 0 {
+                    // Treat running out of connection uses as if we received a GOAWAY frame. This
+                    // will notify the delegate (i.e. connection pool) that the connection can no
+                    // longer be used.
+                    return self.goAwayReceived()
+                } else {
+                    return .nothing
+                }
 
             case .closing(var openStreams, let maxStreams):
                 // A stream might be opened, while we are closing because of race conditions. For
@@ -271,10 +285,10 @@ extension HTTP2IdleHandler {
             case .initialized, .connected:
                 preconditionFailure("Invalid state: \(self.state)")
 
-            case .active(var openStreams, let maxStreams):
+            case .active(var openStreams, let maxStreams, let remainingUses):
                 openStreams -= 1
                 assert(openStreams >= 0)
-                self.state = .active(openStreams: openStreams, maxStreams: maxStreams)
+                self.state = .active(openStreams: openStreams, maxStreams: maxStreams, remainingUses: remainingUses)
                 return .notifyConnectionStreamClosed(currentlyAvailable: maxStreams - openStreams)
 
             case .closing(var openStreams, let maxStreams):

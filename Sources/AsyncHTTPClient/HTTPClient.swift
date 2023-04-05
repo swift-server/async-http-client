@@ -758,6 +758,18 @@ public class HTTPClient {
         /// which is the recommended setting. Only set this to `false` when attempting to trigger a particular error path.
         public var networkFrameworkWaitForConnectivity: Bool
 
+        /// The maximum number of times each connection can be used before it is replaced with a new one. Use `nil` (the default)
+        /// if no limit should be applied to each connection.
+        ///
+        /// - Precondition: The value must be greater than zero.
+        public var maximumUsesPerConnection: Int? {
+            willSet {
+                if let newValue = newValue {
+                    precondition(newValue > 0, "maximumUsesPerConnection must be greater than zero or nil")
+                }
+            }
+        }
+
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,

@@ -28,7 +28,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         var state = HTTPConnectionPool.StateMachine(
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 8,
-            retryConnectionEstablishment: true
+            retryConnectionEstablishment: true,
+            maximumConnectionUses: nil
         )
 
         var connections = MockConnectionPool()
@@ -111,7 +112,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         var state = HTTPConnectionPool.StateMachine(
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 8,
-            retryConnectionEstablishment: false
+            retryConnectionEstablishment: false,
+            maximumConnectionUses: nil
         )
 
         var connections = MockConnectionPool()
@@ -178,7 +180,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         var state = HTTPConnectionPool.StateMachine(
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 2,
-            retryConnectionEstablishment: true
+            retryConnectionEstablishment: true,
+            maximumConnectionUses: nil
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
@@ -236,7 +239,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         var state = HTTPConnectionPool.StateMachine(
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 2,
-            retryConnectionEstablishment: true
+            retryConnectionEstablishment: true,
+            maximumConnectionUses: nil
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
@@ -273,7 +277,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         var state = HTTPConnectionPool.StateMachine(
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 2,
-            retryConnectionEstablishment: true
+            retryConnectionEstablishment: true,
+            maximumConnectionUses: nil
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
@@ -664,7 +669,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         var state = HTTPConnectionPool.StateMachine(
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6,
-            retryConnectionEstablishment: true
+            retryConnectionEstablishment: true,
+            maximumConnectionUses: nil
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
@@ -703,7 +709,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         var state = HTTPConnectionPool.StateMachine(
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6,
-            retryConnectionEstablishment: true
+            retryConnectionEstablishment: true,
+            maximumConnectionUses: nil
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
@@ -735,7 +742,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         var state = HTTPConnectionPool.StateMachine(
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6,
-            retryConnectionEstablishment: true
+            retryConnectionEstablishment: true,
+            maximumConnectionUses: nil
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: eventLoop.next(), requiresEventLoopForChannel: false)
@@ -759,7 +767,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         var state = HTTPConnectionPool.StateMachine(
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6,
-            retryConnectionEstablishment: true
+            retryConnectionEstablishment: true,
+            maximumConnectionUses: nil
         )
 
         let mockRequest1 = MockHTTPScheduableRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
