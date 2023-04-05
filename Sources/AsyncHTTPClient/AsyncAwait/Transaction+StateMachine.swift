@@ -20,7 +20,6 @@ import NIOHTTP1
 extension Transaction {
     @usableFromInline
     struct StateMachine {
-        
         struct ExecutionContext {
             let executor: HTTPRequestExecutor
             let allocator: ByteBufferAllocator
@@ -132,7 +131,7 @@ extension Transaction {
                 case .finished, .producing, .requestHeadSent:
                     return .failResponseStream(source, error, context.executor, bodyStreamContinuation: nil)
                 }
-            
+
             case .finished(error: _),
                  .executing(_, _, .finished):
                 return .none
@@ -315,7 +314,7 @@ extension Transaction {
             case .executing(let context, .producing, let responseState),
                  .executing(let context, .paused(continuation: .none), let responseState),
                  .executing(let context, .requestHeadSent, let responseState):
-                
+
                 switch responseState {
                 case .finished:
                     // if the response stream has already finished before the request, we must succeed
@@ -339,7 +338,7 @@ extension Transaction {
             case succeedResponseHead(TransactionBody, CheckedContinuation<HTTPClientResponse, Error>)
             case none
         }
-        
+
         mutating func receiveResponseHead<Delegate: NIOAsyncSequenceProducerDelegate>(
             _ head: HTTPResponseHead,
             delegate: Delegate
@@ -359,7 +358,7 @@ extension Transaction {
                     backPressureStrategy: .init(lowWatermark: 1, highWatermark: 1),
                     delegate: AnyAsyncSequenceProducerDelegate(delegate)
                 )
-                
+
                 self.state = .executing(context, requestState, .streamingBody(body.source))
                 return .succeedResponseHead(body.sequence, context.continuation)
 
@@ -372,24 +371,24 @@ extension Transaction {
                 preconditionFailure("How can the request be finished without error, before receiving response head?")
             }
         }
-        
+
         enum ProduceMoreAction {
             case none
             case requestMoreResponseBodyParts(HTTPRequestExecutor)
         }
-        
+
         mutating func produceMore() -> ProduceMoreAction {
             switch self.state {
             case .initialized,
-                    .queued,
-                    .deadlineExceededWhileQueued,
-                    .executing(_, _, .waitingForResponseHead):
+                 .queued,
+                 .deadlineExceededWhileQueued,
+                 .executing(_, _, .waitingForResponseHead):
                 preconditionFailure("invalid state \(self.state)")
-                
+
             case .executing(let context, _, .streamingBody):
                 return .requestMoreResponseBodyParts(context.executor)
             case .finished,
-                .executing(_, _, .finished):
+                 .executing(_, _, .finished):
                 return .none
             }
         }
@@ -406,7 +405,7 @@ extension Transaction {
 
             case .executing(_, _, .waitingForResponseHead):
                 preconditionFailure("If we receive a response body, we must have received a head before")
-                
+
             case .executing(let context, _, .streamingBody(let source)):
                 return .yieldResponseBodyParts(source, buffer, context.executor)
 
@@ -433,7 +432,7 @@ extension Transaction {
                 preconditionFailure("Received no response head, but received a response end. Invalid state: \(self.state)")
 
             case .executing(let context, let requestState, .streamingBody(let source)):
-                state = .executing(context, requestState, .finished)
+                self.state = .executing(context, requestState, .finished)
                 return .finishResponseStream(source, finalBody: newChunks)
             case .finished:
                 // the request failed or was cancelled before, we can ignore all events

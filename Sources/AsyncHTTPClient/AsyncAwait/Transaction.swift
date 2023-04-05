@@ -231,7 +231,7 @@ extension Transaction: HTTPExecutableRequest {
             break
 
         case .succeedResponseHead(let body, let continuation):
-            let response: HTTPClientResponse = HTTPClientResponse(
+            let response = HTTPClientResponse(
                 requestMethod: self.requestHead.method,
                 version: head.version,
                 status: head.status,
@@ -325,7 +325,6 @@ extension Transaction: HTTPExecutableRequest {
     }
 }
 
-
 @available(macOS 10.15, *)
 extension Transaction: NIOAsyncSequenceProducerDelegate {
     @usableFromInline
@@ -340,8 +339,7 @@ extension Transaction: NIOAsyncSequenceProducerDelegate {
             executer.demandResponseBodyStream(self)
         }
     }
-    
-    
+
     @usableFromInline
     func didTerminate() {
         self.fail(HTTPClientError.cancelled)

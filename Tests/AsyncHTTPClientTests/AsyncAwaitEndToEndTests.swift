@@ -342,7 +342,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             }
         }
     }
-    
+
     func testCancelingResponseBody() {
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
@@ -363,11 +363,11 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 try await response.body.collect(upTo: 1024 * 1024)
             }
             task.cancel()
-            
+
             await XCTAssertThrowsError(try await task.value) { error in
                 XCTAssertEqual(error as? HTTPClientError, .cancelled)
             }
-            
+
             streamWriter.end()
         }
     }

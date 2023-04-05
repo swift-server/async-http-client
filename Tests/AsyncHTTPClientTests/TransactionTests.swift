@@ -145,9 +145,9 @@ final class TransactionTests: XCTestCase {
             XCTAssertEqual(response.version, responseHead.version)
 
             let iterator = SharedIterator(response.body.filter { $0.readableBytes > 0 })
-            
+
             XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
-            
+
             for i in 0..<100 {
                 async let part = iterator.next()
 

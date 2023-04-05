@@ -19,19 +19,19 @@ import NIOCore
 struct AnyAsyncSequenceProducerDelegate: NIOAsyncSequenceProducerDelegate {
     @usableFromInline
     var delegate: any NIOAsyncSequenceProducerDelegate
-    
+
     @inlinable
     init<Delegate: NIOAsyncSequenceProducerDelegate>(_ delegate: Delegate) {
         self.delegate = delegate
     }
-    
+
     @inlinable
     func produceMore() {
-        delegate.produceMore()
+        self.delegate.produceMore()
     }
-    
+
     @inlinable
     func didTerminate() {
-        delegate.didTerminate()
+        self.delegate.didTerminate()
     }
 }
