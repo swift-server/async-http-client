@@ -2,6 +2,8 @@
 
 This package provides simple HTTP Client library built on top of SwiftNIO.
 
+## Overview
+
 This library provides the following:
 - First class support for Swift Concurrency (since version 1.9.0)
 - Asynchronous and non-blocking request methods
@@ -17,7 +19,7 @@ This library provides the following:
 
 ---
 
-## Getting Started
+### Getting Started
 
 #### Adding the dependency
 
@@ -71,13 +73,13 @@ httpClient.get(url: "https://apple.com/").whenComplete { result in
 }
 ```
 
-You should always shut down ``HTTPClient`` instances you created using ``HTTPClient/shutdown()-96ayw()``. Please note that you must not call ``HTTPClient/shutdown()-96ayw()`` before all requests of the HTTP client have finished, or else the in-flight requests will likely fail because their network connections are interrupted.
+You should always shut down ``HTTPClient`` instances you created using ``HTTPClient/shutdown()-9gcpw``. Please note that you must not call ``HTTPClient/shutdown()-9gcpw`` before all requests of the HTTP client have finished, or else the in-flight requests will likely fail because their network connections are interrupted.
 
-### async/await examples
+#### async/await examples
 
 Examples for the async/await API can be found in the [`Examples` folder](https://github.com/swift-server/async-http-client/tree/main/Examples) in the repository.
 
-## Usage guide
+### Usage guide
 
 The default HTTP Method is `GET`. In case you need to have more control over the method, or you want to add headers or body, use the ``HTTPClientRequest`` struct:
 
@@ -134,14 +136,14 @@ httpClient.execute(request: request).whenComplete { result in
 }
 ```
 
-### Redirects following
+#### Redirects following
 Enable follow-redirects behavior using the client configuration:
 ```swift
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
                             configuration: HTTPClient.Configuration(followRedirects: true))
 ```
 
-### Timeouts
+#### Timeouts
 Timeouts (connect and read) can also be set using the client configuration:
 ```swift
 let timeout = HTTPClient.Configuration.Timeout(connect: .seconds(1), read: .seconds(1))
@@ -153,11 +155,11 @@ or on a per-request basis:
 httpClient.execute(request: request, deadline: .now() + .milliseconds(1))
 ```
 
-### Streaming
+#### Streaming
 When dealing with larger amount of data, it's critical to stream the response body instead of aggregating in-memory. 
 The following example demonstrates how to count the number of bytes in a streaming response body:
 
-#### Using Swift Concurrency
+##### Using Swift Concurrency
 ```swift
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
 do {
@@ -189,7 +191,7 @@ do {
 try await httpClient.shutdown()
 ```
 
-#### Using HTTPClientResponseDelegate and SwiftNIO EventLoopFuture
+##### Using HTTPClientResponseDelegate and SwiftNIO EventLoopFuture
 
 ```swift
 import NIOCore
@@ -251,7 +253,7 @@ httpClient.execute(request: request, delegate: delegate).futureResult.whenSucces
 }
 ```
 
-### File downloads
+#### File downloads
 
 Based on the `HTTPClientResponseDelegate` example above you can build more complex delegates,
 the built-in `FileDownloadDelegate` is one of them. It allows streaming the downloaded data
@@ -280,7 +282,7 @@ client.execute(request: request, delegate: delegate).futureResult
     }
 ```
 
-### Unix Domain Socket Paths
+#### Unix Domain Socket Paths
 Connecting to servers bound to socket paths is easy:
 ```swift
 let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
@@ -314,7 +316,7 @@ let secureSocketPathBasedURL = URL(
 )
 ```
 
-### Disabling HTTP/2
+#### Disabling HTTP/2
 The exclusive use of HTTP/1 is possible by setting ``HTTPClient/Configuration/httpVersion-swift.property`` to ``HTTPClient/Configuration/HTTPVersion-swift.struct/http1Only`` on the ``HTTPClient/Configuration``:
 ```swift
 var configuration = HTTPClient.Configuration()
@@ -325,7 +327,7 @@ let client = HTTPClient(
 )
 ```
 
-## Security
+### Security
 
 AsyncHTTPClient's security process is documented on [GitHub](https://github.com/swift-server/async-http-client/blob/main/SECURITY.md).
 

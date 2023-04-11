@@ -228,7 +228,7 @@ public class HTTPClient {
     /// Shuts down the ``HTTPClient`` and releases its resources.
     ///
     /// - note: You cannot use this method if you sharted the ``HTTPClient`` with
-    ///         ``init(eventLoopGroupProvider: .createNew)`` because that will shut down the ``EventLoopGroup`` the
+    ///         `init(eventLoopGroupProvider: .createNew)` because that will shut down the `EventLoopGroup` the
     ///         returned future would run in.
     public func shutdown() -> EventLoopFuture<Void> {
         switch self.eventLoopGroupProvider {
