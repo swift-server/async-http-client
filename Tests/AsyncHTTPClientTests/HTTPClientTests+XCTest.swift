@@ -147,6 +147,9 @@ extension HTTPClientTests {
             ("testMassiveHeaderHTTP2", testMassiveHeaderHTTP2),
             ("testCancelingHTTP1RequestAfterHeaderSend", testCancelingHTTP1RequestAfterHeaderSend),
             ("testCancelingHTTP2RequestAfterHeaderSend", testCancelingHTTP2RequestAfterHeaderSend),
+            ("testMaxConnectionReusesHTTP1", testMaxConnectionReusesHTTP1),
+            ("testMaxConnectionReusesHTTP2", testMaxConnectionReusesHTTP2),
+            ("testMaxConnectionReusesExceedsMaxConcurrentStreamsForHTTP2", testMaxConnectionReusesExceedsMaxConcurrentStreamsForHTTP2),
         ]
     }
 }

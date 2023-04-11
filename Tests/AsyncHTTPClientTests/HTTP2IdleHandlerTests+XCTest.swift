@@ -36,6 +36,7 @@ extension HTTP2IdleHandlerTests {
             ("testCloseEventWhileThereAreOpenStreams", testCloseEventWhileThereAreOpenStreams),
             ("testGoAwayWhileThereAreOpenStreams", testGoAwayWhileThereAreOpenStreams),
             ("testReceiveSettingsAndGoAwayAfterClientSideClose", testReceiveSettingsAndGoAwayAfterClientSideClose),
+            ("testConnectionUseLimitTriggersGoAway", testConnectionUseLimitTriggersGoAway),
         ]
     }
 }
