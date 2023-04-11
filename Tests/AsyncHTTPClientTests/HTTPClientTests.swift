@@ -3457,7 +3457,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         for requestNumber in stride(from: 0, to: requests, by: maximumUses) {
             var responses = [RequestInfo]()
 
-            for _ in 0 ..< maximumUses {
+            for _ in 0..<maximumUses {
                 let response = try client.execute(request: request).wait()
                 let body = try XCTUnwrap(response.body)
                 let info = try decoder.decode(RequestInfo.self, from: body)

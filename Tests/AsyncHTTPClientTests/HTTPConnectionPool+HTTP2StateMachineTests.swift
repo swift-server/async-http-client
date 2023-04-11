@@ -495,7 +495,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
 
         // establish one idle http2 connection
         let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
-        var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator,             maximumConnectionUses: nil)
+        var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator, maximumConnectionUses: nil)
         let conn1ID = http1Conns.createNewConnection(on: el1)
         var state = HTTPConnectionPool.HTTP2StateMachine(
             idGenerator: idGenerator,
@@ -528,8 +528,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
 
         // establish one idle http2 connection
         let idGenerator = HTTPConnectionPool.Connection.ID.Generator()
-        var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator, maximumConnectionUses: nil
-)
+        var http1Conns = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: idGenerator, maximumConnectionUses: nil)
         let conn1ID = http1Conns.createNewConnection(on: el1)
         var state = HTTPConnectionPool.HTTP2StateMachine(
             idGenerator: idGenerator,

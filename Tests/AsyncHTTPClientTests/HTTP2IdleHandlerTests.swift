@@ -263,7 +263,7 @@ class HTTP2IdleHandlerTests: XCTestCase {
         XCTAssertNoThrow(try embedded.writeInbound(settingsFrame))
         XCTAssertEqual(delegate.maxStreams, 100)
 
-        for streamID in HTTP2StreamID(1) ..< HTTP2StreamID(5) {
+        for streamID in HTTP2StreamID(1)..<HTTP2StreamID(5) {
             let event = NIOHTTP2StreamCreatedEvent(streamID: streamID, localInitialWindowSize: nil, remoteInitialWindowSize: nil)
             embedded.pipeline.fireUserInboundEventTriggered(event)
             XCTAssertFalse(delegate.goAwayReceived)
@@ -275,7 +275,7 @@ class HTTP2IdleHandlerTests: XCTestCase {
         XCTAssertTrue(delegate.goAwayReceived)
 
         // Close the streams.
-        for streamID in HTTP2StreamID(1) ... HTTP2StreamID(5) {
+        for streamID in HTTP2StreamID(1)...HTTP2StreamID(5) {
             let event = StreamClosedEvent(streamID: streamID, reason: nil)
             embedded.pipeline.fireUserInboundEventTriggered(event)
         }
