@@ -192,6 +192,7 @@ extension HTTPConnectionPool {
             case .active(let conn, let maxStreams, var usedStreams, let lastIdle, let remainingUses):
                 usedStreams += count
                 precondition(usedStreams <= maxStreams, "tried to lease a connection which is not available")
+                precondition(remainingUses.map { $0 >= count } ?? true, "tried to lease streams from a connection which does not have enough remaining streams")
                 self.state = .active(conn, maxStreams: maxStreams, usedStreams: usedStreams, lastIdle: lastIdle, remainingUses: remainingUses.map { $0 - count })
                 return conn
             }

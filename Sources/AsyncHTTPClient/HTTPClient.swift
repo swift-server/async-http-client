@@ -764,8 +764,8 @@ public class HTTPClient {
         /// - Precondition: The value must be greater than zero.
         public var maximumUsesPerConnection: Int? {
             willSet {
-                if let newValue = newValue {
-                    precondition(newValue > 0, "maximumUsesPerConnection must be greater than zero or nil")
+                if let newValue = newValue, newValue <= 0 {
+                    fatalError("maximumUsesPerConnection must be greater than zero or nil")
                 }
             }
         }
