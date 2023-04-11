@@ -1,13 +1,13 @@
 #!/bin/bash
 ##===----------------------------------------------------------------------===##
 ##
-## This source file is part of the SwiftNIO open source project
+## This source file is part of the AsyncHTTPClient open source project
 ##
-## Copyright (c) 2023 Apple Inc. and the SwiftNIO project authors
+## Copyright (c) 2023 Apple Inc. and the AsyncHTTPClient project authors
 ## Licensed under Apache License v2.0
 ##
 ## See LICENSE.txt for license information
-## See CONTRIBUTORS.txt for the list of SwiftNIO project authors
+## See CONTRIBUTORS.txt for the list of AsyncHTTPClient project authors
 ##
 ## SPDX-License-Identifier: Apache-2.0
 ##
