@@ -9,6 +9,9 @@ services:
         ubuntu_version: "focal"
         swift_version: "5.5"
 
+  documentation-check:
+    image: async-http-client:20.04-5.5
+
   test:
     image: async-http-client:20.04-5.5
     command: /bin/bash -xcl "swift test --parallel -Xswiftc -warnings-as-errors $${SANITIZER_ARG-}"

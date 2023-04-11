@@ -87,7 +87,7 @@ extension HTTPClientResponse {
             self.storage = storage
         }
 
-        /// Accumulates `Body` of ``ByteBuffer``s into a single ``ByteBuffer``.
+        /// Accumulates `Body` of `ByteBuffer`s into a single `ByteBuffer`.
         /// - Parameters:
         ///   - maxBytes: The maximum number of bytes this method is allowed to accumulate
         /// - Throws: `NIOTooManyBytesError` if the the sequence contains more than `maxBytes`.

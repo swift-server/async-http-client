@@ -388,7 +388,7 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
     /// until it will abort the request and throw an ``ResponseTooBigError``.
     ///
     /// Default is 2^32.
-    /// - precondition: not allowed to exceed 2^32 because ``ByteBuffer`` can not store more bytes
+    /// - precondition: not allowed to exceed 2^32 because `ByteBuffer` can not store more bytes
     public let maxBodySize: Int
 
     public convenience init(request: HTTPClient.Request) {
@@ -400,7 +400,7 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
     ///   - maxBodySize: Maximum size in bytes of the HTTP response body that ``ResponseAccumulator`` will accept
     ///   until it will abort the request and throw an ``ResponseTooBigError``.
     ///   Default is 2^32.
-    /// - precondition: maxBodySize is not allowed to exceed 2^32 because ``ByteBuffer`` can not store more bytes
+    /// - precondition: maxBodySize is not allowed to exceed 2^32 because `ByteBuffer` can not store more bytes
     /// - warning: You can use ``ResponseAccumulator`` for just one request.
     /// If you start another request, you need to initiate another ``ResponseAccumulator``.
     public init(request: HTTPClient.Request, maxBodySize: Int) {

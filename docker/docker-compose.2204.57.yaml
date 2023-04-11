@@ -9,6 +9,9 @@ services:
         ubuntu_version: "jammy"
         swift_version: "5.7"
 
+  documentation-check:
+    image: async-http-client:22.04-5.7
+
   test:
     image: async-http-client:22.04-5.7
     environment: []
