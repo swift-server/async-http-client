@@ -8,6 +8,9 @@ services:
       args:
         base_image: "swiftlang/swift:nightly-5.8-jammy"
 
+  documentation-check:
+    image: async-http-client:22.04-5.8
+
   test:
     image: async-http-client:22.04-5.8
     environment:
