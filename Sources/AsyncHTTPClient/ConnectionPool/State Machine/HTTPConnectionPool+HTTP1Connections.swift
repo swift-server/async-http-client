@@ -19,15 +19,15 @@ extension HTTPConnectionPool {
     private struct HTTP1ConnectionState {
         enum State {
             /// the connection is creating a connection. Valid transitions are to: .backingOff, .idle, and .closed
-            case starting
+            case starting(maximumUses: Int?)
             /// the connection is waiting to retry the establishing a connection. Valid transitions are to: .closed.
             /// This means, the connection can be removed from the connections without cancelling external
             /// state. The connection state can then be replaced by a new one.
             case backingOff
             /// the connection is idle for a new request. Valid transitions to: .leased and .closed
-            case idle(Connection, since: NIODeadline)
+            case idle(Connection, since: NIODeadline, remainingUses: Int?)
             /// the connection is leased and running for a request. Valid transitions to: .idle and .closed
-            case leased(Connection)
+            case leased(Connection, remainingUses: Int?)
             /// the connection is closed. final state.
             case closed
         }
@@ -36,10 +36,10 @@ extension HTTPConnectionPool {
         let connectionID: Connection.ID
         let eventLoop: EventLoop
 
-        init(connectionID: Connection.ID, eventLoop: EventLoop) {
+        init(connectionID: Connection.ID, eventLoop: EventLoop, maximumUses: Int?) {
             self.connectionID = connectionID
             self.eventLoop = eventLoop
-            self.state = .starting
+            self.state = .starting(maximumUses: maximumUses)
         }
 
         var isConnecting: Bool {
@@ -69,6 +69,19 @@ extension HTTPConnectionPool {
             }
         }
 
+        var idleAndNoRemainingUses: Bool {
+            switch self.state {
+            case .idle(_, since: _, remainingUses: let remainingUses):
+                if let remainingUses = remainingUses {
+                    return remainingUses <= 0
+                } else {
+                    return false
+                }
+            case .backingOff, .starting, .leased, .closed:
+                return false
+            }
+        }
+
         var canOrWillBeAbleToExecuteRequests: Bool {
             switch self.state {
             case .leased, .backingOff, .idle, .starting:
@@ -89,7 +102,7 @@ extension HTTPConnectionPool {
 
         var idleSince: NIODeadline? {
             switch self.state {
-            case .idle(_, since: let idleSince):
+            case .idle(_, since: let idleSince, _):
                 return idleSince
             case .backingOff, .starting, .leased, .closed:
                 return nil
@@ -107,8 +120,8 @@ extension HTTPConnectionPool {
 
         mutating func connected(_ connection: Connection) {
             switch self.state {
-            case .starting:
-                self.state = .idle(connection, since: .now())
+            case .starting(maximumUses: let maxUses):
+                self.state = .idle(connection, since: .now(), remainingUses: maxUses)
             case .backingOff, .idle, .leased, .closed:
                 preconditionFailure("Invalid state: \(self.state)")
             }
@@ -126,8 +139,8 @@ extension HTTPConnectionPool {
 
         mutating func lease() -> Connection {
             switch self.state {
-            case .idle(let connection, since: _):
-                self.state = .leased(connection)
+            case .idle(let connection, since: _, remainingUses: let remainingUses):
+                self.state = .leased(connection, remainingUses: remainingUses.map { $0 - 1 })
                 return connection
             case .backingOff, .starting, .leased, .closed:
                 preconditionFailure("Invalid state: \(self.state)")
@@ -136,8 +149,8 @@ extension HTTPConnectionPool {
 
         mutating func release() {
             switch self.state {
-            case .leased(let connection):
-                self.state = .idle(connection, since: .now())
+            case .leased(let connection, let remainingUses):
+                self.state = .idle(connection, since: .now(), remainingUses: remainingUses)
             case .backingOff, .starting, .idle, .closed:
                 preconditionFailure("Invalid state: \(self.state)")
             }
@@ -145,7 +158,7 @@ extension HTTPConnectionPool {
 
         mutating func close() -> Connection {
             switch self.state {
-            case .idle(let connection, since: _):
+            case .idle(let connection, since: _, remainingUses: _):
                 self.state = .closed
                 return connection
             case .backingOff, .starting, .leased, .closed:
@@ -188,10 +201,10 @@ extension HTTPConnectionPool {
                 return .removeConnection
             case .starting:
                 return .keepConnection
-            case .idle(let connection, since: _):
+            case .idle(let connection, since: _, remainingUses: _):
                 context.close.append(connection)
                 return .removeConnection
-            case .leased(let connection):
+            case .leased(let connection, remainingUses: _):
                 context.cancel.append(connection)
                 return .keepConnection
             case .closed:
@@ -212,7 +225,7 @@ extension HTTPConnectionPool {
             case .backingOff:
                 context.backingOff.append((self.connectionID, self.eventLoop))
                 return .removeConnection
-            case .idle(let connection, since: _):
+            case .idle(let connection, since: _, remainingUses: _):
                 // Idle connections can be removed right away
                 context.close.append(connection)
                 return .removeConnection
@@ -243,13 +256,16 @@ extension HTTPConnectionPool {
         /// The index after which you will find the connections for requests with `EventLoop`
         /// requirements in `connections`.
         private var overflowIndex: Array<HTTP1ConnectionState>.Index
+        /// The number of times each connection can be used before it is closed and replaced.
+        private let maximumConnectionUses: Int?
 
-        init(maximumConcurrentConnections: Int, generator: Connection.ID.Generator) {
+        init(maximumConcurrentConnections: Int, generator: Connection.ID.Generator, maximumConnectionUses: Int?) {
             self.connections = []
             self.connections.reserveCapacity(maximumConcurrentConnections)
             self.overflowIndex = self.connections.endIndex
             self.maximumConcurrentConnections = maximumConcurrentConnections
             self.generator = generator
+            self.maximumConnectionUses = maximumConnectionUses
         }
 
         var stats: Stats {
@@ -323,6 +339,8 @@ extension HTTPConnectionPool {
             /// The connection's use. Either general purpose or for requests with `EventLoop`
             /// requirements.
             var use: ConnectionUse
+            /// Whether the connection should be closed.
+            var shouldBeClosed: Bool
         }
 
         /// Information around the failed/closed connection.
@@ -345,14 +363,22 @@ extension HTTPConnectionPool {
 
         mutating func createNewConnection(on eventLoop: EventLoop) -> Connection.ID {
             precondition(self.canGrow)
-            let connection = HTTP1ConnectionState(connectionID: self.generator.next(), eventLoop: eventLoop)
+            let connection = HTTP1ConnectionState(
+                connectionID: self.generator.next(),
+                eventLoop: eventLoop,
+                maximumUses: self.maximumConnectionUses
+            )
             self.connections.insert(connection, at: self.overflowIndex)
             self.overflowIndex = self.connections.index(after: self.overflowIndex)
             return connection.connectionID
         }
 
         mutating func createNewOverflowConnection(on eventLoop: EventLoop) -> Connection.ID {
-            let connection = HTTP1ConnectionState(connectionID: self.generator.next(), eventLoop: eventLoop)
+            let connection = HTTP1ConnectionState(
+                connectionID: self.generator.next(),
+                eventLoop: eventLoop,
+                maximumUses: self.maximumConnectionUses
+            )
             self.connections.append(connection)
             return connection.connectionID
         }
@@ -484,7 +510,8 @@ extension HTTPConnectionPool {
             precondition(self.connections[index].isClosed)
             let newConnection = HTTP1ConnectionState(
                 connectionID: self.generator.next(),
-                eventLoop: self.connections[index].eventLoop
+                eventLoop: self.connections[index].eventLoop,
+                maximumUses: self.maximumConnectionUses
             )
 
             self.connections[index] = newConnection
@@ -562,7 +589,11 @@ extension HTTPConnectionPool {
             backingOff: [(Connection.ID, EventLoop)]
         ) {
             for (connectionID, eventLoop) in starting {
-                let newConnection = HTTP1ConnectionState(connectionID: connectionID, eventLoop: eventLoop)
+                let newConnection = HTTP1ConnectionState(
+                    connectionID: connectionID,
+                    eventLoop: eventLoop,
+                    maximumUses: self.maximumConnectionUses
+                )
                 self.connections.insert(newConnection, at: self.overflowIndex)
                 /// If we can grow, we mark the connection as a general purpose connection.
                 /// Otherwise, it will be an overflow connection which is only used once for requests with a required event loop
@@ -572,7 +603,11 @@ extension HTTPConnectionPool {
             }
 
             for (connectionID, eventLoop) in backingOff {
-                var backingOffConnection = HTTP1ConnectionState(connectionID: connectionID, eventLoop: eventLoop)
+                var backingOffConnection = HTTP1ConnectionState(
+                    connectionID: connectionID,
+                    eventLoop: eventLoop,
+                    maximumUses: self.maximumConnectionUses
+                )
                 // TODO: Maybe we want to add a static init for backing off connections to HTTP1ConnectionState
                 backingOffConnection.failedToConnect()
                 self.connections.insert(backingOffConnection, at: self.overflowIndex)
@@ -690,7 +725,8 @@ extension HTTPConnectionPool {
             } else {
                 use = .eventLoop(eventLoop)
             }
-            return IdleConnectionContext(eventLoop: eventLoop, use: use)
+            let hasNoRemainingUses = self.connections[index].idleAndNoRemainingUses
+            return IdleConnectionContext(eventLoop: eventLoop, use: use, shouldBeClosed: hasNoRemainingUses)
         }
 
         private func findIdleConnection(onPreferred preferredEL: EventLoop) -> Int? {

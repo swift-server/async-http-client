@@ -3437,4 +3437,55 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         }
         XCTAssertThrowsError(try defaultClient.execute(request: request, delegate: CancelAfterHeadSend()).wait())
     }
+
+    private func testMaxConnectionReuses(mode: HTTPBin<HTTPBinHandler>.Mode, maximumUses: Int, requests: Int) throws {
+        let bin = HTTPBin(mode)
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        var configuration = HTTPClient.Configuration(certificateVerification: .none)
+        // Limit each connection to two uses before discarding them. The test will verify that the
+        // connection number indicated by the server increments every two requests.
+        configuration.maximumUsesPerConnection = maximumUses
+
+        let client = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: configuration)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        let request = try HTTPClient.Request(url: bin.baseURL + "stats")
+        let decoder = JSONDecoder()
+
+        // Do two requests per batch. Both should report the same connection number.
+        for requestNumber in stride(from: 0, to: requests, by: maximumUses) {
+            var responses = [RequestInfo]()
+
+            for _ in 0..<maximumUses {
+                let response = try client.execute(request: request).wait()
+                let body = try XCTUnwrap(response.body)
+                let info = try decoder.decode(RequestInfo.self, from: body)
+                responses.append(info)
+            }
+
+            for response in responses {
+                // Connection numbers should be the same as the batch size is the same as the per connection limit.
+                XCTAssertEqual(responses[0].connectionNumber, response.connectionNumber)
+            }
+
+            XCTAssertEqual(responses[0].connectionNumber, requestNumber / maximumUses)
+        }
+    }
+
+    func testMaxConnectionReusesHTTP1() throws {
+        try self.testMaxConnectionReuses(mode: .http1_1(), maximumUses: 5, requests: 100)
+    }
+
+    func testMaxConnectionReusesHTTP2() throws {
+        try self.testMaxConnectionReuses(mode: .http2(), maximumUses: 5, requests: 100)
+    }
+
+    func testMaxConnectionReusesExceedsMaxConcurrentStreamsForHTTP2() throws {
+        try self.testMaxConnectionReuses(
+            mode: .http2(settings: [.init(parameter: .maxConcurrentStreams, value: 100)]),
+            maximumUses: 150,
+            requests: 300
+        )
+    }
 }

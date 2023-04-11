@@ -81,6 +81,7 @@ final class HTTP2Connection {
     private var openStreams = Set<ChannelBox>()
     let id: HTTPConnectionPool.Connection.ID
     let decompression: HTTPClient.Decompression
+    let maximumConnectionUses: Int?
 
     var closeFuture: EventLoopFuture<Void> {
         self.channel.closeFuture
@@ -89,11 +90,13 @@ final class HTTP2Connection {
     init(channel: Channel,
          connectionID: HTTPConnectionPool.Connection.ID,
          decompression: HTTPClient.Decompression,
+         maximumConnectionUses: Int?,
          delegate: HTTP2ConnectionDelegate,
          logger: Logger) {
         self.channel = channel
         self.id = connectionID
         self.decompression = decompression
+        self.maximumConnectionUses = maximumConnectionUses
         self.logger = logger
         self.multiplexer = HTTP2StreamMultiplexer(
             mode: .client,
@@ -120,12 +123,14 @@ final class HTTP2Connection {
         connectionID: HTTPConnectionPool.Connection.ID,
         delegate: HTTP2ConnectionDelegate,
         decompression: HTTPClient.Decompression,
+        maximumConnectionUses: Int?,
         logger: Logger
     ) -> EventLoopFuture<(HTTP2Connection, Int)> {
         let connection = HTTP2Connection(
             channel: channel,
             connectionID: connectionID,
             decompression: decompression,
+            maximumConnectionUses: maximumConnectionUses,
             delegate: delegate,
             logger: logger
         )
@@ -192,7 +197,7 @@ final class HTTP2Connection {
             let sync = self.channel.pipeline.syncOperations
 
             let http2Handler = NIOHTTP2Handler(mode: .client, initialSettings: nioDefaultSettings)
-            let idleHandler = HTTP2IdleHandler(delegate: self, logger: self.logger)
+            let idleHandler = HTTP2IdleHandler(delegate: self, logger: self.logger, maximumConnectionUses: self.maximumConnectionUses)
 
             try sync.addHandler(http2Handler, position: .last)
             try sync.addHandler(idleHandler, position: .last)

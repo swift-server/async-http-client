@@ -38,11 +38,13 @@ extension HTTPConnectionPool {
             idGenerator: Connection.ID.Generator,
             maximumConcurrentConnections: Int,
             retryConnectionEstablishment: Bool,
+            maximumConnectionUses: Int?,
             lifecycleState: StateMachine.LifecycleState
         ) {
             self.connections = HTTP1Connections(
                 maximumConcurrentConnections: maximumConcurrentConnections,
-                generator: idGenerator
+                generator: idGenerator,
+                maximumConnectionUses: maximumConnectionUses
             )
             self.retryConnectionEstablishment = retryConnectionEstablishment
 
@@ -397,11 +399,20 @@ extension HTTPConnectionPool {
         ) -> EstablishedAction {
             switch self.lifecycleState {
             case .running:
-                switch context.use {
-                case .generalPurpose:
-                    return self.nextActionForIdleGeneralPurposeConnection(at: index, context: context)
-                case .eventLoop:
-                    return self.nextActionForIdleEventLoopConnection(at: index, context: context)
+                // Close the connection if it's expired.
+                if context.shouldBeClosed {
+                    let connection = self.connections.closeConnection(at: index)
+                    return .init(
+                        request: .none,
+                        connection: .closeConnection(connection, isShutdown: .no)
+                    )
+                } else {
+                    switch context.use {
+                    case .generalPurpose:
+                        return self.nextActionForIdleGeneralPurposeConnection(at: index, context: context)
+                    case .eventLoop:
+                        return self.nextActionForIdleEventLoopConnection(at: index, context: context)
+                    }
                 }
             case .shuttingDown(let unclean):
                 assert(self.requests.isEmpty)

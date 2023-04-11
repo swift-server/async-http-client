@@ -41,12 +41,14 @@ extension HTTPConnectionPool {
         init(
             idGenerator: Connection.ID.Generator,
             retryConnectionEstablishment: Bool,
-            lifecycleState: StateMachine.LifecycleState
+            lifecycleState: StateMachine.LifecycleState,
+            maximumConnectionUses: Int?
         ) {
             self.idGenerator = idGenerator
             self.requests = RequestQueue()
 
-            self.connections = HTTP2Connections(generator: idGenerator)
+            self.connections = HTTP2Connections(generator: idGenerator,
+                                                maximumConnectionUses: maximumConnectionUses)
             self.lifecycleState = lifecycleState
             self.retryConnectionEstablishment = retryConnectionEstablishment
         }

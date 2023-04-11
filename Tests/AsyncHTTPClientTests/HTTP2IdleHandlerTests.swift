@@ -251,6 +251,40 @@ class HTTP2IdleHandlerTests: XCTestCase {
         XCTAssertNoThrow(try embedded.writeInbound(goAwayFrame))
         XCTAssertEqual(delegate.goAwayReceived, false, "Expected go away to not be forwarded.")
     }
+
+    func testConnectionUseLimitTriggersGoAway() {
+        let delegate = MockHTTP2IdleHandlerDelegate()
+        let idleHandler = HTTP2IdleHandler(delegate: delegate, logger: Logger(label: "test"), maximumConnectionUses: 5)
+        let embedded = EmbeddedChannel(handlers: [idleHandler])
+        XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
+
+        let settingsFrame = HTTP2Frame(streamID: 0, payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 100)])))
+        XCTAssertEqual(delegate.maxStreams, nil)
+        XCTAssertNoThrow(try embedded.writeInbound(settingsFrame))
+        XCTAssertEqual(delegate.maxStreams, 100)
+
+        for streamID in HTTP2StreamID(1)..<HTTP2StreamID(5) {
+            let event = NIOHTTP2StreamCreatedEvent(streamID: streamID, localInitialWindowSize: nil, remoteInitialWindowSize: nil)
+            embedded.pipeline.fireUserInboundEventTriggered(event)
+            XCTAssertFalse(delegate.goAwayReceived)
+        }
+
+        // Open one the last stream.
+        let event = NIOHTTP2StreamCreatedEvent(streamID: HTTP2StreamID(5), localInitialWindowSize: nil, remoteInitialWindowSize: nil)
+        embedded.pipeline.fireUserInboundEventTriggered(event)
+        XCTAssertTrue(delegate.goAwayReceived)
+
+        // Close the streams.
+        for streamID in HTTP2StreamID(1)...HTTP2StreamID(5) {
+            let event = StreamClosedEvent(streamID: streamID, reason: nil)
+            embedded.pipeline.fireUserInboundEventTriggered(event)
+        }
+
+        // The channel should be closed, but we need to run the event loop for the close future
+        // to complete.
+        embedded.embeddedEventLoop.run()
+        XCTAssertNoThrow(try embedded.closeFuture.wait())
+    }
 }
 
 class MockHTTP2IdleHandlerDelegate: HTTP2IdleHandlerDelegate {

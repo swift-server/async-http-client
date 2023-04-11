@@ -99,19 +99,23 @@ extension HTTPConnectionPool {
         /// The property was introduced to fail fast during testing.
         /// Otherwise this should always be true and not turned off.
         private let retryConnectionEstablishment: Bool
+        let maximumConnectionUses: Int?
 
         init(
             idGenerator: Connection.ID.Generator,
             maximumConcurrentHTTP1Connections: Int,
-            retryConnectionEstablishment: Bool
+            retryConnectionEstablishment: Bool,
+            maximumConnectionUses: Int?
         ) {
             self.maximumConcurrentHTTP1Connections = maximumConcurrentHTTP1Connections
             self.retryConnectionEstablishment = retryConnectionEstablishment
             self.idGenerator = idGenerator
+            self.maximumConnectionUses = maximumConnectionUses
             let http1State = HTTP1StateMachine(
                 idGenerator: idGenerator,
                 maximumConcurrentConnections: maximumConcurrentHTTP1Connections,
                 retryConnectionEstablishment: retryConnectionEstablishment,
+                maximumConnectionUses: maximumConnectionUses,
                 lifecycleState: .running
             )
             self.state = .http1(http1State)
@@ -137,6 +141,7 @@ extension HTTPConnectionPool {
                     idGenerator: self.idGenerator,
                     maximumConcurrentConnections: self.maximumConcurrentHTTP1Connections,
                     retryConnectionEstablishment: self.retryConnectionEstablishment,
+                    maximumConnectionUses: self.maximumConnectionUses,
                     lifecycleState: http2StateMachine.lifecycleState
                 )
 
@@ -158,7 +163,8 @@ extension HTTPConnectionPool {
                 var http2StateMachine = HTTP2StateMachine(
                     idGenerator: self.idGenerator,
                     retryConnectionEstablishment: self.retryConnectionEstablishment,
-                    lifecycleState: http1StateMachine.lifecycleState
+                    lifecycleState: http1StateMachine.lifecycleState,
+                    maximumConnectionUses: self.maximumConnectionUses
                 )
                 let migrationAction = http2StateMachine.migrateFromHTTP1(
                     http1Connections: http1StateMachine.connections,
