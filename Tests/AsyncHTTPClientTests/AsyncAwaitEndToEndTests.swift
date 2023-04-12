@@ -365,7 +365,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             task.cancel()
 
             await XCTAssertThrowsError(try await task.value) { error in
-                XCTAssertEqual(error as? HTTPClientError, .cancelled)
+                XCTAssertEqualTypeAndValue(error, HTTPClientError.cancelled)
             }
 
             streamWriter.end()

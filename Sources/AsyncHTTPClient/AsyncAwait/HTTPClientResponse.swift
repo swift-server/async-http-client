@@ -182,7 +182,13 @@ extension HTTPClientResponse.Body.Storage.AsyncIterator: AsyncIteratorProtocol {
     @inlinable mutating func next() async throws -> ByteBuffer? {
         switch self {
         case .transaction(let iterator):
-            return try await iterator.next()
+            do {
+                return try await iterator.next()
+            } catch is CancellationError {
+                throw HTTPClientError.cancelled
+            } catch {
+                throw error
+            }
         case .anyAsyncSequence(var iterator):
             defer { self = .anyAsyncSequence(iterator) }
             return try await iterator.next()
