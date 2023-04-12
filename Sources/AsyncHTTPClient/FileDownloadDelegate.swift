@@ -21,7 +21,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     /// The response type for this delegate: the response header, the total count of bytes as reported 
     /// by the response "Content-Length" header (if available) and the count of bytes downloaded.
     public struct Progress: Sendable {
-        public var reponseHead: HTTPResponseHead?
+        public var responseHead: HTTPResponseHead?
         public var totalBytes: Int?
         public var receivedBytes: Int
     }
