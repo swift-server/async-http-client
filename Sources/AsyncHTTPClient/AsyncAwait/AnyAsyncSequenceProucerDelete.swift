@@ -18,7 +18,7 @@ import NIOCore
 @usableFromInline
 struct AnyAsyncSequenceProducerDelegate: NIOAsyncSequenceProducerDelegate {
     @usableFromInline
-    var delegate: any NIOAsyncSequenceProducerDelegate
+    var delegate: NIOAsyncSequenceProducerDelegate
 
     @inlinable
     init<Delegate: NIOAsyncSequenceProducerDelegate>(_ delegate: Delegate) {
