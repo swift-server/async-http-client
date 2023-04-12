@@ -18,9 +18,10 @@ import NIOPosix
 
 /// Handles a streaming download to a given file path, allowing headers and progress to be reported.
 public final class FileDownloadDelegate: HTTPClientResponseDelegate {
-    /// The response type for this delegate: the total count of bytes as reported by the response
-    /// "Content-Length" header (if available) and the count of bytes downloaded.
+    /// The response type for this delegate: the response header, the total count of bytes as reported 
+    /// by the response "Content-Length" header (if available) and the count of bytes downloaded.
     public struct Progress: Sendable {
+        public var reponseHead: HTTPResponseHead?
         public var totalBytes: Int?
         public var receivedBytes: Int
     }
@@ -97,6 +98,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         task: HTTPClient.Task<Response>,
         _ head: HTTPResponseHead
     ) -> EventLoopFuture<Void> {
+        self.progress.responseHead = head
         self.reportHead?(head)
 
         if let totalBytesString = head.headers.first(name: "Content-Length"),
