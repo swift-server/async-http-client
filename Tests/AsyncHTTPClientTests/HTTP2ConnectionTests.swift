@@ -38,6 +38,7 @@ class HTTP2ConnectionTests: XCTestCase {
             connectionID: 0,
             delegate: TestHTTP2ConnectionDelegate(),
             decompression: .disabled,
+            maximumConnectionUses: nil,
             logger: logger
         ).wait())
     }
@@ -51,6 +52,7 @@ class HTTP2ConnectionTests: XCTestCase {
             channel: embedded,
             connectionID: 0,
             decompression: .disabled,
+            maximumConnectionUses: nil,
             delegate: TestHTTP2ConnectionDelegate(),
             logger: logger
         )

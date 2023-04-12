@@ -20,7 +20,7 @@ import XCTest
 class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
     func testCreatingConnections() {
         let elg = EmbeddedEventLoopGroup(loops: 4)
-        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init())
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init(), maximumConnectionUses: nil)
 
         let el1 = elg.next()
         let el2 = elg.next()
@@ -52,7 +52,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
 
     func testCreatingConnectionAndFailing() {
         let elg = EmbeddedEventLoopGroup(loops: 4)
-        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init())
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init(), maximumConnectionUses: nil)
 
         let el1 = elg.next()
         let el2 = elg.next()
@@ -103,7 +103,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         let el3 = elg.next()
         let el4 = elg.next()
 
-        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init())
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init(), maximumConnectionUses: nil)
 
         for el in [el1, el2, el3, el4] {
             XCTAssertEqual(connections.startingGeneralPurposeConnections, 0)
@@ -130,7 +130,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         let el4 = elg.next()
         let el5 = elg.next()
 
-        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init())
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init(), maximumConnectionUses: nil)
 
         for el in [el1, el2, el3, el4] {
             XCTAssertEqual(connections.startingGeneralPurposeConnections, 0)
@@ -157,7 +157,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         let el4 = elg.next()
         let el5 = elg.next()
 
-        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init())
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init(), maximumConnectionUses: nil)
 
         for el in [el1, el2, el3, el4] {
             XCTAssertEqual(connections.startingGeneralPurposeConnections, 0)
@@ -181,7 +181,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         let el1 = elg.next()
         let el2 = elg.next()
 
-        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init())
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init(), maximumConnectionUses: nil)
 
         for el in [el1, el1, el1, el1, el2] {
             let connID = connections.createNewConnection(on: el)
@@ -228,7 +228,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
 
     func testCloseConnectionIfIdle() {
         let elg = EmbeddedEventLoopGroup(loops: 1)
-        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init())
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init(), maximumConnectionUses: nil)
 
         let el1 = elg.next()
 
@@ -248,7 +248,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
 
     func testCloseConnectionIfIdleButLeasedRaceCondition() {
         let elg = EmbeddedEventLoopGroup(loops: 1)
-        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init())
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init(), maximumConnectionUses: nil)
 
         let el1 = elg.next()
 
@@ -267,7 +267,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
 
     func testCloseConnectionIfIdleButClosedRaceCondition() {
         let elg = EmbeddedEventLoopGroup(loops: 1)
-        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init())
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init(), maximumConnectionUses: nil)
 
         let el1 = elg.next()
 
@@ -288,7 +288,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         let el3 = elg.next()
         let el4 = elg.next()
 
-        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init())
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: .init(), maximumConnectionUses: nil)
 
         for el in [el1, el2, el3, el4] {
             let connID = connections.createNewConnection(on: el)
@@ -343,7 +343,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
     func testMigrationFromHTTP2() {
         let elg = EmbeddedEventLoopGroup(loops: 4)
         let generator = HTTPConnectionPool.Connection.ID.Generator()
-        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: generator)
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: generator, maximumConnectionUses: nil)
 
         let el1 = elg.next()
         let el2 = elg.next()
@@ -372,7 +372,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
     func testMigrationFromHTTP2WithPendingRequestsWithRequiredEventLoop() {
         let elg = EmbeddedEventLoopGroup(loops: 4)
         let generator = HTTPConnectionPool.Connection.ID.Generator()
-        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: generator)
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: generator, maximumConnectionUses: nil)
 
         let el1 = elg.next()
         let el2 = elg.next()
@@ -411,7 +411,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
     func testMigrationFromHTTP2WithPendingRequestsWithPreferredEventLoop() {
         let elg = EmbeddedEventLoopGroup(loops: 4)
         let generator = HTTPConnectionPool.Connection.ID.Generator()
-        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: generator)
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: generator, maximumConnectionUses: nil)
 
         let el1 = elg.next()
         let el2 = elg.next()
@@ -450,7 +450,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
     func testMigrationFromHTTP2WithAlreadyLeasedHTTP1Connection() {
         let elg = EmbeddedEventLoopGroup(loops: 4)
         let generator = HTTPConnectionPool.Connection.ID.Generator()
-        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: generator)
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: generator, maximumConnectionUses: nil)
         let el1 = elg.next()
         let el2 = elg.next()
         let el3 = elg.next()
@@ -494,7 +494,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
     func testMigrationFromHTTP2WithMoreStartingConnectionsThanMaximumAllowedConccurentConnections() {
         let elg = EmbeddedEventLoopGroup(loops: 4)
         let generator = HTTPConnectionPool.Connection.ID.Generator()
-        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 2, generator: generator)
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 2, generator: generator, maximumConnectionUses: nil)
 
         let el1 = elg.next()
         let el2 = elg.next()
@@ -529,7 +529,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
     func testMigrationFromHTTP2StartsEnoghOverflowConnectionsForRequiredEventLoopRequests() {
         let elg = EmbeddedEventLoopGroup(loops: 4)
         let generator = HTTPConnectionPool.Connection.ID.Generator()
-        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 1, generator: generator)
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 1, generator: generator, maximumConnectionUses: nil)
 
         let el1 = elg.next()
         let el2 = elg.next()
@@ -571,7 +571,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         let el2 = elg.next()
 
         let generator = HTTPConnectionPool.Connection.ID.Generator()
-        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: generator)
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: generator, maximumConnectionUses: nil)
 
         let connID1 = connections.createNewConnection(on: el1)
 

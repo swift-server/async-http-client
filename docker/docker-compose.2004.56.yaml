@@ -9,6 +9,9 @@ services:
         ubuntu_version: "focal"
         swift_version: "5.6"
 
+  documentation-check:
+    image: async-http-client:20.04-5.6
+
   test:
     image: async-http-client:20.04-5.6
     environment: []

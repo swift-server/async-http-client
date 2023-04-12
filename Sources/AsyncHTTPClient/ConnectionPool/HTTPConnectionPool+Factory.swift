@@ -84,6 +84,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                     connectionID: connectionID,
                     delegate: http2ConnectionDelegate,
                     decompression: self.clientConfiguration.decompression,
+                    maximumConnectionUses: self.clientConfiguration.maximumUsesPerConnection,
                     logger: logger
                 ).whenComplete { result in
                     switch result {

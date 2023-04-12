@@ -228,7 +228,7 @@ public class HTTPClient {
     /// Shuts down the ``HTTPClient`` and releases its resources.
     ///
     /// - note: You cannot use this method if you sharted the ``HTTPClient`` with
-    ///         ``init(eventLoopGroupProvider: .createNew)`` because that will shut down the ``EventLoopGroup`` the
+    ///         `init(eventLoopGroupProvider: .createNew)` because that will shut down the `EventLoopGroup` the
     ///         returned future would run in.
     public func shutdown() -> EventLoopFuture<Void> {
         switch self.eventLoopGroupProvider {
@@ -757,6 +757,18 @@ public class HTTPClient {
         /// Whether ``HTTPClient`` will let Network.framework sit in the `.waiting` state awaiting new network changes, or fail immediately. Defaults to `true`,
         /// which is the recommended setting. Only set this to `false` when attempting to trigger a particular error path.
         public var networkFrameworkWaitForConnectivity: Bool
+
+        /// The maximum number of times each connection can be used before it is replaced with a new one. Use `nil` (the default)
+        /// if no limit should be applied to each connection.
+        ///
+        /// - Precondition: The value must be greater than zero.
+        public var maximumUsesPerConnection: Int? {
+            willSet {
+                if let newValue = newValue, newValue <= 0 {
+                    fatalError("maximumUsesPerConnection must be greater than zero or nil")
+                }
+            }
+        }
 
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
