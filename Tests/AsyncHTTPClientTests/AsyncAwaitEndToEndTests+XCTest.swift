@@ -36,6 +36,7 @@ extension AsyncAwaitEndToEndTests {
             ("testPostWithFragmentedAsyncSequenceOfByteBuffers", testPostWithFragmentedAsyncSequenceOfByteBuffers),
             ("testPostWithFragmentedAsyncSequenceOfLargeByteBuffers", testPostWithFragmentedAsyncSequenceOfLargeByteBuffers),
             ("testCanceling", testCanceling),
+            ("testCancelingResponseBody", testCancelingResponseBody),
             ("testDeadline", testDeadline),
             ("testImmediateDeadline", testImmediateDeadline),
             ("testConnectTimeout", testConnectTimeout),

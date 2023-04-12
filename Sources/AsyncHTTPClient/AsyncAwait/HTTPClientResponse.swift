@@ -45,14 +45,25 @@ public struct HTTPClientResponse: Sendable {
     }
 
     init(
-        bag: Transaction,
+        requestMethod: HTTPMethod,
         version: HTTPVersion,
         status: HTTPResponseStatus,
         headers: HTTPHeaders,
-        requestMethod: HTTPMethod
+        body: TransactionBody
     ) {
-        let contentLength = HTTPClientResponse.expectedContentLength(requestMethod: requestMethod, headers: headers, status: status)
-        self.init(version: version, status: status, headers: headers, body: .init(TransactionBody(bag, expectedContentLength: contentLength)))
+        self.init(
+            version: version,
+            status: status,
+            headers: headers,
+            body: .init(.transaction(
+                body,
+                expectedContentLength: HTTPClientResponse.expectedContentLength(
+                    requestMethod: requestMethod,
+                    headers: headers,
+                    status: status
+                )
+            ))
+        )
     }
 }
 
@@ -94,8 +105,8 @@ extension HTTPClientResponse {
         /// - Returns: the number of bytes collected over time
         @inlinable public func collect(upTo maxBytes: Int) async throws -> ByteBuffer {
             switch self.storage {
-            case .transaction(let transactionBody):
-                if let contentLength = transactionBody.expectedContentLength {
+            case .transaction(_, let expectedContentLength):
+                if let contentLength = expectedContentLength {
                     if contentLength > maxBytes {
                         throw NIOTooManyBytesError()
                     }
@@ -128,9 +139,18 @@ extension HTTPClientResponse {
 }
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+@usableFromInline
+typealias TransactionBody = NIOThrowingAsyncSequenceProducer<
+    ByteBuffer,
+    Error,
+    NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark,
+    AnyAsyncSequenceProducerDelegate
+>
+
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body {
     @usableFromInline enum Storage: Sendable {
-        case transaction(TransactionBody)
+        case transaction(TransactionBody, expectedContentLength: Int?)
         case anyAsyncSequence(AnyAsyncSequence<ByteBuffer>)
     }
 }
@@ -141,7 +161,7 @@ extension HTTPClientResponse.Body.Storage: AsyncSequence {
 
     @inlinable func makeAsyncIterator() -> AsyncIterator {
         switch self {
-        case .transaction(let transaction):
+        case .transaction(let transaction, _):
             return .transaction(transaction.makeAsyncIterator())
         case .anyAsyncSequence(let anyAsyncSequence):
             return .anyAsyncSequence(anyAsyncSequence.makeAsyncIterator())
@@ -172,10 +192,6 @@ extension HTTPClientResponse.Body.Storage.AsyncIterator: AsyncIteratorProtocol {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body {
-    init(_ body: TransactionBody) {
-        self.init(storage: .transaction(body))
-    }
-
     @inlinable init(_ storage: Storage) {
         self.storage = storage
     }

@@ -18,6 +18,11 @@ import NIOEmbedded
 import NIOHTTP1
 import XCTest
 
+struct NoOpAsyncSequenceProducerDelegate: NIOAsyncSequenceProducerDelegate {
+    func produceMore() {}
+    func didTerminate() {}
+}
+
 final class Transaction_StateMachineTests: XCTestCase {
     func testRequestWasQueuedAfterWillExecuteRequestWasCalled() {
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
@@ -204,8 +209,8 @@ final class Transaction_StateMachineTests: XCTestCase {
                 XCTAssertEqual(state.willExecuteRequest(executor), .none)
                 state.requestWasQueued(queuer)
                 let head = HTTPResponseHead(version: .http1_1, status: .ok)
-                let receiveResponseHeadAction = state.receiveResponseHead(head)
-                guard case .succeedResponseHead(head, let continuation) = receiveResponseHeadAction else {
+                let receiveResponseHeadAction = state.receiveResponseHead(head, delegate: NoOpAsyncSequenceProducerDelegate())
+                guard case .succeedResponseHead(_, let continuation) = receiveResponseHeadAction else {
                     return XCTFail("Unexpected action: \(receiveResponseHeadAction)")
                 }
 

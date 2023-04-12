@@ -52,8 +52,8 @@ final class TransactionTests: XCTestCase {
             }
 
             XCTAssertEqual(queuer.hitCancelCount, 0)
-            await XCTAssertThrowsError(try await responseTask.value) {
-                XCTAssertEqual($0 as? HTTPClientError, .cancelled)
+            await XCTAssertThrowsError(try await responseTask.value) { error in
+                XCTAssertTrue(error is CancellationError, "unexpected error \(error)")
             }
             XCTAssertEqual(queuer.hitCancelCount, 1)
         }
@@ -146,9 +146,9 @@ final class TransactionTests: XCTestCase {
 
             let iterator = SharedIterator(response.body.filter { $0.readableBytes > 0 })
 
-            for i in 0..<100 {
-                XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
+            XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
 
+            for i in 0..<100 {
                 async let part = iterator.next()
 
                 XCTAssertNoThrow(try executor.receiveResponseDemand())
@@ -159,7 +159,6 @@ final class TransactionTests: XCTestCase {
                 XCTAssertEqual(result, ByteBuffer(integer: i))
             }
 
-            XCTAssertFalse(executor.signalledDemandForResponseBody, "Demand was not signalled yet.")
             async let part = iterator.next()
             XCTAssertNoThrow(try executor.receiveResponseDemand())
             executor.resetResponseStreamDemandSignal()
