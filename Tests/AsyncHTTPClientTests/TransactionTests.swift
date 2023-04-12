@@ -52,8 +52,8 @@ final class TransactionTests: XCTestCase {
             }
 
             XCTAssertEqual(queuer.hitCancelCount, 0)
-            await XCTAssertThrowsError(try await responseTask.value) {
-                XCTAssertEqual($0 as? HTTPClientError, .cancelled)
+            await XCTAssertThrowsError(try await responseTask.value) { error in
+                XCTAssertTrue(error is CancellationError, "unexpected error \(error)")
             }
             XCTAssertEqual(queuer.hitCancelCount, 1)
         }

@@ -48,7 +48,7 @@ import NIOSSL
     }
 
     func cancel() {
-        self.fail(HTTPClientError.cancelled)
+        self.fail(CancellationError())
     }
 
     // MARK: Request body helpers
