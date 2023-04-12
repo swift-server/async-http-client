@@ -66,7 +66,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         self.reportHead = reportHead
         self.reportProgress = reportProgress
     }
-    
+
     /// Initializes a new file download delegate.
     ///
     /// - parameters:
