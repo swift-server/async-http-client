@@ -52,6 +52,7 @@ extension HTTPClientTests {
             ("testStreaming", testStreaming),
             ("testFileDownload", testFileDownload),
             ("testFileDownloadError", testFileDownloadError),
+            ("testFileDownloadCustomError", testFileDownloadCustomError),
             ("testRemoteClose", testRemoteClose),
             ("testReadTimeout", testReadTimeout),
             ("testConnectTimeout", testConnectTimeout),

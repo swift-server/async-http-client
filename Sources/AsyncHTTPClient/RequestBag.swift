@@ -394,7 +394,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
     }
 }
 
-extension RequestBag: HTTPSchedulableRequest {
+extension RequestBag: HTTPSchedulableRequest, HTTPClientTaskDelegate {
     var tlsConfiguration: TLSConfiguration? {
         self.request.tlsConfiguration
     }
@@ -509,11 +509,5 @@ extension RequestBag: HTTPExecutableRequest {
                 self.succeedRequest0(buffer)
             }
         }
-    }
-}
-
-extension RequestBag: HTTPClientTaskDelegate {
-    func cancel() {
-        self.fail(HTTPClientError.cancelled)
     }
 }
