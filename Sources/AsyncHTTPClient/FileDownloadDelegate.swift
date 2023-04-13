@@ -31,11 +31,41 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
 
     private let filePath: String
     private(set) var fileIOThreadPool: NIOThreadPool?
-    private let reportHead: ((HTTPResponseHead) -> Void)?
-    private let reportProgress: ((Progress) -> Void)?
+    private let reportHead: ((HTTPClient.Task<Progress>, HTTPResponseHead) -> Void)?
+    private let reportProgress: ((HTTPClient.Task<Progress>, Progress) -> Void)?
 
     private var fileHandleFuture: EventLoopFuture<NIOFileHandle>?
     private var writeFuture: EventLoopFuture<Void>?
+
+    /// Initializes a new file download delegate.
+    ///
+    /// - parameters:
+    ///     - path: Path to a file you'd like to write the download to.
+    ///     - pool: A thread pool to use for asynchronous file I/O. If nil, a shared thread pool will be used.  Defaults to nil.
+    ///     - reportHead: A closure called when the response head is available.
+    ///     - reportProgress: A closure called when a body chunk has been downloaded, with
+    ///       the total byte count and download byte count passed to it as arguments. The callbacks
+    ///       will be invoked in the same threading context that the delegate itself is invoked,
+    ///       as controlled by `EventLoopPreference`.
+    public init(
+        path: String,
+        pool: NIOThreadPool? = nil,
+        reportHead: ((HTTPClient.Task<Response>, HTTPResponseHead) -> Void)? = nil,
+        reportProgress: ((HTTPClient.Task<Response>, Progress) -> Void)? = nil
+    ) throws {
+        if let pool = pool {
+            self.fileIOThreadPool = pool
+        } else {
+            // we should use the shared thread pool from the HTTPClient which
+            // we will get from the `HTTPClient.Task`
+            self.fileIOThreadPool = nil
+        }
+
+        self.filePath = path
+
+        self.reportHead = reportHead
+        self.reportProgress = reportProgress
+    }
 
     /// Initializes a new file download delegate.
     ///
@@ -53,7 +83,20 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         reportHead: ((HTTPResponseHead) -> Void)? = nil,
         reportProgress: ((Progress) -> Void)? = nil
     ) throws {
-        try self.init(path: path, pool: .some(pool), reportHead: reportHead, reportProgress: reportProgress)
+        try self.init(
+            path: path,
+            pool: .some(pool),
+            reportHead: reportHead.map { reportHead in
+                return { _, head in
+                    reportHead(head)
+                }
+            },
+            reportProgress: reportProgress.map { reportProgress in
+                return { _, head in
+                    reportProgress(head)
+                }
+            }
+        )
     }
 
     /// Initializes a new file download delegate and uses the shared thread pool of the ``HTTPClient`` for file I/O.
@@ -70,34 +113,27 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         reportHead: ((HTTPResponseHead) -> Void)? = nil,
         reportProgress: ((Progress) -> Void)? = nil
     ) throws {
-        try self.init(path: path, pool: nil, reportHead: reportHead, reportProgress: reportProgress)
-    }
-
-    private init(
-        path: String,
-        pool: NIOThreadPool?,
-        reportHead: ((HTTPResponseHead) -> Void)? = nil,
-        reportProgress: ((Progress) -> Void)? = nil
-    ) throws {
-        if let pool = pool {
-            self.fileIOThreadPool = pool
-        } else {
-            // we should use the shared thread pool from the HTTPClient which
-            // we will get from the `HTTPClient.Task`
-            self.fileIOThreadPool = nil
-        }
-
-        self.filePath = path
-
-        self.reportHead = reportHead
-        self.reportProgress = reportProgress
+        try self.init(
+            path: path,
+            pool: nil,
+            reportHead: reportHead.map { reportHead in
+                return { _, head in
+                    reportHead(head)
+                }
+            },
+            reportProgress: reportProgress.map { reportProgress in
+                return { _, head in
+                    reportProgress(head)
+                }
+            }
+        )
     }
 
     public func didReceiveHead(
         task: HTTPClient.Task<Response>,
         _ head: HTTPResponseHead
     ) -> EventLoopFuture<Void> {
-        self.reportHead?(head)
+        self.reportHead?(task, head)
 
         if let totalBytesString = head.headers.first(name: "Content-Length"),
            let totalBytes = Int(totalBytesString) {
@@ -121,7 +157,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         }()
         let io = NonBlockingFileIO(threadPool: threadPool)
         self.progress.receivedBytes += buffer.readableBytes
-        self.reportProgress?(self.progress)
+        self.reportProgress?(task, self.progress)
 
         let writeFuture: EventLoopFuture<Void>
         if let fileHandleFuture = self.fileHandleFuture {
