@@ -569,6 +569,31 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         XCTAssertEqual(0, progress.receivedBytes)
     }
 
+    func testFileDownloadCustomError() throws {
+        let request = try Request(url: self.defaultHTTPBinURLPrefix + "get")
+        struct CustomError: Equatable, Error {}
+
+        try TemporaryFileHelpers.withTemporaryFilePath { path in
+            let delegate = try FileDownloadDelegate(path: path, reportHead: { task, head in
+                XCTAssertEqual(head.status, .ok)
+                task.fail(reason: CustomError())
+            }, reportProgress: { _, _ in
+                XCTFail("should never be called")
+            })
+            XCTAssertThrowsError(
+                try self.defaultClient.execute(
+                    request: request,
+                    delegate: delegate
+                )
+                .wait()
+            ) { error in
+                XCTAssertEqualTypeAndValue(error, CustomError())
+            }
+
+            XCTAssertFalse(TemporaryFileHelpers.fileExists(path: path))
+        }
+    }
+
     func testRemoteClose() {
         XCTAssertThrowsError(try self.defaultClient.get(url: self.defaultHTTPBinURLPrefix + "close").wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .remoteConnectionClosed)

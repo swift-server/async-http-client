@@ -276,7 +276,7 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.head(responseHead)))
 
         // canceling the request
-        requestBag.cancel()
+        requestBag.fail(HTTPClientError.cancelled)
         XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .cancelled)
         }

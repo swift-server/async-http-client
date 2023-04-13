@@ -220,7 +220,7 @@ final class RequestBagTests: XCTestCase {
         XCTAssert(bag.eventLoop === embeddedEventLoop)
 
         let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
-        bag.cancel()
+        bag.fail(HTTPClientError.cancelled)
 
         bag.willExecuteRequest(executor)
         XCTAssertTrue(executor.isCancelled, "The request bag, should call cancel immediately on the executor")
@@ -301,7 +301,7 @@ final class RequestBagTests: XCTestCase {
         bag.fail(MyError())
         XCTAssertEqual(delegate.hitDidReceiveError, 1)
 
-        bag.cancel()
+        bag.fail(HTTPClientError.cancelled)
         XCTAssertEqual(delegate.hitDidReceiveError, 1)
 
         XCTAssertThrowsError(try bag.task.futureResult.wait()) {
@@ -342,7 +342,7 @@ final class RequestBagTests: XCTestCase {
         XCTAssertEqual(delegate.hitDidSendRequestHead, 1)
         XCTAssertEqual(delegate.hitDidSendRequest, 1)
 
-        bag.cancel()
+        bag.fail(HTTPClientError.cancelled)
         XCTAssertTrue(executor.isCancelled, "The request bag, should call cancel immediately on the executor")
 
         XCTAssertThrowsError(try bag.task.futureResult.wait()) {
@@ -376,7 +376,7 @@ final class RequestBagTests: XCTestCase {
         bag.requestWasQueued(queuer)
 
         XCTAssertEqual(queuer.hitCancelCount, 0)
-        bag.cancel()
+        bag.fail(HTTPClientError.cancelled)
         XCTAssertEqual(queuer.hitCancelCount, 1)
 
         XCTAssertThrowsError(try bag.task.futureResult.wait()) {
@@ -445,9 +445,9 @@ final class RequestBagTests: XCTestCase {
         let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
         executor.runRequest(bag)
 
-        // This simulates a race between the user cancelling the task (which invokes `RequestBag.cancel`) and the
+        // This simulates a race between the user cancelling the task (which invokes `RequestBag.fail(_:)`) and the
         // call to `resumeRequestBodyStream` (which comes from the `Channel` event loop and so may have to hop.
-        bag.cancel()
+        bag.fail(HTTPClientError.cancelled)
         bag.resumeRequestBodyStream()
 
         XCTAssertEqual(executor.isCancelled, true)

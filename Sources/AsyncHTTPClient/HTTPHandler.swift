@@ -688,7 +688,7 @@ extension URL {
 }
 
 protocol HTTPClientTaskDelegate {
-    func cancel()
+    func fail(_ error: Error)
 }
 
 extension HTTPClient {
@@ -780,12 +780,18 @@ extension HTTPClient {
 
         /// Cancels the request execution.
         public func cancel() {
+            self.fail(reason: HTTPClientError.cancelled)
+        }
+
+        /// Cancels the request execution with a custom `Error`.
+        /// - Parameter reason: the error that is used to fail the promise
+        public func fail(reason error: Error) {
             let taskDelegate = self.lock.withLock { () -> HTTPClientTaskDelegate? in
                 self._isCancelled = true
                 return self._taskDelegate
             }
 
-            taskDelegate?.cancel()
+            taskDelegate?.fail(error)
         }
 
         func succeed<Delegate: HTTPClientResponseDelegate>(promise: EventLoopPromise<Response>?,
