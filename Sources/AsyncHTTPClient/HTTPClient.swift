@@ -200,7 +200,6 @@ public class HTTPClient {
         }
     }
 
-    #if swift(>=5.6)
     /// Shuts down the client and event loop gracefully.
     ///
     /// This function is clearly an outlier in that it uses a completion
@@ -213,17 +212,6 @@ public class HTTPClient {
     ) {
         self.shutdown(requiresCleanClose: false, queue: queue, callback)
     }
-    #else
-    /// Shuts down the client and event loop gracefully.
-    ///
-    /// This function is clearly an outlier in that it uses a completion
-    /// callback instead of an EventLoopFuture. The reason for that is that NIO's EventLoopFutures will call back on an event loop.
-    /// The virtue of this function is to shut the event loop down. To work around that we call back on a DispatchQueue
-    /// instead.
-    public func shutdown(queue: DispatchQueue = .global(), _ callback: @escaping (Error?) -> Void) {
-        self.shutdown(requiresCleanClose: false, queue: queue, callback)
-    }
-    #endif
 
     /// Shuts down the ``HTTPClient`` and releases its resources.
     ///
@@ -917,11 +905,7 @@ public class HTTPClient {
         case enabled(limit: NIOHTTPDecompression.DecompressionLimit)
     }
 
-    #if swift(>=5.6)
     typealias ShutdownCallback = @Sendable (Error?) -> Void
-    #else
-    typealias ShutdownCallback = (Error?) -> Void
-    #endif
 
     enum State {
         case upAndRunning
@@ -934,10 +918,8 @@ public class HTTPClient {
 extension HTTPClient.Configuration: Sendable {}
 #endif
 
-#if swift(>=5.6)
 extension HTTPClient.EventLoopGroupProvider: Sendable {}
 extension HTTPClient.EventLoopPreference: Sendable {}
-#endif
 
 // HTTPClient is thread-safe because its shared mutable state is protected through a lock
 extension HTTPClient: @unchecked Sendable {}

@@ -13,12 +13,6 @@ This library provides the following:
 - Automatic HTTP/2 over HTTPS (since version 1.7.0)
 - Cookie parsing (but not storage)
 
----
-
-**NOTE**: You will need [Xcode 13.2](https://apps.apple.com/gb/app/xcode/id497799835?mt=12) or [Swift 5.5.2](https://swift.org/download/#swift-552) to try out `AsyncHTTPClient`s new async/await APIs.
-
----
-
 ### Getting Started
 
 #### Adding the dependency

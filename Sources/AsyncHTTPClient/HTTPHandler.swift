@@ -49,16 +49,11 @@ extension HTTPClient {
         /// Body size. If nil,`Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
         /// header is set with the given `length`.
         public var length: Int?
-        #if swift(>=5.6)
+
         /// Body chunk provider.
         public var stream: @Sendable (StreamWriter) -> EventLoopFuture<Void>
 
         @usableFromInline typealias StreamCallback = @Sendable (StreamWriter) -> EventLoopFuture<Void>
-        #else
-        public var stream: (StreamWriter) -> EventLoopFuture<Void>
-
-        @usableFromInline typealias StreamCallback = (StreamWriter) -> EventLoopFuture<Void>
-        #endif
 
         @inlinable
         init(length: Int?, stream: @escaping StreamCallback) {
@@ -76,7 +71,6 @@ extension HTTPClient {
             }
         }
 
-        #if swift(>=5.6)
         /// Create and stream body using ``StreamWriter``.
         ///
         /// - parameters:
@@ -87,19 +81,7 @@ extension HTTPClient {
         public static func stream(length: Int? = nil, _ stream: @Sendable @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
             return Body(length: length, stream: stream)
         }
-        #else
-        /// Create and stream body using ``StreamWriter``.
-        ///
-        /// - parameters:
-        ///     - length: Body size. If nil, `Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
-        /// header is set with the given `length`.
-        ///     - stream: Body chunk provider.
-        public static func stream(length: Int? = nil, _ stream: @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
-            return Body(length: length, stream: stream)
-        }
-        #endif
 
-        #if swift(>=5.6)
         /// Create and stream body using a collection of bytes.
         ///
         /// - parameters:
@@ -111,18 +93,6 @@ extension HTTPClient {
                 writer.write(.byteBuffer(ByteBuffer(bytes: bytes)))
             }
         }
-        #else
-        /// Create and stream body using a collection of bytes.
-        ///
-        /// - parameters:
-        ///     - data: Body binary representation.
-        @inlinable
-        public static func bytes<Bytes>(_ bytes: Bytes) -> Body where Bytes: RandomAccessCollection, Bytes.Element == UInt8 {
-            return Body(length: bytes.count) { writer in
-                writer.write(.byteBuffer(ByteBuffer(bytes: bytes)))
-            }
-        }
-        #endif
 
         /// Create and stream body using `String`.
         ///
