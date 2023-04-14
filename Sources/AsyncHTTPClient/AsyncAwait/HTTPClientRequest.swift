@@ -91,7 +91,6 @@ extension HTTPClientRequest.Body {
         self.init(.byteBuffer(byteBuffer))
     }
 
-    #if swift(>=5.6)
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `RandomAccessCollection` of bytes.
     ///
     /// This construction will flatten the bytes into a `ByteBuffer`. As a result, the peak memory
@@ -106,21 +105,6 @@ extension HTTPClientRequest.Body {
     ) -> Self where Bytes.Element == UInt8 {
         Self._bytes(bytes)
     }
-    #else
-    /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `RandomAccessCollection` of bytes.
-    ///
-    /// This construction will flatten the bytes into a `ByteBuffer`. As a result, the peak memory
-    /// usage of this construction will be double the size of the original collection. The construction
-    /// of the `ByteBuffer` will be delayed until it's needed.
-    ///
-    /// - parameter bytes: The bytes of the request body.
-    @inlinable
-    public static func bytes<Bytes: RandomAccessCollection>(
-        _ bytes: Bytes
-    ) -> Self where Bytes.Element == UInt8 {
-        Self._bytes(bytes)
-    }
-    #endif
 
     @inlinable
     static func _bytes<Bytes: RandomAccessCollection>(
@@ -139,7 +123,6 @@ extension HTTPClientRequest.Body {
         })
     }
 
-    #if swift(>=5.6)
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `Sequence` of bytes.
     ///
     /// This construction will flatten the bytes into a `ByteBuffer`. As a result, the peak memory
@@ -165,32 +148,6 @@ extension HTTPClientRequest.Body {
     ) -> Self where Bytes.Element == UInt8 {
         Self._bytes(bytes, length: length)
     }
-    #else
-    /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `Sequence` of bytes.
-    ///
-    /// This construction will flatten the bytes into a `ByteBuffer`. As a result, the peak memory
-    /// usage of this construction will be double the size of the original collection. The construction
-    /// of the `ByteBuffer` will be delayed until it's needed.
-    ///
-    /// Unlike ``bytes(_:)-1uns7``, this construction does not assume that the body can be replayed. As a result,
-    /// if a redirect is encountered that would need us to replay the request body, the redirect will instead
-    /// not be followed. Prefer ``bytes(_:)-1uns7`` wherever possible.
-    ///
-    /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
-    /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
-    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)`` will use `Content-Length`.
-    ///
-    /// - parameters:
-    ///     - bytes: The bytes of the request body.
-    ///     - length: The length of the request body.
-    @inlinable
-    public static func bytes<Bytes: Sequence>(
-        _ bytes: Bytes,
-        length: Length
-    ) -> Self where Bytes.Element == UInt8 {
-        Self._bytes(bytes, length: length)
-    }
-    #endif
 
     @inlinable
     static func _bytes<Bytes: Sequence>(
@@ -210,7 +167,6 @@ extension HTTPClientRequest.Body {
         })
     }
 
-    #if swift(>=5.6)
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `Collection` of bytes.
     ///
     /// This construction will flatten the bytes into a `ByteBuffer`. As a result, the peak memory
@@ -232,28 +188,6 @@ extension HTTPClientRequest.Body {
     ) -> Self where Bytes.Element == UInt8 {
         Self._bytes(bytes, length: length)
     }
-    #else
-    /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `Collection` of bytes.
-    ///
-    /// This construction will flatten the bytes into a `ByteBuffer`. As a result, the peak memory
-    /// usage of this construction will be double the size of the original collection. The construction
-    /// of the `ByteBuffer` will be delayed until it's needed.
-    ///
-    /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
-    /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
-    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)`` will use `Content-Length`.
-    ///
-    /// - parameters:
-    ///     - bytes: The bytes of the request body.
-    ///     - length: The length of the request body.
-    @inlinable
-    public static func bytes<Bytes: Collection>(
-        _ bytes: Bytes,
-        length: Length
-    ) -> Self where Bytes.Element == UInt8 {
-        Self._bytes(bytes, length: length)
-    }
-    #endif
 
     @inlinable
     static func _bytes<Bytes: Collection>(
@@ -273,7 +207,6 @@ extension HTTPClientRequest.Body {
         })
     }
 
-    #if swift(>=5.6)
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from an `AsyncSequence` of `ByteBuffer`s.
     ///
     /// This construction will stream the upload one `ByteBuffer` at a time.
@@ -293,26 +226,6 @@ extension HTTPClientRequest.Body {
     ) -> Self where SequenceOfBytes.Element == ByteBuffer {
         Self._stream(sequenceOfBytes, length: length)
     }
-    #else
-    /// Create an ``HTTPClientRequest/Body-swift.struct`` from an `AsyncSequence` of `ByteBuffer`s.
-    ///
-    /// This construction will stream the upload one `ByteBuffer` at a time.
-    ///
-    /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
-    /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
-    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)`` will use `Content-Length`.
-    ///
-    /// - parameters:
-    ///     - sequenceOfBytes: The bytes of the request body.
-    ///     - length: The length of the request body.
-    @inlinable
-    public static func stream<SequenceOfBytes: AsyncSequence>(
-        _ sequenceOfBytes: SequenceOfBytes,
-        length: Length
-    ) -> Self where SequenceOfBytes.Element == ByteBuffer {
-        Self._stream(sequenceOfBytes, length: length)
-    }
-    #endif
 
     @inlinable
     static func _stream<SequenceOfBytes: AsyncSequence>(
@@ -328,7 +241,6 @@ extension HTTPClientRequest.Body {
         return body
     }
 
-    #if swift(>=5.6)
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from an `AsyncSequence` of bytes.
     ///
     /// This construction will consume 1kB chunks from the `Bytes` and send them at once. This optimizes for
@@ -350,28 +262,6 @@ extension HTTPClientRequest.Body {
     ) -> Self where Bytes.Element == UInt8 {
         Self._stream(bytes, length: length)
     }
-    #else
-    /// Create an ``HTTPClientRequest/Body-swift.struct`` from an `AsyncSequence` of bytes.
-    ///
-    /// This construction will consume 1kB chunks from the `Bytes` and send them at once. This optimizes for
-    /// `AsyncSequence`s where larger chunks are buffered up and available without actually suspending, such
-    /// as those provided by `FileHandle`.
-    ///
-    /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
-    /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
-    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)`` will use `Content-Length`.
-    ///
-    /// - parameters:
-    ///     - bytes: The bytes of the request body.
-    ///     - length: The length of the request body.
-    @inlinable
-    public static func stream<Bytes: AsyncSequence>(
-        _ bytes: Bytes,
-        length: Length
-    ) -> Self where Bytes.Element == UInt8 {
-        Self._stream(bytes, length: length)
-    }
-    #endif
 
     @inlinable
     static func _stream<Bytes: AsyncSequence>(

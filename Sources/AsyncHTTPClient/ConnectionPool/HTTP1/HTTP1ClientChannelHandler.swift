@@ -433,10 +433,8 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     }
 }
 
-#if swift(>=5.6)
 @available(*, unavailable)
 extension HTTP1ClientChannelHandler: Sendable {}
-#endif
 
 extension HTTP1ClientChannelHandler: HTTPRequestExecutor {
     func writeRequestBodyPart(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {

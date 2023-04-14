@@ -580,10 +580,7 @@ actor SharedIterator<Wrapped: AsyncSequence> where Wrapped.Element: Sendable {
         self.nextCallInProgress = true
         var iter = self.wrappedIterator
         defer {
-            // auto-closure of `precondition(_:)` messes with actor isolation analyses in Swift 5.5
-            // we therefore need to move the access to `self.nextCallInProgress` out of the auto-closure
-            let nextCallInProgress = nextCallInProgress
-            precondition(nextCallInProgress == true)
+            precondition(self.nextCallInProgress == true)
             self.nextCallInProgress = false
             self.wrappedIterator = iter
         }
