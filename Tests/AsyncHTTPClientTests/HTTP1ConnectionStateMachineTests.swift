@@ -316,6 +316,8 @@ extension HTTP1ConnectionStateMachine.Action: Equatable {
 
         case (.fireChannelInactive, .fireChannelInactive):
             return true
+        case (.fireChannelError(_, let lhsCloseConnection), .fireChannelError(_, let rhsCloseConnection)):
+            return lhsCloseConnection == rhsCloseConnection
 
         case (.sendRequestHead(let lhsHead, let lhsStartBody), .sendRequestHead(let rhsHead, let rhsStartBody)):
             return lhsHead == rhsHead && lhsStartBody == rhsStartBody
@@ -390,6 +392,7 @@ extension HTTP1ConnectionStateMachine.Action.FinalFailedStreamAction: Equatable 
             return lhsPromise?.futureResult == rhsPromise?.futureResult
         case (.none, .none):
             return true
+
         default:
             return false
         }
