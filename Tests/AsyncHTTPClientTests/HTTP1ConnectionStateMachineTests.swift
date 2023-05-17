@@ -200,6 +200,19 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         XCTAssertEqual(state.requestCancelled(closeConnection: false), .failRequest(HTTPClientError.cancelled, .close(nil)))
     }
 
+    func testNewRequestAfterErrorHappened() {
+        var state = HTTP1ConnectionStateMachine()
+        XCTAssertEqual(state.channelActive(isWritable: false), .fireChannelActive)
+        struct MyError: Error, Equatable {}
+        XCTAssertEqual(state.errorHappened(MyError()), .fireChannelError(MyError(), closeConnection: true))
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/", headers: ["content-length": "4"])
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(4))
+        let action = state.runNewRequest(head: requestHead, metadata: metadata)
+        guard case .failRequest = action else {
+            return XCTFail("unexpected action \(action)")
+        }
+    }
+
     func testCancelRequestIsIgnoredWhenConnectionIsIdle() {
         var state = HTTP1ConnectionStateMachine()
         XCTAssertEqual(state.channelActive(isWritable: true), .fireChannelActive)
@@ -303,6 +316,8 @@ extension HTTP1ConnectionStateMachine.Action: Equatable {
 
         case (.fireChannelInactive, .fireChannelInactive):
             return true
+        case (.fireChannelError(_, let lhsCloseConnection), .fireChannelError(_, let rhsCloseConnection)):
+            return lhsCloseConnection == rhsCloseConnection
 
         case (.sendRequestHead(let lhsHead, let lhsStartBody), .sendRequestHead(let rhsHead, let rhsStartBody)):
             return lhsHead == rhsHead && lhsStartBody == rhsStartBody
@@ -377,6 +392,7 @@ extension HTTP1ConnectionStateMachine.Action.FinalFailedStreamAction: Equatable 
             return lhsPromise?.futureResult == rhsPromise?.futureResult
         case (.none, .none):
             return true
+
         default:
             return false
         }
