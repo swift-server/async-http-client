@@ -121,11 +121,6 @@ extension TLSConfiguration {
             }
         }
 
-        // the certificate chain
-        if self.certificateChain.count > 0 {
-            preconditionFailure("TLSConfiguration.certificateChain is not supported. \(useMTELGExplainer)")
-        }
-
         // cipher suites
         if self.cipherSuites.count > 0 {
             // TODO: Requires NIOSSL to provide list of cipher values before we can continue
