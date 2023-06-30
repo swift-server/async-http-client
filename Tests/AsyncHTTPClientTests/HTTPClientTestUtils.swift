@@ -510,7 +510,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
 
         let responseEncoder = HTTPResponseEncoder()
         let requestDecoder = ByteToMessageHandler(HTTPRequestDecoder(leftOverBytesStrategy: .forwardBytes))
-        let proxySimulator = HTTPProxySimulator(promise: promise, expectedAuhorization: expectedAuthorization)
+        let proxySimulator = HTTPProxySimulator(promise: promise, expectedAuthorization: expectedAuthorization)
 
         try sync.addHandler(responseEncoder)
         try sync.addHandler(requestDecoder)
@@ -660,13 +660,13 @@ final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
 
     // the promise to succeed, once the proxy connection is setup
     let promise: EventLoopPromise<Void>
-    let expectedAuhorization: String?
+    let expectedAuthorization: String?
 
     var head: HTTPResponseHead
 
-    init(promise: EventLoopPromise<Void>, expectedAuhorization: String?) {
+    init(promise: EventLoopPromise<Void>, expectedAuthorization: String?) {
         self.promise = promise
-        self.expectedAuhorization = expectedAuhorization
+        self.expectedAuthorization = expectedAuthorization
         self.head = HTTPResponseHead(version: .init(major: 1, minor: 1), status: .ok, headers: .init([("Content-Length", "0")]))
     }
 
@@ -679,9 +679,9 @@ final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
                 return
             }
 
-            if let expectedAuhorization = self.expectedAuhorization {
+            if let expectedAuthorization = self.expectedAuthorization {
                 guard let authorization = head.headers["proxy-authorization"].first,
-                      expectedAuhorization == authorization else {
+                      expectedAuthorization == authorization else {
                     self.head.status = .proxyAuthenticationRequired
                     return
                 }
