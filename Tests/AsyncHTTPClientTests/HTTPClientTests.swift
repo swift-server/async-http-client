@@ -3507,4 +3507,22 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             requests: 300
         )
     }
+
+    func testClientWithDefaultSingletonELG() throws {
+        let client = HTTPClient()
+        defer {
+            XCTAssertNoThrow(try client.shutdown().wait())
+        }
+        let response = try client.get(url: self.defaultHTTPBinURLPrefix + "get").wait()
+        XCTAssertEqual(.ok, response.status)
+    }
+
+    func testClientWithELGInit() throws {
+        let client = HTTPClient(eventLoopGroup: MultiThreadedEventLoopGroup.singleton)
+        defer {
+            XCTAssertNoThrow(try client.shutdown().wait())
+        }
+        let response = try client.get(url: self.defaultHTTPBinURLPrefix + "get").wait()
+        XCTAssertEqual(.ok, response.status)
+    }
 }

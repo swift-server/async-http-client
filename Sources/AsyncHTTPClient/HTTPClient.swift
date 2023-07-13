@@ -44,7 +44,7 @@ let globalRequestID = ManagedAtomic(0)
 /// Example:
 ///
 /// ```swift
-///     let client = HTTPClient(eventLoopGroupProvider: .createNew)
+///     let client = HTTPClient(eventLoopGroupProvider: .singleton)
 ///     client.get(url: "https://swift.org", deadline: .now() + .seconds(1)).whenComplete { result in
 ///         switch result {
 ///         case .failure(let error):
@@ -69,7 +69,6 @@ public class HTTPClient {
     ///
     /// All HTTP transactions will occur on loops owned by this group.
     public let eventLoopGroup: EventLoopGroup
-    let eventLoopGroupProvider: EventLoopGroupProvider
     let configuration: Configuration
     let poolManager: HTTPConnectionPool.Manager
 
@@ -94,29 +93,50 @@ public class HTTPClient {
                   backgroundActivityLogger: HTTPClient.loggingDisabled)
     }
 
+    /// Create an ``HTTPClient`` with specified `EventLoopGroup`  and configuration.
+    ///
+    /// - parameters:
+    ///     - eventLoopGroupProvider: Specify how `EventLoopGroup` will be created.
+    ///     - configuration: Client configuration.
+    public convenience init(eventLoopGroup: EventLoopGroup = HTTPClient.defaultEventLoopGroup,
+                            configuration: Configuration = Configuration()) {
+        self.init(eventLoopGroupProvider: .shared(eventLoopGroup),
+                  configuration: configuration,
+                  backgroundActivityLogger: HTTPClient.loggingDisabled)
+    }
+
     /// Create an ``HTTPClient`` with specified `EventLoopGroup` provider and configuration.
     ///
     /// - parameters:
     ///     - eventLoopGroupProvider: Specify how `EventLoopGroup` will be created.
     ///     - configuration: Client configuration.
-    public required init(eventLoopGroupProvider: EventLoopGroupProvider,
+    public convenience init(eventLoopGroupProvider: EventLoopGroupProvider,
+                            configuration: Configuration = Configuration(),
+                            backgroundActivityLogger: Logger) {
+        let eventLoopGroup: any EventLoopGroup
+
+        switch eventLoopGroupProvider {
+        case .shared(let group):
+            eventLoopGroup = group
+        default: // handle `.createNew` without a deprecation warning
+            eventLoopGroup = HTTPClient.defaultEventLoopGroup
+        }
+
+        self.init(eventLoopGroup: eventLoopGroup,
+                  configuration: configuration,
+                  backgroundActivityLogger: backgroundActivityLogger)
+    }
+
+    /// Create an ``HTTPClient`` with specified `EventLoopGroup` and configuration.
+    ///
+    /// - parameters:
+    ///     - eventLoopGroup: The `EventLoopGroup` that the ``HTTPClient`` will use.
+    ///     - configuration: Client configuration.
+    ///     - backgroundActivityLogger: The `Logger` that will be used to log background any activity that's not associated with a request.
+    public required init(eventLoopGroup: any EventLoopGroup,
                          configuration: Configuration = Configuration(),
                          backgroundActivityLogger: Logger) {
-        self.eventLoopGroupProvider = eventLoopGroupProvider
-        switch self.eventLoopGroupProvider {
-        case .shared(let group):
-            self.eventLoopGroup = group
-        case .createNew:
-            #if canImport(Network)
-            if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
-                self.eventLoopGroup = NIOTSEventLoopGroup()
-            } else {
-                self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-            }
-            #else
-            self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-            #endif
-        }
+        self.eventLoopGroup = eventLoopGroup
         self.configuration = configuration
         self.poolManager = HTTPConnectionPool.Manager(
             eventLoopGroup: self.eventLoopGroup,
@@ -214,55 +234,16 @@ public class HTTPClient {
     }
 
     /// Shuts down the ``HTTPClient`` and releases its resources.
-    ///
-    /// - note: You cannot use this method if you sharted the ``HTTPClient`` with
-    ///         `init(eventLoopGroupProvider: .createNew)` because that will shut down the `EventLoopGroup` the
-    ///         returned future would run in.
     public func shutdown() -> EventLoopFuture<Void> {
-        switch self.eventLoopGroupProvider {
-        case .shared(let group):
-            let promise = group.any().makePromise(of: Void.self)
-            self.shutdown(queue: .global()) { error in
-                if let error = error {
-                    promise.fail(error)
-                } else {
-                    promise.succeed(())
-                }
-            }
-            return promise.futureResult
-        case .createNew:
-            preconditionFailure("Cannot use the shutdown() method which returns a future when owning the EventLoopGroup. Please use the one of the other shutdown methods.")
-        }
-    }
-
-    private func shutdownEventLoop(queue: DispatchQueue, _ callback: @escaping ShutdownCallback) {
-        self.stateLock.withLock {
-            switch self.eventLoopGroupProvider {
-            case .shared:
-                self.state = .shutDown
-                queue.async {
-                    callback(nil)
-                }
-            case .createNew:
-                switch self.state {
-                case .shuttingDown:
-                    self.state = .shutDown
-                    self.eventLoopGroup.shutdownGracefully(queue: queue, callback)
-                case .shutDown, .upAndRunning:
-                    assertionFailure("The only valid state at this point is \(String(describing: State.shuttingDown))")
-                }
+        let promise = self.eventLoopGroup.any().makePromise(of: Void.self)
+        self.shutdown(queue: .global()) { error in
+            if let error = error {
+                promise.fail(error)
+            } else {
+                promise.succeed(())
             }
         }
-    }
-
-    private func shutdownFileIOThreadPool(queue: DispatchQueue, _ callback: @escaping ShutdownCallback) {
-        self.fileIOThreadPoolLock.withLock {
-            guard let fileIOThreadPool = fileIOThreadPool else {
-                callback(nil)
-                return
-            }
-            fileIOThreadPool.shutdownGracefully(queue: queue, callback)
-        }
+        return promise.futureResult
     }
 
     private func shutdown(requiresCleanClose: Bool, queue: DispatchQueue, _ callback: @escaping ShutdownCallback) {
@@ -293,11 +274,11 @@ public class HTTPClient {
                     let error: Error? = (requiresClean && unclean) ? HTTPClientError.uncleanShutdown : nil
                     return (callback, error)
                 }
-                self.shutdownFileIOThreadPool(queue: queue) { ioThreadPoolError in
-                    self.shutdownEventLoop(queue: queue) { error in
-                        let reportedError = error ?? ioThreadPoolError ?? uncleanError
-                        callback(reportedError)
-                    }
+                self.stateLock.withLock {
+                    self.state = .shutDown
+                }
+                queue.async {
+                    callback(uncleanError)
                 }
             }
         }
@@ -305,11 +286,8 @@ public class HTTPClient {
 
     private func makeOrGetFileIOThreadPool() -> NIOThreadPool {
         self.fileIOThreadPoolLock.withLock {
-            guard let fileIOThreadPool = fileIOThreadPool else {
-                let fileIOThreadPool = NIOThreadPool(numberOfThreads: System.coreCount)
-                fileIOThreadPool.start()
-                self.fileIOThreadPool = fileIOThreadPool
-                return fileIOThreadPool
+            guard let fileIOThreadPool = self.fileIOThreadPool else {
+                return NIOThreadPool.singleton
             }
             return fileIOThreadPool
         }
@@ -853,7 +831,12 @@ public class HTTPClient {
     public enum EventLoopGroupProvider {
         /// `EventLoopGroup` will be provided by the user. Owner of this group is responsible for its lifecycle.
         case shared(EventLoopGroup)
-        /// `EventLoopGroup` will be created by the client. When ``HTTPClient/syncShutdown()`` is called, the created `EventLoopGroup` will be shut down as well.
+        /// The original intention of this was that ``HTTPClient`` would create and own its own `EventLoopGroup` to
+        /// facilitate use in programs that are not already using SwiftNIO.
+        /// Since https://github.com/apple/swift-nio/pull/2471 however, SwiftNIO does provide a global, shared singleton
+        /// `EventLoopGroup`s that we can use. ``HTTPClient`` is no longer able to create & own its own
+        /// `EventLoopGroup` which solves a whole host of issues around shutdown.
+        @available(*, deprecated, renamed: "singleton", message: "Please use the singleton EventLoopGroup explicitly")
         case createNew
     }
 
@@ -911,6 +894,30 @@ public class HTTPClient {
         case upAndRunning
         case shuttingDown(requiresCleanClose: Bool, callback: ShutdownCallback)
         case shutDown
+    }
+}
+
+extension HTTPClient.EventLoopGroupProvider {
+    /// Shares ``HTTPClient/defaultEventLoopGroup`` which is a singleton `EventLoopGroup` suitable for the platform.
+    public static var singleton: Self {
+        return .shared(HTTPClient.defaultEventLoopGroup)
+    }
+}
+
+extension HTTPClient {
+    /// Returns the default `EventLoopGroup` singleton, automatically selecting the best for the platform.
+    ///
+    /// This will select the concrete `EventLoopGroup` depending which platform this is running on.
+    public static var defaultEventLoopGroup: EventLoopGroup {
+        #if canImport(Network)
+        if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *) {
+            return NIOTSEventLoopGroup.singleton
+        } else {
+            return MultiThreadedEventLoopGroup.singleton
+        }
+        #else
+        return MultiThreadedEventLoopGroup.singleton
+        #endif
     }
 }
 
