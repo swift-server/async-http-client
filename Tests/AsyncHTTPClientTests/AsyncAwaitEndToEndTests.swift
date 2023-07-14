@@ -389,8 +389,10 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 guard let error = error as? HTTPClientError else {
                     return XCTFail("unexpected error \(error)")
                 }
-                // a race between deadline and connect timer can result in either error
-                XCTAssertTrue([.deadlineExceeded, .connectTimeout].contains(error))
+                // a race between deadline and connect timer can result in either error.
+                // If closing happens really fast we might shutdown the pipeline before we fail the request.
+                // If the pipeline is closed we may receive a  `.remoteConnectionClosed`.
+                XCTAssertTrue([.deadlineExceeded, .connectTimeout, .remoteConnectionClosed].contains(error), "unexpected error \(error)")
             }
         }
     }
@@ -412,8 +414,10 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 guard let error = error as? HTTPClientError else {
                     return XCTFail("unexpected error \(error)")
                 }
-                // a race between deadline and connect timer can result in either error
-                XCTAssertTrue([.deadlineExceeded, .connectTimeout].contains(error), "unexpected error \(error)")
+                // a race between deadline and connect timer can result in either error.
+                // If closing happens really fast we might shutdown the pipeline before we fail the request.
+                // If the pipeline is closed we may receive a  `.remoteConnectionClosed`.
+                XCTAssertTrue([.deadlineExceeded, .connectTimeout, .remoteConnectionClosed].contains(error), "unexpected error \(error)")
             }
         }
     }
