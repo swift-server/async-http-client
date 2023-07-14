@@ -345,7 +345,7 @@ final class RequestBagTests: XCTestCase {
         bag.fail(HTTPClientError.cancelled)
         XCTAssertTrue(executor.isCancelled, "The request bag, should call cancel immediately on the executor")
 
-        XCTAssertThrowsError(try bag.task.futureResult.wait()) {
+        XCTAssertThrowsError(try bag.task.futureResult.timeout(after: .seconds(10)).wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .cancelled)
         }
     }
