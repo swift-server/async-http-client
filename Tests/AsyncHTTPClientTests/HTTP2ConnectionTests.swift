@@ -62,7 +62,7 @@ class HTTP2ConnectionTests: XCTestCase {
         // to really destroy the channel we need to tick once
         embedded.embeddedEventLoop.run()
 
-        XCTAssertThrowsError(try startFuture.wait())
+        XCTAssertThrowsError(try startFuture.wrapped.wait())
 
         // should not crash
         connection.shutdown()
@@ -340,7 +340,7 @@ class HTTP2ConnectionTests: XCTestCase {
     }
 }
 
-class TestConnectionCreator {
+final class TestConnectionCreator {
     enum Error: Swift.Error {
         case alreadyCreatingAnotherConnection
         case wantedHTTP2ConnectionButGotHTTP1
