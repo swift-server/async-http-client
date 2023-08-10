@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #if canImport(Network)
-import Network
+@preconcurrency import Network
 #endif
 import NIOCore
 import NIOHTTP1

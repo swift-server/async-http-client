@@ -23,7 +23,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
     private var state: HTTP1ConnectionStateMachine = .init() {
         didSet {
-            self.eventLoop.assertInEventLoop()
+            self.eventLoop.wrapped.assertInEventLoop()
         }
     }
 
@@ -50,7 +50,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     }
 
     private var idleReadTimeoutStateMachine: IdleReadStateMachine?
-    private var idleReadTimeoutTimer: Scheduled<Void>?
+    private var idleReadTimeoutTimer: ScheduledOnCurrentEventLoop<Void>?
 
     /// Cancelling a task in NIO does *not* guarantee that the task will not execute under certain race conditions.
     /// We therefore give each timer an ID and increase the ID every time we reset or cancel it.
@@ -59,11 +59,11 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
     private let backgroundLogger: Logger
     private var logger: Logger
-    private let eventLoop: EventLoop
+    private let eventLoop: CurrentEventLoop
     private let connectionIdLoggerMetadata: Logger.MetadataValue
 
     var onConnectionIdle: () -> Void = {}
-    init(eventLoop: EventLoop, backgroundLogger: Logger, connectionIdLoggerMetadata: Logger.MetadataValue) {
+    init(eventLoop: CurrentEventLoop, backgroundLogger: Logger, connectionIdLoggerMetadata: Logger.MetadataValue) {
         self.eventLoop = eventLoop
         self.backgroundLogger = backgroundLogger
         self.logger = backgroundLogger
@@ -279,7 +279,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             case .sendRequestEnd(let writePromise, let shouldClose):
                 let writePromise = writePromise ?? context.eventLoop.makePromise(of: Void.self)
                 // We need to defer succeeding the old request to avoid ordering issues
-                writePromise.futureResult.hop(to: context.eventLoop).whenComplete { result in
+                writePromise.futureResult.hop(to: context.currentEventLoop).whenComplete { result in
                     switch result {
                     case .success:
                         // If our final action was `sendRequestEnd`, that means we've already received
@@ -438,7 +438,7 @@ extension HTTP1ClientChannelHandler: Sendable {}
 
 extension HTTP1ClientChannelHandler: HTTPRequestExecutor {
     func writeRequestBodyPart(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
-        if self.eventLoop.inEventLoop {
+        if self.eventLoop.wrapped.inEventLoop {
             self.writeRequestBodyPart0(data, request: request, promise: promise)
         } else {
             self.eventLoop.execute {
@@ -448,7 +448,7 @@ extension HTTP1ClientChannelHandler: HTTPRequestExecutor {
     }
 
     func finishRequestBodyStream(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
-        if self.eventLoop.inEventLoop {
+        if self.eventLoop.wrapped.inEventLoop {
             self.finishRequestBodyStream0(request, promise: promise)
         } else {
             self.eventLoop.execute {
@@ -458,7 +458,7 @@ extension HTTP1ClientChannelHandler: HTTPRequestExecutor {
     }
 
     func demandResponseBodyStream(_ request: HTTPExecutableRequest) {
-        if self.eventLoop.inEventLoop {
+        if self.eventLoop.wrapped.inEventLoop {
             self.demandResponseBodyStream0(request)
         } else {
             self.eventLoop.execute {
@@ -468,7 +468,7 @@ extension HTTP1ClientChannelHandler: HTTPRequestExecutor {
     }
 
     func cancelRequest(_ request: HTTPExecutableRequest) {
-        if self.eventLoop.inEventLoop {
+        if self.eventLoop.wrapped.inEventLoop {
             self.cancelRequest0(request)
         } else {
             self.eventLoop.execute {

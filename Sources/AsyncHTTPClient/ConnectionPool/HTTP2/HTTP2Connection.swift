@@ -17,7 +17,7 @@ import NIOCore
 import NIOHTTP2
 import NIOHTTPCompression
 
-protocol HTTP2ConnectionDelegate {
+protocol HTTP2ConnectionDelegate: Sendable {
     func http2Connection(_: HTTP2Connection, newMaxStreamSetting: Int)
     func http2ConnectionStreamClosed(_: HTTP2Connection, availableStreams: Int)
     func http2ConnectionGoAwayReceived(_: HTTP2Connection)
@@ -38,7 +38,7 @@ final class HTTP2Connection {
 
     enum State {
         case initialized
-        case starting(EventLoopPromise<Int>)
+        case starting(CurrentEventLoopPromise<Int>)
         case active(maxStreams: Int)
         case closing
         case closed
@@ -134,7 +134,7 @@ final class HTTP2Connection {
             delegate: delegate,
             logger: logger
         )
-        return connection._start0().map { maxStreams in (connection, maxStreams) }
+        return connection._start0().map { maxStreams in (connection, maxStreams) }.wrapped
     }
 
     func executeRequest(_ request: HTTPExecutableRequest) {
@@ -169,13 +169,13 @@ final class HTTP2Connection {
         return promise.futureResult
     }
 
-    func _start0() -> EventLoopFuture<Int> {
+    func _start0() -> CurrentEventLoopFuture<Int> {
         self.channel.eventLoop.assertInEventLoop()
 
-        let readyToAcceptConnectionsPromise = self.channel.eventLoop.makePromise(of: Int.self)
+        let readyToAcceptConnectionsPromise = self.channel.eventLoop.iKnowIAmOnThisEventLoop().makePromise(of: Int.self)
 
         self.state = .starting(readyToAcceptConnectionsPromise)
-        self.channel.closeFuture.whenComplete { _ in
+        self.channel.closeFuture.iKnowIAmOnTheEventLoopOfThisFuture().whenComplete { _ in
             switch self.state {
             case .initialized, .closed:
                 preconditionFailure("invalid state \(self.state)")
@@ -218,8 +218,8 @@ final class HTTP2Connection {
             preconditionFailure("Invalid state: \(self.state). Sending requests is not allowed before we are started.")
 
         case .active:
-            let createStreamChannelPromise = self.channel.eventLoop.makePromise(of: Channel.self)
-            self.multiplexer.createStreamChannel(promise: createStreamChannelPromise) { channel -> EventLoopFuture<Void> in
+            let createStreamChannelPromise = self.channel.eventLoop.iKnowIAmOnThisEventLoop().makePromise(of: Channel.self)
+            self.multiplexer.createStreamChannel(promise: createStreamChannelPromise.wrapped) { channel -> EventLoopFuture<Void> in
                 do {
                     // the connection may have been asked to shutdown while we created the child. in
                     // this
@@ -238,7 +238,7 @@ final class HTTP2Connection {
                         try channel.pipeline.syncOperations.addHandler(decompressHandler)
                     }
 
-                    let handler = HTTP2ClientRequestHandler(eventLoop: channel.eventLoop)
+                    let handler = HTTP2ClientRequestHandler(eventLoop: channel.eventLoop.iKnowIAmOnThisEventLoop())
                     try channel.pipeline.syncOperations.addHandler(handler)
 
                     // We must add the new channel to the list of open channels BEFORE we write the
@@ -246,7 +246,7 @@ final class HTTP2Connection {
                     // before.
                     let box = ChannelBox(channel)
                     self.openStreams.insert(box)
-                    channel.closeFuture.whenComplete { _ in
+                    channel.closeFuture.iKnowIAmOnTheEventLoopOfThisFuture().whenComplete { _ in
                         self.openStreams.remove(box)
                     }
 

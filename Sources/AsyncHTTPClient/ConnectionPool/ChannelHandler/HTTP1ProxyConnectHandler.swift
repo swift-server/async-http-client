@@ -24,9 +24,9 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
         // transitions to `.connectSent` or `.failed`
         case initialized
         // transitions to `.headReceived` or `.failed`
-        case connectSent(Scheduled<Void>)
+        case connectSent(ScheduledOnCurrentEventLoop<Void>)
         // transitions to `.completed` or `.failed`
-        case headReceived(Scheduled<Void>)
+        case headReceived(ScheduledOnCurrentEventLoop<Void>)
         // final error state
         case failed(Error)
         // final success state
@@ -135,7 +135,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
             return
         }
 
-        let timeout = context.eventLoop.scheduleTask(deadline: self.deadline) {
+        let timeout = context.currentEventLoop.scheduleTask(deadline: self.deadline) {
             switch self.state {
             case .initialized:
                 preconditionFailure("How can we have a scheduled timeout, if the connection is not even up?")

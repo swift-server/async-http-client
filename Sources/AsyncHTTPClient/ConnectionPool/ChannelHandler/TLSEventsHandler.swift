@@ -22,7 +22,7 @@ final class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
         // transitions to channelActive or failed
         case initialized
         // transitions to tlsEstablished or failed
-        case channelActive(Scheduled<Void>?)
+        case channelActive(ScheduledOnCurrentEventLoop<Void>?)
         // final success state
         case tlsEstablished
         // final success state
@@ -102,9 +102,9 @@ final class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
             return
         }
 
-        var scheduled: Scheduled<Void>?
+        var scheduled: ScheduledOnCurrentEventLoop<Void>?
         if let deadline = deadline {
-            scheduled = context.eventLoop.scheduleTask(deadline: deadline) {
+            scheduled = context.currentEventLoop.scheduleTask(deadline: deadline) {
                 switch self.state {
                 case .initialized, .channelActive:
                     // close the connection, if the handshake timed out
@@ -121,3 +121,6 @@ final class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
         self.state = .channelActive(scheduled)
     }
 }
+
+@available(*, unavailable)
+extension TLSEventsHandler: Sendable {}

@@ -22,7 +22,7 @@ final class SOCKSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
         // transitions to channelActive or failed
         case initialized
         // transitions to socksEstablished or failed
-        case channelActive(Scheduled<Void>)
+        case channelActive(ScheduledOnCurrentEventLoop<Void>)
         // final success state
         case socksEstablished
         // final success state
@@ -99,7 +99,7 @@ final class SOCKSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
             return
         }
 
-        let scheduled = context.eventLoop.scheduleTask(deadline: self.deadline) {
+        let scheduled = context.currentEventLoop.scheduleTask(deadline: self.deadline) {
             switch self.state {
             case .initialized, .channelActive:
                 // close the connection, if the handshake timed out

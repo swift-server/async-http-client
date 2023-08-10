@@ -135,7 +135,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
                 self.writeNextRequestPart($0)
             }
 
-            body.stream(writer).hop(to: self.eventLoop).whenComplete {
+            body.stream(writer).hop(to: self.eventLoop.iKnowIAmOnThisEventLoop()).whenComplete {
                 self.finishRequestBodyStream($0)
             }
 

@@ -235,7 +235,7 @@ extension HTTPClient {
     }
 
     /// Represents an HTTP response.
-    public struct Response {
+    public struct Response: Sendable {
         /// Remote host of the request.
         public var host: String
         /// Response HTTP status.
@@ -496,7 +496,7 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
 ///          Users of the library are not required to keep a reference to the
 ///          object that implements this protocol, but may do so if needed.
 public protocol HTTPClientResponseDelegate: AnyObject {
-    associatedtype Response
+    associatedtype Response: Sendable
 
     /// Called when the request head is sent. Will be called once.
     ///
@@ -784,7 +784,7 @@ internal struct TaskCancelEvent {}
 
 // MARK: - RedirectHandler
 
-internal struct RedirectHandler<ResponseType> {
+internal struct RedirectHandler<ResponseType: Sendable> {
     let request: HTTPClient.Request
     let redirectState: RedirectState
     let execute: (HTTPClient.Request, RedirectState) -> HTTPClient.Task<ResponseType>

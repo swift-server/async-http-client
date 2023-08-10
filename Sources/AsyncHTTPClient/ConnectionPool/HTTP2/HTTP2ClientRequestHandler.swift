@@ -22,11 +22,11 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
     typealias OutboundOut = HTTPClientRequestPart
     typealias InboundIn = HTTPClientResponsePart
 
-    private let eventLoop: EventLoop
+    private let eventLoop: CurrentEventLoop
 
     private var state: HTTPRequestStateMachine = .init(isChannelWritable: false) {
         willSet {
-            self.eventLoop.assertInEventLoop()
+            self.eventLoop.wrapped.assertInEventLoop()
         }
     }
 
@@ -44,14 +44,14 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
     }
 
     private var idleReadTimeoutStateMachine: IdleReadStateMachine?
-    private var idleReadTimeoutTimer: Scheduled<Void>?
+    private var idleReadTimeoutTimer: ScheduledOnCurrentEventLoop<Void>?
 
-    init(eventLoop: EventLoop) {
+    init(eventLoop: CurrentEventLoop) {
         self.eventLoop = eventLoop
     }
 
     func handlerAdded(context: ChannelHandlerContext) {
-        assert(context.eventLoop === self.eventLoop,
+        assert(context.eventLoop === self.eventLoop.wrapped,
                "The handler must be added to a channel that runs on the eventLoop it was initialized with.")
         self.channelContext = context
 
@@ -345,7 +345,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
 extension HTTP2ClientRequestHandler: HTTPRequestExecutor {
     func writeRequestBodyPart(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
-        if self.eventLoop.inEventLoop {
+        if self.eventLoop.wrapped.inEventLoop {
             self.writeRequestBodyPart0(data, request: request, promise: promise)
         } else {
             self.eventLoop.execute {
@@ -355,7 +355,7 @@ extension HTTP2ClientRequestHandler: HTTPRequestExecutor {
     }
 
     func finishRequestBodyStream(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
-        if self.eventLoop.inEventLoop {
+        if self.eventLoop.wrapped.inEventLoop {
             self.finishRequestBodyStream0(request, promise: promise)
         } else {
             self.eventLoop.execute {
@@ -365,7 +365,7 @@ extension HTTP2ClientRequestHandler: HTTPRequestExecutor {
     }
 
     func demandResponseBodyStream(_ request: HTTPExecutableRequest) {
-        if self.eventLoop.inEventLoop {
+        if self.eventLoop.wrapped.inEventLoop {
             self.demandResponseBodyStream0(request)
         } else {
             self.eventLoop.execute {
@@ -375,7 +375,7 @@ extension HTTP2ClientRequestHandler: HTTPRequestExecutor {
     }
 
     func cancelRequest(_ request: HTTPExecutableRequest) {
-        if self.eventLoop.inEventLoop {
+        if self.eventLoop.wrapped.inEventLoop {
             self.cancelRequest0(request)
         } else {
             self.eventLoop.execute {

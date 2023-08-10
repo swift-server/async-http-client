@@ -43,7 +43,7 @@ extension HTTPConnectionPool {
     }
 }
 
-protocol HTTPConnectionRequester {
+protocol HTTPConnectionRequester: Sendable {
     func http1ConnectionCreated(_: HTTP1Connection)
     func http2ConnectionCreated(_: HTTP2Connection, maximumStreams: Int)
     func failedToCreateHTTPConnection(_: HTTPConnectionPool.Connection.ID, error: Error)
@@ -62,8 +62,8 @@ extension HTTPConnectionPool.ConnectionFactory {
     ) {
         var logger = logger
         logger[metadataKey: "ahc-connection-id"] = "\(connectionID)"
-
-        self.makeChannel(requester: requester, connectionID: connectionID, deadline: deadline, eventLoop: eventLoop, logger: logger).whenComplete { result in
+        
+        self.makeChannel(requester: requester, connectionID: connectionID, deadline: deadline, eventLoop: eventLoop, logger: logger).whenComplete { [logger] result in
             switch result {
             case .success(.http1_1(let channel)):
                 do {

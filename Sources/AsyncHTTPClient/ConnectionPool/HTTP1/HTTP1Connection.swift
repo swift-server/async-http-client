@@ -17,7 +17,7 @@ import NIOCore
 import NIOHTTP1
 import NIOHTTPCompression
 
-protocol HTTP1ConnectionDelegate {
+protocol HTTP1ConnectionDelegate: Sendable {
     func http1ConnectionReleased(_: HTTP1Connection)
     func http1ConnectionClosed(_: HTTP1Connection)
 }
@@ -109,7 +109,7 @@ final class HTTP1Connection {
         }
 
         self.state = .active
-        self.channel.closeFuture.whenComplete { _ in
+        self.channel.closeFuture.iKnowIAmOnTheEventLoopOfThisFuture().whenComplete { _ in
             self.state = .closed
             self.delegate.http1ConnectionClosed(self)
         }
@@ -133,7 +133,7 @@ final class HTTP1Connection {
             }
 
             let channelHandler = HTTP1ClientChannelHandler(
-                eventLoop: channel.eventLoop,
+                eventLoop: channel.eventLoop.iKnowIAmOnThisEventLoop(),
                 backgroundLogger: logger,
                 connectionIdLoggerMetadata: "\(self.id)"
             )

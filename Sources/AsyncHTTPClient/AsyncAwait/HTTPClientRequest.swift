@@ -103,13 +103,6 @@ extension HTTPClientRequest.Body {
     public static func bytes<Bytes: RandomAccessCollection & Sendable>(
         _ bytes: Bytes
     ) -> Self where Bytes.Element == UInt8 {
-        Self._bytes(bytes)
-    }
-
-    @inlinable
-    static func _bytes<Bytes: RandomAccessCollection>(
-        _ bytes: Bytes
-    ) -> Self where Bytes.Element == UInt8 {
         self.init(.sequence(
             length: .known(bytes.count),
             canBeConsumedMultipleTimes: true
@@ -146,14 +139,6 @@ extension HTTPClientRequest.Body {
         _ bytes: Bytes,
         length: Length
     ) -> Self where Bytes.Element == UInt8 {
-        Self._bytes(bytes, length: length)
-    }
-
-    @inlinable
-    static func _bytes<Bytes: Sequence>(
-        _ bytes: Bytes,
-        length: Length
-    ) -> Self where Bytes.Element == UInt8 {
         self.init(.sequence(
             length: length.storage,
             canBeConsumedMultipleTimes: false
@@ -183,14 +168,6 @@ extension HTTPClientRequest.Body {
     @inlinable
     @preconcurrency
     public static func bytes<Bytes: Collection & Sendable>(
-        _ bytes: Bytes,
-        length: Length
-    ) -> Self where Bytes.Element == UInt8 {
-        Self._bytes(bytes, length: length)
-    }
-
-    @inlinable
-    static func _bytes<Bytes: Collection>(
         _ bytes: Bytes,
         length: Length
     ) -> Self where Bytes.Element == UInt8 {
@@ -224,14 +201,6 @@ extension HTTPClientRequest.Body {
         _ sequenceOfBytes: SequenceOfBytes,
         length: Length
     ) -> Self where SequenceOfBytes.Element == ByteBuffer {
-        Self._stream(sequenceOfBytes, length: length)
-    }
-
-    @inlinable
-    static func _stream<SequenceOfBytes: AsyncSequence>(
-        _ sequenceOfBytes: SequenceOfBytes,
-        length: Length
-    ) -> Self where SequenceOfBytes.Element == ByteBuffer {
         let body = self.init(.asyncSequence(length: length.storage) {
             var iterator = sequenceOfBytes.makeAsyncIterator()
             return { _ -> ByteBuffer? in
@@ -257,14 +226,6 @@ extension HTTPClientRequest.Body {
     @inlinable
     @preconcurrency
     public static func stream<Bytes: AsyncSequence & Sendable>(
-        _ bytes: Bytes,
-        length: Length
-    ) -> Self where Bytes.Element == UInt8 {
-        Self._stream(bytes, length: length)
-    }
-
-    @inlinable
-    static func _stream<Bytes: AsyncSequence>(
         _ bytes: Bytes,
         length: Length
     ) -> Self where Bytes.Element == UInt8 {
