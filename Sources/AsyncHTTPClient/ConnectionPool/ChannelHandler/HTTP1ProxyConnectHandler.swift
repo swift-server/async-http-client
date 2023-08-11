@@ -40,8 +40,8 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
     private let proxyAuthorization: HTTPClient.Authorization?
     private let deadline: NIODeadline
 
-    private var proxyEstablishedPromise: EventLoopPromise<Void>?
-    var proxyEstablishedFuture: EventLoopFuture<Void>? {
+    private var proxyEstablishedPromise: CurrentEventLoopPromise<Void>?
+    var proxyEstablishedFuture: CurrentEventLoopFuture<Void>? {
         return self.proxyEstablishedPromise?.futureResult
     }
 
@@ -81,7 +81,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
     }
 
     func handlerAdded(context: ChannelHandlerContext) {
-        self.proxyEstablishedPromise = context.eventLoop.makePromise(of: Void.self)
+        self.proxyEstablishedPromise = context.currentEventLoop.makePromise(of: Void.self)
 
         self.sendConnect(context: context)
     }

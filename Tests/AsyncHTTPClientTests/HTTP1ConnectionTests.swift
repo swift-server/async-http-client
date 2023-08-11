@@ -96,8 +96,7 @@ class HTTP1ConnectionTests: XCTestCase {
         defer { XCTAssertNoThrow(try server.stop()) }
 
         let logger = Logger(label: "test")
-        let delegate = MockHTTP1ConnectionDelegate()
-        delegate.closePromise = clientEL.makePromise(of: Void.self)
+        let delegate = MockHTTP1ConnectionDelegate(closePromise: clientEL.makePromise(of: Void.self))
 
         let connection = try! ClientBootstrap(group: clientEL)
             .connect(to: .init(ipAddress: "127.0.0.1", port: server.serverPort))
@@ -729,10 +728,15 @@ class HTTP1ConnectionTests: XCTestCase {
     }
 }
 
-class MockHTTP1ConnectionDelegate: HTTP1ConnectionDelegate {
-    var releasePromise: EventLoopPromise<Void>?
-    var closePromise: EventLoopPromise<Void>?
-
+struct MockHTTP1ConnectionDelegate: HTTP1ConnectionDelegate {
+    let releasePromise: EventLoopPromise<Void>?
+    let closePromise: EventLoopPromise<Void>?
+    
+    init(releasePromise: EventLoopPromise<Void>? = nil, closePromise: EventLoopPromise<Void>? = nil) {
+        self.releasePromise = releasePromise
+        self.closePromise = closePromise
+    }
+    
     func http1ConnectionReleased(_: HTTP1Connection) {
         self.releasePromise?.succeed(())
     }
@@ -804,31 +808,31 @@ class AfterRequestCloseConnectionChannelHandler: ChannelInboundHandler {
     }
 }
 
-class MockConnectionDelegate: HTTP1ConnectionDelegate {
-    private var lock = NIOLock()
-
-    private var _hitConnectionReleased = 0
-    private var _hitConnectionClosed = 0
+struct MockConnectionDelegate: HTTP1ConnectionDelegate {
+    private struct State {
+        var hitConnectionReleased = 0
+        var hitConnectionClosed = 0
+    }
+    
+    private let state = NIOLockedValueBox(State())
 
     var hitConnectionReleased: Int {
-        self.lock.withLock { self._hitConnectionReleased }
+        self.state.withLockedValue { $0.hitConnectionReleased }
     }
 
     var hitConnectionClosed: Int {
-        self.lock.withLock { self._hitConnectionClosed }
+        self.state.withLockedValue { $0.hitConnectionClosed }
     }
 
-    init() {}
-
     func http1ConnectionReleased(_: HTTP1Connection) {
-        self.lock.withLock {
-            self._hitConnectionReleased += 1
+        self.state.withLockedValue {
+            $0.hitConnectionReleased += 1
         }
     }
 
     func http1ConnectionClosed(_: HTTP1Connection) {
-        self.lock.withLock {
-            self._hitConnectionClosed += 1
+        self.state.withLockedValue {
+            $0.hitConnectionClosed += 1
         }
     }
 }

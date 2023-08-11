@@ -18,7 +18,7 @@ import NIOCore
 import NIOHTTP1
 import NIOSSL
 
-final class RequestBag<Delegate: HTTPClientResponseDelegate> {
+final class RequestBag<Delegate: HTTPClientResponseDelegate>: @unchecked Sendable {
     /// Defends against the call stack getting too large when consuming body parts.
     ///
     /// If the response body comes in lots of tiny chunks, we'll deliver those tiny chunks to users
@@ -157,8 +157,9 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
         if self.eventLoop.inEventLoop {
             return self.writeNextRequestPart0(part)
         } else {
+            let sendableSelf = UnsafeTransfer(self)
             return self.eventLoop.flatSubmit {
-                self.writeNextRequestPart0(part)
+                sendableSelf.wrappedValue.writeNextRequestPart0(part)
             }
         }
     }

@@ -25,9 +25,11 @@ final class SSLContextCache {
 }
 
 extension SSLContextCache {
-    func sslContext(tlsConfiguration: TLSConfiguration,
-                    eventLoop: EventLoop,
-                    logger: Logger) -> EventLoopFuture<NIOSSLContext> {
+    func sslContext(
+        tlsConfiguration: TLSConfiguration,
+        eventLoop: EventLoop,
+        logger: Logger
+    ) -> EventLoopFuture<NIOSSLContext> {
         let eqTLSConfiguration = BestEffortHashableTLSConfiguration(wrapping: tlsConfiguration)
         let sslContext = self.lock.withLock {
             self.sslContextCache.find(key: eqTLSConfiguration)

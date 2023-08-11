@@ -150,7 +150,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         self.request = req
 
         self.logger.debug("Request was scheduled on connection")
-        req.willExecuteRequest(self)
+        req.willExecuteRequest(HTTP1ClientChannelHandler.Executor(self))
 
         let action = self.state.runNewRequest(
             head: req.requestHead,
@@ -436,43 +436,53 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 @available(*, unavailable)
 extension HTTP1ClientChannelHandler: Sendable {}
 
-extension HTTP1ClientChannelHandler: HTTPRequestExecutor {
-    func writeRequestBodyPart(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
-        if self.eventLoop.wrapped.inEventLoop {
-            self.writeRequestBodyPart0(data, request: request, promise: promise)
-        } else {
-            self.eventLoop.execute {
-                self.writeRequestBodyPart0(data, request: request, promise: promise)
+extension HTTP1ClientChannelHandler {
+    struct Executor: HTTPRequestExecutor, @unchecked Sendable {
+        private let handler: HTTP1ClientChannelHandler
+        private let eventLoop: EventLoop
+        
+        init(_ handler: HTTP1ClientChannelHandler) {
+            self.eventLoop = handler.eventLoop.wrapped
+            self.handler = handler
+        }
+        
+        func writeRequestBodyPart(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
+            if self.eventLoop.inEventLoop {
+                self.handler.writeRequestBodyPart0(data, request: request, promise: promise)
+            } else {
+                self.eventLoop.execute {
+                    self.handler.writeRequestBodyPart0(data, request: request, promise: promise)
+                }
             }
         }
-    }
-
-    func finishRequestBodyStream(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
-        if self.eventLoop.wrapped.inEventLoop {
-            self.finishRequestBodyStream0(request, promise: promise)
-        } else {
-            self.eventLoop.execute {
-                self.finishRequestBodyStream0(request, promise: promise)
+        
+        func finishRequestBodyStream(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
+            if self.eventLoop.inEventLoop {
+                self.handler.finishRequestBodyStream0(request, promise: promise)
+            } else {
+                self.eventLoop.execute {
+                    self.handler.finishRequestBodyStream0(request, promise: promise)
+                }
             }
         }
-    }
-
-    func demandResponseBodyStream(_ request: HTTPExecutableRequest) {
-        if self.eventLoop.wrapped.inEventLoop {
-            self.demandResponseBodyStream0(request)
-        } else {
-            self.eventLoop.execute {
-                self.demandResponseBodyStream0(request)
+        
+        func demandResponseBodyStream(_ request: HTTPExecutableRequest) {
+            if self.eventLoop.inEventLoop {
+                self.handler.demandResponseBodyStream0(request)
+            } else {
+                self.eventLoop.execute {
+                    self.handler.demandResponseBodyStream0(request)
+                }
             }
         }
-    }
-
-    func cancelRequest(_ request: HTTPExecutableRequest) {
-        if self.eventLoop.wrapped.inEventLoop {
-            self.cancelRequest0(request)
-        } else {
-            self.eventLoop.execute {
-                self.cancelRequest0(request)
+        
+        func cancelRequest(_ request: HTTPExecutableRequest) {
+            if self.eventLoop.inEventLoop {
+                self.handler.cancelRequest0(request)
+            } else {
+                self.eventLoop.execute {
+                    self.handler.cancelRequest0(request)
+                }
             }
         }
     }

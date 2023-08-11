@@ -69,8 +69,9 @@ final class HTTP1Connection {
         if self.channel.eventLoop.inEventLoop {
             self.execute0(request: request)
         } else {
+            let sendableSelf = UnsafeTransfer(self)
             self.channel.eventLoop.execute {
-                self.execute0(request: request)
+                sendableSelf.wrappedValue.execute0(request: request)
             }
         }
     }

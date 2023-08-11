@@ -678,8 +678,9 @@ public class HTTPClient {
             )
 
             if let deadline = deadline {
+                let sendableRequestBag = UnsafeTransfer(requestBag)
                 let deadlineSchedule = taskEL.scheduleTask(deadline: deadline) {
-                    requestBag.deadlineExceeded()
+                    sendableRequestBag.wrappedValue.deadlineExceeded()
                 }
 
                 task.promise.futureResult.whenComplete { _ in

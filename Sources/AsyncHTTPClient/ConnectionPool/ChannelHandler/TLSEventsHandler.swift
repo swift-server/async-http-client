@@ -29,8 +29,8 @@ final class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
         case failed(Error)
     }
 
-    private var tlsEstablishedPromise: EventLoopPromise<String?>?
-    var tlsEstablishedFuture: EventLoopFuture<String?>? {
+    private var tlsEstablishedPromise: CurrentEventLoopPromise<String?>?
+    var tlsEstablishedFuture: CurrentEventLoopFuture<String?>? {
         return self.tlsEstablishedPromise?.futureResult
     }
 
@@ -42,7 +42,7 @@ final class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
     }
 
     func handlerAdded(context: ChannelHandlerContext) {
-        self.tlsEstablishedPromise = context.eventLoop.makePromise(of: String?.self)
+        self.tlsEstablishedPromise = context.currentEventLoop.makePromise(of: String?.self)
 
         if context.channel.isActive {
             self.connectionStarted(context: context)

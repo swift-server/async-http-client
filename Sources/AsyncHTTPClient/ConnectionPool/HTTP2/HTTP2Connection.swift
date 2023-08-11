@@ -141,8 +141,9 @@ final class HTTP2Connection {
         if self.channel.eventLoop.inEventLoop {
             self.executeRequest0(request)
         } else {
+            let sendableSelf = UnsafeTransfer(self)
             self.channel.eventLoop.execute {
-                self.executeRequest0(request)
+                sendableSelf.wrappedValue.executeRequest0(request)
             }
         }
     }
@@ -153,8 +154,9 @@ final class HTTP2Connection {
         if self.channel.eventLoop.inEventLoop {
             self.shutdown0()
         } else {
+            let sendableSelf = UnsafeTransfer(self)
             self.channel.eventLoop.execute {
-                self.shutdown0()
+                sendableSelf.wrappedValue.shutdown0()
             }
         }
     }

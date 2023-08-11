@@ -17,7 +17,9 @@ import Logging
 import NIOCore
 import NIOHTTP1
 import XCTest
+import NIOConcurrencyHelpers
 
+@dynamicMemberLookup
 final class MockHTTPExecutableRequest: HTTPExecutableRequest {
     enum Event {
         /// ``Event`` without associated values
@@ -55,30 +57,63 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
         }
     }
 
-    var logger: Logging.Logger = Logger(label: "request")
-    var requestHead: NIOHTTP1.HTTPRequestHead
-    var requestFramingMetadata: RequestFramingMetadata
-    var requestOptions: RequestOptions = .forTests()
+    let logger: Logging.Logger = Logger(label: "request")
+    
 
-    /// if true and ``HTTPExecutableRequest`` method is called without setting a corresponding callback on `self` e.g.
-    /// If ``HTTPExecutableRequest\.willExecuteRequest(_:)`` is called but ``willExecuteRequestCallback`` is not set,
-    /// ``XCTestFail(_:)`` will be called to fail the current test.
-    var raiseErrorIfUnimplementedMethodIsCalled: Bool = true
-    private var file: StaticString
-    private var line: UInt
-
-    var willExecuteRequestCallback: ((HTTPRequestExecutor) -> Void)?
-    var requestHeadSentCallback: (() -> Void)?
-    var resumeRequestBodyStreamCallback: (() -> Void)?
-    var pauseRequestBodyStreamCallback: (() -> Void)?
-    var receiveResponseHeadCallback: ((HTTPResponseHead) -> Void)?
-    var receiveResponseBodyPartsCallback: ((CircularBuffer<ByteBuffer>) -> Void)?
-    var succeedRequestCallback: ((CircularBuffer<ByteBuffer>?) -> Void)?
-    var failCallback: ((Error) -> Void)?
-
-    /// captures all ``HTTPExecutableRequest`` method calls in the order of occurrence, including arguments.
-    /// If you are not interested in the arguments you can use `events.map(\.kind)` to get all events without arguments.
-    private(set) var events: [Event] = []
+    private let file: StaticString
+    private let line: UInt
+    
+    struct State: Sendable {
+        var requestHead: NIOHTTP1.HTTPRequestHead
+        var requestFramingMetadata: RequestFramingMetadata
+        var requestOptions: RequestOptions = .forTests()
+        /// if true and ``HTTPExecutableRequest`` method is called without setting a corresponding callback on `self` e.g.
+        /// If ``HTTPExecutableRequest\.willExecuteRequest(_:)`` is called but ``willExecuteRequestCallback`` is not set,
+        /// ``XCTestFail(_:)`` will be called to fail the current test.
+        var raiseErrorIfUnimplementedMethodIsCalled: Bool = true
+        var willExecuteRequestCallback: (@Sendable (HTTPRequestExecutor) -> Void)?
+        var requestHeadSentCallback: (@Sendable () -> Void)?
+        var resumeRequestBodyStreamCallback: (@Sendable () -> Void)?
+        var pauseRequestBodyStreamCallback: (@Sendable () -> Void)?
+        var receiveResponseHeadCallback: (@Sendable (HTTPResponseHead) -> Void)?
+        var receiveResponseBodyPartsCallback: (@Sendable (CircularBuffer<ByteBuffer>) -> Void)?
+        var succeedRequestCallback: (@Sendable (CircularBuffer<ByteBuffer>?) -> Void)?
+        var failCallback: (@Sendable (Error) -> Void)?
+        
+        /// captures all ``HTTPExecutableRequest`` method calls in the order of occurrence, including arguments.
+        /// If you are not interested in the arguments you can use `events.map(\.kind)` to get all events without arguments.
+        fileprivate(set) var events: [Event] = []
+    }
+    
+    private let state: NIOLockedValueBox<State>
+    
+    var requestHead: NIOHTTP1.HTTPRequestHead {
+        get { self.state.withLockedValue { $0.requestHead } }
+        set { self.state.withLockedValue { $0.requestHead = newValue } }
+    }
+    
+    var requestFramingMetadata: AsyncHTTPClient.RequestFramingMetadata {
+        get { self.state.withLockedValue { $0.requestFramingMetadata } }
+        set { self.state.withLockedValue { $0.requestFramingMetadata = newValue } }
+    }
+    
+    var requestOptions: AsyncHTTPClient.RequestOptions {
+        get { self.state.withLockedValue { $0.requestOptions } }
+        set { self.state.withLockedValue { $0.requestOptions = newValue } }
+    }
+    
+    subscript<Property: Sendable>(dynamicMember keyPath: KeyPath<State, Property>) -> Property {
+        state.withLockedValue { $0[keyPath: keyPath] }
+    }
+    
+    subscript<Property: Sendable>(dynamicMember keyPath: WritableKeyPath<State, Property>) -> Property {
+        get {
+            state.withLockedValue { $0[keyPath: keyPath] }
+        }
+        set {
+            state.withLockedValue { $0[keyPath: keyPath] = newValue }
+        }
+    }
 
     init(
         head: NIOHTTP1.HTTPRequestHead = .init(version: .http1_1, method: .GET, uri: "http://localhost/"),
@@ -86,8 +121,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
         file: StaticString = #file,
         line: UInt = #line
     ) {
-        self.requestHead = head
-        self.requestFramingMetadata = framingMetadata
+        self.state = .init(.init(requestHead: head, requestFramingMetadata: framingMetadata))
         self.file = file
         self.line = line
     }
@@ -99,7 +133,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
 
     func willExecuteRequest(_ executor: HTTPRequestExecutor) {
         self.events.append(.willExecuteRequest(executor))
-        guard let willExecuteRequestCallback = willExecuteRequestCallback else {
+        guard let willExecuteRequestCallback = self.willExecuteRequestCallback else {
             return self.calledUnimplementedMethod(#function)
         }
         willExecuteRequestCallback(executor)
@@ -107,7 +141,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
 
     func requestHeadSent() {
         self.events.append(.requestHeadSent)
-        guard let requestHeadSentCallback = requestHeadSentCallback else {
+        guard let requestHeadSentCallback = self.requestHeadSentCallback else {
             return self.calledUnimplementedMethod(#function)
         }
         requestHeadSentCallback()
@@ -115,7 +149,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
 
     func resumeRequestBodyStream() {
         self.events.append(.resumeRequestBodyStream)
-        guard let resumeRequestBodyStreamCallback = resumeRequestBodyStreamCallback else {
+        guard let resumeRequestBodyStreamCallback = self.resumeRequestBodyStreamCallback else {
             return self.calledUnimplementedMethod(#function)
         }
         resumeRequestBodyStreamCallback()
@@ -123,7 +157,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
 
     func pauseRequestBodyStream() {
         self.events.append(.pauseRequestBodyStream)
-        guard let pauseRequestBodyStreamCallback = pauseRequestBodyStreamCallback else {
+        guard let pauseRequestBodyStreamCallback = self.pauseRequestBodyStreamCallback else {
             return self.calledUnimplementedMethod(#function)
         }
         pauseRequestBodyStreamCallback()
@@ -131,7 +165,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
 
     func receiveResponseHead(_ head: HTTPResponseHead) {
         self.events.append(.receiveResponseHead(head))
-        guard let receiveResponseHeadCallback = receiveResponseHeadCallback else {
+        guard let receiveResponseHeadCallback = self.receiveResponseHeadCallback else {
             return self.calledUnimplementedMethod(#function)
         }
         receiveResponseHeadCallback(head)
@@ -139,7 +173,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
 
     func receiveResponseBodyParts(_ buffer: CircularBuffer<NIOCore.ByteBuffer>) {
         self.events.append(.receiveResponseBodyParts(buffer))
-        guard let receiveResponseBodyPartsCallback = receiveResponseBodyPartsCallback else {
+        guard let receiveResponseBodyPartsCallback = self.receiveResponseBodyPartsCallback else {
             return self.calledUnimplementedMethod(#function)
         }
         receiveResponseBodyPartsCallback(buffer)
@@ -147,7 +181,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
 
     func succeedRequest(_ buffer: CircularBuffer<NIOCore.ByteBuffer>?) {
         self.events.append(.succeedRequest(buffer))
-        guard let succeedRequestCallback = succeedRequestCallback else {
+        guard let succeedRequestCallback = self.succeedRequestCallback else {
             return self.calledUnimplementedMethod(#function)
         }
         succeedRequestCallback(buffer)
@@ -155,7 +189,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
 
     func fail(_ error: Error) {
         self.events.append(.fail(error))
-        guard let failCallback = failCallback else {
+        guard let failCallback = self.failCallback else {
             return self.calledUnimplementedMethod(#function)
         }
         failCallback(error)

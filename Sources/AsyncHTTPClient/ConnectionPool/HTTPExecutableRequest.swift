@@ -132,7 +132,7 @@ import NIOSSL
 ///
 /// Use this handle to cancel the request, while it is waiting for a free connection, to execute the request.
 /// This protocol is only intended to be implemented by the `HTTPConnectionPool`.
-protocol HTTPRequestScheduler {
+protocol HTTPRequestScheduler: Sendable {
     /// Informs the task queuer that a request has been cancelled.
     func cancelRequest(_: HTTPSchedulableRequest)
 }
@@ -176,7 +176,7 @@ protocol HTTPSchedulableRequest: HTTPExecutableRequest {
 /// A handle to the request executor.
 ///
 /// This protocol is implemented by the `HTTP1ClientChannelHandler`.
-protocol HTTPRequestExecutor {
+protocol HTTPRequestExecutor: Sendable {
     /// Writes a body part into the channel pipeline
     ///
     /// This method may be **called on any thread**. The executor needs to ensure thread safety.
@@ -201,7 +201,7 @@ protocol HTTPRequestExecutor {
     func cancelRequest(_ task: HTTPExecutableRequest)
 }
 
-protocol HTTPExecutableRequest: AnyObject {
+protocol HTTPExecutableRequest: AnyObject, Sendable {
     /// The request's logger
     var logger: Logger { get }
 

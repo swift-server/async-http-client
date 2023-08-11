@@ -2,7 +2,7 @@
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2022 Apple Inc. and the AsyncHTTPClient project authors
+// Copyright (c) 2022-2023 Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -11,6 +11,25 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //===----------------------------------------------------------------------===//
+
+/// ``UnsafeTransfer`` can be used to make non-`Sendable` values `Sendable`.
+/// As the name implies, the usage of this is unsafe because it disables the sendable checking of the compiler.
+/// It can be used similar to `@unsafe Sendable` but for values instead of types.
+@usableFromInline
+struct UnsafeTransfer<Wrapped> {
+    @usableFromInline
+    var wrappedValue: Wrapped
+    
+    @inlinable
+    init(_ wrappedValue: Wrapped) {
+        self.wrappedValue = wrappedValue
+    }
+}
+
+extension UnsafeTransfer: @unchecked Sendable {}
+
+extension UnsafeTransfer: Equatable where Wrapped: Equatable {}
+extension UnsafeTransfer: Hashable where Wrapped: Hashable {}
 
 /// ``UnsafeMutableTransferBox`` can be used to make non-`Sendable` values `Sendable` and mutable.
 /// It can be used to capture local mutable values in a `@Sendable` closure and mutate them from within the closure.

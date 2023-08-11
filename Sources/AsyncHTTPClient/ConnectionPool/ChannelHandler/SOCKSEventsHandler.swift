@@ -29,8 +29,8 @@ final class SOCKSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
         case failed(Error)
     }
 
-    private var socksEstablishedPromise: EventLoopPromise<Void>?
-    var socksEstablishedFuture: EventLoopFuture<Void>? {
+    private var socksEstablishedPromise: CurrentEventLoopPromise<Void>?
+    var socksEstablishedFuture: CurrentEventLoopFuture<Void>? {
         return self.socksEstablishedPromise?.futureResult
     }
 
@@ -42,7 +42,7 @@ final class SOCKSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
     }
 
     func handlerAdded(context: ChannelHandlerContext) {
-        self.socksEstablishedPromise = context.eventLoop.makePromise(of: Void.self)
+        self.socksEstablishedPromise = context.currentEventLoop.makePromise(of: Void.self)
 
         if context.channel.isActive {
             self.connectionStarted(context: context)
