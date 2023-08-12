@@ -44,8 +44,7 @@ let globalRequestID = ManagedAtomic(0)
 /// Example:
 ///
 /// ```swift
-///     let client = HTTPClient(eventLoopGroupProvider: .singleton)
-///     client.get(url: "https://swift.org", deadline: .now() + .seconds(1)).whenComplete { result in
+///     HTTPClient.shared.get(url: "https://swift.org", deadline: .now() + .seconds(1)).whenComplete { result in
 ///         switch result {
 ///         case .failure(let error):
 ///             // process error
@@ -57,12 +56,6 @@ let globalRequestID = ManagedAtomic(0)
 ///             }
 ///         }
 ///     }
-/// ```
-///
-/// It is important to close the client instance, for example in a defer statement, after use to cleanly shutdown the underlying NIO `EventLoopGroup`:
-///
-/// ```swift
-///     try client.syncShutdown()
 /// ```
 public class HTTPClient {
     /// The `EventLoopGroup` in use by this ``HTTPClient``.
@@ -78,6 +71,7 @@ public class HTTPClient {
 
     private var state: State
     private let stateLock = NIOLock()
+    private let canBeShutDown: Bool
 
     static let loggingDisabled = Logger(label: "AHC-do-not-log", factory: { _ in SwiftLogNoOpLogHandler() })
 
@@ -133,9 +127,20 @@ public class HTTPClient {
     ///     - eventLoopGroup: The `EventLoopGroup` that the ``HTTPClient`` will use.
     ///     - configuration: Client configuration.
     ///     - backgroundActivityLogger: The `Logger` that will be used to log background any activity that's not associated with a request.
-    public required init(eventLoopGroup: any EventLoopGroup = HTTPClient.defaultEventLoopGroup,
-                         configuration: Configuration = Configuration(),
-                         backgroundActivityLogger: Logger) {
+    public convenience init(eventLoopGroup: any EventLoopGroup = HTTPClient.defaultEventLoopGroup,
+                            configuration: Configuration = Configuration(),
+                            backgroundActivityLogger: Logger) {
+        self.init(eventLoopGroup: eventLoopGroup,
+                  configuration: configuration,
+                  backgroundActivityLogger: backgroundActivityLogger,
+                  canBeShutDown: true)
+    }
+
+    internal required init(eventLoopGroup: EventLoopGroup,
+                           configuration: Configuration = Configuration(),
+                           backgroundActivityLogger: Logger,
+                           canBeShutDown: Bool) {
+        self.canBeShutDown = canBeShutDown
         self.eventLoopGroup = eventLoopGroup
         self.configuration = configuration
         self.poolManager = HTTPConnectionPool.Manager(
@@ -238,6 +243,12 @@ public class HTTPClient {
     }
 
     private func shutdown(requiresCleanClose: Bool, queue: DispatchQueue, _ callback: @escaping ShutdownCallback) {
+        guard self.canBeShutDown else {
+            queue.async {
+                callback(HTTPClientError.shutdownUnsupported)
+            }
+            return
+        }
         do {
             try self.stateLock.withLock {
                 guard case .upAndRunning = self.state else {
@@ -1081,6 +1092,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case getConnectionFromPoolTimeout
         case deadlineExceeded
         case httpEndReceivedAfterHeadWith1xx
+        case shutdownUnsupported
     }
 
     private var code: Code
@@ -1164,6 +1176,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
             return "Deadline exceeded"
         case .httpEndReceivedAfterHeadWith1xx:
             return "HTTP end received after head with 1xx"
+        case .shutdownUnsupported:
+            return "The global singleton HTTP client cannot be shut down"
         }
     }
 
@@ -1228,6 +1242,11 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     /// The remote server only offered an unsupported application protocol
     public static func serverOfferedUnsupportedApplicationProtocol(_ proto: String) -> HTTPClientError {
         return HTTPClientError(code: .serverOfferedUnsupportedApplicationProtocol(proto))
+    }
+
+    /// The globally shared singleton ``HTTPClient`` cannot be shut down.
+    public static var shutdownUnsupported: HTTPClientError {
+        return HTTPClientError(code: .shutdownUnsupported)
     }
 
     /// The request deadline was exceeded. The request was cancelled because of this.
