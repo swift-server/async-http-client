@@ -3525,4 +3525,15 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let response = try client.get(url: self.defaultHTTPBinURLPrefix + "get").wait()
         XCTAssertEqual(.ok, response.status)
     }
+
+    func testSingletonClientWorks() throws {
+        let response = try HTTPClient.shared.get(url: self.defaultHTTPBinURLPrefix + "get").wait()
+        XCTAssertEqual(.ok, response.status)
+    }
+
+    func testSingletonClientCannotBeShutDown() {
+        XCTAssertThrowsError(try HTTPClient.shared.shutdown().wait()) { error in
+            XCTAssertEqual(.shutdownUnsupported, error as? HTTPClientError)
+        }
+    }
 }
