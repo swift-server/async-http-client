@@ -27,14 +27,10 @@ and  `AsyncHTTPClient` dependency to your target:
 
 The code snippet below illustrates how to make a simple GET request to a remote server.
 
-Please note that the example will spawn a new `EventLoopGroup` which will _create fresh threads_ which is a very costly operation. In a real-world application that uses [SwiftNIO](https://github.com/apple/swift-nio) for other parts of your application (for example a web server), please prefer `eventLoopGroupProvider: .shared(myExistingEventLoopGroup)` to share the `EventLoopGroup` used by AsyncHTTPClient with other parts of your application.
-
-If your application does not use SwiftNIO yet, it is acceptable to use `eventLoopGroupProvider: .createNew` but please make sure to share the returned `HTTPClient` instance throughout your whole application. Do not create a large number of `HTTPClient` instances with `eventLoopGroupProvider: .createNew`, this is very wasteful and might exhaust the resources of your program.
-
 ```swift
 import AsyncHTTPClient
 
-let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
 
 /// MARK: - Using Swift Concurrency
 let request = HTTPClientRequest(url: "https://apple.com/")
@@ -78,7 +74,7 @@ The default HTTP Method is `GET`. In case you need to have more control over the
 ```swift
 import AsyncHTTPClient
 
-let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
 do {
     var request = HTTPClientRequest(url: "https://apple.com/")
     request.method = .POST
@@ -103,9 +99,10 @@ try await httpClient.shutdown()
 ```swift
 import AsyncHTTPClient
 
-let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
 defer {
-    try? httpClient.syncShutdown()
+    // Shutdown is guaranteed to work if it's done precisely once (which is the case here).
+    try! httpClient.syncShutdown()
 }
 
 var request = try HTTPClient.Request(url: "https://apple.com/", method: .POST)
@@ -129,7 +126,7 @@ httpClient.execute(request: request).whenComplete { result in
 ### Redirects following
 Enable follow-redirects behavior using the client configuration:
 ```swift
-let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+let httpClient = HTTPClient(eventLoopGroupProvider: .singleton,
                             configuration: HTTPClient.Configuration(followRedirects: true))
 ```
 
@@ -137,7 +134,7 @@ let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
 Timeouts (connect and read) can also be set using the client configuration:
 ```swift
 let timeout = HTTPClient.Configuration.Timeout(connect: .seconds(1), read: .seconds(1))
-let httpClient = HTTPClient(eventLoopGroupProvider: .createNew,
+let httpClient = HTTPClient(eventLoopGroupProvider: .singleton,
                             configuration: HTTPClient.Configuration(timeout: timeout))
 ```
 or on a per-request basis:
@@ -151,7 +148,7 @@ The following example demonstrates how to count the number of bytes in a streami
 
 #### Using Swift Concurrency
 ```swift
-let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
 do {
     let request = HTTPClientRequest(url: "https://apple.com/")
     let response = try await httpClient.execute(request, timeout: .seconds(30))
@@ -251,7 +248,7 @@ asynchronously, while reporting the download progress at the same time, like in 
 example:
 
 ```swift
-let client = HTTPClient(eventLoopGroupProvider: .createNew)
+let client = HTTPClient(eventLoopGroupProvider: .singleton)
 let request = try HTTPClient.Request(
     url: "https://swift.org/builds/development/ubuntu1804/latest-build.yml"
 )
@@ -275,7 +272,7 @@ client.execute(request: request, delegate: delegate).futureResult
 ### Unix Domain Socket Paths
 Connecting to servers bound to socket paths is easy:
 ```swift
-let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
 httpClient.execute(
     .GET,
     socketPath: "/tmp/myServer.socket",
@@ -285,7 +282,7 @@ httpClient.execute(
 
 Connecting over TLS to a unix domain socket path is possible as well:
 ```swift
-let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
 httpClient.execute(
     .POST,
     secureSocketPath: "/tmp/myServer.socket",
@@ -312,7 +309,7 @@ The exclusive use of HTTP/1 is possible by setting `httpVersion` to `.http1Only`
 var configuration = HTTPClient.Configuration()
 configuration.httpVersion = .http1Only
 let client = HTTPClient(
-    eventLoopGroupProvider: .createNew,
+    eventLoopGroupProvider: .singleton,
     configuration: configuration
 )
 ```

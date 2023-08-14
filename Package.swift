@@ -21,11 +21,11 @@ let package = Package(
         .library(name: "AsyncHTTPClient", targets: ["AsyncHTTPClient"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.50.0"),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.58.0"),
         .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.22.0"),
         .package(url: "https://github.com/apple/swift-nio-http2.git", from: "1.19.0"),
         .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.13.0"),
-        .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.13.0"),
+        .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.19.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.4.4"),
         .package(url: "https://github.com/apple/swift-atomics.git", from: "1.0.2"),
         .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.0.0"),
