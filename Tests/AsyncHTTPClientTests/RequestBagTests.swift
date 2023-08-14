@@ -970,8 +970,9 @@ final class MockTaskQueuer: HTTPRequestScheduler {
         self.onCancelRequest = onCancelRequest
     }
 
-    func cancelRequest(_: HTTPSchedulableRequest) {
+    func cancelRequest(_ request: HTTPSchedulableRequest) {
         self.hitCancelCount += 1
+        self.onCancelRequest?(request)
     }
 }
 
