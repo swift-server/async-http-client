@@ -38,7 +38,7 @@ class HTTPClientNIOTSTests: XCTestCase {
     }
 
     func testCorrectEventLoopGroup() {
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown())
         }
