@@ -43,19 +43,23 @@ final class TransactionTests: XCTestCase {
                 preferredEventLoop: embeddedEventLoop
             )
 
-            let queuer = MockTaskQueuer()
+            let scheduledRequestCanceled = self.expectation(description: "scheduled request canceled")
+            let queuer = MockTaskQueuer { _ in
+                scheduledRequestCanceled.fulfill()
+            }
             transaction.requestWasQueued(queuer)
 
+            XCTAssertEqual(queuer.hitCancelCount, 0)
             Task.detached {
                 try await Task.sleep(nanoseconds: 5 * 1000 * 1000)
                 transaction.cancel()
             }
 
-            XCTAssertEqual(queuer.hitCancelCount, 0)
             await XCTAssertThrowsError(try await responseTask.value) { error in
                 XCTAssertTrue(error is CancellationError, "unexpected error \(error)")
             }
-            XCTAssertEqual(queuer.hitCancelCount, 1)
+
+            await self.fulfillment(of: [scheduledRequestCanceled])
         }
     }
 
