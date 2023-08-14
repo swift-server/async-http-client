@@ -25,7 +25,7 @@ import XCTest
 
 class HTTP2ClientTests: XCTestCase {
     func makeDefaultHTTPClient(
-        eventLoopGroupProvider: HTTPClient.EventLoopGroupProvider = .createNew
+        eventLoopGroupProvider: HTTPClient.EventLoopGroupProvider = .singleton
     ) -> HTTPClient {
         var config = HTTPClient.Configuration()
         config.tlsConfiguration = .clientDefault
@@ -40,7 +40,7 @@ class HTTP2ClientTests: XCTestCase {
 
     func makeClientWithActiveHTTP2Connection<RequestHandler>(
         to bin: HTTPBin<RequestHandler>,
-        eventLoopGroupProvider: HTTPClient.EventLoopGroupProvider = .createNew
+        eventLoopGroupProvider: HTTPClient.EventLoopGroupProvider = .singleton
     ) -> HTTPClient {
         let client = self.makeDefaultHTTPClient(eventLoopGroupProvider: eventLoopGroupProvider)
         var response: HTTPClient.Response?
@@ -301,7 +301,7 @@ class HTTP2ClientTests: XCTestCase {
         config.httpVersion = .automatic
         config.timeout.read = .milliseconds(100)
         let client = HTTPClient(
-            eventLoopGroupProvider: .createNew,
+            eventLoopGroupProvider: .singleton,
             configuration: config,
             backgroundActivityLogger: Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
         )
@@ -322,7 +322,8 @@ class HTTP2ClientTests: XCTestCase {
         config.tlsConfiguration = tlsConfig
         config.httpVersion = .automatic
         let client = HTTPClient(
-            eventLoopGroupProvider: .createNew,
+            // TODO: Test fails if the provided ELG is a multi-threaded NIOTSEventLoopGroup (probably racy)
+            eventLoopGroupProvider: .shared(bin.group),
             configuration: config,
             backgroundActivityLogger: Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
         )
