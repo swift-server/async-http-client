@@ -60,7 +60,7 @@ class NWWaitingHandlerTests: XCTestCase {
         let embedded = EmbeddedChannel(handlers: [waitingEventHandler])
         embedded.pipeline.fireUserInboundEventTriggered(NIOTSNetworkEvents.BetterPathAvailable())
 
-        XCTAssertFalse(requester.waitingForConnectivityCalled, "Should not call .waitingForConnectitivy on unrelated events")
+        XCTAssertFalse(requester.waitingForConnectivityCalled, "Should not call .waitingForConnectivity on unrelated events")
     }
 
     func testWaitingHandlerPassesTheEventDownTheContext() {
@@ -71,7 +71,7 @@ class NWWaitingHandlerTests: XCTestCase {
 
         embedded.pipeline.fireErrorCaught(NIOSSLError.handshakeFailed(BoringSSLError.wantConnect))
         XCTAssertThrowsError(try XCTUnwrap(tlsEventsHandler.tlsEstablishedFuture).wait()) {
-            XCTAssertEqual($0 as? NIOSSLError, .handshakeFailed(BoringSSLError.wantConnect))
+            XCTAssertEqualTypeAndValue($0, NIOSSLError.handshakeFailed(BoringSSLError.wantConnect))
         }
     }
 }
