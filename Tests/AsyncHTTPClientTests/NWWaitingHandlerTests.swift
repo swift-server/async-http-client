@@ -16,28 +16,24 @@
 @testable import AsyncHTTPClient
 import Network
 import NIOCore
-import NIOTransportServices
 import NIOEmbedded
 import NIOSSL
+import NIOTransportServices
 import XCTest
 
 @available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *)
 class NWWaitingHandlerTests: XCTestCase {
-
     class MockRequester: HTTPConnectionRequester {
         var waitingForConnectivityCalled = false
-        var connectionID: AsyncHTTPClient.HTTPConnectionPool.Connection.ID? = nil
-        var transientError: NWError? = nil
+        var connectionID: AsyncHTTPClient.HTTPConnectionPool.Connection.ID?
+        var transientError: NWError?
 
-        func http1ConnectionCreated(_: AsyncHTTPClient.HTTP1Connection) {
-        }
-        
-        func http2ConnectionCreated(_: AsyncHTTPClient.HTTP2Connection, maximumStreams: Int) {
-        }
-        
-        func failedToCreateHTTPConnection(_: AsyncHTTPClient.HTTPConnectionPool.Connection.ID, error: Error) {
-        }
-        
+        func http1ConnectionCreated(_: AsyncHTTPClient.HTTP1Connection) {}
+
+        func http2ConnectionCreated(_: AsyncHTTPClient.HTTP2Connection, maximumStreams: Int) {}
+
+        func failedToCreateHTTPConnection(_: AsyncHTTPClient.HTTPConnectionPool.Connection.ID, error: Error) {}
+
         func waitingForConnectivity(_ connectionID: AsyncHTTPClient.HTTPConnectionPool.Connection.ID, error: Error) {
             self.waitingForConnectivityCalled = true
             self.connectionID = connectionID
@@ -50,9 +46,9 @@ class NWWaitingHandlerTests: XCTestCase {
         let connectionID: AsyncHTTPClient.HTTPConnectionPool.Connection.ID = 1
         let waitingEventHandler = NWWaitingHandler(requester: requester, connectionID: connectionID)
         let embedded = EmbeddedChannel(handlers: [waitingEventHandler])
-        
+
         embedded.pipeline.fireUserInboundEventTriggered(NIOTSNetworkEvents.WaitingForConnectivity(transientError: .dns(1)))
-        
+
         XCTAssertTrue(requester.waitingForConnectivityCalled, "Expected the handler to invoke .waitingForConnectivity on the requester")
         XCTAssertEqual(requester.connectionID, connectionID, "Expected the handler to pass connectionID to requester")
         XCTAssertEqual(requester.transientError, NWError.dns(1))
@@ -81,4 +77,3 @@ class NWWaitingHandlerTests: XCTestCase {
 }
 
 #endif
-
