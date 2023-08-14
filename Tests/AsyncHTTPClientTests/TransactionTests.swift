@@ -58,7 +58,7 @@ final class TransactionTests: XCTestCase {
             await XCTAssertThrowsError(try await responseTask.value) { error in
                 XCTAssertTrue(error is CancellationError, "unexpected error \(error)")
             }
-            
+
             // self.fulfillment(of:) is not available on Linux
             _ = {
                 self.wait(for: [scheduledRequestCanceled], timeout: 1)
