@@ -20,7 +20,7 @@ import NIOSSL
 import XCTest
 
 private func makeDefaultHTTPClient(
-    eventLoopGroupProvider: HTTPClient.EventLoopGroupProvider = .createNew
+    eventLoopGroupProvider: HTTPClient.EventLoopGroupProvider = .singleton
 ) -> HTTPClient {
     var config = HTTPClient.Configuration()
     config.tlsConfiguration = .clientDefault
@@ -504,7 +504,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let config = HTTPClient.Configuration()
                 .enableFastFailureModeForTesting()
 
-            let localClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: config)
+            let localClient = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
             defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
             let request = HTTPClientRequest(url: "https://localhost:\(port)")
             await XCTAssertThrowsError(try await localClient.execute(request, deadline: .now() + .seconds(2))) { error in
@@ -570,7 +570,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             // this is the actual configuration under test
             config.dnsOverride = ["example.com": "localhost"]
 
-            let localClient = HTTPClient(eventLoopGroupProvider: .createNew, configuration: config)
+            let localClient = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
             defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
             let request = HTTPClientRequest(url: "https://example.com:\(bin.port)/echohostheader")
             let response = await XCTAssertNoThrowWithResult(try await localClient.execute(request, deadline: .now() + .seconds(2)))

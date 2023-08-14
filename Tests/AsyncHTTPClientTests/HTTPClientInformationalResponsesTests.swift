@@ -37,7 +37,7 @@ final class HTTPClientReproTests: XCTestCase {
             }
         }
 
-        let client = HTTPClient(eventLoopGroupProvider: .createNew)
+        let client = HTTPClient(eventLoopGroupProvider: .singleton)
         defer { XCTAssertNoThrow(try client.syncShutdown()) }
 
         let httpBin = HTTPBin(.http1_1(ssl: false, compress: false)) { _ in
@@ -91,7 +91,7 @@ final class HTTPClientReproTests: XCTestCase {
             }
         }
 
-        let client = HTTPClient(eventLoopGroupProvider: .createNew)
+        let client = HTTPClient(eventLoopGroupProvider: .singleton)
         defer { XCTAssertNoThrow(try client.syncShutdown()) }
 
         let httpBin = HTTPBin(.http1_1(ssl: false, compress: false)) { _ in
