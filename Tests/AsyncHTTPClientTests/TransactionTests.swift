@@ -27,6 +27,9 @@ typealias PreparedRequest = HTTPClientRequest.Prepared
 final class TransactionTests: XCTestCase {
     func testCancelAsyncRequest() {
         guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
+        // creating the `XCTestExpectation` off the main thread crashes on Linux with Swift 5.6
+        // therefore we create it here as a workaround which works fine
+        let scheduledRequestCanceled = self.expectation(description: "scheduled request canceled")
         XCTAsyncTest {
             let embeddedEventLoop = EmbeddedEventLoop()
             defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
@@ -43,7 +46,6 @@ final class TransactionTests: XCTestCase {
                 preferredEventLoop: embeddedEventLoop
             )
 
-            let scheduledRequestCanceled = self.expectation(description: "scheduled request canceled")
             let queuer = MockTaskQueuer { _ in
                 scheduledRequestCanceled.fulfill()
             }
