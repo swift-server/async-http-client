@@ -15,6 +15,7 @@
 import Algorithms
 import NIOCore
 import NIOHTTP1
+import NIOSSL
 
 @usableFromInline
 let bagOfBytesToByteBufferConversionChunkSize = 1024 * 1024 * 4
@@ -32,6 +33,9 @@ let byteBufferMaxSize = Int(UInt32.max)
 /// A representation of an HTTP request for the Swift Concurrency HTTPClient API.
 ///
 /// This object is similar to ``HTTPClient/Request``, but used for the Swift Concurrency API.
+///
+/// - note: For many ``HTTPClientRequest/body-swift.property`` configurations, this type is _not_ a value type
+///    (https://github.com/swift-server/async-http-client/issues/708).
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 public struct HTTPClientRequest: Sendable {
     /// The request URL, including scheme, hostname, and optionally port.
@@ -46,11 +50,15 @@ public struct HTTPClientRequest: Sendable {
     /// The request body, if any.
     public var body: Body?
 
+    /// Request-specific TLS configuration, defaults to no request-specific TLS configuration.
+    public var tlsConfiguration: TLSConfiguration?
+
     public init(url: String) {
         self.url = url
         self.method = .GET
         self.headers = .init()
         self.body = .none
+        self.tlsConfiguration = nil
     }
 }
 

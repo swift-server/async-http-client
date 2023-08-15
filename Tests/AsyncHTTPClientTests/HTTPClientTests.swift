@@ -3525,4 +3525,49 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let response = try client.get(url: self.defaultHTTPBinURLPrefix + "get").wait()
         XCTAssertEqual(.ok, response.status)
     }
+
+    func testAsyncExecuteWithCustomTLS() async throws {
+        let httpsBin = HTTPBin(.http1_1(ssl: true))
+        defer {
+            XCTAssertNoThrow(try httpsBin.shutdown())
+        }
+
+        // A client with default TLS settings, i.e. it won't accept `httpsBin`'s fake self-signed cert
+        let client = HTTPClient(eventLoopGroup: MultiThreadedEventLoopGroup.singleton)
+        defer {
+            XCTAssertNoThrow(try client.shutdown().wait())
+        }
+
+        var request = HTTPClientRequest(url: "https://localhost:\(httpsBin.port)/get")
+
+        // For now, let's allow bad TLS certs
+        request.tlsConfiguration = TLSConfiguration.clientDefault
+        // ! is safe, assigned above
+        request.tlsConfiguration!.certificateVerification = .none
+
+        let response1 = try await client.execute(request, timeout: /* infinity */ .hours(99))
+        XCTAssertEqual(.ok, response1.status)
+
+        // For the second request, we reset the TLS config
+        request.tlsConfiguration = nil
+        do {
+            let response2 = try await client.execute(request, timeout: /* infinity */ .hours(99))
+            XCTFail("shouldn't succeed, self-signed cert: \(response2)")
+        } catch {
+            switch error as? NIOSSLError {
+            case .some(.handshakeFailed(_)):
+                () // ok
+            default:
+                XCTFail("unexpected error: \(error)")
+            }
+        }
+
+        // And finally we allow it again.
+        request.tlsConfiguration = TLSConfiguration.clientDefault
+        // ! is safe, assigned above
+        request.tlsConfiguration!.certificateVerification = .none
+
+        let response3 = try await client.execute(request, timeout: /* infinity */ .hours(99))
+        XCTAssertEqual(.ok, response3.status)
+    }
 }
