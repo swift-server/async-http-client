@@ -539,7 +539,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         let eventLoopGroup = EmbeddedEventLoopGroup(loops: 1)
         let eventLoop = eventLoopGroup.next() as! EmbeddedEventLoop
         let handler = HTTP1ClientChannelHandler(
-            eventLoop: eventLoop,
+            eventLoop: eventLoop.iKnowIAmOnThisEventLoop(),
             backgroundLogger: Logger(label: "no-op", factory: SwiftLogNoOpLogHandler.init),
             connectionIdLoggerMetadata: "test connection"
         )

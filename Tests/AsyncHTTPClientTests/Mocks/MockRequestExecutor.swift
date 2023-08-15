@@ -17,7 +17,7 @@ import NIOConcurrencyHelpers
 import NIOCore
 
 // This is a MockRequestExecutor, that is synchronized on its EventLoop.
-final class MockRequestExecutor {
+final class MockRequestExecutor: @unchecked Sendable {
     enum Errors: Error {
         case eof
         case unexpectedFileRegion
@@ -241,7 +241,7 @@ extension MockRequestExecutor: HTTPRequestExecutor {
 extension MockRequestExecutor {
     public struct TimeoutError: Error {}
 
-    final class BlockingQueue<Element> {
+    final class BlockingQueue<Element>: @unchecked Sendable {
         private let condition = ConditionLock(value: false)
         private var buffer = CircularBuffer<Result<Element, Error>>()
 

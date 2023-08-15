@@ -14,6 +14,7 @@
 
 import Atomics
 import Foundation
+@preconcurrency import Dispatch
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -654,14 +655,14 @@ public class HTTPClient {
                 delegate: delegate
             )
 
-            var deadlineSchedule: Scheduled<Void>?
             if let deadline = deadline {
-                deadlineSchedule = taskEL.scheduleTask(deadline: deadline) {
-                    requestBag.deadlineExceeded()
+                let sendableRequestBag = UnsafeTransfer(requestBag)
+                let deadlineSchedule = taskEL.scheduleTask(deadline: deadline) {
+                    sendableRequestBag.wrappedValue.deadlineExceeded()
                 }
 
                 task.promise.futureResult.whenComplete { _ in
-                    deadlineSchedule?.cancel()
+                    deadlineSchedule.cancel()
                 }
             }
 

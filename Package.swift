@@ -49,6 +49,7 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Atomics", package: "swift-atomics"),
             ]
+            , swiftSettings: [.unsafeFlags(["-Xfrontend", "-strict-concurrency=complete"])]
         ),
         .testTarget(
             name: "AsyncHTTPClientTests",

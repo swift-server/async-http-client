@@ -24,9 +24,9 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
         // transitions to `.connectSent` or `.failed`
         case initialized
         // transitions to `.headReceived` or `.failed`
-        case connectSent(Scheduled<Void>)
+        case connectSent(ScheduledOnCurrentEventLoop<Void>)
         // transitions to `.completed` or `.failed`
-        case headReceived(Scheduled<Void>)
+        case headReceived(ScheduledOnCurrentEventLoop<Void>)
         // final error state
         case failed(Error)
         // final success state
@@ -40,8 +40,8 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
     private let proxyAuthorization: HTTPClient.Authorization?
     private let deadline: NIODeadline
 
-    private var proxyEstablishedPromise: EventLoopPromise<Void>?
-    var proxyEstablishedFuture: EventLoopFuture<Void>? {
+    private var proxyEstablishedPromise: CurrentEventLoopPromise<Void>?
+    var proxyEstablishedFuture: CurrentEventLoopFuture<Void>? {
         return self.proxyEstablishedPromise?.futureResult
     }
 
@@ -81,7 +81,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
     }
 
     func handlerAdded(context: ChannelHandlerContext) {
-        self.proxyEstablishedPromise = context.eventLoop.makePromise(of: Void.self)
+        self.proxyEstablishedPromise = context.currentEventLoop.makePromise(of: Void.self)
 
         self.sendConnect(context: context)
     }
@@ -135,7 +135,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
             return
         }
 
-        let timeout = context.eventLoop.scheduleTask(deadline: self.deadline) {
+        let timeout = context.currentEventLoop.scheduleTask(deadline: self.deadline) {
             switch self.state {
             case .initialized:
                 preconditionFailure("How can we have a scheduled timeout, if the connection is not even up?")

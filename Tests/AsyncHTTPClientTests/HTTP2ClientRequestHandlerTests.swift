@@ -23,7 +23,7 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
     func testResponseBackpressure() {
         let embedded = EmbeddedChannel()
         let readEventHandler = ReadEventHitHandler()
-        let requestHandler = HTTP2ClientRequestHandler(eventLoop: embedded.eventLoop)
+        let requestHandler = HTTP2ClientRequestHandler(eventLoop: embedded.eventLoop.iKnowIAmOnThisEventLoop())
         let logger = Logger(label: "test")
 
         XCTAssertNoThrow(try embedded.pipeline.syncOperations.addHandlers([readEventHandler, requestHandler]))
@@ -108,7 +108,7 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
 
     func testWriteBackpressure() {
         let embedded = EmbeddedChannel()
-        let requestHandler = HTTP2ClientRequestHandler(eventLoop: embedded.eventLoop)
+        let requestHandler = HTTP2ClientRequestHandler(eventLoop: embedded.eventLoop.iKnowIAmOnThisEventLoop())
         XCTAssertNoThrow(try embedded.pipeline.syncOperations.addHandler(requestHandler))
         let logger = Logger(label: "test")
 
@@ -187,7 +187,7 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
     func testIdleReadTimeout() {
         let embedded = EmbeddedChannel()
         let readEventHandler = ReadEventHitHandler()
-        let requestHandler = HTTP2ClientRequestHandler(eventLoop: embedded.eventLoop)
+        let requestHandler = HTTP2ClientRequestHandler(eventLoop: embedded.eventLoop.iKnowIAmOnThisEventLoop())
         XCTAssertNoThrow(try embedded.pipeline.syncOperations.addHandlers([readEventHandler, requestHandler]))
         XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
         let logger = Logger(label: "test")
@@ -237,7 +237,7 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
     func testIdleReadTimeoutIsCanceledIfRequestIsCanceled() {
         let embedded = EmbeddedChannel()
         let readEventHandler = ReadEventHitHandler()
-        let requestHandler = HTTP2ClientRequestHandler(eventLoop: embedded.eventLoop)
+        let requestHandler = HTTP2ClientRequestHandler(eventLoop: embedded.eventLoop.iKnowIAmOnThisEventLoop())
         XCTAssertNoThrow(try embedded.pipeline.syncOperations.addHandlers([readEventHandler, requestHandler]))
         XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
         let logger = Logger(label: "test")
@@ -307,7 +307,7 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
 
         for body in bodies {
             let embeddedEventLoop = EmbeddedEventLoop()
-            let requestHandler = HTTP2ClientRequestHandler(eventLoop: embeddedEventLoop)
+            let requestHandler = HTTP2ClientRequestHandler(eventLoop: embeddedEventLoop.iKnowIAmOnThisEventLoop())
             let embedded = EmbeddedChannel(handlers: [FailWriteHandler(), requestHandler], loop: embeddedEventLoop)
 
             let logger = Logger(label: "test")
@@ -359,7 +359,7 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
         let eventLoopGroup = EmbeddedEventLoopGroup(loops: 1)
         let eventLoop = eventLoopGroup.next() as! EmbeddedEventLoop
         let handler = HTTP2ClientRequestHandler(
-            eventLoop: eventLoop
+            eventLoop: eventLoop.iKnowIAmOnThisEventLoop()
         )
         let channel = EmbeddedChannel(handlers: [
             ChangeWritabilityOnFlush(),

@@ -43,7 +43,7 @@ extension HTTPConnectionPool {
     }
 }
 
-protocol HTTPConnectionRequester {
+protocol HTTPConnectionRequester: Sendable {
     func http1ConnectionCreated(_: HTTP1Connection)
     func http2ConnectionCreated(_: HTTP2Connection, maximumStreams: Int)
     func failedToCreateHTTPConnection(_: HTTPConnectionPool.Connection.ID, error: Error)
@@ -62,8 +62,8 @@ extension HTTPConnectionPool.ConnectionFactory {
     ) {
         var logger = logger
         logger[metadataKey: "ahc-connection-id"] = "\(connectionID)"
-
-        self.makeChannel(requester: requester, connectionID: connectionID, deadline: deadline, eventLoop: eventLoop, logger: logger).whenComplete { result in
+        
+        self.makeChannel(requester: requester, connectionID: connectionID, deadline: deadline, eventLoop: eventLoop, logger: logger).whenComplete { [logger] result in
             switch result {
             case .success(.http1_1(let channel)):
                 do {
@@ -212,14 +212,17 @@ extension HTTPConnectionPool.ConnectionFactory {
             // The proxyEstablishedFuture is set as soon as the HTTP1ProxyConnectHandler is in a
             // pipeline. It is created in HTTP1ProxyConnectHandler's handlerAdded method.
             return proxyHandler.proxyEstablishedFuture!.flatMap {
-                channel.pipeline.removeHandler(proxyHandler).flatMap {
-                    channel.pipeline.removeHandler(decoder).flatMap {
-                        channel.pipeline.removeHandler(encoder)
-                    }
-                }
-            }.flatMap {
-                self.setupTLSInProxyConnectionIfNeeded(channel, deadline: deadline, logger: logger)
+                channel.pipeline.removeHandler(proxyHandler)
             }
+            .flatMap {
+                channel.pipeline.removeHandler(decoder)
+            }
+            .flatMap {
+                channel.pipeline.removeHandler(encoder)
+            }
+            .flatMap {
+                self.setupTLSInProxyConnectionIfNeeded(channel, deadline: deadline, logger: logger)
+            }.wrapped
         }
     }
 
@@ -249,12 +252,14 @@ extension HTTPConnectionPool.ConnectionFactory {
             // The socksEstablishedFuture is set as soon as the SOCKSEventsHandler is in a
             // pipeline. It is created in SOCKSEventsHandler's handlerAdded method.
             return socksEventHandler.socksEstablishedFuture!.flatMap {
-                channel.pipeline.removeHandler(socksEventHandler).flatMap {
-                    channel.pipeline.removeHandler(socksConnectHandler)
-                }
-            }.flatMap {
-                self.setupTLSInProxyConnectionIfNeeded(channel, deadline: deadline, logger: logger)
+                channel.pipeline.removeHandler(socksEventHandler)
             }
+            .flatMap {
+                channel.pipeline.removeHandler(socksConnectHandler)
+            }
+            .flatMap {
+                self.setupTLSInProxyConnectionIfNeeded(channel, deadline: deadline, logger: logger)
+            }.wrapped
         }
     }
 
@@ -287,7 +292,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                 tlsConfiguration: tlsConfig,
                 eventLoop: channel.eventLoop,
                 logger: logger
-            )
+            ).iKnowIAmOnTheEventLoopOfThisFuture()
 
             return sslContextFuture.flatMap { sslContext -> EventLoopFuture<String?> in
                 do {
@@ -300,7 +305,7 @@ extension HTTPConnectionPool.ConnectionFactory {
 
                     // The tlsEstablishedFuture is set as soon as the TLSEventsHandler is in a
                     // pipeline. It is created in TLSEventsHandler's handlerAdded method.
-                    return tlsEventHandler.tlsEstablishedFuture!
+                    return tlsEventHandler.tlsEstablishedFuture!.wrapped
                 } catch {
                     return channel.eventLoop.makeFailedFuture(error)
                 }
@@ -308,7 +313,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                 channel.pipeline.removeHandler(tlsEventHandler).flatMapThrowing {
                     try self.matchALPNToHTTPVersion(negotiated, channel: channel)
                 }
-            }
+            }.wrapped
         }
     }
 
@@ -371,7 +376,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                 // pipeline. It is created in TLSEventsHandler's handlerAdded method.
                 return tlsEventHandler.tlsEstablishedFuture!.flatMap { negotiated in
                     channel.pipeline.removeHandler(tlsEventHandler).map { (channel, negotiated) }
-                }
+                }.wrapped
             } catch {
                 assert(channel.isActive == false, "if the channel is still active then TLSEventsHandler must be present but got error \(error)")
                 return channel.eventLoop.makeFailedFuture(HTTPClientError.remoteConnectionClosed)
@@ -410,10 +415,12 @@ extension HTTPConnectionPool.ConnectionFactory {
         #if canImport(Network)
         if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), let tsBootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoop) {
             // create NIOClientTCPBootstrap with NIOTS TLS provider
+            let tsBootstrapSendable = UnsafeTransfer(tsBootstrap)
             let bootstrapFuture = tlsConfig.getNWProtocolTLSOptions(on: eventLoop, serverNameIndicatorOverride: key.serverNameIndicatorOverride).map {
                 options -> NIOClientTCPBootstrapProtocol in
 
-                tsBootstrap
+                tsBootstrapSendable
+                    .wrappedValue
                     .channelOption(NIOTSChannelOptions.waitForActivity, value: self.clientConfiguration.networkFrameworkWaitForConnectivity)
                     .connectTimeout(deadline - NIODeadline.now())
                     .tlsOptions(options)
@@ -444,7 +451,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         let bootstrap = ClientBootstrap(group: eventLoop)
             .connectTimeout(deadline - NIODeadline.now())
             .channelInitializer { channel in
-                sslContextFuture.flatMap { sslContext -> EventLoopFuture<Void> in
+                sslContextFuture.iKnowIAmOnTheEventLoopOfThisFuture().flatMap { sslContext -> EventLoopFuture<Void> in
                     do {
                         let sync = channel.pipeline.syncOperations
                         let sslHandler = try NIOSSLClientHandler(
@@ -459,7 +466,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                     } catch {
                         return channel.eventLoop.makeFailedFuture(error)
                     }
-                }
+                }.wrapped
             }
 
         return eventLoop.makeSucceededFuture(bootstrap)

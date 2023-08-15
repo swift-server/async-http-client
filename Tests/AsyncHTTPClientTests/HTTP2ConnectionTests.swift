@@ -62,7 +62,7 @@ class HTTP2ConnectionTests: XCTestCase {
         // to really destroy the channel we need to tick once
         embedded.embeddedEventLoop.run()
 
-        XCTAssertThrowsError(try startFuture.wait())
+        XCTAssertThrowsError(try startFuture.wrapped.wait())
 
         // should not crash
         connection.shutdown()
@@ -340,7 +340,7 @@ class HTTP2ConnectionTests: XCTestCase {
     }
 }
 
-class TestConnectionCreator {
+final class TestConnectionCreator {
     enum Error: Swift.Error {
         case alreadyCreatingAnotherConnection
         case wantedHTTP2ConnectionButGotHTTP1
@@ -353,8 +353,7 @@ class TestConnectionCreator {
         case waitingForHTTP2Connection(EventLoopPromise<HTTP2Connection>)
     }
 
-    private var state: State = .idle
-    private let lock = NIOLock()
+    private let state = NIOLockedValueBox(State.idle)
 
     init() {}
 
@@ -378,13 +377,13 @@ class TestConnectionCreator {
             sslContextCache: .init()
         )
 
-        let promise = try self.lock.withLock { () -> EventLoopPromise<HTTP1Connection> in
-            guard case .idle = self.state else {
+        let promise = try self.state.withLockedValue { state -> EventLoopPromise<HTTP1Connection> in
+            guard case .idle = state else {
                 throw Error.alreadyCreatingAnotherConnection
             }
 
             let promise = eventLoop.makePromise(of: HTTP1Connection.self)
-            self.state = .waitingForHTTP1Connection(promise)
+            state = .waitingForHTTP1Connection(promise)
             return promise
         }
 
@@ -421,13 +420,13 @@ class TestConnectionCreator {
             sslContextCache: .init()
         )
 
-        let promise = try self.lock.withLock { () -> EventLoopPromise<HTTP2Connection> in
-            guard case .idle = self.state else {
+        let promise = try self.state.withLockedValue { state -> EventLoopPromise<HTTP2Connection> in
+            guard case .idle = state else {
                 throw Error.alreadyCreatingAnotherConnection
             }
 
             let promise = eventLoop.makePromise(of: HTTP2Connection.self)
-            self.state = .waitingForHTTP2Connection(promise)
+            state = .waitingForHTTP2Connection(promise)
             return promise
         }
 
@@ -461,9 +460,9 @@ extension TestConnectionCreator: HTTPConnectionRequester {
     }
 
     func http1ConnectionCreated(_ connection: HTTP1Connection) {
-        let wrapper = self.lock.withLock { () -> (EitherPromiseWrapper<HTTP1Connection, HTTP2Connection>) in
+        let wrapper = self.state.withLockedValue { state -> (EitherPromiseWrapper<HTTP1Connection, HTTP2Connection>) in
 
-            switch self.state {
+            switch state {
             case .waitingForHTTP1Connection(let promise):
                 return .succeed(promise, connection)
 
@@ -478,9 +477,9 @@ extension TestConnectionCreator: HTTPConnectionRequester {
     }
 
     func http2ConnectionCreated(_ connection: HTTP2Connection, maximumStreams: Int) {
-        let wrapper = self.lock.withLock { () -> (EitherPromiseWrapper<HTTP2Connection, HTTP1Connection>) in
+        let wrapper = self.state.withLockedValue { state -> (EitherPromiseWrapper<HTTP2Connection, HTTP1Connection>) in
 
-            switch self.state {
+            switch state {
             case .waitingForHTTP1Connection(let promise):
                 return .fail(promise, Error.wantedHTTP1ConnectionButGotHTTP2)
 
@@ -509,9 +508,9 @@ extension TestConnectionCreator: HTTPConnectionRequester {
     }
 
     func failedToCreateHTTPConnection(_: HTTPConnectionPool.Connection.ID, error: Swift.Error) {
-        let wrapper = self.lock.withLock { () -> (FailPromiseWrapper<HTTP1Connection, HTTP2Connection>) in
+        let wrapper = self.state.withLockedValue { state -> (FailPromiseWrapper<HTTP1Connection, HTTP2Connection>) in
 
-            switch self.state {
+            switch state {
             case .waitingForHTTP1Connection(let promise):
                 return .type1(promise)
 
@@ -530,48 +529,51 @@ extension TestConnectionCreator: HTTPConnectionRequester {
     }
 }
 
-class TestHTTP2ConnectionDelegate: HTTP2ConnectionDelegate {
+struct TestHTTP2ConnectionDelegate: HTTP2ConnectionDelegate {
     var hitStreamClosed: Int {
-        self.lock.withLock { self._hitStreamClosed }
+        self.state.withLockedValue { $0._hitStreamClosed }
     }
 
     var hitGoAwayReceived: Int {
-        self.lock.withLock { self._hitGoAwayReceived }
+        self.state.withLockedValue { $0._hitGoAwayReceived }
     }
 
     var hitConnectionClosed: Int {
-        self.lock.withLock { self._hitConnectionClosed }
+        self.state.withLockedValue { $0._hitConnectionClosed }
     }
 
     var maxStreamSetting: Int {
-        self.lock.withLock { self._maxStreamSetting }
+        self.state.withLockedValue { $0._maxStreamSetting }
     }
 
-    private let lock = NIOLock()
-    private var _hitStreamClosed: Int = 0
-    private var _hitGoAwayReceived: Int = 0
-    private var _hitConnectionClosed: Int = 0
-    private var _maxStreamSetting: Int = 100
+    private let state = NIOLockedValueBox(State())
+    private struct State {
+        var _hitStreamClosed: Int = 0
+        var _hitGoAwayReceived: Int = 0
+        var _hitConnectionClosed: Int = 0
+        var _maxStreamSetting: Int = 100
+    }
+    
 
     init() {}
 
     func http2Connection(_: HTTP2Connection, newMaxStreamSetting: Int) {}
 
     func http2ConnectionStreamClosed(_: HTTP2Connection, availableStreams: Int) {
-        self.lock.withLock {
-            self._hitStreamClosed += 1
+        self.state.withLockedValue {
+            $0._hitStreamClosed += 1
         }
     }
 
     func http2ConnectionGoAwayReceived(_: HTTP2Connection) {
-        self.lock.withLock {
-            self._hitGoAwayReceived += 1
+        self.state.withLockedValue {
+            $0._hitGoAwayReceived += 1
         }
     }
 
     func http2ConnectionClosed(_: HTTP2Connection) {
-        self.lock.withLock {
-            self._hitConnectionClosed += 1
+        self.state.withLockedValue {
+            $0._hitConnectionClosed += 1
         }
     }
 }

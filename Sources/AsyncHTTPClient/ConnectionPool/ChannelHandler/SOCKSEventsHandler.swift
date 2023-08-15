@@ -22,15 +22,15 @@ final class SOCKSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
         // transitions to channelActive or failed
         case initialized
         // transitions to socksEstablished or failed
-        case channelActive(Scheduled<Void>)
+        case channelActive(ScheduledOnCurrentEventLoop<Void>)
         // final success state
         case socksEstablished
         // final success state
         case failed(Error)
     }
 
-    private var socksEstablishedPromise: EventLoopPromise<Void>?
-    var socksEstablishedFuture: EventLoopFuture<Void>? {
+    private var socksEstablishedPromise: CurrentEventLoopPromise<Void>?
+    var socksEstablishedFuture: CurrentEventLoopFuture<Void>? {
         return self.socksEstablishedPromise?.futureResult
     }
 
@@ -42,7 +42,7 @@ final class SOCKSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
     }
 
     func handlerAdded(context: ChannelHandlerContext) {
-        self.socksEstablishedPromise = context.eventLoop.makePromise(of: Void.self)
+        self.socksEstablishedPromise = context.currentEventLoop.makePromise(of: Void.self)
 
         if context.channel.isActive {
             self.connectionStarted(context: context)
@@ -99,7 +99,7 @@ final class SOCKSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
             return
         }
 
-        let scheduled = context.eventLoop.scheduleTask(deadline: self.deadline) {
+        let scheduled = context.currentEventLoop.scheduleTask(deadline: self.deadline) {
             switch self.state {
             case .initialized, .channelActive:
                 // close the connection, if the handshake timed out

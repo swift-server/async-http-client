@@ -34,8 +34,8 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     private let reportHead: ((HTTPClient.Task<Progress>, HTTPResponseHead) -> Void)?
     private let reportProgress: ((HTTPClient.Task<Progress>, Progress) -> Void)?
 
-    private var fileHandleFuture: EventLoopFuture<NIOFileHandle>?
-    private var writeFuture: EventLoopFuture<Void>?
+    private var fileHandleFuture: CurrentEventLoopFuture<NIOFileHandle>?
+    private var writeFuture: CurrentEventLoopFuture<Void>?
 
     /// Initializes a new file download delegate.
     ///
@@ -159,7 +159,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         self.progress.receivedBytes += buffer.readableBytes
         self.reportProgress?(task, self.progress)
 
-        let writeFuture: EventLoopFuture<Void>
+        let writeFuture: CurrentEventLoopFuture<Void>
         if let fileHandleFuture = self.fileHandleFuture {
             writeFuture = fileHandleFuture.flatMap {
                 io.write(fileHandle: $0, buffer: buffer, eventLoop: task.eventLoop)
@@ -170,7 +170,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
                 mode: .write,
                 flags: .allowFileCreation(),
                 eventLoop: task.eventLoop
-            )
+            ).iKnowIAmOnTheEventLoopOfThisFuture()
             self.fileHandleFuture = fileHandleFuture
             writeFuture = fileHandleFuture.flatMap {
                 io.write(fileHandle: $0, buffer: buffer, eventLoop: task.eventLoop)
@@ -178,7 +178,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         }
 
         self.writeFuture = writeFuture
-        return writeFuture
+        return writeFuture.wrapped
     }
 
     private func close(fileHandle: NIOFileHandle) {

@@ -22,15 +22,15 @@ final class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
         // transitions to channelActive or failed
         case initialized
         // transitions to tlsEstablished or failed
-        case channelActive(Scheduled<Void>?)
+        case channelActive(ScheduledOnCurrentEventLoop<Void>?)
         // final success state
         case tlsEstablished
         // final success state
         case failed(Error)
     }
 
-    private var tlsEstablishedPromise: EventLoopPromise<String?>?
-    var tlsEstablishedFuture: EventLoopFuture<String?>? {
+    private var tlsEstablishedPromise: CurrentEventLoopPromise<String?>?
+    var tlsEstablishedFuture: CurrentEventLoopFuture<String?>? {
         return self.tlsEstablishedPromise?.futureResult
     }
 
@@ -42,7 +42,7 @@ final class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
     }
 
     func handlerAdded(context: ChannelHandlerContext) {
-        self.tlsEstablishedPromise = context.eventLoop.makePromise(of: String?.self)
+        self.tlsEstablishedPromise = context.currentEventLoop.makePromise(of: String?.self)
 
         if context.channel.isActive {
             self.connectionStarted(context: context)
@@ -102,9 +102,9 @@ final class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
             return
         }
 
-        var scheduled: Scheduled<Void>?
+        var scheduled: ScheduledOnCurrentEventLoop<Void>?
         if let deadline = deadline {
-            scheduled = context.eventLoop.scheduleTask(deadline: deadline) {
+            scheduled = context.currentEventLoop.scheduleTask(deadline: deadline) {
                 switch self.state {
                 case .initialized, .channelActive:
                     // close the connection, if the handshake timed out
@@ -121,3 +121,6 @@ final class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
         self.state = .channelActive(scheduled)
     }
 }
+
+@available(*, unavailable)
+extension TLSEventsHandler: Sendable {}

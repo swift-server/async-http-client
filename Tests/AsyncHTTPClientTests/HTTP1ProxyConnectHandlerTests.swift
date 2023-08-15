@@ -51,7 +51,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.head(responseHead)))
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.end(nil)))
 
-        XCTAssertNoThrow(try XCTUnwrap(proxyConnectHandler.proxyEstablishedFuture).wait())
+        XCTAssertNoThrow(try XCTUnwrap(proxyConnectHandler.proxyEstablishedFuture).wrapped.wait())
     }
 
     func testProxyConnectWithAuthorization() {
@@ -85,7 +85,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.head(responseHead)))
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.end(nil)))
 
-        XCTAssertNoThrow(try XCTUnwrap(proxyConnectHandler.proxyEstablishedFuture).wait())
+        XCTAssertNoThrow(try XCTUnwrap(proxyConnectHandler.proxyEstablishedFuture).wrapped.wait())
     }
 
     func testProxyConnectWithoutAuthorizationFailure500() {
@@ -123,7 +123,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         XCTAssertFalse(embedded.isActive, "Channel should be closed in response to the error")
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.end(nil)))
 
-        XCTAssertThrowsError(try XCTUnwrap(proxyConnectHandler.proxyEstablishedFuture).wait()) {
+        XCTAssertThrowsError(try XCTUnwrap(proxyConnectHandler.proxyEstablishedFuture).wrapped.wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .invalidProxyResponse)
         }
     }
@@ -163,7 +163,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         XCTAssertFalse(embedded.isActive, "Channel should be closed in response to the error")
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.end(nil)))
 
-        XCTAssertThrowsError(try XCTUnwrap(proxyConnectHandler.proxyEstablishedFuture).wait()) {
+        XCTAssertThrowsError(try XCTUnwrap(proxyConnectHandler.proxyEstablishedFuture).wrapped.wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .proxyAuthenticationRequired)
         }
     }
@@ -203,7 +203,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         XCTAssertEqual(embedded.isActive, false)
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.end(nil)))
 
-        XCTAssertThrowsError(try XCTUnwrap(proxyConnectHandler.proxyEstablishedFuture).wait()) {
+        XCTAssertThrowsError(try XCTUnwrap(proxyConnectHandler.proxyEstablishedFuture).wrapped.wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .invalidProxyResponse)
         }
     }

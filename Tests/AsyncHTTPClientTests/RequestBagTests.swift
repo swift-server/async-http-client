@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Atomics
 @testable import AsyncHTTPClient
 import Logging
 import NIOCore
@@ -961,13 +962,12 @@ class UploadCountingDelegate: HTTPClientResponseDelegate {
     }
 }
 
-class MockTaskQueuer: HTTPRequestScheduler {
-    private(set) var hitCancelCount = 0
-
-    init() {}
+final class  MockTaskQueuer: HTTPRequestScheduler {
+    private let _hitCancelCount = ManagedAtomic(0)
+    var hitCancelCount: Int { _hitCancelCount.load(ordering: .relaxed) }
 
     func cancelRequest(_: HTTPSchedulableRequest) {
-        self.hitCancelCount += 1
+        self._hitCancelCount.wrappingIncrement(ordering: .relaxed)
     }
 }
 
