@@ -15,6 +15,10 @@
 import NIOCore
 import NIOHTTP1
 
+// TODO: should this be a multiple of a page size?
+@usableFromInline
+let bagOfBytesToByteBufferConversionChunkSize = 1024 * 1024 * 4
+
 /// A representation of an HTTP request for the Swift Concurrency HTTPClient API.
 ///
 /// This object is similar to ``HTTPClient/Request``, but used for the Swift Concurrency API.
@@ -103,24 +107,7 @@ extension HTTPClientRequest.Body {
     public static func bytes<Bytes: RandomAccessCollection & Sendable>(
         _ bytes: Bytes
     ) -> Self where Bytes.Element == UInt8 {
-        Self._bytes(bytes)
-    }
-
-    @inlinable
-    static func _bytes<Bytes: RandomAccessCollection>(
-        _ bytes: Bytes
-    ) -> Self where Bytes.Element == UInt8 {
-        self.init(.sequence(
-            length: .known(bytes.count),
-            canBeConsumedMultipleTimes: true
-        ) { allocator in
-            if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
-                // fastpath
-                return buffer
-            }
-            // potentially really slow path
-            return allocator.buffer(bytes: bytes)
-        })
+        self.bytes(bytes, length: .known(bytes.count))
     }
 
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `Sequence` of bytes.
@@ -146,24 +133,20 @@ extension HTTPClientRequest.Body {
         _ bytes: Bytes,
         length: Length
     ) -> Self where Bytes.Element == UInt8 {
-        Self._bytes(bytes, length: length)
-    }
-
-    @inlinable
-    static func _bytes<Bytes: Sequence>(
-        _ bytes: Bytes,
-        length: Length
-    ) -> Self where Bytes.Element == UInt8 {
-        self.init(.sequence(
-            length: length.storage,
-            canBeConsumedMultipleTimes: false
-        ) { allocator in
-            if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
-                // fastpath
-                return buffer
+        self.init(.asyncSequence(
+            length: length.storage
+        ) {
+            var iterator = bytes.makeIterator()
+            return { allocator in
+                var buffer = allocator.buffer(capacity: 1024) // TODO: Magic number
+                while buffer.writableBytes > 0, let byte = iterator.next() {
+                    buffer.writeInteger(byte)
+                }
+                if buffer.readableBytes > 0 {
+                    return buffer
+                }
+                return nil
             }
-            // potentially really slow path
-            return allocator.buffer(bytes: bytes)
         })
     }
 
@@ -182,29 +165,31 @@ extension HTTPClientRequest.Body {
     ///     - length: The length of the request body.
     @inlinable
     @preconcurrency
-    public static func bytes<Bytes: Collection & Sendable>(
+    public static func bytes<Bytes: RandomAccessCollection & Sendable>(
         _ bytes: Bytes,
         length: Length
     ) -> Self where Bytes.Element == UInt8 {
-        Self._bytes(bytes, length: length)
-    }
-
-    @inlinable
-    static func _bytes<Bytes: Collection>(
-        _ bytes: Bytes,
-        length: Length
-    ) -> Self where Bytes.Element == UInt8 {
-        self.init(.sequence(
-            length: length.storage,
-            canBeConsumedMultipleTimes: true
-        ) { allocator in
-            if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
-                // fastpath
-                return buffer
-            }
-            // potentially really slow path
-            return allocator.buffer(bytes: bytes)
-        })
+        if bytes.count <= bagOfBytesToByteBufferConversionChunkSize {
+            return self.init(.sequence(
+                length: length.storage,
+                canBeConsumedMultipleTimes: true
+            ) { allocator in
+                allocator.buffer(bytes: bytes)
+            })
+        } else {
+            return self.init(.asyncSequence(
+                length: length.storage,
+                makeAsyncIterator: {
+                    var iterator = bytes.chunked(size: bagOfBytesToByteBufferConversionChunkSize).makeIterator()
+                    return { allocator in
+                        guard let chunk = iterator.next() else {
+                            return nil
+                        }
+                        return allocator.buffer(bytes: chunk)
+                    }
+                }
+            ))
+        }
     }
 
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from an `AsyncSequence` of `ByteBuffer`s.
@@ -221,14 +206,6 @@ extension HTTPClientRequest.Body {
     @inlinable
     @preconcurrency
     public static func stream<SequenceOfBytes: AsyncSequence & Sendable>(
-        _ sequenceOfBytes: SequenceOfBytes,
-        length: Length
-    ) -> Self where SequenceOfBytes.Element == ByteBuffer {
-        Self._stream(sequenceOfBytes, length: length)
-    }
-
-    @inlinable
-    static func _stream<SequenceOfBytes: AsyncSequence>(
         _ sequenceOfBytes: SequenceOfBytes,
         length: Length
     ) -> Self where SequenceOfBytes.Element == ByteBuffer {
@@ -257,14 +234,6 @@ extension HTTPClientRequest.Body {
     @inlinable
     @preconcurrency
     public static func stream<Bytes: AsyncSequence & Sendable>(
-        _ bytes: Bytes,
-        length: Length
-    ) -> Self where Bytes.Element == UInt8 {
-        Self._stream(bytes, length: length)
-    }
-
-    @inlinable
-    static func _stream<Bytes: AsyncSequence>(
         _ bytes: Bytes,
         length: Length
     ) -> Self where Bytes.Element == UInt8 {
@@ -311,5 +280,56 @@ extension HTTPClientRequest.Body {
 
         @usableFromInline
         internal var storage: RequestBodyLength
+    }
+}
+
+@usableFromInline
+struct ChunkedCollection<Wrapped: RandomAccessCollection>: Sequence {
+    @usableFromInline
+    struct Iterator: IteratorProtocol {
+        @usableFromInline
+        var remainingElements: Wrapped.SubSequence
+        @usableFromInline
+        let maxChunkSize: Int
+        
+        @inlinable
+        mutating func next() -> Wrapped.SubSequence? {
+            guard !self.remainingElements.isEmpty else {
+                return nil
+            }
+            let chunk = self.remainingElements.prefix(self.maxChunkSize)
+            self.remainingElements = self.remainingElements.dropFirst(self.maxChunkSize)
+            return chunk
+        }
+        
+        @inlinable
+        init(remainingElements: Wrapped.SubSequence, maxChunkSize: Int) {
+            self.remainingElements = remainingElements
+            self.maxChunkSize = maxChunkSize
+        }
+    }
+
+    @usableFromInline
+    var wrapped: Wrapped
+    
+    @usableFromInline
+    var maxChunkSize: Int
+    
+    @inlinable
+    init(wrapped: Wrapped, maxChunkSize: Int) {
+        self.wrapped = wrapped
+        self.maxChunkSize = maxChunkSize
+    }
+
+    @inlinable
+    func makeIterator() -> Iterator {
+        .init(remainingElements: self.wrapped[...], maxChunkSize: self.maxChunkSize)
+    }
+}
+
+extension RandomAccessCollection {
+    @usableFromInline
+    func chunked(size: Int) -> ChunkedCollection<Self> {
+        ChunkedCollection(wrapped: self, maxChunkSize: size)
     }
 }

@@ -90,7 +90,23 @@ extension HTTPClient {
         @inlinable
         public static func bytes<Bytes>(_ bytes: Bytes) -> Body where Bytes: RandomAccessCollection, Bytes: Sendable, Bytes.Element == UInt8 {
             return Body(length: bytes.count) { writer in
-                writer.write(.byteBuffer(ByteBuffer(bytes: bytes)))
+                let iterator = UnsafeMutableTransferBox(bytes.chunked(size: bagOfBytesToByteBufferConversionChunkSize).makeIterator())
+                guard let chunk = iterator.wrappedValue.next() else {
+                    return writer.write(IOData.byteBuffer(.init()))
+                }
+                
+                @Sendable // can't use closure here as we recursively call ourselves which closures can't do
+                func writeNextChunk(_ chunk: Bytes.SubSequence) -> EventLoopFuture<Void> {
+                    if let nextChunk = iterator.wrappedValue.next() {
+                        writer.write(.byteBuffer(ByteBuffer(bytes: chunk))).flatMap {
+                            writeNextChunk(nextChunk)
+                        }
+                    } else {
+                        writer.write(.byteBuffer(ByteBuffer(bytes: chunk)))
+                    }
+                }
+                
+                return writeNextChunk(chunk)
             }
         }
 
