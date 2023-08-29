@@ -15,6 +15,7 @@
 @testable import AsyncHTTPClient
 import NIOCore
 import XCTest
+import Algorithms
 
 class HTTPClientRequestTests: XCTestCase {
     @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
@@ -393,7 +394,7 @@ class HTTPClientRequestTests: XCTestCase {
             request.method = .POST
             let asyncSequence = ByteBuffer(string: "post body")
                 .readableBytesView
-                .chunked(maxChunkSize: 2)
+                .chunks(ofCount: 2)
                 .async
                 .map { ByteBuffer($0) }
 
@@ -433,7 +434,7 @@ class HTTPClientRequestTests: XCTestCase {
             request.method = .POST
             let asyncSequence = ByteBuffer(string: "post body")
                 .readableBytesView
-                .chunked(maxChunkSize: 2)
+                .chunks(ofCount: 2)
                 .async
                 .map { ByteBuffer($0) }
 
@@ -500,37 +501,5 @@ extension Optional where Wrapped == HTTPClientRequest.Prepared.Body {
             }
             return accumulatedBuffer
         }
-    }
-}
-
-struct ChunkedSequence<Wrapped: Collection>: Sequence {
-    struct Iterator: IteratorProtocol {
-        fileprivate var remainingElements: Wrapped.SubSequence
-        fileprivate let maxChunkSize: Int
-        mutating func next() -> Wrapped.SubSequence? {
-            guard !self.remainingElements.isEmpty else {
-                return nil
-            }
-            let chunk = self.remainingElements.prefix(self.maxChunkSize)
-            self.remainingElements = self.remainingElements.dropFirst(self.maxChunkSize)
-            return chunk
-        }
-    }
-
-    fileprivate let wrapped: Wrapped
-    fileprivate let maxChunkSize: Int
-
-    func makeIterator() -> Iterator {
-        .init(remainingElements: self.wrapped[...], maxChunkSize: self.maxChunkSize)
-    }
-}
-
-extension ChunkedSequence: Sendable where Wrapped: Sendable {}
-
-extension Collection {
-    /// Lazily splits `self` into `SubSequence`s with `maxChunkSize` elements.
-    /// - Parameter maxChunkSize: size of each chunk except the last one which can be smaller if not enough elements are remaining.
-    func chunked(maxChunkSize: Int) -> ChunkedSequence<Self> {
-        .init(wrapped: self, maxChunkSize: maxChunkSize)
     }
 }
