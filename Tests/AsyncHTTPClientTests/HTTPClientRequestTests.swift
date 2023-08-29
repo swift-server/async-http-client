@@ -12,10 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Algorithms
 @testable import AsyncHTTPClient
 import NIOCore
 import XCTest
-import Algorithms
 
 class HTTPClientRequestTests: XCTestCase {
     @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)

@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Algorithms
 import Foundation
 import Logging
 import NIOConcurrencyHelpers
@@ -19,7 +20,6 @@ import NIOCore
 import NIOHTTP1
 import NIOPosix
 import NIOSSL
-import Algorithms
 
 extension HTTPClient {
     /// A request body.
@@ -45,14 +45,14 @@ extension HTTPClient {
             public func write(_ data: IOData) -> EventLoopFuture<Void> {
                 return self.closure(data)
             }
-            
+
             @inlinable
             func writeChunks<Bytes: Collection>(of bytes: Bytes, maxChunkSize: Int) -> EventLoopFuture<Void> where Bytes.Element == UInt8 {
                 let iterator = UnsafeMutableTransferBox(bytes.chunks(ofCount: maxChunkSize).makeIterator())
                 guard let chunk = iterator.wrappedValue.next() else {
                     return self.write(IOData.byteBuffer(.init()))
                 }
-                
+
                 @Sendable // can't use closure here as we recursively call ourselves which closures can't do
                 func writeNextChunk(_ chunk: Bytes.SubSequence) -> EventLoopFuture<Void> {
                     if let nextChunk = iterator.wrappedValue.next() {
@@ -63,7 +63,7 @@ extension HTTPClient {
                         self.write(.byteBuffer(ByteBuffer(bytes: chunk)))
                     }
                 }
-                
+
                 return writeNextChunk(chunk)
             }
         }

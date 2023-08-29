@@ -12,9 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Algorithms
 import NIOCore
 import NIOHTTP1
-import Algorithms
 
 // TODO: should this be a multiple of a page size?
 @usableFromInline
