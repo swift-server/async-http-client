@@ -140,10 +140,10 @@ extension HTTPClientRequest.Body {
     ///     - length: The length of the request body.
     @inlinable
     @preconcurrency
-    public static func bytes(
-        _ bytes: some Sequence<UInt8> & Sendable,
+    public static func bytes<Bytes: Sequence & Sendable>(
+        _ bytes: Bytes,
         length: Length
-    ) -> Self {
+    ) -> Self where Bytes.Element == UInt8 {
         Self._bytes(
             bytes,
             length: length,
@@ -155,12 +155,12 @@ extension HTTPClientRequest.Body {
     /// internal method to test chunking
     @inlinable
     @preconcurrency
-    static func _bytes(
-        _ bytes: some Sequence<UInt8> & Sendable,
+    static func _bytes<Bytes: Sequence & Sendable>(
+        _ bytes: Bytes,
         length: Length,
         bagOfBytesToByteBufferConversionChunkSize: Int,
         byteBufferMaxSize: Int
-    ) -> Self {
+    ) -> Self where Bytes.Element == UInt8 {
         // fast path
         let body: Self? = bytes.withContiguousStorageIfAvailable { bufferPointer -> Self in
             // `some Sequence<UInt8>` is special as it can't be efficiently chunked lazily.
@@ -225,10 +225,10 @@ extension HTTPClientRequest.Body {
     ///     - length: The length of the request body.
     @inlinable
     @preconcurrency
-    public static func bytes(
-        _ bytes: some Collection<UInt8> & Sendable,
+    public static func bytes<Bytes: Collection & Sendable>(
+        _ bytes: Bytes,
         length: Length
-    ) -> Self {
+    ) -> Self where Bytes.Element == UInt8 {
         if bytes.count <= bagOfBytesToByteBufferConversionChunkSize {
             return self.init(.sequence(
                 length: length.storage,

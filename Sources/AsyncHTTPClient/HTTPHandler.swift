@@ -127,9 +127,9 @@ extension HTTPClient {
         public static func string(_ string: String) -> Body {
             return Body(length: string.utf8.count) { writer in
                 if string.utf8.count <= bagOfBytesToByteBufferConversionChunkSize {
-                    writer.write(.byteBuffer(ByteBuffer(string: string)))
+                    return writer.write(.byteBuffer(ByteBuffer(string: string)))
                 } else {
-                    writer.writeChunks(of: string.utf8, maxChunkSize: bagOfBytesToByteBufferConversionChunkSize)
+                    return writer.writeChunks(of: string.utf8, maxChunkSize: bagOfBytesToByteBufferConversionChunkSize)
                 }
             }
         }
