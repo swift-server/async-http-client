@@ -162,7 +162,12 @@ extension HTTPClientRequest.Body {
         bagOfBytesToByteBufferConversionChunkSize: Int,
         byteBufferMaxSize: Int
     ) -> Self {
+        // fast path
         let body: Self? = bytes.withContiguousStorageIfAvailable { bufferPointer -> Self in
+            // `some Sequence<UInt8>` is special as it can't be efficiently chunked lazily.
+            // Therefore we need to do the chunking eagerly if it implements the fast path withContiguousStorageIfAvailable
+            // If we do it eagerly, it doesn't make sense to do a bunch of small chunks, so we only chunk if it exceeds
+            // the maximum size of a ByteBuffer.
             if bufferPointer.count <= byteBufferMaxSize {
                 let buffer = ByteBuffer(bytes: bufferPointer)
                 return Self(.sequence(
@@ -187,6 +192,8 @@ extension HTTPClientRequest.Body {
         if let body = body {
             return body
         }
+        
+        // slow path
         return Self(.asyncSequence(
             length: length.storage
         ) {
