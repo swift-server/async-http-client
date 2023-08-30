@@ -115,9 +115,9 @@ extension HTTPClientRequest.Body {
     /// - parameter bytes: The bytes of the request body.
     @inlinable
     @preconcurrency
-    public static func bytes(
-        _ bytes: some RandomAccessCollection<UInt8> & Sendable
-    ) -> Self {
+    public static func bytes<Bytes: RandomAccessCollection & Sendable>(
+        _ bytes: Bytes
+    ) -> Self where Bytes.Element == UInt8 {
         self.bytes(bytes, length: .known(bytes.count))
     }
 
