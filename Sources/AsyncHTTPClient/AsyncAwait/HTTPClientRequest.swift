@@ -115,9 +115,9 @@ extension HTTPClientRequest.Body {
     /// - parameter bytes: The bytes of the request body.
     @inlinable
     @preconcurrency
-    public static func bytes<Bytes: RandomAccessCollection & Sendable>(
-        _ bytes: Bytes
-    ) -> Self where Bytes.Element == UInt8 {
+    public static func bytes(
+        _ bytes: some RandomAccessCollection<UInt8> & Sendable
+    ) -> Self {
         self.bytes(bytes, length: .known(bytes.count))
     }
 
@@ -140,10 +140,28 @@ extension HTTPClientRequest.Body {
     ///     - length: The length of the request body.
     @inlinable
     @preconcurrency
-    public static func bytes<Bytes: Sequence & Sendable>(
-        _ bytes: Bytes,
+    public static func bytes(
+        _ bytes: some Sequence<UInt8> & Sendable,
         length: Length
-    ) -> Self where Bytes.Element == UInt8 {
+    ) -> Self {
+        Self._bytes(
+            bytes,
+            length: length,
+            bagOfBytesToByteBufferConversionChunkSize: bagOfBytesToByteBufferConversionChunkSize,
+            byteBufferMaxSize: byteBufferMaxSize
+        )
+    }
+    
+    
+    /// internal method to test chunking
+    @inlinable
+    @preconcurrency
+    static func _bytes(
+        _ bytes: some Sequence<UInt8> & Sendable,
+        length: Length,
+        bagOfBytesToByteBufferConversionChunkSize: Int,
+        byteBufferMaxSize: Int
+    ) -> Self {
         let body: Self? = bytes.withContiguousStorageIfAvailable { bufferPointer -> Self in
             if bufferPointer.count <= byteBufferMaxSize {
                 let buffer = ByteBuffer(bytes: bufferPointer)
@@ -201,10 +219,10 @@ extension HTTPClientRequest.Body {
     ///     - length: The length of the request body.
     @inlinable
     @preconcurrency
-    public static func bytes<Bytes: Collection & Sendable>(
-        _ bytes: Bytes,
+    public static func bytes(
+        _ bytes: some Collection<UInt8> & Sendable,
         length: Length
-    ) -> Self where Bytes.Element == UInt8 {
+    ) -> Self {
         if bytes.count <= bagOfBytesToByteBufferConversionChunkSize {
             return self.init(.sequence(
                 length: length.storage,
@@ -316,5 +334,55 @@ extension HTTPClientRequest.Body {
 
         @usableFromInline
         internal var storage: RequestBodyLength
+    }
+}
+
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+extension HTTPClientRequest.Body: AsyncSequence {
+    public typealias Element = ByteBuffer
+    
+    @inlinable
+    public func makeAsyncIterator() -> AsyncIterator {
+        switch self.mode {
+        case .asyncSequence(_, let makeAsyncIterator):
+            return .init(storage: .makeNext(makeAsyncIterator()))
+        case .sequence(_, _, let makeCompleteBody):
+            return .init(storage: .byteBuffer(makeCompleteBody(AsyncIterator.allocator)))
+        case .byteBuffer(let byteBuffer):
+            return .init(storage: .byteBuffer(byteBuffer))
+        }
+    }
+}
+
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+extension HTTPClientRequest.Body {
+    public struct AsyncIterator: AsyncIteratorProtocol {
+        @usableFromInline
+        static let allocator = ByteBufferAllocator()
+        
+        @usableFromInline
+        enum Storage {
+            case byteBuffer(ByteBuffer?)
+            case makeNext((ByteBufferAllocator) async throws -> ByteBuffer?)
+        }
+        
+        @usableFromInline
+        var storage: Storage
+        
+        @inlinable
+        init(storage: Storage) {
+            self.storage = storage
+        }
+        
+        @inlinable
+        public mutating func next() async throws -> ByteBuffer? {
+            switch storage {
+            case .byteBuffer(let buffer):
+                self.storage = .byteBuffer(nil)
+                return buffer
+            case .makeNext(let makeNext):
+                return try await makeNext(Self.allocator)
+            }
+        }
     }
 }
