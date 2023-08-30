@@ -522,6 +522,7 @@ class HTTPClientRequestTests: XCTestCase {
         XCTAssertEqual(body, expectedChunks)
     }
 
+    #if swift(>=5.7)
     func testChunkingSequenceFastPath() async throws {
         func makeBytes() -> some Sequence<UInt8> & Sendable {
             Array(repeating: 0, count: bagOfBytesToByteBufferConversionChunkSize) +
@@ -568,6 +569,7 @@ class HTTPClientRequestTests: XCTestCase {
 
         XCTAssertEqual(body, expectedChunks)
     }
+    #endif
 
     func testBodyStringChunking() throws {
         let body = try HTTPClient.Body.string(
