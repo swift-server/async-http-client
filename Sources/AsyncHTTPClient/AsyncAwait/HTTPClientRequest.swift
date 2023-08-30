@@ -151,8 +151,7 @@ extension HTTPClientRequest.Body {
             byteBufferMaxSize: byteBufferMaxSize
         )
     }
-    
-    
+
     /// internal method to test chunking
     @inlinable
     @preconcurrency
@@ -192,7 +191,7 @@ extension HTTPClientRequest.Body {
         if let body = body {
             return body
         }
-        
+
         // slow path
         return Self(.asyncSequence(
             length: length.storage
@@ -347,7 +346,7 @@ extension HTTPClientRequest.Body {
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest.Body: AsyncSequence {
     public typealias Element = ByteBuffer
-    
+
     @inlinable
     public func makeAsyncIterator() -> AsyncIterator {
         switch self.mode {
@@ -366,24 +365,24 @@ extension HTTPClientRequest.Body {
     public struct AsyncIterator: AsyncIteratorProtocol {
         @usableFromInline
         static let allocator = ByteBufferAllocator()
-        
+
         @usableFromInline
         enum Storage {
             case byteBuffer(ByteBuffer?)
             case makeNext((ByteBufferAllocator) async throws -> ByteBuffer?)
         }
-        
+
         @usableFromInline
         var storage: Storage
-        
+
         @inlinable
         init(storage: Storage) {
             self.storage = storage
         }
-        
+
         @inlinable
         public mutating func next() async throws -> ByteBuffer? {
-            switch storage {
+            switch self.storage {
             case .byteBuffer(let buffer):
                 self.storage = .byteBuffer(nil)
                 return buffer
