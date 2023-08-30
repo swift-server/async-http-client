@@ -56,11 +56,11 @@ extension HTTPClient {
                 @Sendable // can't use closure here as we recursively call ourselves which closures can't do
                 func writeNextChunk(_ chunk: Bytes.SubSequence) -> EventLoopFuture<Void> {
                     if let nextChunk = iterator.wrappedValue.next() {
-                        self.write(.byteBuffer(ByteBuffer(bytes: chunk))).flatMap {
+                        return self.write(.byteBuffer(ByteBuffer(bytes: chunk))).flatMap {
                             writeNextChunk(nextChunk)
                         }
                     } else {
-                        self.write(.byteBuffer(ByteBuffer(bytes: chunk)))
+                        return self.write(.byteBuffer(ByteBuffer(bytes: chunk)))
                     }
                 }
 
