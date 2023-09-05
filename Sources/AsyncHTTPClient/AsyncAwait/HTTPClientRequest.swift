@@ -16,7 +16,6 @@ import Algorithms
 import NIOCore
 import NIOHTTP1
 
-// TODO: should this be a multiple of a page size?
 @usableFromInline
 let bagOfBytesToByteBufferConversionChunkSize = 1024 * 1024 * 4
 
@@ -108,9 +107,9 @@ extension HTTPClientRequest.Body {
 
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `RandomAccessCollection` of bytes.
     ///
-    /// This construction will flatten the bytes into a `ByteBuffer`. As a result, the peak memory
-    /// usage of this construction will be double the size of the original collection. The construction
-    /// of the `ByteBuffer` will be delayed until it's needed.
+    /// This construction will flatten the `bytes` into a `ByteBuffer` in chunks of ~4MB.
+    /// As a result, the peak memory usage of this construction will be a small multiple of ~4MB.
+    /// The construction of the `ByteBuffer` will be delayed until it's needed.
     ///
     /// - parameter bytes: The bytes of the request body.
     @inlinable
@@ -212,9 +211,9 @@ extension HTTPClientRequest.Body {
 
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `Collection` of bytes.
     ///
-    /// This construction will flatten the bytes into a `ByteBuffer`. As a result, the peak memory
-    /// usage of this construction will be double the size of the original collection. The construction
-    /// of the `ByteBuffer` will be delayed until it's needed.
+    /// This construction will flatten the `bytes` into a `ByteBuffer` in chunks of ~4MB.
+    /// As a result, the peak memory usage of this construction will be a small multiple of ~4MB.
+    /// The construction of the `ByteBuffer` will be delayed until it's needed.
     ///
     /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
     /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
@@ -280,7 +279,7 @@ extension HTTPClientRequest.Body {
 
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from an `AsyncSequence` of bytes.
     ///
-    /// This construction will consume 1kB chunks from the `Bytes` and send them at once. This optimizes for
+    /// This construction will consume 4MB chunks from the `Bytes` and send them at once. This optimizes for
     /// `AsyncSequence`s where larger chunks are buffered up and available without actually suspending, such
     /// as those provided by `FileHandle`.
     ///
