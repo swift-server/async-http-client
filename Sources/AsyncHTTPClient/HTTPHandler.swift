@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Algorithms
 import Foundation
 import Logging
 import NIOConcurrencyHelpers
@@ -43,6 +44,27 @@ extension HTTPClient {
             ///     - data: `IOData` to write.
             public func write(_ data: IOData) -> EventLoopFuture<Void> {
                 return self.closure(data)
+            }
+
+            @inlinable
+            func writeChunks<Bytes: Collection>(of bytes: Bytes, maxChunkSize: Int) -> EventLoopFuture<Void> where Bytes.Element == UInt8 {
+                let iterator = UnsafeMutableTransferBox(bytes.chunks(ofCount: maxChunkSize).makeIterator())
+                guard let chunk = iterator.wrappedValue.next() else {
+                    return self.write(IOData.byteBuffer(.init()))
+                }
+
+                @Sendable // can't use closure here as we recursively call ourselves which closures can't do
+                func writeNextChunk(_ chunk: Bytes.SubSequence) -> EventLoopFuture<Void> {
+                    if let nextChunk = iterator.wrappedValue.next() {
+                        return self.write(.byteBuffer(ByteBuffer(bytes: chunk))).flatMap {
+                            writeNextChunk(nextChunk)
+                        }
+                    } else {
+                        return self.write(.byteBuffer(ByteBuffer(bytes: chunk)))
+                    }
+                }
+
+                return writeNextChunk(chunk)
             }
         }
 
@@ -90,7 +112,11 @@ extension HTTPClient {
         @inlinable
         public static func bytes<Bytes>(_ bytes: Bytes) -> Body where Bytes: RandomAccessCollection, Bytes: Sendable, Bytes.Element == UInt8 {
             return Body(length: bytes.count) { writer in
-                writer.write(.byteBuffer(ByteBuffer(bytes: bytes)))
+                if bytes.count <= bagOfBytesToByteBufferConversionChunkSize {
+                    return writer.write(.byteBuffer(ByteBuffer(bytes: bytes)))
+                } else {
+                    return writer.writeChunks(of: bytes, maxChunkSize: bagOfBytesToByteBufferConversionChunkSize)
+                }
             }
         }
 
@@ -100,7 +126,11 @@ extension HTTPClient {
         ///     - string: Body `String` representation.
         public static func string(_ string: String) -> Body {
             return Body(length: string.utf8.count) { writer in
-                writer.write(.byteBuffer(ByteBuffer(string: string)))
+                if string.utf8.count <= bagOfBytesToByteBufferConversionChunkSize {
+                    return writer.write(.byteBuffer(ByteBuffer(string: string)))
+                } else {
+                    return writer.writeChunks(of: string.utf8, maxChunkSize: bagOfBytesToByteBufferConversionChunkSize)
+                }
             }
         }
     }

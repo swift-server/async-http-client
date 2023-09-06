@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Algorithms
 @testable import AsyncHTTPClient
 import NIOCore
 import XCTest
@@ -393,7 +394,7 @@ class HTTPClientRequestTests: XCTestCase {
             request.method = .POST
             let asyncSequence = ByteBuffer(string: "post body")
                 .readableBytesView
-                .chunked(maxChunkSize: 2)
+                .chunks(ofCount: 2)
                 .async
                 .map { ByteBuffer($0) }
 
@@ -433,7 +434,7 @@ class HTTPClientRequestTests: XCTestCase {
             request.method = .POST
             let asyncSequence = ByteBuffer(string: "post body")
                 .readableBytesView
-                .chunked(maxChunkSize: 2)
+                .chunks(ofCount: 2)
                 .async
                 .map { ByteBuffer($0) }
 
@@ -464,6 +465,166 @@ class HTTPClientRequestTests: XCTestCase {
             guard let buffer = await XCTAssertNoThrowWithResult(try await preparedRequest.body.read()) else { return }
             XCTAssertEqual(buffer, .init(string: "post body"))
         }
+    }
+
+    func testChunkingRandomAccessCollection() async throws {
+        let body = try await HTTPClientRequest.Body.bytes(
+            Array(repeating: 0, count: bagOfBytesToByteBufferConversionChunkSize) +
+                Array(repeating: 1, count: bagOfBytesToByteBufferConversionChunkSize) +
+                Array(repeating: 2, count: bagOfBytesToByteBufferConversionChunkSize)
+        ).collect()
+
+        let expectedChunks = [
+            ByteBuffer(repeating: 0, count: bagOfBytesToByteBufferConversionChunkSize),
+            ByteBuffer(repeating: 1, count: bagOfBytesToByteBufferConversionChunkSize),
+            ByteBuffer(repeating: 2, count: bagOfBytesToByteBufferConversionChunkSize),
+        ]
+
+        XCTAssertEqual(body, expectedChunks)
+    }
+
+    func testChunkingCollection() async throws {
+        let body = try await HTTPClientRequest.Body.bytes(
+            (
+                String(repeating: "0", count: bagOfBytesToByteBufferConversionChunkSize) +
+                    String(repeating: "1", count: bagOfBytesToByteBufferConversionChunkSize) +
+                    String(repeating: "2", count: bagOfBytesToByteBufferConversionChunkSize)
+            ).utf8,
+            length: .known(bagOfBytesToByteBufferConversionChunkSize * 3)
+        ).collect()
+
+        let expectedChunks = [
+            ByteBuffer(repeating: UInt8(ascii: "0"), count: bagOfBytesToByteBufferConversionChunkSize),
+            ByteBuffer(repeating: UInt8(ascii: "1"), count: bagOfBytesToByteBufferConversionChunkSize),
+            ByteBuffer(repeating: UInt8(ascii: "2"), count: bagOfBytesToByteBufferConversionChunkSize),
+        ]
+
+        XCTAssertEqual(body, expectedChunks)
+    }
+
+    func testChunkingSequenceThatDoesNotImplementWithContiguousStorageIfAvailable() async throws {
+        let bagOfBytesToByteBufferConversionChunkSize = 8
+        let body = try await HTTPClientRequest.Body._bytes(
+            AnySequence(
+                Array(repeating: 0, count: bagOfBytesToByteBufferConversionChunkSize) +
+                    Array(repeating: 1, count: bagOfBytesToByteBufferConversionChunkSize)
+            ),
+            length: .known(bagOfBytesToByteBufferConversionChunkSize * 3),
+            bagOfBytesToByteBufferConversionChunkSize: bagOfBytesToByteBufferConversionChunkSize,
+            byteBufferMaxSize: byteBufferMaxSize
+        ).collect()
+
+        let expectedChunks = [
+            ByteBuffer(repeating: 0, count: bagOfBytesToByteBufferConversionChunkSize),
+            ByteBuffer(repeating: 1, count: bagOfBytesToByteBufferConversionChunkSize),
+        ]
+
+        XCTAssertEqual(body, expectedChunks)
+    }
+
+    #if swift(>=5.7)
+    func testChunkingSequenceFastPath() async throws {
+        func makeBytes() -> some Sequence<UInt8> & Sendable {
+            Array(repeating: 0, count: bagOfBytesToByteBufferConversionChunkSize) +
+                Array(repeating: 1, count: bagOfBytesToByteBufferConversionChunkSize) +
+                Array(repeating: 2, count: bagOfBytesToByteBufferConversionChunkSize)
+        }
+        let body = try await HTTPClientRequest.Body.bytes(
+            makeBytes(),
+            length: .known(bagOfBytesToByteBufferConversionChunkSize * 3)
+        ).collect()
+
+        var firstChunk = ByteBuffer(repeating: 0, count: bagOfBytesToByteBufferConversionChunkSize)
+        firstChunk.writeImmutableBuffer(ByteBuffer(repeating: 1, count: bagOfBytesToByteBufferConversionChunkSize))
+        firstChunk.writeImmutableBuffer(ByteBuffer(repeating: 2, count: bagOfBytesToByteBufferConversionChunkSize))
+        let expectedChunks = [
+            firstChunk,
+        ]
+
+        XCTAssertEqual(body, expectedChunks)
+    }
+
+    func testChunkingSequenceFastPathExceedingByteBufferMaxSize() async throws {
+        let bagOfBytesToByteBufferConversionChunkSize = 8
+        let byteBufferMaxSize = 16
+        func makeBytes() -> some Sequence<UInt8> & Sendable {
+            Array(repeating: 0, count: bagOfBytesToByteBufferConversionChunkSize) +
+                Array(repeating: 1, count: bagOfBytesToByteBufferConversionChunkSize) +
+                Array(repeating: 2, count: bagOfBytesToByteBufferConversionChunkSize)
+        }
+        let body = try await HTTPClientRequest.Body._bytes(
+            makeBytes(),
+            length: .known(bagOfBytesToByteBufferConversionChunkSize * 3),
+            bagOfBytesToByteBufferConversionChunkSize: bagOfBytesToByteBufferConversionChunkSize,
+            byteBufferMaxSize: byteBufferMaxSize
+        ).collect()
+
+        var firstChunk = ByteBuffer(repeating: 0, count: bagOfBytesToByteBufferConversionChunkSize)
+        firstChunk.writeImmutableBuffer(ByteBuffer(repeating: 1, count: bagOfBytesToByteBufferConversionChunkSize))
+        let secondChunk = ByteBuffer(repeating: 2, count: bagOfBytesToByteBufferConversionChunkSize)
+        let expectedChunks = [
+            firstChunk,
+            secondChunk,
+        ]
+
+        XCTAssertEqual(body, expectedChunks)
+    }
+    #endif
+
+    func testBodyStringChunking() throws {
+        let body = try HTTPClient.Body.string(
+            String(repeating: "0", count: bagOfBytesToByteBufferConversionChunkSize) +
+                String(repeating: "1", count: bagOfBytesToByteBufferConversionChunkSize) +
+                String(repeating: "2", count: bagOfBytesToByteBufferConversionChunkSize)
+        ).collect().wait()
+
+        let expectedChunks = [
+            ByteBuffer(repeating: UInt8(ascii: "0"), count: bagOfBytesToByteBufferConversionChunkSize),
+            ByteBuffer(repeating: UInt8(ascii: "1"), count: bagOfBytesToByteBufferConversionChunkSize),
+            ByteBuffer(repeating: UInt8(ascii: "2"), count: bagOfBytesToByteBufferConversionChunkSize),
+        ]
+
+        XCTAssertEqual(body, expectedChunks)
+    }
+
+    func testBodyChunkingRandomAccessCollection() throws {
+        let body = try HTTPClient.Body.bytes(
+            Array(repeating: 0, count: bagOfBytesToByteBufferConversionChunkSize) +
+                Array(repeating: 1, count: bagOfBytesToByteBufferConversionChunkSize) +
+                Array(repeating: 2, count: bagOfBytesToByteBufferConversionChunkSize)
+        ).collect().wait()
+
+        let expectedChunks = [
+            ByteBuffer(repeating: 0, count: bagOfBytesToByteBufferConversionChunkSize),
+            ByteBuffer(repeating: 1, count: bagOfBytesToByteBufferConversionChunkSize),
+            ByteBuffer(repeating: 2, count: bagOfBytesToByteBufferConversionChunkSize),
+        ]
+
+        XCTAssertEqual(body, expectedChunks)
+    }
+}
+
+extension AsyncSequence {
+    func collect() async throws -> [Element] {
+        try await self.reduce(into: []) { $0 += CollectionOfOne($1) }
+    }
+}
+
+extension HTTPClient.Body {
+    func collect() -> EventLoopFuture<[ByteBuffer]> {
+        let eelg = EmbeddedEventLoopGroup(loops: 1)
+        let el = eelg.next()
+        var body = [ByteBuffer]()
+        let writer = StreamWriter {
+            switch $0 {
+            case .byteBuffer(let byteBuffer):
+                body.append(byteBuffer)
+            case .fileRegion:
+                fatalError("file region not supported")
+            }
+            return el.makeSucceededVoidFuture()
+        }
+        return self.stream(writer).map { _ in body }
     }
 }
 
@@ -500,37 +661,5 @@ extension Optional where Wrapped == HTTPClientRequest.Prepared.Body {
             }
             return accumulatedBuffer
         }
-    }
-}
-
-struct ChunkedSequence<Wrapped: Collection>: Sequence {
-    struct Iterator: IteratorProtocol {
-        fileprivate var remainingElements: Wrapped.SubSequence
-        fileprivate let maxChunkSize: Int
-        mutating func next() -> Wrapped.SubSequence? {
-            guard !self.remainingElements.isEmpty else {
-                return nil
-            }
-            let chunk = self.remainingElements.prefix(self.maxChunkSize)
-            self.remainingElements = self.remainingElements.dropFirst(self.maxChunkSize)
-            return chunk
-        }
-    }
-
-    fileprivate let wrapped: Wrapped
-    fileprivate let maxChunkSize: Int
-
-    func makeIterator() -> Iterator {
-        .init(remainingElements: self.wrapped[...], maxChunkSize: self.maxChunkSize)
-    }
-}
-
-extension ChunkedSequence: Sendable where Wrapped: Sendable {}
-
-extension Collection {
-    /// Lazily splits `self` into `SubSequence`s with `maxChunkSize` elements.
-    /// - Parameter maxChunkSize: size of each chunk except the last one which can be smaller if not enough elements are remaining.
-    func chunked(maxChunkSize: Int) -> ChunkedSequence<Self> {
-        .init(wrapped: self, maxChunkSize: maxChunkSize)
     }
 }
