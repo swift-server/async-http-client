@@ -133,7 +133,7 @@ public class HTTPClient {
     ///     - eventLoopGroup: The `EventLoopGroup` that the ``HTTPClient`` will use.
     ///     - configuration: Client configuration.
     ///     - backgroundActivityLogger: The `Logger` that will be used to log background any activity that's not associated with a request.
-    public required init(eventLoopGroup: any EventLoopGroup,
+    public required init(eventLoopGroup: any EventLoopGroup = HTTPClient.defaultEventLoopGroup,
                          configuration: Configuration = Configuration(),
                          backgroundActivityLogger: Logger) {
         self.eventLoopGroup = eventLoopGroup
