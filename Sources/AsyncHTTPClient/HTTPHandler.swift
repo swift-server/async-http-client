@@ -750,7 +750,6 @@ extension HTTPClient {
             return self.promise.futureResult
         }
 
-        #if swift(>=5.7)
         /// Waits for execution of this request to complete.
         ///
         /// - returns: The value of  ``futureResult`` when it completes.
@@ -759,15 +758,6 @@ extension HTTPClient {
         public func wait() throws -> Response {
             return try self.promise.futureResult.wait()
         }
-        #else
-        /// Waits for execution of this request to complete.
-        ///
-        /// - returns: The value of ``futureResult`` when it completes.
-        /// - throws: The error value of ``futureResult`` if it errors.
-        public func wait() throws -> Response {
-            return try self.promise.futureResult.wait()
-        }
-        #endif
 
         /// Provides the result of this request.
         ///
