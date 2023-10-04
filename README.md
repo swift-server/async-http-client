@@ -330,3 +330,4 @@ AsyncHTTPClient     | Minimum Swift Version
 `1.13.0 ..< 1.18.0` | 5.5.2
 `1.18.0 ..< 1.20.0` | 5.6
 `1.20.0 ...`        | 5.7
+
