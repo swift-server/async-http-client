@@ -12,8 +12,22 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Algorithms
 import NIOCore
 import NIOHTTP1
+
+@usableFromInline
+let bagOfBytesToByteBufferConversionChunkSize = 1024 * 1024 * 4
+
+#if arch(arm) || arch(i386)
+// on 32-bit platforms we can't make use of a whole UInt32.max (as it doesn't fit in an Int)
+@usableFromInline
+let byteBufferMaxSize = Int.max
+#else
+// on 64-bit platforms we're good
+@usableFromInline
+let byteBufferMaxSize = Int(UInt32.max)
+#endif
 
 /// A representation of an HTTP request for the Swift Concurrency HTTPClient API.
 ///
@@ -93,9 +107,9 @@ extension HTTPClientRequest.Body {
 
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `RandomAccessCollection` of bytes.
     ///
-    /// This construction will flatten the bytes into a `ByteBuffer`. As a result, the peak memory
-    /// usage of this construction will be double the size of the original collection. The construction
-    /// of the `ByteBuffer` will be delayed until it's needed.
+    /// This construction will flatten the `bytes` into a `ByteBuffer` in chunks of ~4MB.
+    /// As a result, the peak memory usage of this construction will be a small multiple of ~4MB.
+    /// The construction of the `ByteBuffer` will be delayed until it's needed.
     ///
     /// - parameter bytes: The bytes of the request body.
     @inlinable
@@ -103,24 +117,7 @@ extension HTTPClientRequest.Body {
     public static func bytes<Bytes: RandomAccessCollection & Sendable>(
         _ bytes: Bytes
     ) -> Self where Bytes.Element == UInt8 {
-        Self._bytes(bytes)
-    }
-
-    @inlinable
-    static func _bytes<Bytes: RandomAccessCollection>(
-        _ bytes: Bytes
-    ) -> Self where Bytes.Element == UInt8 {
-        self.init(.sequence(
-            length: .known(bytes.count),
-            canBeConsumedMultipleTimes: true
-        ) { allocator in
-            if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
-                // fastpath
-                return buffer
-            }
-            // potentially really slow path
-            return allocator.buffer(bytes: bytes)
-        })
+        self.bytes(bytes, length: .known(bytes.count))
     }
 
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `Sequence` of bytes.
@@ -146,32 +143,77 @@ extension HTTPClientRequest.Body {
         _ bytes: Bytes,
         length: Length
     ) -> Self where Bytes.Element == UInt8 {
-        Self._bytes(bytes, length: length)
+        Self._bytes(
+            bytes,
+            length: length,
+            bagOfBytesToByteBufferConversionChunkSize: bagOfBytesToByteBufferConversionChunkSize,
+            byteBufferMaxSize: byteBufferMaxSize
+        )
     }
 
+    /// internal method to test chunking
     @inlinable
-    static func _bytes<Bytes: Sequence>(
+    @preconcurrency
+    static func _bytes<Bytes: Sequence & Sendable>(
         _ bytes: Bytes,
-        length: Length
+        length: Length,
+        bagOfBytesToByteBufferConversionChunkSize: Int,
+        byteBufferMaxSize: Int
     ) -> Self where Bytes.Element == UInt8 {
-        self.init(.sequence(
-            length: length.storage,
-            canBeConsumedMultipleTimes: false
-        ) { allocator in
-            if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
-                // fastpath
-                return buffer
+        // fast path
+        let body: Self? = bytes.withContiguousStorageIfAvailable { bufferPointer -> Self in
+            // `some Sequence<UInt8>` is special as it can't be efficiently chunked lazily.
+            // Therefore we need to do the chunking eagerly if it implements the fast path withContiguousStorageIfAvailable
+            // If we do it eagerly, it doesn't make sense to do a bunch of small chunks, so we only chunk if it exceeds
+            // the maximum size of a ByteBuffer.
+            if bufferPointer.count <= byteBufferMaxSize {
+                let buffer = ByteBuffer(bytes: bufferPointer)
+                return Self(.sequence(
+                    length: length.storage,
+                    canBeConsumedMultipleTimes: true,
+                    makeCompleteBody: { _ in buffer }
+                ))
+            } else {
+                // we need to copy `bufferPointer` eagerly as the pointer is only valid during the call to `withContiguousStorageIfAvailable`
+                let buffers: Array<ByteBuffer> = bufferPointer.chunks(ofCount: byteBufferMaxSize).map { ByteBuffer(bytes: $0) }
+                return Self(.asyncSequence(
+                    length: length.storage,
+                    makeAsyncIterator: {
+                        var iterator = buffers.makeIterator()
+                        return { _ in
+                            iterator.next()
+                        }
+                    }
+                ))
             }
-            // potentially really slow path
-            return allocator.buffer(bytes: bytes)
+        }
+        if let body = body {
+            return body
+        }
+
+        // slow path
+        return Self(.asyncSequence(
+            length: length.storage
+        ) {
+            var iterator = bytes.makeIterator()
+            return { allocator in
+                var buffer = allocator.buffer(capacity: bagOfBytesToByteBufferConversionChunkSize)
+                while buffer.writableBytes > 0, let byte = iterator.next() {
+                    buffer.writeInteger(byte)
+                }
+                if buffer.readableBytes > 0 {
+                    return buffer
+                }
+                return nil
+            }
         })
     }
 
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `Collection` of bytes.
     ///
-    /// This construction will flatten the bytes into a `ByteBuffer`. As a result, the peak memory
-    /// usage of this construction will be double the size of the original collection. The construction
-    /// of the `ByteBuffer` will be delayed until it's needed.
+    /// This construction will flatten the `bytes` into a `ByteBuffer` in chunks of ~4MB.
+    /// As a result, the peak memory usage of this construction will be a small multiple of ~4MB.
+    /// The construction of the `ByteBuffer` will be delayed until it's needed.
     ///
     /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
     /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
@@ -186,25 +228,27 @@ extension HTTPClientRequest.Body {
         _ bytes: Bytes,
         length: Length
     ) -> Self where Bytes.Element == UInt8 {
-        Self._bytes(bytes, length: length)
-    }
-
-    @inlinable
-    static func _bytes<Bytes: Collection>(
-        _ bytes: Bytes,
-        length: Length
-    ) -> Self where Bytes.Element == UInt8 {
-        self.init(.sequence(
-            length: length.storage,
-            canBeConsumedMultipleTimes: true
-        ) { allocator in
-            if let buffer = bytes.withContiguousStorageIfAvailable({ allocator.buffer(bytes: $0) }) {
-                // fastpath
-                return buffer
-            }
-            // potentially really slow path
-            return allocator.buffer(bytes: bytes)
-        })
+        if bytes.count <= bagOfBytesToByteBufferConversionChunkSize {
+            return self.init(.sequence(
+                length: length.storage,
+                canBeConsumedMultipleTimes: true
+            ) { allocator in
+                allocator.buffer(bytes: bytes)
+            })
+        } else {
+            return self.init(.asyncSequence(
+                length: length.storage,
+                makeAsyncIterator: {
+                    var iterator = bytes.chunks(ofCount: bagOfBytesToByteBufferConversionChunkSize).makeIterator()
+                    return { allocator in
+                        guard let chunk = iterator.next() else {
+                            return nil
+                        }
+                        return allocator.buffer(bytes: chunk)
+                    }
+                }
+            ))
+        }
     }
 
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from an `AsyncSequence` of `ByteBuffer`s.
@@ -224,14 +268,6 @@ extension HTTPClientRequest.Body {
         _ sequenceOfBytes: SequenceOfBytes,
         length: Length
     ) -> Self where SequenceOfBytes.Element == ByteBuffer {
-        Self._stream(sequenceOfBytes, length: length)
-    }
-
-    @inlinable
-    static func _stream<SequenceOfBytes: AsyncSequence>(
-        _ sequenceOfBytes: SequenceOfBytes,
-        length: Length
-    ) -> Self where SequenceOfBytes.Element == ByteBuffer {
         let body = self.init(.asyncSequence(length: length.storage) {
             var iterator = sequenceOfBytes.makeAsyncIterator()
             return { _ -> ByteBuffer? in
@@ -243,7 +279,7 @@ extension HTTPClientRequest.Body {
 
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from an `AsyncSequence` of bytes.
     ///
-    /// This construction will consume 1kB chunks from the `Bytes` and send them at once. This optimizes for
+    /// This construction will consume 4MB chunks from the `Bytes` and send them at once. This optimizes for
     /// `AsyncSequence`s where larger chunks are buffered up and available without actually suspending, such
     /// as those provided by `FileHandle`.
     ///
@@ -260,18 +296,10 @@ extension HTTPClientRequest.Body {
         _ bytes: Bytes,
         length: Length
     ) -> Self where Bytes.Element == UInt8 {
-        Self._stream(bytes, length: length)
-    }
-
-    @inlinable
-    static func _stream<Bytes: AsyncSequence>(
-        _ bytes: Bytes,
-        length: Length
-    ) -> Self where Bytes.Element == UInt8 {
         let body = self.init(.asyncSequence(length: length.storage) {
             var iterator = bytes.makeAsyncIterator()
             return { allocator -> ByteBuffer? in
-                var buffer = allocator.buffer(capacity: 1024) // TODO: Magic number
+                var buffer = allocator.buffer(capacity: bagOfBytesToByteBufferConversionChunkSize)
                 while buffer.writableBytes > 0, let byte = try await iterator.next() {
                     buffer.writeInteger(byte)
                 }
@@ -311,5 +339,55 @@ extension HTTPClientRequest.Body {
 
         @usableFromInline
         internal var storage: RequestBodyLength
+    }
+}
+
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+extension HTTPClientRequest.Body: AsyncSequence {
+    public typealias Element = ByteBuffer
+
+    @inlinable
+    public func makeAsyncIterator() -> AsyncIterator {
+        switch self.mode {
+        case .asyncSequence(_, let makeAsyncIterator):
+            return .init(storage: .makeNext(makeAsyncIterator()))
+        case .sequence(_, _, let makeCompleteBody):
+            return .init(storage: .byteBuffer(makeCompleteBody(AsyncIterator.allocator)))
+        case .byteBuffer(let byteBuffer):
+            return .init(storage: .byteBuffer(byteBuffer))
+        }
+    }
+}
+
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+extension HTTPClientRequest.Body {
+    public struct AsyncIterator: AsyncIteratorProtocol {
+        @usableFromInline
+        static let allocator = ByteBufferAllocator()
+
+        @usableFromInline
+        enum Storage {
+            case byteBuffer(ByteBuffer?)
+            case makeNext((ByteBufferAllocator) async throws -> ByteBuffer?)
+        }
+
+        @usableFromInline
+        var storage: Storage
+
+        @inlinable
+        init(storage: Storage) {
+            self.storage = storage
+        }
+
+        @inlinable
+        public mutating func next() async throws -> ByteBuffer? {
+            switch self.storage {
+            case .byteBuffer(let buffer):
+                self.storage = .byteBuffer(nil)
+                return buffer
+            case .makeNext(let makeNext):
+                return try await makeNext(Self.allocator)
+            }
+        }
     }
 }

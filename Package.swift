@@ -1,4 +1,4 @@
-// swift-tools-version:5.6
+// swift-tools-version:5.7
 //===----------------------------------------------------------------------===//
 //
 // This source file is part of the AsyncHTTPClient open source project
@@ -29,6 +29,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.4.4"),
         .package(url: "https://github.com/apple/swift-atomics.git", from: "1.0.2"),
         .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.0.0"),
+        .package(url: "https://github.com/apple/swift-algorithms", from: "1.0.0"),
     ],
     targets: [
         .target(name: "CAsyncHTTPClient"),
@@ -48,6 +49,7 @@ let package = Package(
                 .product(name: "NIOTransportServices", package: "swift-nio-transport-services"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Atomics", package: "swift-atomics"),
+                .product(name: "Algorithms", package: "swift-algorithms"),
             ]
         ),
         .testTarget(
@@ -64,6 +66,7 @@ let package = Package(
                 .product(name: "NIOSOCKS", package: "swift-nio-extras"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Atomics", package: "swift-atomics"),
+                .product(name: "Algorithms", package: "swift-algorithms"),
             ],
             resources: [
                 .copy("Resources/self_signed_cert.pem"),
