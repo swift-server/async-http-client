@@ -15,6 +15,7 @@
 import struct Foundation.URL
 import NIOCore
 import NIOHTTP1
+import NIOSSL
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest {
@@ -37,6 +38,7 @@ extension HTTPClientRequest {
         var requestFramingMetadata: RequestFramingMetadata
         var head: HTTPRequestHead
         var body: Body?
+        var tlsConfiguration: TLSConfiguration?
     }
 }
 
@@ -58,7 +60,7 @@ extension HTTPClientRequest.Prepared {
 
         self.init(
             url: url,
-            poolKey: .init(url: deconstructedURL, tlsConfiguration: nil, dnsOverride: dnsOverride),
+            poolKey: .init(url: deconstructedURL, tlsConfiguration: request.tlsConfiguration, dnsOverride: dnsOverride),
             requestFramingMetadata: metadata,
             head: .init(
                 version: .http1_1,
@@ -66,7 +68,8 @@ extension HTTPClientRequest.Prepared {
                 uri: deconstructedURL.uri,
                 headers: headers
             ),
-            body: request.body.map { .init($0) }
+            body: request.body.map { .init($0) },
+            tlsConfiguration: request.tlsConfiguration
         )
     }
 }
