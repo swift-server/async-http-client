@@ -923,7 +923,7 @@ extension HTTPClient: @unchecked Sendable {}
 extension HTTPClient.Configuration {
     /// Timeout configuration.
     public struct Timeout: Sendable {
-        /// Specifies connect timeout. If no connect timeout is given, a default 30 seconds timeout will applied.
+        /// Specifies connect timeout. If no connect timeout is given, a default 10 seconds timeout will be applied.
         public var connect: TimeAmount?
         /// Specifies read timeout.
         public var read: TimeAmount?
