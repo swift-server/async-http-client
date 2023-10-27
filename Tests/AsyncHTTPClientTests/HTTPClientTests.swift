@@ -3536,7 +3536,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             XCTAssertEqual(.shutdownUnsupported, error as? HTTPClientError)
         }
     }
-  
+
     func testAsyncExecuteWithCustomTLS() async throws {
         let httpsBin = HTTPBin(.http1_1(ssl: true))
         defer {
