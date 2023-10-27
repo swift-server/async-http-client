@@ -127,7 +127,7 @@ public class HTTPClient {
     ///     - eventLoopGroup: The `EventLoopGroup` that the ``HTTPClient`` will use.
     ///     - configuration: Client configuration.
     ///     - backgroundActivityLogger: The `Logger` that will be used to log background any activity that's not associated with a request.
-    public convenience init(eventLoopGroup: any EventLoopGroup,
+    public convenience init(eventLoopGroup: any EventLoopGroup = HTTPClient.defaultEventLoopGroup,
                             configuration: Configuration = Configuration(),
                             backgroundActivityLogger: Logger) {
         self.init(eventLoopGroup: eventLoopGroup,
@@ -171,7 +171,6 @@ public class HTTPClient {
         }
     }
 
-    #if swift(>=5.7)
     /// Shuts down the client and `EventLoopGroup` if it was created by the client.
     ///
     /// This method blocks the thread indefinitely, prefer using ``shutdown()-96ayw``.
@@ -179,14 +178,6 @@ public class HTTPClient {
     public func syncShutdown() throws {
         try self.syncShutdown(requiresCleanClose: false)
     }
-    #else
-    /// Shuts down the client and `EventLoopGroup` if it was created by the client.
-    ///
-    /// This method blocks the thread indefinitely, prefer using ``shutdown()-96ayw``.
-    public func syncShutdown() throws {
-        try self.syncShutdown(requiresCleanClose: false)
-    }
-    #endif
 
     /// Shuts down the client and `EventLoopGroup` if it was created by the client.
     ///
@@ -932,9 +923,7 @@ extension HTTPClient {
     }
 }
 
-#if swift(>=5.7)
 extension HTTPClient.Configuration: Sendable {}
-#endif
 
 extension HTTPClient.EventLoopGroupProvider: Sendable {}
 extension HTTPClient.EventLoopPreference: Sendable {}
@@ -945,7 +934,7 @@ extension HTTPClient: @unchecked Sendable {}
 extension HTTPClient.Configuration {
     /// Timeout configuration.
     public struct Timeout: Sendable {
-        /// Specifies connect timeout. If no connect timeout is given, a default 30 seconds timeout will applied.
+        /// Specifies connect timeout. If no connect timeout is given, a default 10 seconds timeout will be applied.
         public var connect: TimeAmount?
         /// Specifies read timeout.
         public var read: TimeAmount?

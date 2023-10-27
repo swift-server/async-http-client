@@ -146,7 +146,7 @@ import NIOSSL
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension Transaction: HTTPSchedulableRequest {
     var poolKey: ConnectionPool.Key { self.request.poolKey }
-    var tlsConfiguration: TLSConfiguration? { return nil }
+    var tlsConfiguration: TLSConfiguration? { return self.request.tlsConfiguration }
     var requiredEventLoop: EventLoop? { return nil }
 
     func requestWasQueued(_ scheduler: HTTPRequestScheduler) {

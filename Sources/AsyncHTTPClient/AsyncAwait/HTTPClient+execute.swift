@@ -78,7 +78,7 @@ extension HTTPClient {
         // this loop is there to follow potential redirects
         while true {
             let preparedRequest = try HTTPClientRequest.Prepared(currentRequest, dnsOverride: configuration.dnsOverride)
-            let response = try await executeCancellable(preparedRequest, deadline: deadline, logger: logger)
+            let response = try await self.executeCancellable(preparedRequest, deadline: deadline, logger: logger)
 
             guard var redirectState = currentRedirectState else {
                 // a `nil` redirectState means we should not follow redirects

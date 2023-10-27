@@ -961,13 +961,18 @@ class UploadCountingDelegate: HTTPClientResponseDelegate {
     }
 }
 
-class MockTaskQueuer: HTTPRequestScheduler {
+final class MockTaskQueuer: HTTPRequestScheduler {
     private(set) var hitCancelCount = 0
 
-    init() {}
+    let onCancelRequest: (@Sendable (HTTPSchedulableRequest) -> Void)?
 
-    func cancelRequest(_: HTTPSchedulableRequest) {
+    init(onCancelRequest: (@Sendable (HTTPSchedulableRequest) -> Void)? = nil) {
+        self.onCancelRequest = onCancelRequest
+    }
+
+    func cancelRequest(_ request: HTTPSchedulableRequest) {
         self.hitCancelCount += 1
+        self.onCancelRequest?(request)
     }
 }
 
