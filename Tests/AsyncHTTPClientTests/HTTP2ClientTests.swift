@@ -376,7 +376,7 @@ class HTTP2ClientTests: XCTestCase {
     }
 
     func testPlatformConnectErrorIsForwardedOnTimeout() {
-        let bin = HTTPBin(.http2(compress: false))
+        let bin = HTTPBin(.http2(compress: false), reusePort: true)
         let clientGroup = MultiThreadedEventLoopGroup(numberOfThreads: 2)
         let el1 = clientGroup.next()
         let el2 = clientGroup.next()
@@ -404,20 +404,22 @@ class HTTP2ClientTests: XCTestCase {
         XCTAssertEqual(.ok, response1?.status)
         XCTAssertEqual(response1?.version, .http2)
         let serverPort = bin.port
-        XCTAssertNoThrow(try bin.shutdown())
-        // client is now in HTTP/2 state and the HTTPBin is closed
-        // start a new server on the old port which closes all connections immediately
+
         let serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { XCTAssertNoThrow(try serverGroup.syncShutdownGracefully()) }
         var maybeServer: Channel?
         XCTAssertNoThrow(maybeServer = try ServerBootstrap(group: serverGroup)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
             .childChannelInitializer { channel in
                 channel.close()
             }
             .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .bind(host: "127.0.0.1", port: serverPort)
             .wait())
+        // shutting down the old server closes all connections immediately
+        XCTAssertNoThrow(try bin.shutdown())
+        // client is now in HTTP/2 state and the HTTPBin is closed
         guard let server = maybeServer else { return }
         defer { XCTAssertNoThrow(try server.close().wait()) }
 
