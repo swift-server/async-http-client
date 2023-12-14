@@ -17,11 +17,18 @@ import NIOCore
 struct RequestOptions {
     /// The maximal `TimeAmount` that is allowed to pass between `channelRead`s from the Channel.
     var idleReadTimeout: TimeAmount?
-
+    /// The maximal `TimeAmount` that is allowed to pass between `write`s into the Channel.
+    var idleWriteTimeout: TimeAmount?
+    /// DNS overrides.
     var dnsOverride: [String: String]
 
-    init(idleReadTimeout: TimeAmount?, dnsOverride: [String: String]) {
+    init(
+        idleReadTimeout: TimeAmount?,
+        idleWriteTimeout: TimeAmount?,
+        dnsOverride: [String: String]
+    ) {
         self.idleReadTimeout = idleReadTimeout
+        self.idleWriteTimeout = idleWriteTimeout
         self.dnsOverride = dnsOverride
     }
 }
@@ -30,6 +37,7 @@ extension RequestOptions {
     static func fromClientConfiguration(_ configuration: HTTPClient.Configuration) -> Self {
         RequestOptions(
             idleReadTimeout: configuration.timeout.read,
+            idleWriteTimeout: configuration.timeout.write,
             dnsOverride: configuration.dnsOverride
         )
     }

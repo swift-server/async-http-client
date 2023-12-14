@@ -927,8 +927,10 @@ extension HTTPClient.Configuration {
         public var connect: TimeAmount?
         /// Specifies read timeout.
         public var read: TimeAmount?
+        /// Specifies the maximum amount of time without bytes being written by the client before closing the connection.
+        public var write: TimeAmount?
 
-        /// internal connection creation timeout. Defaults the connect timeout to always contain a value.
+        /// Internal connection creation timeout. Defaults the connect timeout to always contain a value.
         var connectionCreationTimeout: TimeAmount {
             self.connect ?? .seconds(10)
         }
@@ -938,7 +940,12 @@ extension HTTPClient.Configuration {
         /// - parameters:
         ///     - connect: `connect` timeout. Will default to 10 seconds, if no value is provided.
         ///     - read: `read` timeout.
-        public init(connect: TimeAmount? = nil, read: TimeAmount? = nil) {
+        ///     - write: `write` timeout.
+        public init(
+            connect: TimeAmount? = nil,
+            read: TimeAmount? = nil,
+            write: TimeAmount? = nil
+        ) {
             self.connect = connect
             self.read = read
         }
@@ -1032,6 +1039,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case emptyScheme
         case unsupportedScheme(String)
         case readTimeout
+        case writeTimeout
         case remoteConnectionClosed
         case cancelled
         case identityCodingIncorrectlyPresent
@@ -1090,6 +1098,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
             return "Unsupported scheme"
         case .readTimeout:
             return "Read timeout"
+        case .writeTimeout:
+            return "Write timeout"
         case .remoteConnectionClosed:
             return "Remote connection closed"
         case .cancelled:
@@ -1155,8 +1165,10 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let emptyScheme = HTTPClientError(code: .emptyScheme)
     /// Provided URL scheme is not supported, supported schemes are: `http` and `https`
     public static func unsupportedScheme(_ scheme: String) -> HTTPClientError { return HTTPClientError(code: .unsupportedScheme(scheme)) }
-    /// Request timed out.
+    /// Request timed out while waiting for response.
     public static let readTimeout = HTTPClientError(code: .readTimeout)
+    /// Request timed out.
+    public static let writeTimeout = HTTPClientError(code: .writeTimeout)
     /// Remote connection was closed unexpectedly.
     public static let remoteConnectionClosed = HTTPClientError(code: .remoteConnectionClosed)
     /// Request was cancelled.

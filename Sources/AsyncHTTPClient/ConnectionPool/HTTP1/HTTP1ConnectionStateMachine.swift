@@ -355,6 +355,18 @@ struct HTTP1ConnectionStateMachine {
         }
     }
 
+    mutating func idleWriteTimeoutTriggered() -> Action {
+        guard case .inRequest(var requestStateMachine, let close) = self.state else {
+            preconditionFailure("Invalid state: \(self.state)")
+        }
+
+        return self.avoidingStateMachineCoW { state -> Action in
+            let action = requestStateMachine.idleWriteTimeoutTriggered()
+            state = .inRequest(requestStateMachine, close: close)
+            return state.modify(with: action)
+        }
+    }
+
     mutating func headSent() -> Action {
         guard case .inRequest(var requestStateMachine, let close) = self.state else {
             return .wait

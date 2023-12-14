@@ -356,6 +356,7 @@ extension Transaction {
                 // response body stream.
                 let body = TransactionBody.makeSequence(
                     backPressureStrategy: .init(lowWatermark: 1, highWatermark: 1),
+                    finishOnDeinit: true,
                     delegate: AnyAsyncSequenceProducerDelegate(delegate)
                 )
 
