@@ -53,7 +53,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
     private var idleReadTimeoutStateMachine: IdleReadStateMachine?
     private var idleReadTimeoutTimer: Scheduled<Void>?
-    
+
     private var idleWriteTimeoutStateMachine: IdleWriteStateMachine?
     private var idleWriteTimeoutTimer: Scheduled<Void>?
 
@@ -91,7 +91,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         if let timeoutAction = self.idleWriteTimeoutStateMachine?.channelWritabilityChanged(context: context) {
             self.runTimeoutAction(timeoutAction, context: context)
         }
-        
+
         let action = self.state.writabilityChanged(writable: context.channel.isWritable)
         self.run(action, context: context)
     }
@@ -124,7 +124,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         // The `HTTPRequestStateMachine` ensures that a `HTTP2ClientRequestHandler` only handles
         // a single request.
         self.request = request
-        
+
         if let timeoutAction = self.idleWriteTimeoutStateMachine?.write() {
             self.runTimeoutAction(timeoutAction, context: context)
         }
@@ -175,7 +175,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
                 if let readTimeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
                     self.runTimeoutAction(readTimeoutAction, context: context)
                 }
-                
+
                 if let writeTimeoutAction = self.idleWriteTimeoutStateMachine?.requestEndSent() {
                     self.runTimeoutAction(writeTimeoutAction, context: context)
                 }
@@ -194,7 +194,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             if let readTimeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
                 self.runTimeoutAction(readTimeoutAction, context: context)
             }
-            
+
             if let writeTimeoutAction = self.idleWriteTimeoutStateMachine?.requestEndSent() {
                 self.runTimeoutAction(writeTimeoutAction, context: context)
             }
@@ -321,7 +321,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             break
         }
     }
-    
+
     private func runTimeoutAction(_ action: IdleWriteStateMachine.Action, context: ChannelHandlerContext) {
         switch action {
         case .startIdleWriteTimeoutTimer(let timeAmount):
@@ -364,7 +364,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             promise?.fail(HTTPClientError.requestStreamCancelled)
             return
         }
-        
+
         if let timeoutAction = self.idleWriteTimeoutStateMachine?.write() {
             self.runTimeoutAction(timeoutAction, context: context)
         }
@@ -398,7 +398,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             // See code comment in `writeRequestBodyPart0`
             return
         }
-        
+
         if let timeoutAction = self.idleWriteTimeoutStateMachine?.cancelRequest() {
             self.runTimeoutAction(timeoutAction, context: context)
         }

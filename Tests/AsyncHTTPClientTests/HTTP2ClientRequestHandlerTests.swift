@@ -285,7 +285,7 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
         // therefore advancing the time should not trigger a crash
         embedded.embeddedEventLoop.advanceTime(by: .milliseconds(250))
     }
-    
+
     func testIdleWriteTimeout() {
         let embedded = EmbeddedChannel()
         let requestHandler = HTTP2ClientRequestHandler(eventLoop: embedded.eventLoop)
@@ -324,7 +324,7 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
             XCTAssertEqual($0 as? HTTPClientError, .writeTimeout)
         }
     }
-    
+
     func testIdleWriteTimeoutWritabilityChanged() {
         let embedded = EmbeddedChannel()
         let readEventHandler = ReadEventHitHandler()
@@ -341,12 +341,12 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
             // This should not trigger any errors or timeouts, because the timer isn't running
             // as the channel is not writable.
             embedded.embeddedEventLoop.advanceTime(by: .milliseconds(20))
-            
+
             // Now that the channel will become writable, this should trigger a timeout.
             embedded.isWritable = true
             embedded.pipeline.fireChannelWritabilityChanged()
             embedded.embeddedEventLoop.advanceTime(by: .milliseconds(2))
-            
+
             return testWriter.start(writer: writer)
         }))
 

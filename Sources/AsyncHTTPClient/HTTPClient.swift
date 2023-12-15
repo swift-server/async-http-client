@@ -79,7 +79,7 @@ public class HTTPClient {
     private var state: State
     private let stateLock = NIOLock()
 
-    internal static let loggingDisabled = Logger(label: "AHC-do-not-log", factory: { _ in SwiftLogNoOpLogHandler() })
+    static let loggingDisabled = Logger(label: "AHC-do-not-log", factory: { _ in SwiftLogNoOpLogHandler() })
 
     /// Create an ``HTTPClient`` with specified `EventLoopGroup` provider and configuration.
     ///
@@ -184,7 +184,7 @@ public class HTTPClient {
     /// throw the appropriate error if needed. For instance, if its internal connection pool has any non-released connections,
     /// this indicate shutdown was called too early before tasks were completed or explicitly canceled.
     /// In general, setting this parameter to `true` should make it easier and faster to catch related programming errors.
-    internal func syncShutdown(requiresCleanClose: Bool) throws {
+    func syncShutdown(requiresCleanClose: Bool) throws {
         if let eventLoop = MultiThreadedEventLoopGroup.currentEventLoop {
             preconditionFailure("""
             BUG DETECTED: syncShutdown() must not be called when on an EventLoop.
@@ -947,7 +947,7 @@ extension HTTPClient.Configuration {
             self.connect = connect
             self.read = read
         }
-        
+
         /// Create timeout.
         ///
         /// - parameters:
@@ -1027,7 +1027,7 @@ extension HTTPClient.Configuration {
     }
 
     public struct HTTPVersion: Sendable, Hashable {
-        internal enum Configuration {
+        enum Configuration {
             case http1Only
             case automatic
         }
@@ -1038,7 +1038,7 @@ extension HTTPClient.Configuration {
         /// HTTP/2 is used if we connect to a server with HTTPS and the server supports HTTP/2, otherwise we use HTTP/1
         public static let automatic: Self = .init(configuration: .automatic)
 
-        internal var configuration: Configuration
+        var configuration: Configuration
     }
 }
 

@@ -336,7 +336,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         // therefore advancing the time should not trigger a crash
         embedded.embeddedEventLoop.advanceTime(by: .milliseconds(250))
     }
-    
+
     func testIdleWriteTimeout() {
         let embedded = EmbeddedChannel()
         let testWriter = TestBackpressureWriter(eventLoop: embedded.eventLoop, parts: 5)
@@ -375,7 +375,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
             XCTAssertEqual($0 as? HTTPClientError, .writeTimeout)
         }
     }
-    
+
     func testIdleWriteTimeoutWritabilityChanged() {
         let embedded = EmbeddedChannel()
         let testWriter = TestBackpressureWriter(eventLoop: embedded.eventLoop, parts: 5)
@@ -390,12 +390,12 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
             // This should not trigger any errors or timeouts, because the timer isn't running
             // as the channel is not writable.
             embedded.embeddedEventLoop.advanceTime(by: .milliseconds(20))
-            
+
             // Now that the channel will become writable, this should trigger a timeout.
             embedded.isWritable = true
             embedded.pipeline.fireChannelWritabilityChanged()
             embedded.embeddedEventLoop.advanceTime(by: .milliseconds(2))
-            
+
             return testWriter.start(writer: writer)
         }))
 
@@ -423,7 +423,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
             XCTAssertEqual($0 as? HTTPClientError, .writeTimeout)
         }
     }
-    
+
     func testIdleWriteTimeoutIsCancelledIfRequestIsCancelled() {
         let embedded = EmbeddedChannel()
         let testWriter = TestBackpressureWriter(eventLoop: embedded.eventLoop, parts: 1)
@@ -454,7 +454,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         testWriter.writabilityChanged(true)
         embedded.pipeline.fireChannelWritabilityChanged()
         testUtils.connection.executeRequest(requestBag)
-        
+
         // canceling the request
         requestBag.fail(HTTPClientError.cancelled)
         XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
