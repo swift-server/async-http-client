@@ -940,11 +940,24 @@ extension HTTPClient.Configuration {
         /// - parameters:
         ///     - connect: `connect` timeout. Will default to 10 seconds, if no value is provided.
         ///     - read: `read` timeout.
+        public init(
+            connect: TimeAmount? = nil,
+            read: TimeAmount? = nil
+        ) {
+            self.connect = connect
+            self.read = read
+        }
+        
+        /// Create timeout.
+        ///
+        /// - parameters:
+        ///     - connect: `connect` timeout. Will default to 10 seconds, if no value is provided.
+        ///     - read: `read` timeout.
         ///     - write: `write` timeout.
         public init(
             connect: TimeAmount? = nil,
             read: TimeAmount? = nil,
-            write: TimeAmount? = nil
+            write: TimeAmount
         ) {
             self.connect = connect
             self.read = read
