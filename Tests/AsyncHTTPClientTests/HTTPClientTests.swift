@@ -3526,6 +3526,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         XCTAssertEqual(.ok, response.status)
     }
 
+    @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
     func testAsyncExecuteWithCustomTLS() async throws {
         let httpsBin = HTTPBin(.http1_1(ssl: true))
         defer {
