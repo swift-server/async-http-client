@@ -286,6 +286,139 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
         embedded.embeddedEventLoop.advanceTime(by: .milliseconds(250))
     }
 
+    func testIdleWriteTimeout() {
+        let embedded = EmbeddedChannel()
+        let requestHandler = HTTP2ClientRequestHandler(eventLoop: embedded.eventLoop)
+        XCTAssertNoThrow(try embedded.pipeline.syncOperations.addHandlers([requestHandler]))
+        XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
+        let logger = Logger(label: "test")
+
+        let testWriter = TestBackpressureWriter(eventLoop: embedded.eventLoop, parts: 5)
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(length: 10) { writer in
+            // Advance time by more than the idle write timeout (that's 1 millisecond) to trigger the timeout.
+            embedded.embeddedEventLoop.advanceTime(by: .milliseconds(2))
+            return testWriter.start(writer: writer)
+        }))
+        guard let request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
+
+        let delegate = ResponseBackpressureDelegate(eventLoop: embedded.eventLoop)
+        var maybeRequestBag: RequestBag<ResponseBackpressureDelegate>?
+        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embedded.eventLoop),
+            task: .init(eventLoop: embedded.eventLoop, logger: logger),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(idleWriteTimeout: .milliseconds(1)),
+            delegate: delegate
+        ))
+        guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
+
+        embedded.isWritable = true
+        testWriter.writabilityChanged(true)
+        embedded.pipeline.fireChannelWritabilityChanged()
+        embedded.write(requestBag, promise: nil)
+
+        XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .writeTimeout)
+        }
+    }
+
+    func testIdleWriteTimeoutWritabilityChanged() {
+        let embedded = EmbeddedChannel()
+        let readEventHandler = ReadEventHitHandler()
+        let requestHandler = HTTP2ClientRequestHandler(eventLoop: embedded.eventLoop)
+        XCTAssertNoThrow(try embedded.pipeline.syncOperations.addHandlers([readEventHandler, requestHandler]))
+        XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
+        let logger = Logger(label: "test")
+
+        let testWriter = TestBackpressureWriter(eventLoop: embedded.eventLoop, parts: 5)
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(length: 10) { writer in
+            embedded.isWritable = false
+            embedded.pipeline.fireChannelWritabilityChanged()
+            // This should not trigger any errors or timeouts, because the timer isn't running
+            // as the channel is not writable.
+            embedded.embeddedEventLoop.advanceTime(by: .milliseconds(20))
+
+            // Now that the channel will become writable, this should trigger a timeout.
+            embedded.isWritable = true
+            embedded.pipeline.fireChannelWritabilityChanged()
+            embedded.embeddedEventLoop.advanceTime(by: .milliseconds(2))
+
+            return testWriter.start(writer: writer)
+        }))
+
+        guard let request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
+
+        let delegate = ResponseAccumulator(request: request)
+        var maybeRequestBag: RequestBag<ResponseAccumulator>?
+        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embedded.eventLoop),
+            task: .init(eventLoop: embedded.eventLoop, logger: logger),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(idleWriteTimeout: .milliseconds(1)),
+            delegate: delegate
+        ))
+        guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
+
+        embedded.isWritable = true
+        testWriter.writabilityChanged(true)
+        embedded.pipeline.fireChannelWritabilityChanged()
+        embedded.write(requestBag, promise: nil)
+
+        XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .writeTimeout)
+        }
+    }
+
+    func testIdleWriteTimeoutIsCanceledIfRequestIsCanceled() {
+        let embedded = EmbeddedChannel()
+        let readEventHandler = ReadEventHitHandler()
+        let requestHandler = HTTP2ClientRequestHandler(eventLoop: embedded.eventLoop)
+        XCTAssertNoThrow(try embedded.pipeline.syncOperations.addHandlers([readEventHandler, requestHandler]))
+        XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
+        let logger = Logger(label: "test")
+
+        let testWriter = TestBackpressureWriter(eventLoop: embedded.eventLoop, parts: 5)
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(length: 2) { writer in
+            return testWriter.start(writer: writer, expectedErrors: [HTTPClientError.cancelled])
+        }))
+        guard let request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
+
+        let delegate = ResponseBackpressureDelegate(eventLoop: embedded.eventLoop)
+        var maybeRequestBag: RequestBag<ResponseBackpressureDelegate>?
+        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embedded.eventLoop),
+            task: .init(eventLoop: embedded.eventLoop, logger: logger),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(idleWriteTimeout: .milliseconds(1)),
+            delegate: delegate
+        ))
+        guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
+
+        embedded.isWritable = true
+        testWriter.writabilityChanged(true)
+        embedded.pipeline.fireChannelWritabilityChanged()
+        embedded.write(requestBag, promise: nil)
+
+        // canceling the request
+        requestBag.fail(HTTPClientError.cancelled)
+        XCTAssertThrowsError(try requestBag.task.futureResult.wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .cancelled)
+        }
+
+        // the idle read timeout should be cleared because we canceled the request
+        // therefore advancing the time should not trigger a crash
+        embedded.embeddedEventLoop.advanceTime(by: .milliseconds(250))
+    }
+
     func testWriteHTTPHeadFails() {
         struct WriteError: Error, Equatable {}
 
