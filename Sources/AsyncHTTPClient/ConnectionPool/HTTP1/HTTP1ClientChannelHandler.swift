@@ -60,17 +60,13 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     private var idleReadTimeoutStateMachine: IdleReadStateMachine?
     private var idleReadTimeoutTimer: Scheduled<Void>?
 
-    /// Cancelling a task in NIO does *not* guarantee that the task will not execute under certain race conditions.
-    /// We therefore give each timer an ID and increase the ID every time we reset or cancel it.
-    /// We check in the task if the timer ID has changed in the meantime and do not execute any action if has changed.
-    private var currentIdleReadTimeoutTimerID: Int = 0
-
     private var idleWriteTimeoutStateMachine: IdleWriteStateMachine?
     private var idleWriteTimeoutTimer: Scheduled<Void>?
 
     /// Cancelling a task in NIO does *not* guarantee that the task will not execute under certain race conditions.
     /// We therefore give each timer an ID and increase the ID every time we reset or cancel it.
     /// We check in the task if the timer ID has changed in the meantime and do not execute any action if has changed.
+    private var currentIdleReadTimeoutTimerID: Int = 0
     private var currentIdleWriteTimeoutTimerID: Int = 0
 
     private let backgroundLogger: Logger
