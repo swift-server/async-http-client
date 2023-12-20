@@ -775,7 +775,7 @@ public class HTTPClient {
             self.init(tlsConfiguration: tlsConfig,
                       redirectConfiguration: redirectConfiguration,
                       timeout: timeout,
-                      connectionPool: ConnectionPool(),
+                      connectionPool: ConnectionPool(idleTimeout: maximumAllowedIdleTimeInConnectionPool),
                       proxy: proxy,
                       ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
                       decompression: decompression)
@@ -794,7 +794,7 @@ public class HTTPClient {
             self.init(tlsConfiguration: tlsConfig,
                       redirectConfiguration: redirectConfiguration,
                       timeout: timeout,
-                      connectionPool: ConnectionPool(),
+                      connectionPool: ConnectionPool(idleTimeout: connectionPool),
                       proxy: proxy,
                       ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
                       decompression: decompression)

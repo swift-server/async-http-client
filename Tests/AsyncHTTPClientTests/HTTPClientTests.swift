@@ -1847,11 +1847,29 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
     }
 
     func testPoolClosesIdleConnections() {
+        let configuration = HTTPClient.Configuration(
+            certificateVerification: .none,
+            maximumAllowedIdleTimeInConnectionPool: .milliseconds(100)
+        )
+        
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(connectionPool: .init(idleTimeout: .milliseconds(100))))
+                                     configuration: configuration)
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
         }
+        
+        // Make sure that the idle timeout of the connection pool is properly propagated
+        // to the connection pool itself, when using both inits.
+        XCTAssertEqual(configuration.connectionPool.idleTimeout, .milliseconds(100))
+        XCTAssertEqual(
+            configuration.connectionPool.idleTimeout,
+            HTTPClient.Configuration(
+                certificateVerification: .none,
+                connectionPool: .milliseconds(100),
+                backgroundActivityLogger: nil
+            ).connectionPool.idleTimeout
+        )
+
         XCTAssertNoThrow(try localClient.get(url: self.defaultHTTPBinURLPrefix + "get").wait())
         Thread.sleep(forTimeInterval: 0.2)
         XCTAssertEqual(self.defaultHTTPBin.activeConnections, 0)
