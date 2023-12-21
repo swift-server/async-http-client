@@ -1851,13 +1851,13 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             certificateVerification: .none,
             maximumAllowedIdleTimeInConnectionPool: .milliseconds(100)
         )
-        
+
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: configuration)
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
         }
-        
+
         // Make sure that the idle timeout of the connection pool is properly propagated
         // to the connection pool itself, when using both inits.
         XCTAssertEqual(configuration.connectionPool.idleTimeout, .milliseconds(100))
