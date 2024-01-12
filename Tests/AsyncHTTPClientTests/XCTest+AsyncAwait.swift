@@ -30,7 +30,6 @@
 import XCTest
 
 extension XCTestCase {
-    @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
     /// Cross-platform XCTest support for async-await tests.
     ///
     /// Currently the Linux implementation of XCTest doesn't have async-await support.
@@ -39,6 +38,7 @@ extension XCTestCase {
     ///
     /// - NOTE: Support for Linux is tracked by https://bugs.swift.org/browse/SR-14403.
     /// - NOTE: Implementation currently in progress: https://github.com/apple/swift-corelibs-xctest/pull/326
+    @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
     func XCTAsyncTest(
         expectationDescription: String = "Async operation",
         timeout: TimeInterval = 30,

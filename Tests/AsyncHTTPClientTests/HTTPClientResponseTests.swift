@@ -17,6 +17,7 @@ import Logging
 import NIOCore
 import XCTest
 
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 final class HTTPClientResponseTests: XCTestCase {
     func testSimpleResponse() {
         let response = HTTPClientResponse.expectedContentLength(requestMethod: .GET, headers: ["content-length": "1025"], status: .ok)

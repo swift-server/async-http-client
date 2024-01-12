@@ -704,6 +704,28 @@ struct HTTPRequestStateMachine {
         }
     }
 
+    mutating func idleWriteTimeoutTriggered() -> Action {
+        switch self.state {
+        case .initialized,
+             .waitForChannelToBecomeWritable:
+            preconditionFailure("We only schedule idle write timeouts while the request is being sent. Invalid state: \(self.state)")
+
+        case .running(.streaming, _):
+            let error = HTTPClientError.writeTimeout
+            self.state = .failed(error)
+            return .failRequest(error, .close(nil))
+
+        case .running(.endSent, _):
+            preconditionFailure("Invalid state. This state should be: .finished")
+
+        case .finished, .failed:
+            return .wait
+
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
+        }
+    }
+
     private mutating func startSendingRequest(head: HTTPRequestHead, metadata: RequestFramingMetadata) -> Action {
         let length = metadata.body.expectedLength
         if length == 0 {

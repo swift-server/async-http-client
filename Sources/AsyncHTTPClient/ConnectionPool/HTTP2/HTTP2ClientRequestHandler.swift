@@ -35,8 +35,16 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
     private var request: HTTPExecutableRequest? {
         didSet {
-            if let newRequest = self.request, let idleReadTimeout = newRequest.requestOptions.idleReadTimeout {
-                self.idleReadTimeoutStateMachine = .init(timeAmount: idleReadTimeout)
+            if let newRequest = self.request {
+                if let idleReadTimeout = newRequest.requestOptions.idleReadTimeout {
+                    self.idleReadTimeoutStateMachine = .init(timeAmount: idleReadTimeout)
+                }
+                if let idleWriteTimeout = newRequest.requestOptions.idleWriteTimeout {
+                    self.idleWriteTimeoutStateMachine = .init(
+                        timeAmount: idleWriteTimeout,
+                        isWritabilityEnabled: self.channelContext?.channel.isWritable ?? false
+                    )
+                }
             } else {
                 self.idleReadTimeoutStateMachine = nil
             }
@@ -45,6 +53,15 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
     private var idleReadTimeoutStateMachine: IdleReadStateMachine?
     private var idleReadTimeoutTimer: Scheduled<Void>?
+
+    private var idleWriteTimeoutStateMachine: IdleWriteStateMachine?
+    private var idleWriteTimeoutTimer: Scheduled<Void>?
+
+    /// Cancelling a task in NIO does *not* guarantee that the task will not execute under certain race conditions.
+    /// We therefore give each timer an ID and increase the ID every time we reset or cancel it.
+    /// We check in the task if the timer ID has changed in the meantime and do not execute any action if has changed.
+    private var currentIdleReadTimeoutTimerID: Int = 0
+    private var currentIdleWriteTimeoutTimerID: Int = 0
 
     init(eventLoop: EventLoop) {
         self.eventLoop = eventLoop
@@ -77,6 +94,10 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
     }
 
     func channelWritabilityChanged(context: ChannelHandlerContext) {
+        if let timeoutAction = self.idleWriteTimeoutStateMachine?.channelWritabilityChanged(context: context) {
+            self.runTimeoutAction(timeoutAction, context: context)
+        }
+
         let action = self.state.writabilityChanged(writable: context.channel.isWritable)
         self.run(action, context: context)
     }
@@ -109,6 +130,10 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         // The `HTTPRequestStateMachine` ensures that a `HTTP2ClientRequestHandler` only handles
         // a single request.
         self.request = request
+
+        if let timeoutAction = self.idleWriteTimeoutStateMachine?.write() {
+            self.runTimeoutAction(timeoutAction, context: context)
+        }
 
         request.willExecuteRequest(self)
 
@@ -153,8 +178,12 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
                 request.resumeRequestBodyStream()
             }
             if startIdleTimer {
-                if let timeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
-                    self.runTimeoutAction(timeoutAction, context: context)
+                if let readTimeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
+                    self.runTimeoutAction(readTimeoutAction, context: context)
+                }
+
+                if let writeTimeoutAction = self.idleWriteTimeoutStateMachine?.requestEndSent() {
+                    self.runTimeoutAction(writeTimeoutAction, context: context)
                 }
             }
         case .pauseRequestBodyStream:
@@ -168,8 +197,12 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         case .sendRequestEnd(let writePromise):
             context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: writePromise)
 
-            if let timeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
-                self.runTimeoutAction(timeoutAction, context: context)
+            if let readTimeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
+                self.runTimeoutAction(readTimeoutAction, context: context)
+            }
+
+            if let writeTimeoutAction = self.idleWriteTimeoutStateMachine?.requestEndSent() {
+                self.runTimeoutAction(writeTimeoutAction, context: context)
             }
 
         case .read:
@@ -268,8 +301,9 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         case .startIdleReadTimeoutTimer(let timeAmount):
             assert(self.idleReadTimeoutTimer == nil, "Expected there is no timeout timer so far.")
 
+            let timerID = self.currentIdleReadTimeoutTimerID
             self.idleReadTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
-                guard self.idleReadTimeoutTimer != nil else { return }
+                guard self.currentIdleReadTimeoutTimerID == timerID else { return }
                 let action = self.state.idleReadTimeoutTriggered()
                 self.run(action, context: context)
             }
@@ -279,17 +313,54 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
                 oldTimer.cancel()
             }
 
+            self.currentIdleReadTimeoutTimerID &+= 1
+            let timerID = self.currentIdleReadTimeoutTimerID
             self.idleReadTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
-                guard self.idleReadTimeoutTimer != nil else { return }
+                guard self.currentIdleReadTimeoutTimerID == timerID else { return }
                 let action = self.state.idleReadTimeoutTriggered()
                 self.run(action, context: context)
             }
         case .clearIdleReadTimeoutTimer:
             if let oldTimer = self.idleReadTimeoutTimer {
                 self.idleReadTimeoutTimer = nil
+                self.currentIdleReadTimeoutTimerID &+= 1
                 oldTimer.cancel()
             }
 
+        case .none:
+            break
+        }
+    }
+
+    private func runTimeoutAction(_ action: IdleWriteStateMachine.Action, context: ChannelHandlerContext) {
+        switch action {
+        case .startIdleWriteTimeoutTimer(let timeAmount):
+            assert(self.idleWriteTimeoutTimer == nil, "Expected there is no timeout timer so far.")
+
+            let timerID = self.currentIdleWriteTimeoutTimerID
+            self.idleWriteTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
+                guard self.currentIdleWriteTimeoutTimerID == timerID else { return }
+                let action = self.state.idleWriteTimeoutTriggered()
+                self.run(action, context: context)
+            }
+        case .resetIdleWriteTimeoutTimer(let timeAmount):
+            if let oldTimer = self.idleWriteTimeoutTimer {
+                oldTimer.cancel()
+            }
+
+            self.currentIdleWriteTimeoutTimerID &+= 1
+            let timerID = self.currentIdleWriteTimeoutTimerID
+            self.idleWriteTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
+                guard self.currentIdleWriteTimeoutTimerID == timerID else { return }
+                let action = self.state.idleWriteTimeoutTriggered()
+                self.run(action, context: context)
+            }
+        case .clearIdleWriteTimeoutTimer:
+            if let oldTimer = self.idleWriteTimeoutTimer {
+                self.idleWriteTimeoutTimer = nil
+                self.currentIdleWriteTimeoutTimerID &+= 1
+                oldTimer.cancel()
+            }
         case .none:
             break
         }
@@ -306,6 +377,10 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             // screwed up.
             promise?.fail(HTTPClientError.requestStreamCancelled)
             return
+        }
+
+        if let timeoutAction = self.idleWriteTimeoutStateMachine?.write() {
+            self.runTimeoutAction(timeoutAction, context: context)
         }
 
         let action = self.state.requestStreamPartReceived(data, promise: promise)
@@ -336,6 +411,10 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         guard self.request === request, let context = self.channelContext else {
             // See code comment in `writeRequestBodyPart0`
             return
+        }
+
+        if let timeoutAction = self.idleWriteTimeoutStateMachine?.cancelRequest() {
+            self.runTimeoutAction(timeoutAction, context: context)
         }
 
         let action = self.state.requestCancelled()

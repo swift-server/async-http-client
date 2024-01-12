@@ -979,10 +979,12 @@ final class MockTaskQueuer: HTTPRequestScheduler {
 extension RequestOptions {
     static func forTests(
         idleReadTimeout: TimeAmount? = nil,
+        idleWriteTimeout: TimeAmount? = nil,
         dnsOverride: [String: String] = [:]
     ) -> Self {
         RequestOptions(
             idleReadTimeout: idleReadTimeout,
+            idleWriteTimeout: idleWriteTimeout,
             dnsOverride: dnsOverride
         )
     }

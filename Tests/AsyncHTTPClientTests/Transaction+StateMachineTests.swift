@@ -23,9 +23,9 @@ struct NoOpAsyncSequenceProducerDelegate: NIOAsyncSequenceProducerDelegate {
     func didTerminate() {}
 }
 
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 final class Transaction_StateMachineTests: XCTestCase {
     func testRequestWasQueuedAfterWillExecuteRequestWasCalled() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
@@ -53,7 +53,6 @@ final class Transaction_StateMachineTests: XCTestCase {
     }
 
     func testRequestBodyStreamWasPaused() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
@@ -75,7 +74,6 @@ final class Transaction_StateMachineTests: XCTestCase {
 
     func testQueuedRequestGetsRemovedWhenDeadlineExceeded() {
         struct MyError: Error, Equatable {}
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
                 var state = Transaction.StateMachine(continuation)
@@ -106,7 +104,6 @@ final class Transaction_StateMachineTests: XCTestCase {
 
     func testDeadlineExceededAndFullyFailedRequestCanBeCanceledWithNoEffect() {
         struct MyError: Error, Equatable {}
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
                 var state = Transaction.StateMachine(continuation)
@@ -141,7 +138,6 @@ final class Transaction_StateMachineTests: XCTestCase {
     }
 
     func testScheduledRequestGetsRemovedWhenDeadlineExceeded() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
@@ -166,7 +162,6 @@ final class Transaction_StateMachineTests: XCTestCase {
     }
 
     func testDeadlineExceededRaceWithRequestWillExecute() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {
@@ -198,7 +193,6 @@ final class Transaction_StateMachineTests: XCTestCase {
     }
 
     func testRequestWithHeadReceivedGetNotCancelledWhenDeadlineExceeded() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         let eventLoop = EmbeddedEventLoop()
         XCTAsyncTest {
             func workaround(_ continuation: CheckedContinuation<HTTPClientResponse, Error>) {

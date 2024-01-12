@@ -33,6 +33,7 @@ private func makeDefaultHTTPClient(
     )
 }
 
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 final class AsyncAwaitEndToEndTests: XCTestCase {
     var clientGroup: EventLoopGroup!
     var serverGroup: EventLoopGroup!
@@ -56,7 +57,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testSimpleGet() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -77,7 +77,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testSimplePost() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -98,7 +97,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testPostWithByteBuffer() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -121,7 +119,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testPostWithSequenceOfUInt8() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -144,7 +141,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testPostWithCollectionOfUInt8() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -167,7 +163,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testPostWithRandomAccessCollectionOfUInt8() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -190,7 +185,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testPostWithAsyncSequenceOfByteBuffers() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -217,7 +211,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testPostWithAsyncSequenceOfUInt8() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -240,7 +233,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testPostWithFragmentedAsyncSequenceOfByteBuffers() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -280,7 +272,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testPostWithFragmentedAsyncSequenceOfLargeByteBuffers() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -321,7 +312,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testCanceling() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
             let bin = HTTPBin(.http2(compress: false))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -344,7 +334,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testCancelingResponseBody() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
             let bin = HTTPBin(.http2(compress: false)) { _ in
                 HTTPEchoHandler()
@@ -373,7 +362,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testDeadline() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
             let bin = HTTPBin(.http2(compress: false))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -398,7 +386,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testImmediateDeadline() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
             let bin = HTTPBin(.http2(compress: false))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -423,7 +410,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testConnectTimeout() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest(timeout: 60) {
             #if os(Linux)
             // 198.51.100.254 is reserved for documentation only and therefore should not accept any TCP connection
@@ -480,7 +466,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testSelfSignedCertificateIsRejectedWithCorrectErrorIfRequestDeadlineIsExceeded() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
             /// key + cert was created with the follwing command:
             /// openssl req -x509 -newkey rsa:4096 -keyout self_signed_key.pem -out self_signed_cert.pem -sha256 -days 99999 -nodes -subj '/CN=localhost'
@@ -526,7 +511,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testDnsOverride() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
             /// key + cert was created with the following code (depends on swift-certificates)
             /// ```
@@ -584,7 +568,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testInvalidURL() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest(timeout: 5) {
             let client = makeDefaultHTTPClient()
             defer { XCTAssertNoThrow(try client.syncShutdown()) }
@@ -598,7 +581,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testRedirectChangesHostHeader() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -625,7 +607,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testShutdown() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let client = makeDefaultHTTPClient()
             try await client.shutdown()
@@ -637,7 +618,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
     /// Regression test for https://github.com/swift-server/async-http-client/issues/612
     func testCancelingBodyDoesNotCrash() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let client = makeDefaultHTTPClient()
             defer { XCTAssertNoThrow(try client.syncShutdown()) }
@@ -654,7 +634,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testAsyncSequenceReuse() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -698,7 +677,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     private func _rejectsInvalidCharactersInHeaderFieldNames(mode: HTTPBin<HTTPBinHandler>.Mode) {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(mode)
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -759,7 +737,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     private func _rejectsInvalidCharactersInHeaderFieldValues(mode: HTTPBin<HTTPBinHandler>.Mode) {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(mode)
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -818,7 +795,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testUsingGetMethodInsteadOfWait() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -838,7 +814,6 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testSimpleContentLengthErrorNoBody() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false))
             defer { XCTAssertNoThrow(try bin.shutdown()) }

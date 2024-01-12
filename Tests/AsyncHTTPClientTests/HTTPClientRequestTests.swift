@@ -17,15 +17,13 @@ import Algorithms
 import NIOCore
 import XCTest
 
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 class HTTPClientRequestTests: XCTestCase {
-    @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
     private typealias Request = HTTPClientRequest
 
-    @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
     private typealias PreparedRequest = HTTPClientRequest.Prepared
 
     func testCustomHeadersAreRespected() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "https://example.com/get")
             request.headers = [
@@ -60,7 +58,6 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testUnixScheme() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "unix://%2Fexample%2Ffolder.sock/some_path")
             request.headers = ["custom-header": "custom-value"]
@@ -90,7 +87,6 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testHTTPUnixScheme() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http+unix://%2Fexample%2Ffolder.sock/some_path")
             request.headers = ["custom-header": "custom-value"]
@@ -120,7 +116,6 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testHTTPSUnixScheme() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "https+unix://%2Fexample%2Ffolder.sock/some_path")
             request.headers = ["custom-header": "custom-value"]
@@ -150,7 +145,6 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testGetWithoutBody() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             let request = Request(url: "https://example.com/get")
             var preparedRequest: PreparedRequest?
@@ -179,7 +173,6 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testPostWithoutBody() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
@@ -213,7 +206,6 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testPostWithEmptyByteBuffer() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
@@ -248,7 +240,6 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testPostWithByteBuffer() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
@@ -282,7 +273,6 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testPostWithSequenceOfUnknownLength() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
@@ -317,7 +307,6 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testPostWithSequenceWithFixedLength() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
@@ -353,7 +342,6 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testPostWithRandomAccessCollection() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
@@ -388,7 +376,6 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testPostWithAsyncSequenceOfUnknownLength() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
@@ -428,7 +415,6 @@ class HTTPClientRequestTests: XCTestCase {
     }
 
     func testPostWithAsyncSequenceWithKnownLength() {
-        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else { return }
         XCTAsyncTest {
             var request = Request(url: "http://example.com/post")
             request.method = .POST
@@ -602,6 +588,7 @@ class HTTPClientRequestTests: XCTestCase {
     }
 }
 
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension AsyncSequence {
     func collect() async throws -> [Element] {
         try await self.reduce(into: []) { $0 += CollectionOfOne($1) }

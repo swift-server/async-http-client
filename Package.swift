@@ -21,7 +21,7 @@ let package = Package(
         .library(name: "AsyncHTTPClient", targets: ["AsyncHTTPClient"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.58.0"),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.62.0"),
         .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.22.0"),
         .package(url: "https://github.com/apple/swift-nio-http2.git", from: "1.19.0"),
         .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.13.0"),
@@ -38,6 +38,7 @@ let package = Package(
             dependencies: [
                 .target(name: "CAsyncHTTPClient"),
                 .product(name: "NIO", package: "swift-nio"),
+                .product(name: "NIOTLS", package: "swift-nio"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
@@ -56,6 +57,7 @@ let package = Package(
             name: "AsyncHTTPClientTests",
             dependencies: [
                 .target(name: "AsyncHTTPClient"),
+                .product(name: "NIOTLS", package: "swift-nio"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOConcurrencyHelpers", package: "swift-nio"),
                 .product(name: "NIOEmbedded", package: "swift-nio"),
