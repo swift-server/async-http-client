@@ -32,7 +32,12 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-algorithms", from: "1.0.0"),
     ],
     targets: [
-        .target(name: "CAsyncHTTPClient"),
+        .target(
+            name: "CAsyncHTTPClient",
+            cSettings: [
+                .define("_GNU_SOURCE"),
+            ]
+        ),
         .target(
             name: "AsyncHTTPClient",
             dependencies: [
