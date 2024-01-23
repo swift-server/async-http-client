@@ -91,7 +91,7 @@ do {
     // handle error
 }
 // it's important to shutdown the httpClient after all requests are done, even if one failed
-try await httpClient.shutdown()
+try await httpClient.shutdown().get()
 ```
 
 #### Using SwiftNIO EventLoopFuture
@@ -175,7 +175,7 @@ do {
     print("request failed:", error)
 }
 // it is important to shutdown the httpClient after all requests are done, even if one failed
-try await httpClient.shutdown()
+try await httpClient.shutdown().get()
 ```
 
 #### Using HTTPClientResponseDelegate and SwiftNIO EventLoopFuture
