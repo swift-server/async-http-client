@@ -20,6 +20,7 @@ import Network
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
+import NIOEmbedded
 import NIOFoundationCompat
 import NIOHTTP1
 import NIOHTTPCompression
@@ -28,7 +29,6 @@ import NIOSSL
 import NIOTestUtils
 import NIOTransportServices
 import XCTest
-import NIOEmbedded
 
 final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
     func testRequestURI() throws {
@@ -607,31 +607,31 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             XCTAssertEqual($0 as? HTTPClientError, .readTimeout)
         }
     }
-    
+
     func testWriteTimeout() throws {
         let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                      configuration: HTTPClient.Configuration(timeout: HTTPClient.Configuration.Timeout(write: .nanoseconds(10))))
-        
+
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
         }
-        
+
         // Create a request that writes a chunk, then waits longer than the configured write timeout,
         // and then writes again. This should trigger a write timeout error.
         let request = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "post",
                                              method: .POST,
                                              headers: ["transfer-encoding": "chunked"],
                                              body: .stream { streamWriter in
-            _ = streamWriter.write(.byteBuffer(.init()))
-            
-            let promise = self.clientGroup.next().makePromise(of: Void.self)
-            self.clientGroup.next().scheduleTask(in: .milliseconds(3)) {
-                streamWriter.write(.byteBuffer(.init())).cascade(to: promise)
-            }
-            
-            return promise.futureResult
-        })
-        
+                                                 _ = streamWriter.write(.byteBuffer(.init()))
+
+                                                 let promise = self.clientGroup.next().makePromise(of: Void.self)
+                                                 self.clientGroup.next().scheduleTask(in: .milliseconds(3)) {
+                                                     streamWriter.write(.byteBuffer(.init())).cascade(to: promise)
+                                                 }
+
+                                                 return promise.futureResult
+                                             })
+
         XCTAssertThrowsError(try localClient.execute(request: request).wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .writeTimeout)
         }
@@ -1260,8 +1260,8 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         /// openssl req -x509 -newkey rsa:4096 -keyout self_signed_key.pem -out self_signed_cert.pem -sha256 -days 99999 -nodes -subj '/CN=localhost'
         let certPath = Bundle.module.path(forResource: "self_signed_cert", ofType: "pem")!
         let keyPath = Bundle.module.path(forResource: "self_signed_key", ofType: "pem")!
-        let configuration = TLSConfiguration.makeServerConfiguration(
-            certificateChain: try NIOSSLCertificate.fromPEMFile(certPath).map { .certificate($0) },
+        let configuration = try TLSConfiguration.makeServerConfiguration(
+            certificateChain: NIOSSLCertificate.fromPEMFile(certPath).map { .certificate($0) },
             privateKey: .file(keyPath)
         )
         let sslContext = try NIOSSLContext(configuration: configuration)
@@ -1300,8 +1300,8 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         /// openssl req -x509 -newkey rsa:4096 -keyout self_signed_key.pem -out self_signed_cert.pem -sha256 -days 99999 -nodes -subj '/CN=localhost'
         let certPath = Bundle.module.path(forResource: "self_signed_cert", ofType: "pem")!
         let keyPath = Bundle.module.path(forResource: "self_signed_key", ofType: "pem")!
-        let configuration = TLSConfiguration.makeServerConfiguration(
-            certificateChain: try NIOSSLCertificate.fromPEMFile(certPath).map { .certificate($0) },
+        let configuration = try TLSConfiguration.makeServerConfiguration(
+            certificateChain: NIOSSLCertificate.fromPEMFile(certPath).map { .certificate($0) },
             privateKey: .file(keyPath)
         )
         let sslContext = try NIOSSLContext(configuration: configuration)
@@ -2758,7 +2758,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         func uploader(_ streamWriter: HTTPClient.Body.StreamWriter) -> EventLoopFuture<Void> {
             let done = streamWriter.write(.byteBuffer(ByteBuffer(string: "X")))
-            done.recover { error -> Void in
+            done.recover { error in
                 XCTFail("unexpected error \(error)")
             }.whenSuccess {
                 // This is executed when we have already sent the end of the request.
