@@ -961,6 +961,7 @@ extension HTTPClient.Configuration {
         ) {
             self.connect = connect
             self.read = read
+            self.write = write
         }
     }
 
