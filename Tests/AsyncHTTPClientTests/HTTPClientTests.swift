@@ -28,6 +28,7 @@ import NIOSSL
 import NIOTestUtils
 import NIOTransportServices
 import XCTest
+import NIOEmbedded
 
 final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
     func testRequestURI() throws {
@@ -604,6 +605,35 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         XCTAssertThrowsError(try localClient.get(url: self.defaultHTTPBinURLPrefix + "wait").wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .readTimeout)
+        }
+    }
+    
+    func testWriteTimeout() throws {
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
+                                     configuration: HTTPClient.Configuration(timeout: HTTPClient.Configuration.Timeout(write: .nanoseconds(10))))
+        
+        defer {
+            XCTAssertNoThrow(try localClient.syncShutdown())
+        }
+        
+        // Create a request that writes a chunk, then waits longer than the configured write timeout,
+        // and then writes again. This should trigger a write timeout error.
+        let request = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "post",
+                                             method: .POST,
+                                             headers: ["transfer-encoding": "chunked"],
+                                             body: .stream { streamWriter in
+            _ = streamWriter.write(.byteBuffer(.init()))
+            
+            let promise = self.clientGroup.next().makePromise(of: Void.self)
+            self.clientGroup.next().scheduleTask(in: .milliseconds(3)) {
+                streamWriter.write(.byteBuffer(.init())).cascade(to: promise)
+            }
+            
+            return promise.futureResult
+        })
+        
+        XCTAssertThrowsError(try localClient.execute(request: request).wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .writeTimeout)
         }
     }
 
