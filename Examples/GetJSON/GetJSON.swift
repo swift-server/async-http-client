@@ -47,6 +47,6 @@ struct GetJSON {
             print("request failed:", error)
         }
         // it is important to shutdown the httpClient after all requests are done, even if one failed
-        try await httpClient.shutdown()
+        try await httpClient.shutdown().get()
     }
 }
