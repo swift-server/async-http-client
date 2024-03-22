@@ -34,12 +34,6 @@ The code snippet below illustrates how to make a simple GET request to a remote 
 ```swift
 import AsyncHTTPClient
 
-let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
-defer {
-    // Shutdown is guaranteed to work if it's done precisely once (which is the case here).
-    try! httpClient.syncShutdown()
-}
-
 /// MARK: - Using Swift Concurrency
 let request = HTTPClientRequest(url: "https://apple.com/")
 let response = try await httpClient.execute(request, timeout: .seconds(30))
@@ -53,7 +47,7 @@ if response.status == .ok {
 
 
 /// MARK: - Using SwiftNIO EventLoopFuture
-httpClient.get(url: "https://apple.com/").whenComplete { result in
+HTTPClient.shared.get(url: "https://apple.com/").whenComplete { result in
     switch result {
     case .failure(let error):
         // process error
@@ -82,19 +76,13 @@ The default HTTP Method is `GET`. In case you need to have more control over the
 ```swift
 import AsyncHTTPClient
 
-let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
-defer {
-    // Shutdown is guaranteed to work if it's done precisely once (which is the case here).
-    try! httpClient.syncShutdown()
-}
-
 do {
     var request = HTTPClientRequest(url: "https://apple.com/")
     request.method = .POST
     request.headers.add(name: "User-Agent", value: "Swift HTTPClient")
     request.body = .bytes(ByteBuffer(string: "some data"))
 
-    let response = try await httpClient.execute(request, timeout: .seconds(30))
+    let response = try await HTTPClient.shared.execute(request, timeout: .seconds(30))
     if response.status == .ok {
         // handle response
     } else {
@@ -103,8 +91,6 @@ do {
 } catch {
     // handle error
 }
-// it's important to shutdown the httpClient after all requests are done, even if one failed
-try await httpClient.shutdown()
 ```
 
 #### Using SwiftNIO EventLoopFuture
@@ -112,17 +98,11 @@ try await httpClient.shutdown()
 ```swift
 import AsyncHTTPClient
 
-let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
-defer {
-    // Shutdown is guaranteed to work if it's done precisely once (which is the case here).
-    try! httpClient.syncShutdown()
-}
-
 var request = try HTTPClient.Request(url: "https://apple.com/", method: .POST)
 request.headers.add(name: "User-Agent", value: "Swift HTTPClient")
 request.body = .string("some-body")
 
-httpClient.execute(request: request).whenComplete { result in
+HTTPClient.shared.execute(request: request).whenComplete { result in
     switch result {
     case .failure(let error):
         // process error
@@ -161,15 +141,9 @@ The following example demonstrates how to count the number of bytes in a streami
 
 ##### Using Swift Concurrency
 ```swift
-let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
-defer {
-    // Shutdown is guaranteed to work if it's done precisely once (which is the case here).
-    try! httpClient.syncShutdown()
-}
-
 do {
     let request = HTTPClientRequest(url: "https://apple.com/")
-    let response = try await httpClient.execute(request, timeout: .seconds(30))
+    let response = try await HTTPClient.shared.execute(request, timeout: .seconds(30))
     print("HTTP head", response)
 
     // if defined, the content-length headers announces the size of the body
@@ -192,8 +166,6 @@ do {
 } catch {
     print("request failed:", error) 
 }
-// it is important to shutdown the httpClient after all requests are done, even if one failed 
-try await httpClient.shutdown()
 ```
 
 ##### Using HTTPClientResponseDelegate and SwiftNIO EventLoopFuture
@@ -266,12 +238,6 @@ asynchronously, while reporting the download progress at the same time, like in 
 example:
 
 ```swift
-let client = HTTPClient(eventLoopGroupProvider: .singleton)
-defer {
-    // Shutdown is guaranteed to work if it's done precisely once (which is the case here).
-    try! httpClient.syncShutdown()
-}
-
 let request = try HTTPClient.Request(
     url: "https://swift.org/builds/development/ubuntu1804/latest-build.yml"
 )
@@ -283,7 +249,7 @@ let delegate = try FileDownloadDelegate(path: "/tmp/latest-build.yml", reportPro
     print("Downloaded \($0.receivedBytes) bytes so far")
 })
 
-client.execute(request: request, delegate: delegate).futureResult
+HTTPClient.shared.execute(request: request, delegate: delegate).futureResult
     .whenSuccess { progress in
         if let totalBytes = progress.totalBytes {
             print("Final total bytes count: \(totalBytes)")
@@ -295,13 +261,7 @@ client.execute(request: request, delegate: delegate).futureResult
 #### Unix Domain Socket Paths
 Connecting to servers bound to socket paths is easy:
 ```swift
-let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
-defer {
-    // Shutdown is guaranteed to work if it's done precisely once (which is the case here).
-    try! httpClient.syncShutdown()
-}
-
-httpClient.execute(
+HTTPClient.shared.execute(
     .GET, 
     socketPath: "/tmp/myServer.socket", 
     urlPath: "/path/to/resource"
@@ -310,13 +270,7 @@ httpClient.execute(
 
 Connecting over TLS to a unix domain socket path is possible as well:
 ```swift
-let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
-defer {
-    // Shutdown is guaranteed to work if it's done precisely once (which is the case here).
-    try! httpClient.syncShutdown()
-}
-
-httpClient.execute(
+HTTPClient.shared.execute(
     .POST, 
     secureSocketPath: "/tmp/myServer.socket", 
     urlPath: "/path/to/resource", 

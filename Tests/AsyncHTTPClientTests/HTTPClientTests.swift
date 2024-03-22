@@ -3574,6 +3574,17 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         XCTAssertEqual(.ok, response.status)
     }
 
+    func testSingletonClientWorks() throws {
+        let response = try HTTPClient.shared.get(url: self.defaultHTTPBinURLPrefix + "get").wait()
+        XCTAssertEqual(.ok, response.status)
+    }
+
+    func testSingletonClientCannotBeShutDown() {
+        XCTAssertThrowsError(try HTTPClient.shared.shutdown().wait()) { error in
+            XCTAssertEqual(.shutdownUnsupported, error as? HTTPClientError)
+        }
+    }
+
     @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
     func testAsyncExecuteWithCustomTLS() async throws {
         let httpsBin = HTTPBin(.http1_1(ssl: true))
