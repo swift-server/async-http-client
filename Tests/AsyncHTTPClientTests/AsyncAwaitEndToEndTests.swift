@@ -514,6 +514,10 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         XCTAsyncTest(timeout: 5) {
             /// key + cert was created with the following code (depends on swift-certificates)
             /// ```
+            /// import X509
+            /// import CryptoKit
+            /// import Foundation
+            ///
             /// let privateKey = P384.Signing.PrivateKey()
             /// let name = try DistinguishedName {
             ///     OrganizationName("Self Signed")
@@ -524,13 +528,13 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             ///     serialNumber: .init(),
             ///     publicKey: .init(privateKey.publicKey),
             ///     notValidBefore: Date(),
-            ///     notValidAfter: Date() + .days(365),
+            ///     notValidAfter: Date().advanced(by: 365 * 24 * 3600),
             ///     issuer: name,
             ///     subject: name,
             ///     signatureAlgorithm: .ecdsaWithSHA384,
             ///     extensions: try .init {
             ///         SubjectAlternativeNames([.dnsName("example.com")])
-            ///         ExtendedKeyUsage([.serverAuth])
+            ///         try ExtendedKeyUsage([.serverAuth])
             ///     },
             ///     issuerPrivateKey: .init(privateKey)
             /// )
