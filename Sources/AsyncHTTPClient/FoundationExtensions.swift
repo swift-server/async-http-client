@@ -67,11 +67,11 @@ extension HTTPClient.Body {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse {
-	/// Response body as `Data`.
-	public var data: Data? {
-		get async throws {
-			var bytes = try await bytes
-			return bytes.readData(length: bytes.readableBytes)
-		}
-	}
+    /// Response body as `Data`.
+    public var data: Data? {
+        get async throws {
+            var bytes = try await bytes
+            return bytes.readData(length: bytes.readableBytes)
+        }
+    }
 }

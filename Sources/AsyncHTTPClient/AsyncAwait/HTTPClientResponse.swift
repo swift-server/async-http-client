@@ -140,15 +140,15 @@ extension HTTPClientResponse {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse {
-	/// Response body as `ByteBuffer`.
-	public var bytes: ByteBuffer {
-		get async throws {
-			let expectedBytes = headers
-				.first(name: "content-length")
-				.flatMap(Int.init) ?? 1024 * 1024
-			return try await body.collect(upTo: expectedBytes)
-		}
-	}
+    /// Response body as `ByteBuffer`.
+    public var bytes: ByteBuffer {
+        get async throws {
+            let expectedBytes = headers
+                .first(name: "content-length")
+                .flatMap(Int.init) ?? 1024 * 1024
+            return try await body.collect(upTo: expectedBytes)
+        }
+    }
 }
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
