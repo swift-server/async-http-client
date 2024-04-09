@@ -70,7 +70,7 @@ extension HTTPClientResponse {
     /// Response body as `Data`.
     public var data: Data? {
         get async throws {
-            var bytes = try await self.bytes
+            var bytes = try await self.bytes()
             return bytes.readData(length: bytes.readableBytes)
         }
     }
