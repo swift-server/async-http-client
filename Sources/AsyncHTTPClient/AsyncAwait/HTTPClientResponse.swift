@@ -141,13 +141,18 @@ extension HTTPClientResponse {
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse {
     /// Response body as `ByteBuffer`.
-    public var bytes: ByteBuffer {
-        get async throws {
-            let expectedBytes = headers
-                .first(name: "content-length")
-                .flatMap(Int.init) ?? 1024 * 1024
-            return try await body.collect(upTo: expectedBytes)
+    /// - Returns: Bytes collected over time
+    public func bytes() async throws -> ByteBuffer {
+        if let expectedBytes = self.headers.first(name: "content-length").flatMap(Int.init) {
+            return try await self.body.collect(upTo: expectedBytes)
         }
+
+        var data = [UInt8]()
+        for try await var buffer in self.body {
+            data = data + (buffer.readBytes(length: buffer.readableBytes) ?? [])
+        }
+
+        return ByteBuffer(bytes: data)
     }
 }
 
