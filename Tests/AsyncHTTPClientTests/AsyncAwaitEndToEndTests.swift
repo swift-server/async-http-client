@@ -852,7 +852,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             ) else { return }
             XCTAssertEqual(response.headers["content-length"], ["4"])
             guard let body = await XCTAssertNoThrowWithResult(
-                try await response.bytes(upTo: 4)
+                try await response.bytes(upTo: 3)
             ) else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
 
@@ -861,7 +861,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             ) else { return }
             responseNoContentLength.headers.remove(name: "content-length")
             guard let body2 = await XCTAssertNoThrowWithResult(
-                try await responseNoContentLength.bytes()
+                try await responseNoContentLength.bytes(upTo: 4)
             ) else { return }
             XCTAssertEqual(body2, ByteBuffer(string: "1234"))
         }
@@ -883,7 +883,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             ) else { return }
             XCTAssertEqual(response.headers["content-length"], ["4"])
             guard let bodyData = await XCTAssertNoThrowWithResult(
-                try await response.data
+                try await response.data(upTo: 4)
             ) else { return }
             XCTAssertEqual(bodyData, "1234".data(using: .utf8))
         }
