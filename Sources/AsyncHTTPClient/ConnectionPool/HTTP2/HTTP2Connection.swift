@@ -29,6 +29,8 @@ struct HTTP2PushNotSupportedError: Error {}
 struct HTTP2ReceivedGoAwayBeforeSettingsError: Error {}
 
 final class HTTP2Connection {
+    private static let defaultSettings = nioDefaultSettings + [HTTP2Setting(parameter: .enablePush, value: 0)]
+
     let channel: Channel
     let multiplexer: HTTP2StreamMultiplexer
     let logger: Logger
@@ -196,7 +198,7 @@ final class HTTP2Connection {
             // can be scheduled on this connection.
             let sync = self.channel.pipeline.syncOperations
 
-            let http2Handler = NIOHTTP2Handler(mode: .client, initialSettings: nioDefaultSettings)
+            let http2Handler = NIOHTTP2Handler(mode: .client, initialSettings: Self.defaultSettings)
             let idleHandler = HTTP2IdleHandler(delegate: self, logger: self.logger, maximumConnectionUses: self.maximumConnectionUses)
 
             try sync.addHandler(http2Handler, position: .last)
