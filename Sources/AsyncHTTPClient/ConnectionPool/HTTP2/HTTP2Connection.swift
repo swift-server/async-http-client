@@ -29,7 +29,7 @@ struct HTTP2PushNotSupportedError: Error {}
 struct HTTP2ReceivedGoAwayBeforeSettingsError: Error {}
 
 final class HTTP2Connection {
-    private static let defaultSettings = nioDefaultSettings + [HTTP2Setting(parameter: .enablePush, value: 0)]
+    internal static let defaultSettings = nioDefaultSettings + [HTTP2Setting(parameter: .enablePush, value: 0)]
 
     let channel: Channel
     let multiplexer: HTTP2StreamMultiplexer
