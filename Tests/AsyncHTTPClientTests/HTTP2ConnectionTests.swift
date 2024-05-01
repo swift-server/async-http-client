@@ -339,7 +339,7 @@ class HTTP2ConnectionTests: XCTestCase {
         }
         XCTAssertLessThan(retryCount, maxRetries)
     }
-    
+
     func testServerPushIsDisabled() {
         let embedded = EmbeddedChannel()
         let logger = Logger(label: "test.http2.connection")
@@ -352,7 +352,7 @@ class HTTP2ConnectionTests: XCTestCase {
             logger: logger
         )
         _ = connection._start0()
-        
+
         let settingsFrame = HTTP2Frame(streamID: 0, payload: .settings(.settings([])))
         XCTAssertNoThrow(try connection.channel.writeAndFlush(settingsFrame).wait())
 
