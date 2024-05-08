@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-import AsyncHTTPClient
+@testable import AsyncHTTPClient
 import Atomics
 import Foundation
 import Logging
@@ -361,10 +361,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
         var httpSettings: HTTP2Settings {
             switch self {
             case .http1_1, .http2(_, _, nil), .refuse:
-                return [
-                    HTTP2Setting(parameter: .maxConcurrentStreams, value: 10),
-                    HTTP2Setting(parameter: .maxHeaderListSize, value: HPACKDecoder.defaultMaxHeaderListSize),
-                ]
+                return HTTP2Connection.defaultSettings
             case .http2(_, _, .some(let customSettings)):
                 return customSettings
             }

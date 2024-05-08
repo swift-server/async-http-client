@@ -18,6 +18,7 @@ import NIOConcurrencyHelpers
 import NIOCore
 import NIOEmbedded
 import NIOHTTP1
+import NIOHTTP2
 import NIOPosix
 import NIOSSL
 import NIOTestUtils
@@ -337,6 +338,28 @@ class HTTP2ConnectionTests: XCTestCase {
             retryCount += 1
         }
         XCTAssertLessThan(retryCount, maxRetries)
+    }
+
+    func testServerPushIsDisabled() {
+        let embedded = EmbeddedChannel()
+        let logger = Logger(label: "test.http2.connection")
+        let connection = HTTP2Connection(
+            channel: embedded,
+            connectionID: 0,
+            decompression: .disabled,
+            maximumConnectionUses: nil,
+            delegate: TestHTTP2ConnectionDelegate(),
+            logger: logger
+        )
+        _ = connection._start0()
+
+        let settingsFrame = HTTP2Frame(streamID: 0, payload: .settings(.settings([])))
+        XCTAssertNoThrow(try connection.channel.writeAndFlush(settingsFrame).wait())
+
+        let pushPromiseFrame = HTTP2Frame(streamID: 0, payload: .pushPromise(.init(pushedStreamID: 1, headers: [:])))
+        XCTAssertThrowsError(try connection.channel.writeAndFlush(pushPromiseFrame).wait()) { error in
+            XCTAssertNotNil(error as? NIOHTTP2Errors.PushInViolationOfSetting)
+        }
     }
 }
 
