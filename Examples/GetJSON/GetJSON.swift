@@ -33,7 +33,7 @@ struct Comic: Codable {
 @main
 struct GetJSON {
     static func main() async throws {
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
         do {
             let request = HTTPClientRequest(url: "https://xkcd.com/info.0.json")
             let response = try await httpClient.execute(request, timeout: .seconds(30))
