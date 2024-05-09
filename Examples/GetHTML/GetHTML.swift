@@ -18,7 +18,7 @@ import NIOCore
 @main
 struct GetHTML {
     static func main() async throws {
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
         do {
             let request = HTTPClientRequest(url: "https://apple.com")
             let response = try await httpClient.execute(request, timeout: .seconds(30))
