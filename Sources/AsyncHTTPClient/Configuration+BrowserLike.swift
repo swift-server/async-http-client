@@ -34,7 +34,7 @@ extension HTTPClient.Configuration {
             connectionPool: .seconds(600),
             proxy: nil,
             ignoreUncleanSSLShutdown: false,
-            decompression: .enabled(limit: .ratio(10)),
+            decompression: .enabled(limit: .ratio(25)),
             backgroundActivityLogger: nil
         )
     }
