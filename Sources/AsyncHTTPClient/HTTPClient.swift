@@ -1025,7 +1025,7 @@ extension HTTPClient.Configuration {
         /// - warning: We highly recommend leaving this on.
         /// It is very common that connections establishment is flaky at scale.
         /// ``HTTPClient`` will automatically mitigate these kind of issues if this flag is turned on.
-        var retryConnectionEstablishment: Bool
+        public var retryConnectionEstablishment: Bool
 
         public init(idleTimeout: TimeAmount = .seconds(60)) {
             self.init(idleTimeout: idleTimeout, concurrentHTTP1ConnectionsPerHostSoftLimit: 8)
