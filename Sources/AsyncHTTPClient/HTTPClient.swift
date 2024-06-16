@@ -1031,10 +1031,10 @@ extension HTTPClient.Configuration {
             self.init(idleTimeout: idleTimeout, concurrentHTTP1ConnectionsPerHostSoftLimit: 8)
         }
 
-        public init(idleTimeout: TimeAmount, concurrentHTTP1ConnectionsPerHostSoftLimit: Int) {
+        public init(idleTimeout: TimeAmount, concurrentHTTP1ConnectionsPerHostSoftLimit: Int, retryConnectionEstablishment: Bool = true) {
             self.idleTimeout = idleTimeout
             self.concurrentHTTP1ConnectionsPerHostSoftLimit = concurrentHTTP1ConnectionsPerHostSoftLimit
-            self.retryConnectionEstablishment = true
+            self.retryConnectionEstablishment = retryConnectionEstablishment
         }
     }
 
