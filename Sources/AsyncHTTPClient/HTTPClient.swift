@@ -1012,11 +1012,11 @@ extension HTTPClient.Configuration {
     public struct ConnectionPool: Hashable, Sendable {
         /// Specifies amount of time connections are kept idle in the pool. After this time has passed without a new
         /// request the connections are closed.
-        public var idleTimeout: TimeAmount
+        public var idleTimeout: TimeAmount = .seconds(60)
 
         /// The maximum number of connections that are kept alive in the connection pool per host. If requests with
         /// an explicit eventLoopRequirement are sent, this number might be exceeded due to overflow connections.
-        public var concurrentHTTP1ConnectionsPerHostSoftLimit: Int
+        public var concurrentHTTP1ConnectionsPerHostSoftLimit: Int = 8
 
         /// If true, ``HTTPClient`` will try to create new connections on connection failure with an exponential backoff.
         /// Requests will only fail after the ``HTTPClient/Configuration/Timeout-swift.struct/connect`` timeout exceeded.
@@ -1025,22 +1025,17 @@ extension HTTPClient.Configuration {
         /// - warning: We highly recommend leaving this on.
         /// It is very common that connections establishment is flaky at scale.
         /// ``HTTPClient`` will automatically mitigate these kind of issues if this flag is turned on.
-        public var retryConnectionEstablishment: Bool
+        public var retryConnectionEstablishment: Bool = true
 
-        public init() {
-            self.idleTimeout = .seconds(60)
-            self.concurrentHTTP1ConnectionsPerHostSoftLimit = 8
-            self.retryConnectionEstablishment = true
-        }
-
-        public init(idleTimeout: TimeAmount = .seconds(60)) {
-            self.init(idleTimeout: idleTimeout, concurrentHTTP1ConnectionsPerHostSoftLimit: 8)
+        public init() {}
+        
+        public init(idleTimeout: TimeAmount) {
+            self.idleTimeout = idleTimeout
         }
 
         public init(idleTimeout: TimeAmount, concurrentHTTP1ConnectionsPerHostSoftLimit: Int) {
             self.idleTimeout = idleTimeout
             self.concurrentHTTP1ConnectionsPerHostSoftLimit = concurrentHTTP1ConnectionsPerHostSoftLimit
-            self.retryConnectionEstablishment = true
         }
     }
 
