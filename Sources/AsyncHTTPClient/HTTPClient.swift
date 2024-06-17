@@ -1027,6 +1027,12 @@ extension HTTPClient.Configuration {
         /// ``HTTPClient`` will automatically mitigate these kind of issues if this flag is turned on.
         public var retryConnectionEstablishment: Bool
 
+        public init() {
+            self.idleTimeout = .seconds(60)
+            self.concurrentHTTP1ConnectionsPerHostSoftLimit = 8
+            self.retryConnectionEstablishment = true
+        }
+
         public init(idleTimeout: TimeAmount = .seconds(60)) {
             self.init(idleTimeout: idleTimeout, concurrentHTTP1ConnectionsPerHostSoftLimit: 8)
         }
