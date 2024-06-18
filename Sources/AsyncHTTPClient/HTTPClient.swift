@@ -1028,7 +1028,6 @@ extension HTTPClient.Configuration {
         public var retryConnectionEstablishment: Bool = true
 
         public init() {}
-        
         public init(idleTimeout: TimeAmount) {
             self.idleTimeout = idleTimeout
         }
