@@ -95,7 +95,7 @@ extension RequestBodyLength {
         case .none:
             self = .known(0)
         case .byteBuffer(let buffer):
-            self = .known(buffer.readableBytes)
+            self = .known(Int64(buffer.readableBytes))
         case .sequence(let length, _, _), .asyncSequence(let length, _):
             self = length
         }

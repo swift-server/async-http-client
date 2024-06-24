@@ -58,7 +58,7 @@ struct HTTPRequestStateMachine {
         /// The request is streaming its request body. `expectedBodyLength` has a value, if the request header contained
         /// a `"content-length"` header field. If the request header contained a `"transfer-encoding" = "chunked"`
         /// header field, the `expectedBodyLength` is `nil`.
-        case streaming(expectedBodyLength: Int?, sentBodyBytes: Int, producer: ProducerControlState)
+        case streaming(expectedBodyLength: Int64?, sentBodyBytes: Int64, producer: ProducerControlState)
         /// The request has sent its request body and end.
         case endSent
     }
@@ -308,13 +308,13 @@ struct HTTPRequestStateMachine {
             // pause. The reason for this is as follows: There might be thread synchronization
             // situations in which the producer might not have received the plea to pause yet.
 
-            if let expected = expectedBodyLength, sentBodyBytes + part.readableBytes > expected {
+            if let expected = expectedBodyLength, sentBodyBytes + Int64(part.readableBytes) > expected {
                 let error = HTTPClientError.bodyLengthMismatch
                 self.state = .failed(error)
                 return .failRequest(error, .close(promise))
             }
 
-            sentBodyBytes += part.readableBytes
+            sentBodyBytes += Int64(part.readableBytes)
 
             let requestState: RequestState = .streaming(
                 expectedBodyLength: expectedBodyLength,
@@ -768,7 +768,7 @@ struct HTTPRequestStateMachine {
 }
 
 extension RequestFramingMetadata.Body {
-    var expectedLength: Int? {
+    var expectedLength: Int64? {
         switch self {
         case .fixedSize(let length): return length
         case .stream: return nil

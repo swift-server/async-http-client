@@ -614,8 +614,8 @@ extension HTTPClient.Body {
 }
 
 private struct LengthMismatch: Error {
-    var announcedLength: Int
-    var actualLength: Int
+    var announcedLength: Int64
+    var actualLength: Int64
 }
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
@@ -631,8 +631,8 @@ extension Optional where Wrapped == HTTPClientRequest.Prepared.Body {
         case .sequence(let announcedLength, _, let generate):
             let buffer = generate(ByteBufferAllocator())
             if case .known(let announcedLength) = announcedLength,
-               announcedLength != buffer.readableBytes {
-                throw LengthMismatch(announcedLength: announcedLength, actualLength: buffer.readableBytes)
+               announcedLength != Int64(buffer.readableBytes) {
+                throw LengthMismatch(announcedLength: announcedLength, actualLength: Int64(buffer.readableBytes))
             }
             return buffer
         case .asyncSequence(length: let announcedLength, let generate):
@@ -641,8 +641,8 @@ extension Optional where Wrapped == HTTPClientRequest.Prepared.Body {
                 accumulatedBuffer.writeBuffer(&buffer)
             }
             if case .known(let announcedLength) = announcedLength,
-               announcedLength != accumulatedBuffer.readableBytes {
-                throw LengthMismatch(announcedLength: announcedLength, actualLength: accumulatedBuffer.readableBytes)
+               announcedLength != Int64(accumulatedBuffer.readableBytes) {
+                throw LengthMismatch(announcedLength: announcedLength, actualLength: Int64(accumulatedBuffer.readableBytes))
             }
             return accumulatedBuffer
         }

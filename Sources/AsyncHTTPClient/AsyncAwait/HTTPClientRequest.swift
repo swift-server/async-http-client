@@ -125,7 +125,7 @@ extension HTTPClientRequest.Body {
     public static func bytes<Bytes: RandomAccessCollection & Sendable>(
         _ bytes: Bytes
     ) -> Self where Bytes.Element == UInt8 {
-        self.bytes(bytes, length: .known(bytes.count))
+        self.bytes(bytes, length: .known(Int64(bytes.count)))
     }
 
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `Sequence` of bytes.
@@ -341,7 +341,13 @@ extension HTTPClientRequest.Body {
         public static let unknown: Self = .init(storage: .unknown)
 
         /// The size of the request body is known and exactly `count` bytes
+        @_disfavoredOverload
         public static func known(_ count: Int) -> Self {
+            .init(storage: .known(Int64(count)))
+        }
+        
+        /// The size of the request body is known and exactly `count` bytes
+        public static func known(_ count: Int64) -> Self {
             .init(storage: .known(count))
         }
 

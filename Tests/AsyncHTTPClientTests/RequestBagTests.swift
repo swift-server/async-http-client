@@ -19,6 +19,7 @@ import NIOEmbedded
 import NIOHTTP1
 import NIOPosix
 import XCTest
+import Atomics
 
 final class RequestBagTests: XCTestCase {
     func testWriteBackpressureWorks() {
@@ -26,24 +27,24 @@ final class RequestBagTests: XCTestCase {
         defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
         let logger = Logger(label: "test")
 
-        var writtenBytes = 0
-        var writes = 0
-        let bytesToSent = (3000...10000).randomElement()!
-        let expectedWrites = bytesToSent / 100 + ((bytesToSent % 100 > 0) ? 1 : 0)
-        var streamIsAllowedToWrite = false
+        let writtenBytes: ManagedAtomic<Int> = .init(0)
+        let writes: ManagedAtomic<Int> = .init(0)
+        let bytesToSent: ManagedAtomic<Int> = .init((3000...10000).randomElement()!)
+        let expectedWrites = bytesToSent.load(ordering: .relaxed) / 100 + ((bytesToSent.load(ordering: .relaxed) % 100 > 0) ? 1 : 0)
+        let streamIsAllowedToWrite: ManagedAtomic<Bool> = .init(false)
 
         let writeDonePromise = embeddedEventLoop.makePromise(of: Void.self)
-        let requestBody: HTTPClient.Body = .stream(length: bytesToSent) { writer -> EventLoopFuture<Void> in
-            func write(donePromise: EventLoopPromise<Void>) {
-                XCTAssertTrue(streamIsAllowedToWrite)
-                guard writtenBytes < bytesToSent else {
+        let requestBody: HTTPClient.Body = .stream(contentLength: Int64(bytesToSent.load(ordering: .relaxed))) { writer -> EventLoopFuture<Void> in
+            @Sendable func write(donePromise: EventLoopPromise<Void>) {
+                XCTAssertTrue(streamIsAllowedToWrite.load(ordering: .relaxed))
+                guard writtenBytes.load(ordering: .relaxed) < bytesToSent.load(ordering: .relaxed) else {
                     return donePromise.succeed(())
                 }
-                let byteCount = min(bytesToSent - writtenBytes, 100)
+                let byteCount = min(bytesToSent.load(ordering: .relaxed) - writtenBytes.load(ordering: .relaxed), 100)
                 let buffer = ByteBuffer(bytes: [UInt8](repeating: 1, count: byteCount))
-                writes += 1
+                writes.wrappingIncrement(by: 1, ordering: .relaxed)
                 writer.write(.byteBuffer(buffer)).whenSuccess { _ in
-                    writtenBytes += 100
+                    writtenBytes.wrappingIncrement(by: 100, ordering: .relaxed)
                     write(donePromise: donePromise)
                 }
             }
@@ -81,9 +82,9 @@ final class RequestBagTests: XCTestCase {
         executor.runRequest(bag)
         XCTAssertEqual(delegate.hitDidSendRequestHead, 1)
 
-        streamIsAllowedToWrite = true
+        streamIsAllowedToWrite.store(true, ordering: .relaxed)
         bag.resumeRequestBodyStream()
-        streamIsAllowedToWrite = false
+        streamIsAllowedToWrite.store(false, ordering: .relaxed)
 
         // after starting the body stream we should have received two writes
         var receivedBytes = 0
@@ -91,19 +92,19 @@ final class RequestBagTests: XCTestCase {
             XCTAssertNoThrow(try executor.receiveRequestBody {
                 receivedBytes += $0.readableBytes
             })
-            XCTAssertEqual(delegate.hitDidSendRequestPart, writes)
+            XCTAssertEqual(delegate.hitDidSendRequestPart, writes.load(ordering: .relaxed))
 
             if i % 2 == 1 {
-                streamIsAllowedToWrite = true
+                streamIsAllowedToWrite.store(true, ordering: .relaxed)
                 executor.resumeRequestBodyStream()
-                streamIsAllowedToWrite = false
+                streamIsAllowedToWrite.store(false, ordering: .relaxed)
                 XCTAssertLessThanOrEqual(executor.requestBodyPartsCount, 2)
-                XCTAssertEqual(delegate.hitDidSendRequestPart, writes)
+                XCTAssertEqual(delegate.hitDidSendRequestPart, writes.load(ordering: .relaxed))
             }
         }
 
         XCTAssertNoThrow(try executor.receiveEndOfStream())
-        XCTAssertEqual(receivedBytes, bytesToSent, "We have sent all request bytes...")
+        XCTAssertEqual(receivedBytes, bytesToSent.load(ordering: .relaxed), "We have sent all request bytes...")
 
         XCTAssertNil(delegate.receivedHead, "Expected not to have a response head, before `receiveResponseHead`")
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: .init([
@@ -153,7 +154,7 @@ final class RequestBagTests: XCTestCase {
         defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
         let logger = Logger(label: "test")
 
-        let requestBody: HTTPClient.Body = .stream(length: 12) { writer -> EventLoopFuture<Void> in
+        let requestBody: HTTPClient.Body = .stream(contentLength: 12) { writer -> EventLoopFuture<Void> in
 
             writer.write(.byteBuffer(ByteBuffer(bytes: 0...3))).flatMap { _ -> EventLoopFuture<Void> in
                 embeddedEventLoop.makeFailedFuture(TestError())
@@ -535,16 +536,16 @@ final class RequestBagTests: XCTestCase {
             url: "https://swift.org",
             method: .POST,
             headers: ["content-length": "12"],
-            body: .stream(length: 12) { writer -> EventLoopFuture<Void> in
-                var firstWriteSuccess = false
+            body: .stream(contentLength: 12) { writer -> EventLoopFuture<Void> in
+                let firstWriteSuccess: ManagedAtomic<Bool> = .init(false)
                 return writer.write(.byteBuffer(.init(bytes: 0...3))).flatMap { _ in
-                    firstWriteSuccess = true
+                    firstWriteSuccess.store(true, ordering: .relaxed)
 
                     return writeSecondPartPromise.futureResult
                 }.flatMap {
                     return writer.write(.byteBuffer(.init(bytes: 4...7)))
                 }.always { result in
-                    XCTAssertTrue(firstWriteSuccess)
+                    XCTAssertTrue(firstWriteSuccess.load(ordering: .relaxed))
 
                     guard case .failure(let error) = result else {
                         return XCTFail("Expected the second write to fail")
@@ -859,11 +860,11 @@ final class RequestBagTests: XCTestCase {
 
             let writerPromise = group.any().makePromise(of: HTTPClient.Body.StreamWriter.self)
             let donePromise = group.any().makePromise(of: Void.self)
-            request.body = .stream { [leakDetector] writer in
+            request.body = .stream(bodyStream: { [leakDetector] writer in
                 _ = leakDetector
                 writerPromise.succeed(writer)
                 return donePromise.futureResult
-            }
+            })
 
             let resultFuture = httpClient.execute(request: request)
             request.body = nil
