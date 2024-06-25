@@ -117,7 +117,6 @@ extension HTTPClient {
             return Body(contentLength: length.flatMap { Int64($0) }, stream: stream)
         }
 
-
         /// Create and stream body using ``StreamWriter``.
         ///
         /// - parameters:

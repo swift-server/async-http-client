@@ -14,12 +14,12 @@
 
 @testable import AsyncHTTPClient
 import Logging
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOEmbedded
 import NIOHTTP1
 import NIOPosix
 import XCTest
-import NIOConcurrencyHelpers
 
 final class RequestBagTests: XCTestCase {
     func testWriteBackpressureWorks() {
