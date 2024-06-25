@@ -312,7 +312,7 @@ class HTTPClientRequestTests: XCTestCase {
             request.method = .POST
 
             let sequence = AnySendableSequence(ByteBuffer(string: "post body").readableBytesView)
-            request.body = .bytes(sequence, length: .known(9))
+            request.body = .bytes(sequence, length: .known(Int64(9)))
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }
@@ -424,7 +424,7 @@ class HTTPClientRequestTests: XCTestCase {
                 .async
                 .map { ByteBuffer($0) }
 
-            request.body = .stream(asyncSequence, length: .known(9))
+            request.body = .stream(asyncSequence, length: .known(Int64(9)))
             var preparedRequest: PreparedRequest?
             XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
             guard let preparedRequest = preparedRequest else { return }
@@ -476,7 +476,7 @@ class HTTPClientRequestTests: XCTestCase {
                     String(repeating: "1", count: bagOfBytesToByteBufferConversionChunkSize) +
                     String(repeating: "2", count: bagOfBytesToByteBufferConversionChunkSize)
             ).utf8,
-            length: .known(bagOfBytesToByteBufferConversionChunkSize * 3)
+            length: .known(Int64(bagOfBytesToByteBufferConversionChunkSize * 3))
         ).collect()
 
         let expectedChunks = [
@@ -495,7 +495,7 @@ class HTTPClientRequestTests: XCTestCase {
                 Array(repeating: 0, count: bagOfBytesToByteBufferConversionChunkSize) +
                     Array(repeating: 1, count: bagOfBytesToByteBufferConversionChunkSize)
             ),
-            length: .known(bagOfBytesToByteBufferConversionChunkSize * 3),
+            length: .known(Int64(bagOfBytesToByteBufferConversionChunkSize * 3)),
             bagOfBytesToByteBufferConversionChunkSize: bagOfBytesToByteBufferConversionChunkSize,
             byteBufferMaxSize: byteBufferMaxSize
         ).collect()
@@ -516,7 +516,7 @@ class HTTPClientRequestTests: XCTestCase {
         }
         let body = try await HTTPClientRequest.Body.bytes(
             makeBytes(),
-            length: .known(bagOfBytesToByteBufferConversionChunkSize * 3)
+            length: .known(Int64(bagOfBytesToByteBufferConversionChunkSize * 3))
         ).collect()
 
         var firstChunk = ByteBuffer(repeating: 0, count: bagOfBytesToByteBufferConversionChunkSize)
@@ -539,7 +539,7 @@ class HTTPClientRequestTests: XCTestCase {
         }
         let body = try await HTTPClientRequest.Body._bytes(
             makeBytes(),
-            length: .known(bagOfBytesToByteBufferConversionChunkSize * 3),
+            length: .known(Int64(bagOfBytesToByteBufferConversionChunkSize * 3)),
             bagOfBytesToByteBufferConversionChunkSize: bagOfBytesToByteBufferConversionChunkSize,
             byteBufferMaxSize: byteBufferMaxSize
         ).collect()

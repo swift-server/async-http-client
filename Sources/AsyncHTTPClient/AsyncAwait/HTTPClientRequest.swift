@@ -341,11 +341,11 @@ extension HTTPClientRequest.Body {
         public static let unknown: Self = .init(storage: .unknown)
 
         /// The size of the request body is known and exactly `count` bytes
-        @_disfavoredOverload
+        @available(*, deprecated, message: "Use `known(_ count: Int64)` instead")
         public static func known(_ count: Int) -> Self {
             .init(storage: .known(Int64(count)))
         }
-        
+
         /// The size of the request body is known and exactly `count` bytes
         public static func known(_ count: Int64) -> Self {
             .init(storage: .known(count))

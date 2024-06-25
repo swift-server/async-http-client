@@ -517,7 +517,7 @@ final class TransactionTests: XCTestCase {
             var request = HTTPClientRequest(url: "https://localhost:\(httpBin.port)/")
             request.method = .POST
             request.headers = ["host": "localhost:\(httpBin.port)"]
-            request.body = .stream(streamWriter, length: .known(800))
+            request.body = .stream(streamWriter, length: .known(Int64(800)))
 
             var maybePreparedRequest: PreparedRequest?
             XCTAssertNoThrow(maybePreparedRequest = try PreparedRequest(request))
