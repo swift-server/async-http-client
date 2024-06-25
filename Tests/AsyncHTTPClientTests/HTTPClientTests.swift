@@ -2756,7 +2756,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
     func testBodyUploadAfterEndFails() {
         let url = self.defaultHTTPBinURLPrefix + "post"
 
-        func uploader(_ streamWriter: HTTPClient.Body.StreamWriter) -> EventLoopFuture<Void> {
+        let uploader = { @Sendable (_ streamWriter: HTTPClient.Body.StreamWriter) -> EventLoopFuture<Void> in
             let done = streamWriter.write(.byteBuffer(ByteBuffer(string: "X")))
             done.recover { error in
                 XCTFail("unexpected error \(error)")
@@ -2971,7 +2971,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let body: HTTPClient.Body = .stream(bodyStream: { writer in
             let finalPromise = writeEL.makePromise(of: Void.self)
 
-            func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
+            @Sendable func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
                 // always invoke from the wrong el to test thread safety
                 writeEL.preconditionInEventLoop()
 
@@ -3116,7 +3116,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let body: HTTPClient.Body = .stream(bodyStream: { writer in
             let finalPromise = writeEL.makePromise(of: Void.self)
 
-            func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
+            @Sendable func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
                 // always invoke from the wrong el to test thread safety
                 writeEL.preconditionInEventLoop()
 
@@ -3167,7 +3167,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let body: HTTPClient.Body = .stream(bodyStream: { writer in
             let finalPromise = writeEL.makePromise(of: Void.self)
 
-            func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
+            @Sendable func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
                 // always invoke from the wrong el to test thread safety
                 writeEL.preconditionInEventLoop()
 
@@ -3223,7 +3223,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let body: HTTPClient.Body = .stream(bodyStream: { writer in
             let finalPromise = writeEL.makePromise(of: Void.self)
 
-            func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
+            @Sendable func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
                 // always invoke from the wrong el to test thread safety
                 writeEL.preconditionInEventLoop()
 

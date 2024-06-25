@@ -189,18 +189,20 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         
         let chunkSize: Int
         let totalChunks: Int
+        let buffer: ByteBuffer
         var chunksGenerated: Int = 0
         
         init(chunkSize: Int, totalChunks: Int) {
             self.chunkSize = chunkSize
             self.totalChunks = totalChunks
+            self.buffer = ByteBuffer(repeating: 1, count: self.chunkSize)
         }
         
         mutating func next() async throws -> ByteBuffer? {
             guard self.chunksGenerated < self.totalChunks else { return nil }
 
             self.chunksGenerated += 1
-            return ByteBuffer(repeating: 1, count: self.chunkSize)
+            return self.buffer
         }
     
         func makeAsyncIterator() -> AsyncSequenceByteBufferGenerator {
@@ -231,7 +233,11 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         let response: HTTPClientResponse = try await client.execute(request, deadline: .now() + .seconds(30), logger: logger)
         XCTAssertEqual(response.headers["content-length"], [])
         
-        _ = try await response.body.collect(upTo: 3_221_225_472)
+        var receivedBytes: Int64 = 0
+        for try await part in response.body {
+            receivedBytes += Int64(part.readableBytes)
+        }
+        XCTAssertEqual(receivedBytes, 3_221_225_472) // 3GB
     }
 
     func testPostWithAsyncSequenceOfByteBuffers() {

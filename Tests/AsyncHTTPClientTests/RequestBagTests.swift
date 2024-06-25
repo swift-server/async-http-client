@@ -29,18 +29,18 @@ final class RequestBagTests: XCTestCase {
 
         let writtenBytes: ManagedAtomic<Int> = .init(0)
         let writes: ManagedAtomic<Int> = .init(0)
-        let bytesToSent: ManagedAtomic<Int> = .init((3000...10000).randomElement()!)
-        let expectedWrites = bytesToSent.load(ordering: .relaxed) / 100 + ((bytesToSent.load(ordering: .relaxed) % 100 > 0) ? 1 : 0)
+        let bytesToSent = (3000...10000).randomElement()!
+        let expectedWrites = bytesToSent / 100 + ((bytesToSent % 100 > 0) ? 1 : 0)
         let streamIsAllowedToWrite: ManagedAtomic<Bool> = .init(false)
 
         let writeDonePromise = embeddedEventLoop.makePromise(of: Void.self)
-        let requestBody: HTTPClient.Body = .stream(contentLength: Int64(bytesToSent.load(ordering: .relaxed))) { writer -> EventLoopFuture<Void> in
+        let requestBody: HTTPClient.Body = .stream(contentLength: Int64(bytesToSent)) { writer -> EventLoopFuture<Void> in
             @Sendable func write(donePromise: EventLoopPromise<Void>) {
                 XCTAssertTrue(streamIsAllowedToWrite.load(ordering: .relaxed))
-                guard writtenBytes.load(ordering: .relaxed) < bytesToSent.load(ordering: .relaxed) else {
+                guard writtenBytes.load(ordering: .relaxed) < bytesToSent else {
                     return donePromise.succeed(())
                 }
-                let byteCount = min(bytesToSent.load(ordering: .relaxed) - writtenBytes.load(ordering: .relaxed), 100)
+                let byteCount = min(bytesToSent - writtenBytes.load(ordering: .relaxed), 100)
                 let buffer = ByteBuffer(bytes: [UInt8](repeating: 1, count: byteCount))
                 writes.wrappingIncrement(by: 1, ordering: .relaxed)
                 writer.write(.byteBuffer(buffer)).whenSuccess { _ in
@@ -104,7 +104,7 @@ final class RequestBagTests: XCTestCase {
         }
 
         XCTAssertNoThrow(try executor.receiveEndOfStream())
-        XCTAssertEqual(receivedBytes, bytesToSent.load(ordering: .relaxed), "We have sent all request bytes...")
+        XCTAssertEqual(receivedBytes, bytesToSent, "We have sent all request bytes...")
 
         XCTAssertNil(delegate.receivedHead, "Expected not to have a response head, before `receiveResponseHead`")
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: .init([

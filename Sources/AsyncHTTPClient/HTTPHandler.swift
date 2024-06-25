@@ -70,7 +70,7 @@ extension HTTPClient {
 
         /// Body size. If nil,`Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
         /// header is set with the given `length`.
-        @available(*, deprecated, message: "Use `contentLength: Int64?` instead")
+        @available(*, deprecated, renamed: "contentLength")
         public var length: Int? {
             get {
                 self.contentLength.flatMap { Int($0) }
@@ -79,7 +79,7 @@ extension HTTPClient {
                 self.contentLength = newValue.flatMap { Int64($0) }
             }
         }
-        
+
         /// Body size. If nil,`Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
         /// header is set with the given `contentLength`.
         public var contentLength: Int64?
@@ -88,13 +88,6 @@ extension HTTPClient {
         public var stream: @Sendable (StreamWriter) -> EventLoopFuture<Void>
 
         @usableFromInline typealias StreamCallback = @Sendable (StreamWriter) -> EventLoopFuture<Void>
-
-        @inlinable
-        @available(*, deprecated, message: "Use initializer with `contentLength: Int64` instead")
-        init(length: Int?, stream: @escaping StreamCallback) {
-            self.contentLength = length.flatMap { Int64($0) }
-            self.stream = stream
-        }
 
         @inlinable
         init(contentLength: Int64?, stream: @escaping StreamCallback) {
@@ -119,9 +112,9 @@ extension HTTPClient {
         /// header is set with the given `length`.
         ///     - stream: Body chunk provider.
         @preconcurrency
-        @available(*, deprecated, message: "Use `stream` with `length: Int64` instead")
+        @available(*, deprecated, renamed: "stream(contentLength:bodyStream:)")
         public static func stream(length: Int? = nil, _ stream: @Sendable @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
-            return Body(length: length, stream: stream)
+            return Body(contentLength: length.flatMap { Int64($0) }, stream: stream)
         }
 
 
