@@ -662,7 +662,7 @@ extension URL {
         if self.path.isEmpty {
             return "/"
         }
-        return URLComponents(url: self, resolvingAgainstBaseURL: true)?.percentEncodedPath ?? self.path
+        return URLComponents(url: self, resolvingAgainstBaseURL: false)?.percentEncodedPath ?? self.path
     }
 
     var uri: String {
