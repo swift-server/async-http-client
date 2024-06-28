@@ -140,7 +140,7 @@ extension HTTPClientRequest.Body {
     ///
     /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
     /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
-    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)`` will use `Content-Length`.
+    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)-9q0ge`` will use `Content-Length`.
     ///
     /// - parameters:
     ///     - bytes: The bytes of the request body.
@@ -225,7 +225,7 @@ extension HTTPClientRequest.Body {
     ///
     /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
     /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
-    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)`` will use `Content-Length`.
+    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)-9q0ge`` will use `Content-Length`.
     ///
     /// - parameters:
     ///     - bytes: The bytes of the request body.
@@ -265,7 +265,7 @@ extension HTTPClientRequest.Body {
     ///
     /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
     /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
-    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)`` will use `Content-Length`.
+    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)-9q0ge`` will use `Content-Length`.
     ///
     /// - parameters:
     ///     - sequenceOfBytes: The bytes of the request body.
@@ -293,7 +293,7 @@ extension HTTPClientRequest.Body {
     ///
     /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
     /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
-    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)`` will use `Content-Length`.
+    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)-9q0ge`` will use `Content-Length`.
     ///
     /// - parameters:
     ///     - bytes: The bytes of the request body.
