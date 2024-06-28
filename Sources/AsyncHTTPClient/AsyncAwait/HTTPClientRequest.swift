@@ -125,7 +125,7 @@ extension HTTPClientRequest.Body {
     public static func bytes<Bytes: RandomAccessCollection & Sendable>(
         _ bytes: Bytes
     ) -> Self where Bytes.Element == UInt8 {
-        self.bytes(bytes, length: .known(bytes.count))
+        self.bytes(bytes, length: .known(Int64(bytes.count)))
     }
 
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `Sequence` of bytes.
@@ -140,7 +140,7 @@ extension HTTPClientRequest.Body {
     ///
     /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
     /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
-    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)`` will use `Content-Length`.
+    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)-9q0ge`` will use `Content-Length`.
     ///
     /// - parameters:
     ///     - bytes: The bytes of the request body.
@@ -225,7 +225,7 @@ extension HTTPClientRequest.Body {
     ///
     /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
     /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
-    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)`` will use `Content-Length`.
+    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)-9q0ge`` will use `Content-Length`.
     ///
     /// - parameters:
     ///     - bytes: The bytes of the request body.
@@ -265,7 +265,7 @@ extension HTTPClientRequest.Body {
     ///
     /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
     /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
-    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)`` will use `Content-Length`.
+    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)-9q0ge`` will use `Content-Length`.
     ///
     /// - parameters:
     ///     - sequenceOfBytes: The bytes of the request body.
@@ -293,7 +293,7 @@ extension HTTPClientRequest.Body {
     ///
     /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
     /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
-    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)`` will use `Content-Length`.
+    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)-9q0ge`` will use `Content-Length`.
     ///
     /// - parameters:
     ///     - bytes: The bytes of the request body.
@@ -341,7 +341,13 @@ extension HTTPClientRequest.Body {
         public static let unknown: Self = .init(storage: .unknown)
 
         /// The size of the request body is known and exactly `count` bytes
+        @available(*, deprecated, message: "Use `known(_ count: Int64)` with an explicit Int64 argument instead")
         public static func known(_ count: Int) -> Self {
+            .init(storage: .known(Int64(count)))
+        }
+
+        /// The size of the request body is known and exactly `count` bytes
+        public static func known(_ count: Int64) -> Self {
             .init(storage: .known(count))
         }
 

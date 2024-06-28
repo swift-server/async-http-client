@@ -15,7 +15,7 @@
 struct RequestFramingMetadata: Hashable {
     enum Body: Hashable {
         case stream
-        case fixedSize(Int)
+        case fixedSize(Int64)
     }
 
     var connectionClose: Bool

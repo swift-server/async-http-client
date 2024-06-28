@@ -14,6 +14,7 @@
 
 @testable import AsyncHTTPClient
 import Logging
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOEmbedded
 import NIOHTTP1
@@ -26,24 +27,36 @@ final class RequestBagTests: XCTestCase {
         defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
         let logger = Logger(label: "test")
 
-        var writtenBytes = 0
-        var writes = 0
+        struct TestState {
+            var writtenBytes: Int = 0
+            var writes: Int = 0
+            var streamIsAllowedToWrite: Bool = false
+        }
+
+        let testState = NIOLockedValueBox(TestState())
+
         let bytesToSent = (3000...10000).randomElement()!
         let expectedWrites = bytesToSent / 100 + ((bytesToSent % 100 > 0) ? 1 : 0)
-        var streamIsAllowedToWrite = false
 
         let writeDonePromise = embeddedEventLoop.makePromise(of: Void.self)
-        let requestBody: HTTPClient.Body = .stream(length: bytesToSent) { writer -> EventLoopFuture<Void> in
-            func write(donePromise: EventLoopPromise<Void>) {
-                XCTAssertTrue(streamIsAllowedToWrite)
-                guard writtenBytes < bytesToSent else {
-                    return donePromise.succeed(())
+        let requestBody: HTTPClient.Body = .stream(contentLength: Int64(bytesToSent)) { writer -> EventLoopFuture<Void> in
+            @Sendable func write(donePromise: EventLoopPromise<Void>) {
+                let futureWrite: EventLoopFuture<Void>? = testState.withLockedValue { state in
+                    XCTAssertTrue(state.streamIsAllowedToWrite)
+                    guard state.writtenBytes < bytesToSent else {
+                        donePromise.succeed(())
+                        return nil
+                    }
+                    let byteCount = min(bytesToSent - state.writtenBytes, 100)
+                    let buffer = ByteBuffer(bytes: [UInt8](repeating: 1, count: byteCount))
+                    state.writes += 1
+                    return writer.write(.byteBuffer(buffer))
                 }
-                let byteCount = min(bytesToSent - writtenBytes, 100)
-                let buffer = ByteBuffer(bytes: [UInt8](repeating: 1, count: byteCount))
-                writes += 1
-                writer.write(.byteBuffer(buffer)).whenSuccess { _ in
-                    writtenBytes += 100
+
+                futureWrite?.whenSuccess { _ in
+                    testState.withLockedValue { state in
+                        state.writtenBytes += 100
+                    }
                     write(donePromise: donePromise)
                 }
             }
@@ -81,9 +94,9 @@ final class RequestBagTests: XCTestCase {
         executor.runRequest(bag)
         XCTAssertEqual(delegate.hitDidSendRequestHead, 1)
 
-        streamIsAllowedToWrite = true
+        testState.withLockedValue { $0.streamIsAllowedToWrite = true }
         bag.resumeRequestBodyStream()
-        streamIsAllowedToWrite = false
+        testState.withLockedValue { $0.streamIsAllowedToWrite = false }
 
         // after starting the body stream we should have received two writes
         var receivedBytes = 0
@@ -91,14 +104,14 @@ final class RequestBagTests: XCTestCase {
             XCTAssertNoThrow(try executor.receiveRequestBody {
                 receivedBytes += $0.readableBytes
             })
-            XCTAssertEqual(delegate.hitDidSendRequestPart, writes)
+            XCTAssertEqual(delegate.hitDidSendRequestPart, testState.withLockedValue { $0.writes })
 
             if i % 2 == 1 {
-                streamIsAllowedToWrite = true
+                testState.withLockedValue { $0.streamIsAllowedToWrite = true }
                 executor.resumeRequestBodyStream()
-                streamIsAllowedToWrite = false
+                testState.withLockedValue { $0.streamIsAllowedToWrite = false }
                 XCTAssertLessThanOrEqual(executor.requestBodyPartsCount, 2)
-                XCTAssertEqual(delegate.hitDidSendRequestPart, writes)
+                XCTAssertEqual(delegate.hitDidSendRequestPart, testState.withLockedValue { $0.writes })
             }
         }
 
@@ -153,7 +166,7 @@ final class RequestBagTests: XCTestCase {
         defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
         let logger = Logger(label: "test")
 
-        let requestBody: HTTPClient.Body = .stream(length: 12) { writer -> EventLoopFuture<Void> in
+        let requestBody: HTTPClient.Body = .stream(contentLength: 12) { writer -> EventLoopFuture<Void> in
 
             writer.write(.byteBuffer(ByteBuffer(bytes: 0...3))).flatMap { _ -> EventLoopFuture<Void> in
                 embeddedEventLoop.makeFailedFuture(TestError())
@@ -530,21 +543,21 @@ final class RequestBagTests: XCTestCase {
 
         var maybeRequest: HTTPClient.Request?
         let writeSecondPartPromise = embeddedEventLoop.makePromise(of: Void.self)
+        let firstWriteSuccess: NIOLockedValueBox<Bool> = .init(false)
 
         XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(
             url: "https://swift.org",
             method: .POST,
             headers: ["content-length": "12"],
-            body: .stream(length: 12) { writer -> EventLoopFuture<Void> in
-                var firstWriteSuccess = false
+            body: .stream(contentLength: 12) { writer -> EventLoopFuture<Void> in
                 return writer.write(.byteBuffer(.init(bytes: 0...3))).flatMap { _ in
-                    firstWriteSuccess = true
+                    firstWriteSuccess.withLockedValue { $0 = true }
 
                     return writeSecondPartPromise.futureResult
                 }.flatMap {
                     return writer.write(.byteBuffer(.init(bytes: 4...7)))
                 }.always { result in
-                    XCTAssertTrue(firstWriteSuccess)
+                    XCTAssertTrue(firstWriteSuccess.withLockedValue { $0 })
 
                     guard case .failure(let error) = result else {
                         return XCTFail("Expected the second write to fail")
@@ -859,11 +872,11 @@ final class RequestBagTests: XCTestCase {
 
             let writerPromise = group.any().makePromise(of: HTTPClient.Body.StreamWriter.self)
             let donePromise = group.any().makePromise(of: Void.self)
-            request.body = .stream { [leakDetector] writer in
+            request.body = .stream(bodyStream: { [leakDetector] writer in
                 _ = leakDetector
                 writerPromise.succeed(writer)
                 return donePromise.futureResult
-            }
+            })
 
             let resultFuture = httpClient.execute(request: request)
             request.body = nil

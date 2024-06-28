@@ -184,6 +184,62 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         }
     }
 
+    struct AsyncSequenceByteBufferGenerator: AsyncSequence, Sendable, AsyncIteratorProtocol {
+        typealias Element = ByteBuffer
+
+        let chunkSize: Int
+        let totalChunks: Int
+        let buffer: ByteBuffer
+        var chunksGenerated: Int = 0
+
+        init(chunkSize: Int, totalChunks: Int) {
+            self.chunkSize = chunkSize
+            self.totalChunks = totalChunks
+            self.buffer = ByteBuffer(repeating: 1, count: self.chunkSize)
+        }
+
+        mutating func next() async throws -> ByteBuffer? {
+            guard self.chunksGenerated < self.totalChunks else { return nil }
+
+            self.chunksGenerated += 1
+            return self.buffer
+        }
+
+        func makeAsyncIterator() -> AsyncSequenceByteBufferGenerator {
+            return self
+        }
+    }
+
+    func testEchoStreamThatHas3GBInTotal() async throws {
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully()) }
+        let bin = HTTPBin(.http1_1()) { _ in HTTPEchoHandler() }
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        let client: HTTPClient = makeDefaultHTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+
+        var request = HTTPClientRequest(url: "http://localhost:\(bin.port)/")
+        request.method = .POST
+
+        let sequence = AsyncSequenceByteBufferGenerator(
+            chunkSize: 4_194_304, // 4MB chunk
+            totalChunks: 768 // Total = 3GB
+        )
+        request.body = .stream(sequence, length: .unknown)
+
+        let response: HTTPClientResponse = try await client.execute(request, deadline: .now() + .seconds(30), logger: logger)
+        XCTAssertEqual(response.headers["content-length"], [])
+
+        var receivedBytes: Int64 = 0
+        for try await part in response.body {
+            receivedBytes += Int64(part.readableBytes)
+        }
+        XCTAssertEqual(receivedBytes, 3_221_225_472) // 3GB
+    }
+
     func testPostWithAsyncSequenceOfByteBuffers() {
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
