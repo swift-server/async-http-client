@@ -495,6 +495,19 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         XCTAssertEqual(.ok, response.status)
     }
 
+    func testLeadingSlashRelativeURL() throws {
+        let noLeadingSlashURL = URL(string: "percent%2Fencoded/hello", relativeTo: URL(string: self.defaultHTTPBinURLPrefix)!)!
+        let withLeadingSlashURL = URL(string: "/percent%2Fencoded/hello", relativeTo: URL(string: self.defaultHTTPBinURLPrefix)!)!
+
+        let noLeadingSlashURLRequest = try HTTPClient.Request(url: noLeadingSlashURL, method: .GET)
+        let withLeadingSlashURLRequest = try HTTPClient.Request(url: withLeadingSlashURL, method: .GET)
+
+        let noLeadingSlashURLResponse = try self.defaultClient.execute(request: noLeadingSlashURLRequest).wait()
+        let withLeadingSlashURLResponse = try self.defaultClient.execute(request: withLeadingSlashURLRequest).wait()
+
+        XCTAssertEqual(noLeadingSlashURLResponse.status, withLeadingSlashURLResponse.status)
+    }
+
     func testMultipleContentLengthHeaders() throws {
         let body = ByteBuffer(string: "hello world!")
 
