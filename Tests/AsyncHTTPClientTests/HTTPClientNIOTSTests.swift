@@ -55,9 +55,8 @@ class HTTPClientNIOTSTests: XCTestCase {
         guard isTestingNIOTS() else { return }
 
         let httpBin = HTTPBin(.http1_1(ssl: true))
-        var config = HTTPClient.Configuration()
-        config.networkFrameworkWaitForConnectivity = false
-        config.connectionPool.retryConnectionEstablishment = false
+        let config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: config)
         defer {
@@ -84,9 +83,8 @@ class HTTPClientNIOTSTests: XCTestCase {
         guard isTestingNIOTS() else { return }
         #if canImport(Network)
         let httpBin = HTTPBin(.http1_1(ssl: false))
-        var config = HTTPClient.Configuration()
-        config.networkFrameworkWaitForConnectivity = false
-        config.connectionPool.retryConnectionEstablishment = false
+        let config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
 
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
                                     configuration: config)
@@ -140,9 +138,8 @@ class HTTPClientNIOTSTests: XCTestCase {
         tlsConfig.minimumTLSVersion = .tlsv11
         tlsConfig.maximumTLSVersion = .tlsv1
 
-        var clientConfig = HTTPClient.Configuration(tlsConfiguration: tlsConfig)
-        clientConfig.networkFrameworkWaitForConnectivity = false
-        clientConfig.connectionPool.retryConnectionEstablishment = false
+        let clientConfig = HTTPClient.Configuration(tlsConfiguration: tlsConfig)
+            .enableFastFailureModeForTesting()
         let httpClient = HTTPClient(
             eventLoopGroupProvider: .shared(self.clientGroup),
             configuration: clientConfig
