@@ -634,7 +634,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let request = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "post",
                                              method: .POST,
                                              headers: ["transfer-encoding": "chunked"],
-                                             body: .stream { streamWriter in
+                                             body: .stream(bodyStream: { streamWriter in
                                                  _ = streamWriter.write(.byteBuffer(.init()))
 
                                                  let promise = self.clientGroup.next().makePromise(of: Void.self)
@@ -643,7 +643,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                                                  }
 
                                                  return promise.futureResult
-                                             })
+                                             }))
 
         XCTAssertThrowsError(try localClient.execute(request: request).wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .writeTimeout)
@@ -815,7 +815,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
     }
 
     func testUploadStreaming() throws {
-        let body: HTTPClient.Body = .stream(length: 8) { writer in
+        let body: HTTPClient.Body = .stream(contentLength: 8) { writer in
             let buffer = ByteBuffer(string: "1234")
             return writer.write(.byteBuffer(buffer)).flatMap {
                 let buffer = ByteBuffer(string: "4321")
@@ -1966,9 +1966,9 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
     }
 
     func testValidationErrorsAreSurfaced() throws {
-        let request = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get", method: .TRACE, body: .stream { _ in
+        let request = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get", method: .TRACE, body: .stream(bodyStream: { _ in
             self.defaultClient.eventLoopGroup.next().makeSucceededFuture(())
-        })
+        }))
         let runningRequest = self.defaultClient.execute(request: request)
         XCTAssertThrowsError(try runningRequest.wait()) { error in
             XCTAssertEqual(HTTPClientError.traceRequestWithBody, error as? HTTPClientError)
@@ -2061,10 +2061,10 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             return try? HTTPClient.Request(url: "http://\(localAddress.ipAddress!):\(localAddress.port!)",
                                            method: .POST,
                                            headers: ["transfer-encoding": "chunked"],
-                                           body: .stream { streamWriter in
+                                           body: .stream(bodyStream: { streamWriter in
                                                streamWriterPromise.succeed(streamWriter)
                                                return sentOffAllBodyPartsPromise.futureResult
-                                           })
+                                           }))
         }
 
         guard let server = makeServer(), let request = makeRequest(server: server) else {
@@ -2096,7 +2096,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
     }
 
     func testUploadStreamingCallinToleratedFromOtsideEL() throws {
-        let request = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get", method: .POST, body: .stream(length: 4) { writer in
+        let request = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get", method: .POST, body: .stream(contentLength: 4) { writer in
             let promise = self.defaultClient.eventLoopGroup.next().makePromise(of: Void.self)
             // We have to toleare callins from any thread
             DispatchQueue(label: "upload-streaming").async {
@@ -2615,9 +2615,9 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         }
 
         var request = try HTTPClient.Request(url: "http://localhost:\(server.serverPort)/")
-        request.body = .stream { writer in
+        request.body = .stream(bodyStream: { writer in
             writer.write(.byteBuffer(ByteBuffer(string: "1234")))
-        }
+        })
 
         let future = client.execute(request: request)
 
@@ -2716,7 +2716,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         XCTAssertThrowsError(
             try self.defaultClient.execute(request:
                 Request(url: url,
-                        body: .stream(length: 10) { streamWriter in
+                        body: .stream(contentLength: 10) { streamWriter in
                             let promise = self.defaultClient.eventLoopGroup.next().makePromise(of: Void.self)
                             DispatchQueue(label: "content-length-test").async {
                                 streamWriter.write(.byteBuffer(ByteBuffer(string: "1"))).cascade(to: promise)
@@ -2746,7 +2746,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         XCTAssertThrowsError(
             try self.defaultClient.execute(request:
                 Request(url: url,
-                        body: .stream(length: 1) { streamWriter in
+                        body: .stream(contentLength: 1) { streamWriter in
                             streamWriter.write(.byteBuffer(ByteBuffer(string: tooLong)))
                         })).wait()) { error in
             XCTAssertEqual(error as! HTTPClientError, HTTPClientError.bodyLengthMismatch)
@@ -2769,7 +2769,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
     func testBodyUploadAfterEndFails() {
         let url = self.defaultHTTPBinURLPrefix + "post"
 
-        func uploader(_ streamWriter: HTTPClient.Body.StreamWriter) -> EventLoopFuture<Void> {
+        let uploader = { @Sendable (_ streamWriter: HTTPClient.Body.StreamWriter) -> EventLoopFuture<Void> in
             let done = streamWriter.write(.byteBuffer(ByteBuffer(string: "X")))
             done.recover { error in
                 XCTFail("unexpected error \(error)")
@@ -2790,7 +2790,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         }
 
         var request: HTTPClient.Request?
-        XCTAssertNoThrow(request = try Request(url: url, body: .stream(length: 1, uploader)))
+        XCTAssertNoThrow(request = try Request(url: url, body: .stream(contentLength: 1, bodyStream: uploader)))
         XCTAssertThrowsError(try self.defaultClient.execute(request: XCTUnwrap(request)).wait()) {
             XCTAssertEqual($0 as? HTTPClientError, .writeAfterRequestSent)
         }
@@ -2806,7 +2806,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         _ = self.defaultClient.get(url: "http://localhost:\(self.defaultHTTPBin.port)/events/10/1")
 
         var request = try HTTPClient.Request(url: "http://localhost:\(self.defaultHTTPBin.port)/wait", method: .POST)
-        request.body = .stream { writer in
+        request.body = .stream(bodyStream: { writer in
             // Start writing chunks so tha we will try to write after read timeout is thrown
             for _ in 1...10 {
                 _ = writer.write(.byteBuffer(ByteBuffer(string: "1234")))
@@ -2818,7 +2818,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             }
 
             return promise.futureResult
-        }
+        })
 
         // We specify a deadline of 2 ms co that request will be timed out before all chunks are writtent,
         // we need to verify that second error on write after timeout does not lead to double-release.
@@ -2981,10 +2981,10 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         let delegate = ResponseStreamDelegate(eventLoop: delegateEL)
 
-        let body: HTTPClient.Body = .stream { writer in
+        let body: HTTPClient.Body = .stream(bodyStream: { writer in
             let finalPromise = writeEL.makePromise(of: Void.self)
 
-            func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
+            @Sendable func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
                 // always invoke from the wrong el to test thread safety
                 writeEL.preconditionInEventLoop()
 
@@ -3017,7 +3017,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             }
 
             return finalPromise.futureResult
-        }
+        })
 
         let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)", body: body)
         let future = httpClient.execute(request: request, delegate: delegate, eventLoop: .delegate(on: delegateEL))
@@ -3081,9 +3081,9 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let body = ByteBuffer(bytes: 0..<11)
 
         var request = try Request(url: httpBin.baseURL)
-        request.body = .stream { writer in
+        request.body = .stream(bodyStream: { writer in
             writer.write(.byteBuffer(body))
-        }
+        })
         XCTAssertThrowsError(try self.defaultClient.execute(
             request: request,
             delegate: ResponseAccumulator(request: request, maxBodySize: 10)
@@ -3099,9 +3099,9 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let body = ByteBuffer(bytes: 0..<10)
 
         var request = try Request(url: httpBin.baseURL)
-        request.body = .stream { writer in
+        request.body = .stream(bodyStream: { writer in
             writer.write(.byteBuffer(body))
-        }
+        })
         let response = try self.defaultClient.execute(
             request: request,
             delegate: ResponseAccumulator(request: request, maxBodySize: 10)
@@ -3126,10 +3126,10 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         let delegate = ResponseStreamDelegate(eventLoop: delegateEL)
 
-        let body: HTTPClient.Body = .stream { writer in
+        let body: HTTPClient.Body = .stream(bodyStream: { writer in
             let finalPromise = writeEL.makePromise(of: Void.self)
 
-            func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
+            @Sendable func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
                 // always invoke from the wrong el to test thread safety
                 writeEL.preconditionInEventLoop()
 
@@ -3156,7 +3156,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             }
 
             return finalPromise.futureResult
-        }
+        })
 
         let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)", body: body)
         let future = httpClient.execute(request: request, delegate: delegate, eventLoop: .delegate(on: delegateEL))
@@ -3177,10 +3177,10 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
         defer { XCTAssertNoThrow(try httpClient.syncShutdown()) }
 
-        let body: HTTPClient.Body = .stream { writer in
+        let body: HTTPClient.Body = .stream(bodyStream: { writer in
             let finalPromise = writeEL.makePromise(of: Void.self)
 
-            func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
+            @Sendable func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
                 // always invoke from the wrong el to test thread safety
                 writeEL.preconditionInEventLoop()
 
@@ -3207,7 +3207,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             }
 
             return finalPromise.futureResult
-        }
+        })
 
         let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)", body: body)
         let future = httpClient.execute(request: request)
@@ -3233,10 +3233,10 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let httpClient = HTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
         defer { XCTAssertNoThrow(try httpClient.syncShutdown()) }
 
-        let body: HTTPClient.Body = .stream { writer in
+        let body: HTTPClient.Body = .stream(bodyStream: { writer in
             let finalPromise = writeEL.makePromise(of: Void.self)
 
-            func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
+            @Sendable func writeLoop(_ writer: HTTPClient.Body.StreamWriter, index: Int) {
                 // always invoke from the wrong el to test thread safety
                 writeEL.preconditionInEventLoop()
 
@@ -3263,7 +3263,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             }
 
             return finalPromise.futureResult
-        }
+        })
 
         let headers = HTTPHeaders([("Connection", "close")])
         let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)", headers: headers, body: body)

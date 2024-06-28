@@ -40,7 +40,7 @@ final class NoBytesSentOverBodyLimitTests: XCTestCaseHTTPClientTestsBaseClass {
 
         let request = try Request(
             url: "http://localhost:\(server.serverPort)",
-            body: .stream(length: 1) { streamWriter in
+            body: .stream(contentLength: 1) { streamWriter in
                 streamWriter.write(.byteBuffer(ByteBuffer(string: tooLong)))
             }
         )

@@ -113,7 +113,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         guard let testUtils = maybeTestUtils else { return XCTFail("Expected connection setup works") }
 
         var maybeRequest: HTTPClient.Request?
-        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(length: 100) { writer in
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(contentLength: 100) { writer in
             testWriter.start(writer: writer)
         }))
         guard let request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
@@ -345,7 +345,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         guard let testUtils = maybeTestUtils else { return XCTFail("Expected connection setup works") }
 
         var maybeRequest: HTTPClient.Request?
-        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(length: 10) { writer in
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(contentLength: 10) { writer in
             // Advance time by more than the idle write timeout (that's 1 millisecond) to trigger the timeout.
             embedded.embeddedEventLoop.advanceTime(by: .milliseconds(2))
             return testWriter.start(writer: writer)
@@ -384,7 +384,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         guard let testUtils = maybeTestUtils else { return XCTFail("Expected connection setup works") }
 
         var maybeRequest: HTTPClient.Request?
-        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(length: 10) { writer in
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(contentLength: 10) { writer in
             embedded.isWritable = false
             embedded.pipeline.fireChannelWritabilityChanged()
             // This should not trigger any errors or timeouts, because the timer isn't running
@@ -432,7 +432,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         guard let testUtils = maybeTestUtils else { return XCTFail("Expected connection setup works") }
 
         var maybeRequest: HTTPClient.Request?
-        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(length: 2) { writer in
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(contentLength: 2) { writer in
             return testWriter.start(writer: writer, expectedErrors: [HTTPClientError.cancelled])
         }))
         guard let request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
@@ -595,7 +595,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         guard let testUtils = maybeTestUtils else { return XCTFail("Expected connection setup works") }
 
         var maybeRequest: HTTPClient.Request?
-        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(length: 10) { writer in
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(contentLength: 10) { writer in
             testWriter.start(writer: writer)
         }))
         guard let request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
