@@ -88,7 +88,7 @@ extension HTTPClient {
         @available(*, deprecated, renamed: "contentLength")
         public var length: Int? {
             get {
-                if case let .known(count) = self.contentLength.length {
+                if case .known(let count) = self.contentLength.length {
                     return Int(count)
                 }
                 return nil

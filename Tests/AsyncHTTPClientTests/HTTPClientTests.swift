@@ -1957,8 +1957,9 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             url: self.defaultHTTPBinURLPrefix + "get",
             method: .TRACE,
             body: .stream(length: .unknown) { _ in
-            self.defaultClient.eventLoopGroup.next().makeSucceededFuture(())
-        })
+                self.defaultClient.eventLoopGroup.next().makeSucceededFuture(())
+            }
+        )
         let runningRequest = self.defaultClient.execute(request: request)
         XCTAssertThrowsError(try runningRequest.wait()) { error in
             XCTAssertEqual(HTTPClientError.traceRequestWithBody, error as? HTTPClientError)
