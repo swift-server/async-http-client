@@ -116,7 +116,7 @@ class HTTP1ConnectionTests: XCTestCase {
         XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(
             url: "http://localhost/hello/swift",
             method: .POST,
-            body: .stream(contentLength: 4) { writer -> EventLoopFuture<Void> in
+            body: .stream(length: .known(4)) { writer -> EventLoopFuture<Void> in
                 @Sendable func recursive(count: UInt8, promise: EventLoopPromise<Void>) {
                     guard count < 4 else {
                         return promise.succeed(())

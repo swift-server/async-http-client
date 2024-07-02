@@ -68,7 +68,7 @@ class HTTP2ClientTests: XCTestCase {
         let client = self.makeDefaultHTTPClient()
         defer { XCTAssertNoThrow(try client.syncShutdown()) }
         var response: HTTPClient.Response?
-        let body = HTTPClient.Body.stream(contentLength: nil) { writer in
+        let body = HTTPClient.Body.stream(length: .unknown) { writer in
             writer.write(.byteBuffer(ByteBuffer(integer: UInt64(0)))).flatMap {
                 writer.write(.byteBuffer(ByteBuffer(integer: UInt64(0))))
             }
@@ -84,7 +84,7 @@ class HTTP2ClientTests: XCTestCase {
         defer { XCTAssertNoThrow(try bin.shutdown()) }
         let client = self.makeDefaultHTTPClient()
         defer { XCTAssertNoThrow(try client.syncShutdown()) }
-        let body = HTTPClient.Body.stream(contentLength: 12) { writer in
+        let body = HTTPClient.Body.stream(length: .known(12)) { writer in
             writer.write(.byteBuffer(ByteBuffer(integer: UInt64(0)))).flatMap {
                 writer.write(.byteBuffer(ByteBuffer(integer: UInt64(0))))
             }

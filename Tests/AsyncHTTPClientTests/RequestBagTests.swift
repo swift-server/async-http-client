@@ -39,7 +39,7 @@ final class RequestBagTests: XCTestCase {
         let expectedWrites = bytesToSent / 100 + ((bytesToSent % 100 > 0) ? 1 : 0)
 
         let writeDonePromise = embeddedEventLoop.makePromise(of: Void.self)
-        let requestBody: HTTPClient.Body = .stream(contentLength: Int64(bytesToSent)) { writer -> EventLoopFuture<Void> in
+        let requestBody: HTTPClient.Body = .stream(length: .known(Int64(bytesToSent))) { writer -> EventLoopFuture<Void> in
             @Sendable func write(donePromise: EventLoopPromise<Void>) {
                 let futureWrite: EventLoopFuture<Void>? = testState.withLockedValue { state in
                     XCTAssertTrue(state.streamIsAllowedToWrite)
@@ -166,7 +166,7 @@ final class RequestBagTests: XCTestCase {
         defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
         let logger = Logger(label: "test")
 
-        let requestBody: HTTPClient.Body = .stream(contentLength: 12) { writer -> EventLoopFuture<Void> in
+        let requestBody: HTTPClient.Body = .stream(length: .known(12)) { writer -> EventLoopFuture<Void> in
 
             writer.write(.byteBuffer(ByteBuffer(bytes: 0...3))).flatMap { _ -> EventLoopFuture<Void> in
                 embeddedEventLoop.makeFailedFuture(TestError())
@@ -549,7 +549,7 @@ final class RequestBagTests: XCTestCase {
             url: "https://swift.org",
             method: .POST,
             headers: ["content-length": "12"],
-            body: .stream(contentLength: 12) { writer -> EventLoopFuture<Void> in
+            body: .stream(length: .known(12)) { writer -> EventLoopFuture<Void> in
                 return writer.write(.byteBuffer(.init(bytes: 0...3))).flatMap { _ in
                     firstWriteSuccess.withLockedValue { $0 = true }
 
@@ -872,11 +872,11 @@ final class RequestBagTests: XCTestCase {
 
             let writerPromise = group.any().makePromise(of: HTTPClient.Body.StreamWriter.self)
             let donePromise = group.any().makePromise(of: Void.self)
-            request.body = .stream(bodyStream: { [leakDetector] writer in
+            request.body = .stream(length: .unknown) { [leakDetector] writer in
                 _ = leakDetector
                 writerPromise.succeed(writer)
                 return donePromise.futureResult
-            })
+            }
 
             let resultFuture = httpClient.execute(request: request)
             request.body = nil

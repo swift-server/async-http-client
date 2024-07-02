@@ -68,21 +68,43 @@ extension HTTPClient {
             }
         }
 
+        public struct Length: Hashable, Sendable {
+            @usableFromInline
+            let length: RequestBodyLength
+
+            private init(_ length: RequestBodyLength) {
+                self.length = length
+            }
+
+            public static let unknown = Length(.unknown)
+
+            public static func known(_ length: Int64) -> Length {
+                return Length(.known(length))
+            }
+        }
+
         /// Body size. If nil,`Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
         /// header is set with the given `length`.
         @available(*, deprecated, renamed: "contentLength")
         public var length: Int? {
             get {
-                self.contentLength.flatMap { Int($0) }
+                if case let .known(count) = self.contentLength.length {
+                    return Int(count)
+                }
+                return nil
             }
             set {
-                self.contentLength = newValue.flatMap { Int64($0) }
+                if let newValue = newValue {
+                    self.contentLength = Length.known(Int64(newValue))
+                } else {
+                    self.contentLength = Length.unknown
+                }
             }
         }
 
         /// Body size. If nil,`Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
         /// header is set with the given `contentLength`.
-        public var contentLength: Int64?
+        public var contentLength: Length
 
         /// Body chunk provider.
         public var stream: @Sendable (StreamWriter) -> EventLoopFuture<Void>
@@ -90,8 +112,8 @@ extension HTTPClient {
         @usableFromInline typealias StreamCallback = @Sendable (StreamWriter) -> EventLoopFuture<Void>
 
         @inlinable
-        init(contentLength: Int64?, stream: @escaping StreamCallback) {
-            self.contentLength = contentLength.flatMap { $0 }
+        init(contentLength: Length, stream: @escaping StreamCallback) {
+            self.contentLength = contentLength
             self.stream = stream
         }
 
@@ -100,7 +122,7 @@ extension HTTPClient {
         /// - parameters:
         ///     - buffer: Body `ByteBuffer` representation.
         public static func byteBuffer(_ buffer: ByteBuffer) -> Body {
-            return Body(contentLength: Int64(buffer.readableBytes)) { writer in
+            return Body(contentLength: .known(Int64(buffer.readableBytes))) { writer in
                 writer.write(.byteBuffer(buffer))
             }
         }
@@ -114,17 +136,23 @@ extension HTTPClient {
         @preconcurrency
         @available(*, deprecated, renamed: "stream(contentLength:bodyStream:)")
         public static func stream(length: Int? = nil, _ stream: @Sendable @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
-            return Body(contentLength: length.flatMap { Int64($0) }, stream: stream)
+            let contentLength: Length
+            if let length = length {
+                contentLength = .known(Int64(length))
+            } else {
+                contentLength = .unknown
+            }
+            return Body(contentLength: contentLength, stream: stream)
         }
 
         /// Create and stream body using ``StreamWriter``.
         ///
         /// - parameters:
-        ///     - contentLength: Body size. If nil, `Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
+        ///     - length: Body size. If nil, `Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
         /// header is set with the given `contentLength`.
-        ///     - bodyStream: Body chunk provider.
-        public static func stream(contentLength: Int64? = nil, bodyStream: @Sendable @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
-            return Body(contentLength: contentLength, stream: bodyStream)
+        ///     - stream: Body chunk provider.
+        public static func stream(length: Length, _ stream: @Sendable @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
+            return Body(contentLength: length, stream: stream)
         }
 
         /// Create and stream body using a collection of bytes.
@@ -134,7 +162,7 @@ extension HTTPClient {
         @preconcurrency
         @inlinable
         public static func bytes<Bytes>(_ bytes: Bytes) -> Body where Bytes: RandomAccessCollection, Bytes: Sendable, Bytes.Element == UInt8 {
-            return Body(contentLength: Int64(bytes.count)) { writer in
+            return Body(contentLength: .known(Int64(bytes.count))) { writer in
                 if bytes.count <= bagOfBytesToByteBufferConversionChunkSize {
                     return writer.write(.byteBuffer(ByteBuffer(bytes: bytes)))
                 } else {
@@ -148,7 +176,7 @@ extension HTTPClient {
         /// - parameters:
         ///     - string: Body `String` representation.
         public static func string(_ string: String) -> Body {
-            return Body(contentLength: Int64(string.utf8.count)) { writer in
+            return Body(contentLength: .known(Int64(string.utf8.count))) { writer in
                 if string.utf8.count <= bagOfBytesToByteBufferConversionChunkSize {
                     return writer.write(.byteBuffer(ByteBuffer(string: string)))
                 } else {
@@ -881,10 +909,6 @@ extension RequestBodyLength {
             self = .known(0)
             return
         }
-        guard let length = body.contentLength else {
-            self = .unknown
-            return
-        }
-        self = .known(length)
+        self = body.contentLength.length
     }
 }
