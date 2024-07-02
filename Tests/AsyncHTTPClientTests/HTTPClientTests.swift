@@ -3668,4 +3668,11 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let response3 = try await client.execute(request, timeout: /* infinity */ .hours(99))
         XCTAssertEqual(.ok, response3.status)
     }
+
+    @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+    func testRequestBasicAuth() async throws {
+        var request = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix)
+        request.setBasicAuth(username: "foo", password: "bar")
+        XCTAssertEqual(request.headers.first(name: "Authorization"), "Basic Zm9vOmJhcg==")
+    }
 }

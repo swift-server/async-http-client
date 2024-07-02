@@ -57,6 +57,17 @@ class HTTPClientRequestTests: XCTestCase {
         }
     }
 
+    func testBasicAuth() {
+        XCTAsyncTest {
+            var request = Request(url: "https://example.com/get")
+            request.setBasicAuth(username: "foo", password: "bar")
+            var preparedRequest: PreparedRequest?
+            XCTAssertNoThrow(preparedRequest = try PreparedRequest(request))
+            guard let preparedRequest = preparedRequest else { return }
+            XCTAssertEqual(preparedRequest.head.headers.first(name: "Authorization")!, "Basic Zm9vOmJhcg==")
+        }
+    }
+
     func testUnixScheme() {
         XCTAsyncTest {
             var request = Request(url: "unix://%2Fexample%2Ffolder.sock/some_path")
