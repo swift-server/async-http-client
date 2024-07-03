@@ -111,8 +111,8 @@ extension HTTPClient {
         ///     - length: Body size. If nil, `Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
         /// header is set with the given `length`.
         ///     - stream: Body chunk provider.
+        @_disfavoredOverload
         @preconcurrency
-        @available(*, deprecated, renamed: "stream(contentLength:bodyStream:)")
         public static func stream(length: Int? = nil, _ stream: @Sendable @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
             return Body(contentLength: length.flatMap { Int64($0) }, stream: stream)
         }
@@ -123,8 +123,8 @@ extension HTTPClient {
         ///     - contentLength: Body size. If nil, `Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
         /// header is set with the given `contentLength`.
         ///     - bodyStream: Body chunk provider.
-        public static func stream(contentLength: Int64? = nil, bodyStream: @Sendable @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
-            return Body(contentLength: contentLength, stream: bodyStream)
+        public static func stream(contentLength: Int64? = nil, _ stream: @Sendable @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
+            return Body(contentLength: contentLength, stream: stream)
         }
 
         /// Create and stream body using a collection of bytes.

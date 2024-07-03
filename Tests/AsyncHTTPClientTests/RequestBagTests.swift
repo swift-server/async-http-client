@@ -872,11 +872,11 @@ final class RequestBagTests: XCTestCase {
 
             let writerPromise = group.any().makePromise(of: HTTPClient.Body.StreamWriter.self)
             let donePromise = group.any().makePromise(of: Void.self)
-            request.body = .stream(bodyStream: { [leakDetector] writer in
+            request.body = .stream { [leakDetector] writer in
                 _ = leakDetector
                 writerPromise.succeed(writer)
                 return donePromise.futureResult
-            })
+            }
 
             let resultFuture = httpClient.execute(request: request)
             request.body = nil
