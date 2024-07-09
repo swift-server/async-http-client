@@ -142,6 +142,25 @@ class HTTPClientInternalTests: XCTestCase {
         XCTAssertEqual(request12.url.uri, "/some%2Fpathsegment1/pathsegment2")
     }
 
+    func testURIOfRelativeURLRequest() throws {
+        let requestNoLeadingSlash = try Request(
+            url: URL(
+                string: "percent%2Fencoded/hello",
+                relativeTo: URL(string: "http://127.0.0.1")!
+            )!
+        )
+
+        let requestWithLeadingSlash = try Request(
+            url: URL(
+                string: "/percent%2Fencoded/hello",
+                relativeTo: URL(string: "http://127.0.0.1")!
+            )!
+        )
+
+        XCTAssertEqual(requestNoLeadingSlash.url.uri, "/percent%2Fencoded/hello")
+        XCTAssertEqual(requestWithLeadingSlash.url.uri, "/percent%2Fencoded/hello")
+    }
+
     func testChannelAndDelegateOnDifferentEventLoops() throws {
         class Delegate: HTTPClientResponseDelegate {
             typealias Response = ([Message], [Message])
