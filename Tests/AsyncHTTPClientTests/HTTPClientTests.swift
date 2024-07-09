@@ -505,7 +505,8 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let noLeadingSlashURLResponse = try self.defaultClient.execute(request: noLeadingSlashURLRequest).wait()
         let withLeadingSlashURLResponse = try self.defaultClient.execute(request: withLeadingSlashURLRequest).wait()
 
-        XCTAssertEqual(noLeadingSlashURLResponse.status, withLeadingSlashURLResponse.status)
+        XCTAssertEqual(noLeadingSlashURLResponse.status, .ok)
+        XCTAssertEqual(withLeadingSlashURLResponse.status, .ok)
     }
 
     func testMultipleContentLengthHeaders() throws {

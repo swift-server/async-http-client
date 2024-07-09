@@ -157,7 +157,8 @@ class HTTPClientInternalTests: XCTestCase {
             )!
         )
 
-        XCTAssertEqual(requestNoLeadingSlash.url.uri, requestWithLeadingSlash.url.uri)
+        XCTAssertEqual(requestNoLeadingSlash.url.uri, "/percent%2Fencoded/hello")
+        XCTAssertEqual(requestWithLeadingSlash.url.uri, "/percent%2Fencoded/hello")
     }
 
     func testChannelAndDelegateOnDifferentEventLoops() throws {
