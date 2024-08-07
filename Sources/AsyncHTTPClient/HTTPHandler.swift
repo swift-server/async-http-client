@@ -288,7 +288,7 @@ extension HTTPClient {
     }
 
     /// Represents an HTTP response.
-    public struct Response {
+    public struct Response: Sendable {
         /// Remote host of the request.
         public var host: String
         /// Response HTTP status.
