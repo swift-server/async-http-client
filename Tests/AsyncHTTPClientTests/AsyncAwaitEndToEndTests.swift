@@ -527,9 +527,10 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             /// openssl req -x509 -newkey rsa:4096 -keyout self_signed_key.pem -out self_signed_cert.pem -sha256 -days 99999 -nodes -subj '/CN=localhost'
             let certPath = Bundle.module.path(forResource: "self_signed_cert", ofType: "pem")!
             let keyPath = Bundle.module.path(forResource: "self_signed_key", ofType: "pem")!
+            let key = try NIOSSLPrivateKey(file: keyPath, format: .pem)
             let configuration = TLSConfiguration.makeServerConfiguration(
                 certificateChain: try NIOSSLCertificate.fromPEMFile(certPath).map { .certificate($0) },
-                privateKey: .file(keyPath)
+                privateKey: .privateKey(key)
             )
             let sslContext = try NIOSSLContext(configuration: configuration)
             let serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
@@ -597,10 +598,11 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             /// ```
             let certPath = Bundle.module.path(forResource: "example.com.cert", ofType: "pem")!
             let keyPath = Bundle.module.path(forResource: "example.com.private-key", ofType: "pem")!
+            let key = try NIOSSLPrivateKey(file: keyPath, format: .pem)
             let localhostCert = try NIOSSLCertificate.fromPEMFile(certPath)
             let configuration = TLSConfiguration.makeServerConfiguration(
                 certificateChain: localhostCert.map { .certificate($0) },
-                privateKey: .file(keyPath)
+                privateKey: .privateKey(key)
             )
             let bin = HTTPBin(.http2(tlsConfiguration: configuration))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
