@@ -381,7 +381,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         let conn1ID = generator.next()
         let conn2ID = generator.next()
 
-        var rq: [(EventLoop, Int)] = [(el3, 1)]
+        let rq: [(EventLoop, Int)] = [(el3, 1)]
         connections.migrateFromHTTP2(
             starting: [(conn1ID, el1)],
             backingOff: [(conn2ID, el2)],
@@ -409,7 +409,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         XCTAssertEqual(context.use, .eventLoop(el3))
         XCTAssertTrue(context.eventLoop === el3)
     }
-    
+
     func testMigrationFromHTTP2WithPendingRequestsWithRequiredEventLoopSameAsStartingConnections() {
         let elg = EmbeddedEventLoopGroup(loops: 4)
         let generator = HTTPConnectionPool.Connection.ID.Generator()
@@ -417,12 +417,11 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
 
         let el1 = elg.next()
         let el2 = elg.next()
-        let el3 = elg.next()
 
         let conn1ID = generator.next()
         let conn2ID = generator.next()
 
-        var rq: [(EventLoop, Int)] = [(el1, 1)]
+        let rq: [(EventLoop, Int)] = [(el1, 1)]
         connections.migrateFromHTTP2(
             starting: [(conn1ID, el1)],
             backingOff: [(conn2ID, el2)],

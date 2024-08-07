@@ -112,7 +112,7 @@ extension HTTPConnectionPool {
             self.retryConnectionEstablishment = retryConnectionEstablishment
             self.idGenerator = idGenerator
             self.maximumConnectionUses = maximumConnectionUses
-            
+
             if preferHTTP1 {
                 let http1State = HTTP1StateMachine(
                     idGenerator: idGenerator,
@@ -131,8 +131,6 @@ extension HTTPConnectionPool {
                 )
                 self.state = .http2(http2State)
             }
-            
-            
         }
 
         mutating func executeRequest(_ request: Request) -> Action {

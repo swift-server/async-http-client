@@ -596,10 +596,10 @@ extension HTTPConnectionPool {
                     eventLoop: eventLoop,
                     maximumUses: self.maximumConnectionUses
                 )
-                
+
                 /// Mark as overflow connection if any request is pending on a starting connection
                 /// on the same event loop, else mark as general purpose connection
-                if requiredEventLoopPendingRequests.first(where: {$0.0.id == eventLoop.id}) != nil {
+                if requiredEventLoopPendingRequests.first(where: { $0.0.id == eventLoop.id }) != nil {
                     self.connections.append(newConnection)
                 } else {
                     self.connections.insert(newConnection, at: self.overflowIndex)
@@ -619,10 +619,10 @@ extension HTTPConnectionPool {
                 )
                 // TODO: Maybe we want to add a static init for backing off connections to HTTP1ConnectionState
                 backingOffConnection.failedToConnect()
-                
+
                 /// Mark as overflow connection if any request is pending on a backing off connection
                 /// on the same event loop, else mark as general purpose connection
-                if requiredEventLoopPendingRequests.first(where: {$0.0.id == eventLoop.id}) != nil {
+                if requiredEventLoopPendingRequests.first(where: { $0.0.id == eventLoop.id }) != nil {
                     self.connections.append(backingOffConnection)
                 } else {
                     self.connections.insert(backingOffConnection, at: self.overflowIndex)

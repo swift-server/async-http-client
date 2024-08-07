@@ -1022,7 +1022,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         guard case .executeRequestsAndCancelTimeouts(let requests, http2Conn) = executeAction1.request else {
             return XCTFail("unexpected request action \(executeAction1.request)")
         }
-        
+
         XCTAssertEqual(requests.count, 1)
         for request in requests {
             XCTAssertNoThrow(try queuer.get(request.id, request: request.__testOnly_wrapped_request()))
@@ -1094,7 +1094,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         guard case .executeRequestsAndCancelTimeouts(let requests, http2Conn) = executeAction1.request else {
             return XCTFail("unexpected request action \(executeAction1.request)")
         }
-        
+
         XCTAssertEqual(requests.count, 1)
         for request in requests {
             XCTAssertNoThrow(try queuer.get(request.id, request: request.__testOnly_wrapped_request()))
