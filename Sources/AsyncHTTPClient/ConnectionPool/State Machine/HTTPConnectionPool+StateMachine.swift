@@ -105,15 +105,15 @@ extension HTTPConnectionPool {
             idGenerator: Connection.ID.Generator,
             maximumConcurrentHTTP1Connections: Int,
             retryConnectionEstablishment: Bool,
-            maximumConnectionUses: Int?,
-            preferHTTP1: Bool? = nil
+            preferHTTP1: Bool,
+            maximumConnectionUses: Int?
         ) {
             self.maximumConcurrentHTTP1Connections = maximumConcurrentHTTP1Connections
             self.retryConnectionEstablishment = retryConnectionEstablishment
             self.idGenerator = idGenerator
             self.maximumConnectionUses = maximumConnectionUses
             
-            if preferHTTP1 ?? false {
+            if preferHTTP1 {
                 let http1State = HTTP1StateMachine(
                     idGenerator: idGenerator,
                     maximumConcurrentConnections: maximumConcurrentHTTP1Connections,

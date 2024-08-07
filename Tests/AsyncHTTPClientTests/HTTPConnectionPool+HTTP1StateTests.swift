@@ -29,8 +29,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil,
-            preferHTTP1: true
+            preferHTTP1: true,
+            maximumConnectionUses: nil
         )
 
         var connections = MockConnectionPool()
@@ -114,8 +114,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: false,
-            maximumConnectionUses: nil,
-            preferHTTP1: true
+            preferHTTP1: true,
+            maximumConnectionUses: nil
         )
 
         var connections = MockConnectionPool()
@@ -183,8 +183,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 2,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil,
-            preferHTTP1: true
+            preferHTTP1: true,
+            maximumConnectionUses: nil
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
@@ -243,8 +243,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 2,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil,
-            preferHTTP1: true
+            preferHTTP1: true,
+            maximumConnectionUses: nil
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
@@ -282,8 +282,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 2,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil,
-            preferHTTP1: true
+            preferHTTP1: true,
+            maximumConnectionUses: nil
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
@@ -675,8 +675,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil,
-            preferHTTP1: true
+            preferHTTP1: true,
+            maximumConnectionUses: nil
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
@@ -716,8 +716,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil,
-            preferHTTP1: true
+            preferHTTP1: true,
+            maximumConnectionUses: nil
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
@@ -750,8 +750,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil,
-            preferHTTP1: true
+            preferHTTP1: true,
+            maximumConnectionUses: nil
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: eventLoop.next(), requiresEventLoopForChannel: false)
@@ -776,8 +776,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil,
-            preferHTTP1: true
+            preferHTTP1: true,
+            maximumConnectionUses: nil
         )
 
         let mockRequest1 = MockHTTPScheduableRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)

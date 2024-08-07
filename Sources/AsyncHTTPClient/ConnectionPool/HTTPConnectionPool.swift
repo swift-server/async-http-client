@@ -72,8 +72,8 @@ final class HTTPConnectionPool {
             idGenerator: idGenerator,
             maximumConcurrentHTTP1Connections: clientConfiguration.connectionPool.concurrentHTTP1ConnectionsPerHostSoftLimit,
             retryConnectionEstablishment: clientConfiguration.connectionPool.retryConnectionEstablishment,
-            maximumConnectionUses: clientConfiguration.maximumUsesPerConnection,
-            preferHTTP1: clientConfiguration.httpVersion == .http1Only
+            preferHTTP1: clientConfiguration.httpVersion == .http1Only,
+            maximumConnectionUses: clientConfiguration.maximumUsesPerConnection
         )
     }
 

@@ -720,8 +720,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil,
-            preferHTTP1: true
+            preferHTTP1: true,
+            maximumConnectionUses: nil
         )
 
         /// first 8 request should create a new connection
@@ -812,6 +812,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
+            preferHTTP1: false,
             maximumConnectionUses: nil
         )
 
@@ -859,8 +860,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil,
-            preferHTTP1: true
+            preferHTTP1: true,
+            maximumConnectionUses: nil
         )
 
         /// first 8 request should create a new connection
@@ -1000,6 +1001,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
+            preferHTTP1: false,
             maximumConnectionUses: nil
         )
 
@@ -1071,6 +1073,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
+            preferHTTP1: false,
             maximumConnectionUses: nil
         )
 
@@ -1148,6 +1151,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
+            preferHTTP1: false,
             maximumConnectionUses: nil
         )
 
