@@ -381,9 +381,11 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         let conn1ID = generator.next()
         let conn2ID = generator.next()
 
+        let rq: [(EventLoop, Int)] = [(el3, 1)]
         connections.migrateFromHTTP2(
             starting: [(conn1ID, el1)],
-            backingOff: [(conn2ID, el2)]
+            backingOff: [(conn2ID, el2)],
+            requiredEventLoopPendingRequests: rq
         )
         let newConnections = connections.createConnectionsAfterMigrationIfNeeded(
             requiredEventLoopOfPendingRequests: [(el3, 1)],
@@ -406,6 +408,36 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         let (_, context) = connections.newHTTP1ConnectionEstablished(conn3)
         XCTAssertEqual(context.use, .eventLoop(el3))
         XCTAssertTrue(context.eventLoop === el3)
+    }
+
+    func testMigrationFromHTTP2WithPendingRequestsWithRequiredEventLoopSameAsStartingConnections() {
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        let generator = HTTPConnectionPool.Connection.ID.Generator()
+        var connections = HTTPConnectionPool.HTTP1Connections(maximumConcurrentConnections: 8, generator: generator, maximumConnectionUses: nil)
+
+        let el1 = elg.next()
+        let el2 = elg.next()
+
+        let conn1ID = generator.next()
+        let conn2ID = generator.next()
+
+        let rq: [(EventLoop, Int)] = [(el1, 1)]
+        connections.migrateFromHTTP2(
+            starting: [(conn1ID, el1)],
+            backingOff: [(conn2ID, el2)],
+            requiredEventLoopPendingRequests: rq
+        )
+
+        let stats = connections.stats
+        XCTAssertEqual(stats.idle, 0)
+        XCTAssertEqual(stats.leased, 0)
+        XCTAssertEqual(stats.connecting, 1)
+        XCTAssertEqual(stats.backingOff, 1)
+
+        let conn1: HTTPConnectionPool.Connection = .__testOnly_connection(id: conn1ID, eventLoop: el1)
+        let (_, context) = connections.newHTTP1ConnectionEstablished(conn1)
+        XCTAssertEqual(context.use, .eventLoop(el1))
+        XCTAssertTrue(context.eventLoop === el1)
     }
 
     func testMigrationFromHTTP2WithPendingRequestsWithPreferredEventLoop() {

@@ -543,6 +543,7 @@ extension MockConnectionPool {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: maxNumberOfConnections,
             retryConnectionEstablishment: true,
+            preferHTTP1: true,
             maximumConnectionUses: nil
         )
         var connections = MockConnectionPool()
@@ -608,6 +609,7 @@ extension MockConnectionPool {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
+            preferHTTP1: false,
             maximumConnectionUses: nil
         )
         var connections = MockConnectionPool()
@@ -637,10 +639,6 @@ extension MockConnectionPool {
 
         guard case .executeRequestsAndCancelTimeouts([request], newConnection) = action.request else {
             throw SetupError.expectedPreviouslyQueuedRequestToBeRunNow
-        }
-
-        guard case .migration(createConnections: let create, closeConnections: [], scheduleTimeout: nil) = action.connection, create.isEmpty else {
-            throw SetupError.expectedNoConnectionAction
         }
 
         guard try queuer.get(request.id, request: request.__testOnly_wrapped_request()) === mockRequest else {

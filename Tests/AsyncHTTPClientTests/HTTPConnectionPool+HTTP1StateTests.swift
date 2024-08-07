@@ -29,6 +29,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
+            preferHTTP1: true,
             maximumConnectionUses: nil
         )
 
@@ -113,6 +114,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: false,
+            preferHTTP1: true,
             maximumConnectionUses: nil
         )
 
@@ -181,6 +183,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 2,
             retryConnectionEstablishment: true,
+            preferHTTP1: true,
             maximumConnectionUses: nil
         )
 
@@ -240,6 +243,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 2,
             retryConnectionEstablishment: true,
+            preferHTTP1: true,
             maximumConnectionUses: nil
         )
 
@@ -278,6 +282,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 2,
             retryConnectionEstablishment: true,
+            preferHTTP1: true,
             maximumConnectionUses: nil
         )
 
@@ -670,6 +675,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6,
             retryConnectionEstablishment: true,
+            preferHTTP1: true,
             maximumConnectionUses: nil
         )
 
@@ -710,6 +716,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6,
             retryConnectionEstablishment: true,
+            preferHTTP1: true,
             maximumConnectionUses: nil
         )
 
@@ -743,6 +750,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6,
             retryConnectionEstablishment: true,
+            preferHTTP1: true,
             maximumConnectionUses: nil
         )
 
@@ -768,6 +776,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6,
             retryConnectionEstablishment: true,
+            preferHTTP1: true,
             maximumConnectionUses: nil
         )
 
