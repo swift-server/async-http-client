@@ -1274,10 +1274,10 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         /// openssl req -x509 -newkey rsa:4096 -keyout self_signed_key.pem -out self_signed_cert.pem -sha256 -days 99999 -nodes -subj '/CN=localhost'
         let certPath = Bundle.module.path(forResource: "self_signed_cert", ofType: "pem")!
         let keyPath = Bundle.module.path(forResource: "self_signed_key", ofType: "pem")!
-        let privateKey = try NIOSSLPrivateKey(file: keyPath, format: .pem)
+        let key = try NIOSSLPrivateKey(file: keyPath, format: .pem)
         let configuration = try TLSConfiguration.makeServerConfiguration(
             certificateChain: NIOSSLCertificate.fromPEMFile(certPath).map { .certificate($0) },
-            privateKey: .privateKey(privateKey)
+            privateKey: .privateKey(key)
         )
         let sslContext = try NIOSSLContext(configuration: configuration)
 
@@ -1315,10 +1315,10 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         /// openssl req -x509 -newkey rsa:4096 -keyout self_signed_key.pem -out self_signed_cert.pem -sha256 -days 99999 -nodes -subj '/CN=localhost'
         let certPath = Bundle.module.path(forResource: "self_signed_cert", ofType: "pem")!
         let keyPath = Bundle.module.path(forResource: "self_signed_key", ofType: "pem")!
-        let privateKey = try NIOSSLPrivateKey(file: keyPath, format: .pem)
+        let key = try NIOSSLPrivateKey(file: keyPath, format: .pem)
         let configuration = try TLSConfiguration.makeServerConfiguration(
             certificateChain: NIOSSLCertificate.fromPEMFile(certPath).map { .certificate($0) },
-            privateKey: .privateKey(privateKey)
+            privateKey: .privateKey(key)
         )
         let sslContext = try NIOSSLContext(configuration: configuration)
 
