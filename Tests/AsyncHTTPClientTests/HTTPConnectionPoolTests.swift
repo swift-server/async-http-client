@@ -82,7 +82,6 @@ class HTTPConnectionPoolTests: XCTestCase {
 
         let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)")
         let poolDelegate = TestDelegate(eventLoop: eventLoop)
-
         let pool = HTTPConnectionPool(
             eventLoopGroup: eventLoopGroup,
             sslContextCache: .init(),

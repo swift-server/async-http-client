@@ -29,7 +29,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preferHTTP1: true
         )
 
         var connections = MockConnectionPool()
@@ -113,7 +114,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: false,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preferHTTP1: true
         )
 
         var connections = MockConnectionPool()
@@ -181,7 +183,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 2,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preferHTTP1: true
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
@@ -240,7 +243,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 2,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preferHTTP1: true
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
@@ -278,7 +282,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 2,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preferHTTP1: true
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
@@ -670,7 +675,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preferHTTP1: true
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
@@ -710,7 +716,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preferHTTP1: true
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
@@ -743,7 +750,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preferHTTP1: true
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: eventLoop.next(), requiresEventLoopForChannel: false)
@@ -768,7 +776,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 6,
             retryConnectionEstablishment: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preferHTTP1: true
         )
 
         let mockRequest1 = MockHTTPScheduableRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
