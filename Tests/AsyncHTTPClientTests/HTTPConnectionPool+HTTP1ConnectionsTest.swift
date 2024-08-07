@@ -452,7 +452,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
 
         let conn1ID = generator.next()
         let conn2ID = generator.next()
-    
+
         connections.migrateFromHTTP2(
             starting: [(conn1ID, el1)],
             backingOff: [(conn2ID, el2)]
@@ -495,7 +495,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
 
         let conn2ID = generator.next()
         let conn3ID = generator.next()
-    
+
         connections.migrateFromHTTP2(
             starting: [(conn2ID, el2)],
             backingOff: [(conn3ID, el3)]
@@ -572,7 +572,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         let conn1ID = generator.next()
         let conn2ID = generator.next()
         let conn3ID = generator.next()
-    
+
         connections.migrateFromHTTP2(
             starting: [(conn1ID, el1), (conn2ID, el2), (conn3ID, el3)],
             backingOff: []
@@ -616,7 +616,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         ))
 
         let connID2 = generator.next()
-    
+
         connections.migrateFromHTTP2(
             starting: [(connID2, el2)],
             backingOff: []
