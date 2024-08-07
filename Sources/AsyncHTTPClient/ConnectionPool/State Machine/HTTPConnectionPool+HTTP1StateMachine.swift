@@ -92,14 +92,16 @@ extension HTTPConnectionPool {
 
             var http2Connections = http2Connections
             let migration = http2Connections.migrateToHTTP1()
-
+            
+            let requiredEventLoopOfPendingRequests = requests.requestCountGroupedByRequiredEventLoop()
             self.connections.migrateFromHTTP2(
                 starting: migration.starting,
-                backingOff: migration.backingOff
+                backingOff: migration.backingOff,
+                requiredEventLoopPendingRequests: requiredEventLoopOfPendingRequests
             )
 
             let createConnections = self.connections.createConnectionsAfterMigrationIfNeeded(
-                requiredEventLoopOfPendingRequests: requests.requestCountGroupedByRequiredEventLoop(),
+                requiredEventLoopOfPendingRequests: requiredEventLoopOfPendingRequests,
                 generalPurposeRequestCountGroupedByPreferredEventLoop: requests.generalPurposeRequestCountGroupedByPreferredEventLoop()
             )
 
