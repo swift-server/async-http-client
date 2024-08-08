@@ -642,6 +642,25 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         }
     }
 
+    func testInsanelyHighConcurrentHTTP1ConnectionLimitDoesNotCrash() throws {
+        let bin = HTTPBin(.http1_1(compress: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        var httpClientConfig = HTTPClient.Configuration()
+        httpClientConfig.connectionPool = .init(
+            idleTimeout: .hours(1),
+            concurrentHTTP1ConnectionsPerHostSoftLimit: Int.max
+        )
+        httpClientConfig.timeout = .init(connect: .seconds(10), read: .seconds(100), write: .seconds(100))
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: httpClientConfig)
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+
+        let response = httpClient.get(url: "https://localhost:\(bin.port)", deadline: .now() + .seconds(2))
+    }
+
     func testRedirectChangesHostHeader() {
         XCTAsyncTest {
             let bin = HTTPBin(.http2(compress: false))
