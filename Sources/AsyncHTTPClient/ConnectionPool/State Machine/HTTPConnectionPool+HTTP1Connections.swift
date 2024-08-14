@@ -261,7 +261,7 @@ extension HTTPConnectionPool {
 
         init(maximumConcurrentConnections: Int, generator: Connection.ID.Generator, maximumConnectionUses: Int?) {
             self.connections = []
-            self.connections.reserveCapacity(maximumConcurrentConnections)
+            self.connections.reserveCapacity(min(maximumConcurrentConnections, 1024))
             self.overflowIndex = self.connections.endIndex
             self.maximumConcurrentConnections = maximumConcurrentConnections
             self.generator = generator
