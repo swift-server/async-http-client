@@ -657,7 +657,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         defer { XCTAssertNoThrow(try httpClient.syncShutdown()) }
 
         let request = HTTPClientRequest(url: "http://localhost:\(bin.port)")
-        let _ = try await httpClient.execute(request, deadline: .now() + .seconds(2))
+        _ = try await httpClient.execute(request, deadline: .now() + .seconds(2))
     }
 
     func testRedirectChangesHostHeader() {
