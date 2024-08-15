@@ -82,12 +82,75 @@ class HTTPConnectionPoolTests: XCTestCase {
 
         let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)")
         let poolDelegate = TestDelegate(eventLoop: eventLoop)
-
         let pool = HTTPConnectionPool(
             eventLoopGroup: eventLoopGroup,
             sslContextCache: .init(),
             tlsConfiguration: .none,
             clientConfiguration: .init(),
+            key: .init(request),
+            delegate: poolDelegate,
+            idGenerator: .init(),
+            backgroundActivityLogger: .init(label: "test")
+        )
+        defer {
+            pool.shutdown()
+            XCTAssertNoThrow(try poolDelegate.future.wait())
+            XCTAssertNoThrow(try eventLoop.scheduleTask(in: .milliseconds(100)) {}.futureResult.wait())
+            XCTAssertEqual(httpBin.activeConnections, 0)
+            // Since we would migrate from h2 -> h1, which creates a general purpose connection
+            // for every connection in .starting state, after the first request which will
+            // be serviced by an overflow connection, the rest of requests will use the general
+            // purpose connection since they are all on the same event loop.
+            // Hence we will only create 1 overflow connection and 1 general purpose connection.
+            XCTAssertEqual(httpBin.createdConnections, 2)
+        }
+
+        XCTAssertEqual(httpBin.createdConnections, 0)
+
+        for _ in 0..<10 {
+            var maybeRequest: HTTPClient.Request?
+            var maybeRequestBag: RequestBag<ResponseAccumulator>?
+            XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://localhost:\(httpBin.port)"))
+            XCTAssertNoThrow(maybeRequestBag = try RequestBag(
+                request: XCTUnwrap(maybeRequest),
+                eventLoopPreference: .init(.testOnly_exact(channelOn: eventLoopGroup.next(), delegateOn: eventLoopGroup.next())),
+                task: .init(eventLoop: eventLoop, logger: .init(label: "test")),
+                redirectHandler: nil,
+                connectionDeadline: .distantFuture,
+                requestOptions: .forTests(),
+                delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
+            ))
+
+            guard let requestBag = maybeRequestBag else { return XCTFail("Expected to get a request") }
+
+            pool.executeRequest(requestBag)
+            XCTAssertNoThrow(try requestBag.task.futureResult.wait())
+
+            // Flakiness Alert: We check <= and >= instead of ==
+            // While migration from h2 -> h1, one general purpose and one over flow connection
+            // will be created, there's no guarantee as to whether the request is executed
+            // after both are created.
+            XCTAssertGreaterThanOrEqual(httpBin.createdConnections, 1)
+            XCTAssertLessThanOrEqual(httpBin.createdConnections, 2)
+        }
+    }
+
+    func testConnectionsForEventLoopRequirementsAreClosedH1Only() {
+        let httpBin = HTTPBin()
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 2)
+        let eventLoop = eventLoopGroup.next()
+        defer { XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully()) }
+
+        let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)")
+        let poolDelegate = TestDelegate(eventLoop: eventLoop)
+        var configuration = HTTPClient.Configuration()
+        configuration.httpVersion = .http1Only
+        let pool = HTTPConnectionPool(
+            eventLoopGroup: eventLoopGroup,
+            sslContextCache: .init(),
+            tlsConfiguration: .none,
+            clientConfiguration: configuration,
             key: .init(request),
             delegate: poolDelegate,
             idGenerator: .init(),

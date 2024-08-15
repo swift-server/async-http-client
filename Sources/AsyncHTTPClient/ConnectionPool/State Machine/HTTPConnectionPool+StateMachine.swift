@@ -105,20 +105,32 @@ extension HTTPConnectionPool {
             idGenerator: Connection.ID.Generator,
             maximumConcurrentHTTP1Connections: Int,
             retryConnectionEstablishment: Bool,
+            preferHTTP1: Bool,
             maximumConnectionUses: Int?
         ) {
             self.maximumConcurrentHTTP1Connections = maximumConcurrentHTTP1Connections
             self.retryConnectionEstablishment = retryConnectionEstablishment
             self.idGenerator = idGenerator
             self.maximumConnectionUses = maximumConnectionUses
-            let http1State = HTTP1StateMachine(
-                idGenerator: idGenerator,
-                maximumConcurrentConnections: maximumConcurrentHTTP1Connections,
-                retryConnectionEstablishment: retryConnectionEstablishment,
-                maximumConnectionUses: maximumConnectionUses,
-                lifecycleState: .running
-            )
-            self.state = .http1(http1State)
+
+            if preferHTTP1 {
+                let http1State = HTTP1StateMachine(
+                    idGenerator: idGenerator,
+                    maximumConcurrentConnections: maximumConcurrentHTTP1Connections,
+                    retryConnectionEstablishment: retryConnectionEstablishment,
+                    maximumConnectionUses: maximumConnectionUses,
+                    lifecycleState: .running
+                )
+                self.state = .http1(http1State)
+            } else {
+                let http2State = HTTP2StateMachine(
+                    idGenerator: idGenerator,
+                    retryConnectionEstablishment: retryConnectionEstablishment,
+                    lifecycleState: .running,
+                    maximumConnectionUses: maximumConnectionUses
+                )
+                self.state = .http2(http2State)
+            }
         }
 
         mutating func executeRequest(_ request: Request) -> Action {
