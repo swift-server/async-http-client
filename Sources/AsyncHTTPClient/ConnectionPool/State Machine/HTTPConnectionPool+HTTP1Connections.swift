@@ -584,11 +584,9 @@ extension HTTPConnectionPool {
         /// - Parameters:
         ///   - starting: starting HTTP connections from previous state machine
         ///   - backingOff: backing off HTTP connections from previous state machine
-        ///   - requiredEventLoopPendingRequests: pending requests which run on required event loop from previous state machine
         mutating func migrateFromHTTP2(
             starting: [(Connection.ID, EventLoop)],
-            backingOff: [(Connection.ID, EventLoop)],
-            requiredEventLoopPendingRequests: [(EventLoop, Int)] = []
+            backingOff: [(Connection.ID, EventLoop)]
         ) {
             for (connectionID, eventLoop) in starting {
                 let newConnection = HTTP1ConnectionState(
@@ -597,17 +595,11 @@ extension HTTPConnectionPool {
                     maximumUses: self.maximumConnectionUses
                 )
 
-                /// Mark as overflow connection if any request is pending on a starting connection
-                /// on the same event loop, else mark as general purpose connection
-                if requiredEventLoopPendingRequests.first(where: { $0.0.id == eventLoop.id }) != nil {
-                    self.connections.append(newConnection)
-                } else {
-                    self.connections.insert(newConnection, at: self.overflowIndex)
-                    /// If we can grow, we mark the connection as a general purpose connection.
-                    /// Otherwise, it will be an overflow connection which is only used once for requests with a required event loop
-                    if self.canGrow {
-                        self.overflowIndex = self.connections.index(after: self.overflowIndex)
-                    }
+                self.connections.insert(newConnection, at: self.overflowIndex)
+                /// If we can grow, we mark the connection as a general purpose connection.
+                /// Otherwise, it will be an overflow connection which is only used once for requests with a required event loop
+                if self.canGrow {
+                    self.overflowIndex = self.connections.index(after: self.overflowIndex)
                 }
             }
 
@@ -620,17 +612,11 @@ extension HTTPConnectionPool {
                 // TODO: Maybe we want to add a static init for backing off connections to HTTP1ConnectionState
                 backingOffConnection.failedToConnect()
 
-                /// Mark as overflow connection if any request is pending on a backing off connection
-                /// on the same event loop, else mark as general purpose connection
-                if requiredEventLoopPendingRequests.first(where: { $0.0.id == eventLoop.id }) != nil {
-                    self.connections.append(backingOffConnection)
-                } else {
-                    self.connections.insert(backingOffConnection, at: self.overflowIndex)
-                    /// If we can grow, we mark the connection as a general purpose connection.
-                    /// Otherwise, it will be an overflow connection which is only used once for requests with a required event loop
-                    if self.canGrow {
-                        self.overflowIndex = self.connections.index(after: self.overflowIndex)
-                    }
+                self.connections.insert(backingOffConnection, at: self.overflowIndex)
+                /// If we can grow, we mark the connection as a general purpose connection.
+                /// Otherwise, it will be an overflow connection which is only used once for requests with a required event loop
+                if self.canGrow {
+                    self.overflowIndex = self.connections.index(after: self.overflowIndex)
                 }
             }
         }

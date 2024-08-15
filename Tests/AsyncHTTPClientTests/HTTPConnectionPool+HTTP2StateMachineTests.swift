@@ -1051,7 +1051,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         guard case .migration(let createConnections, closeConnections: [], scheduleTimeout: nil) = migrationAction2.connection else {
             return XCTFail("unexpected connection action \(migrationAction2.connection)")
         }
-        XCTAssertEqual(createConnections.map { $0.1.id }, [])
+        XCTAssertEqual(createConnections.map { $0.1.id }, [el2.id])
         XCTAssertNoThrow(try queuer.get(request2.id, request: request2.__testOnly_wrapped_request()))
         XCTAssertNoThrow(try connections.execute(request2.__testOnly_wrapped_request(), on: http1Conn))
 
