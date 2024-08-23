@@ -738,6 +738,10 @@ public class HTTPClient {
             }
         }
 
+        /// Whether ``HTTPClient`` will use Multipath TCP or not
+        /// By default, don't use it
+        public var enableMultipath: Bool
+
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
@@ -755,6 +759,7 @@ public class HTTPClient {
             self.decompression = decompression
             self.httpVersion = .automatic
             self.networkFrameworkWaitForConnectivity = true
+            self.enableMultipath = false
         }
 
         public init(tlsConfiguration: TLSConfiguration? = nil,

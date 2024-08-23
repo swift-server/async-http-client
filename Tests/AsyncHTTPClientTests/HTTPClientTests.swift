@@ -3590,6 +3590,22 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         XCTAssertEqual(.ok, response.status)
     }
 
+    func testClientWithMultipath() throws {
+        do {
+            var conf = HTTPClient.Configuration()
+            conf.enableMultipath = true
+            let client = HTTPClient(configuration: conf)
+            defer {
+                XCTAssertNoThrow(try client.shutdown().wait())
+            }
+            let response = try client.get(url: self.defaultHTTPBinURLPrefix + "get").wait()
+            XCTAssertEqual(.ok, response.status)
+        }catch let error as IOError where error.errnoCode == EINVAL{
+            // some old Linux kernels don't support MPTCP, skip this test in this case
+            throw XCTSkip()
+        }
+    }
+
     func testSingletonClientWorks() throws {
         let response = try HTTPClient.shared.get(url: self.defaultHTTPBinURLPrefix + "get").wait()
         XCTAssertEqual(.ok, response.status)
