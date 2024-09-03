@@ -108,7 +108,7 @@ extension HTTPClientResponse {
             case .transaction(_, let expectedContentLength):
                 if let contentLength = expectedContentLength {
                     if contentLength > maxBytes {
-                        throw NIOTooManyBytesError()
+                        throw NIOTooManyBytesError(maxBytes: maxBytes)
                     }
                 }
             case .anyAsyncSequence:
