@@ -665,7 +665,8 @@ struct IdleWriteStateMachine {
             self.state = .requestEndSent
             return .clearIdleWriteTimeoutTimer
         case .waitingForWritabilityEnabled:
-            preconditionFailure("If the channel is not writable, we can't have sent the request end.")
+            self.state = .requestEndSent
+            return .none
         case .requestEndSent:
             return .none
         }
