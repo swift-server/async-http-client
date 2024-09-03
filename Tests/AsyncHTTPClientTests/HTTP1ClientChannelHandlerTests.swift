@@ -383,7 +383,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         guard let testUtils = maybeTestUtils else { return XCTFail("Expected connection setup works") }
 
         var maybeRequest: HTTPClient.Request?
-        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream { writer in
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream { _ in
             // Advance time by more than the idle write timeout (that's 1 millisecond) to trigger the timeout.
             let scheduled = embedded.embeddedEventLoop.flatScheduleTask(in: .milliseconds(2)) {
                 embedded.embeddedEventLoop.makeSucceededVoidFuture()
