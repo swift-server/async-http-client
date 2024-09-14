@@ -28,7 +28,11 @@ import NIOSSL
 import NIOTLS
 import NIOTransportServices
 import XCTest
-#if canImport(Darwin)
+#if canImport(xlocale)
+import xlocale
+#elseif canImport(locale_h)
+import locale_h
+#elseif canImport(Darwin)
 import Darwin
 #elseif canImport(Musl)
 import Musl
