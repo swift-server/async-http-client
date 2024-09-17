@@ -3600,7 +3600,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             }
             let response = try client.get(url: self.defaultHTTPBinURLPrefix + "get").wait()
             XCTAssertEqual(.ok, response.status)
-        }catch let error as IOError where error.errnoCode == EINVAL{
+        } catch let error as IOError where error.errnoCode == EINVAL {
             // some old Linux kernels don't support MPTCP, skip this test in this case
             throw XCTSkip()
         }
