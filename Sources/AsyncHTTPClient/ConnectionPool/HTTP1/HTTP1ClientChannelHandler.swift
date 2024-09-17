@@ -36,7 +36,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             if let newRequest = self.request {
                 var requestLogger = newRequest.logger
                 requestLogger[metadataKey: "ahc-connection-id"] = self.connectionIdLoggerMetadata
-                requestLogger[metadataKey: "ahc-el"] = "\(self.eventLoop)"
+                requestLogger[metadataKey: "ahc-el"] = self.eventLoopDescription
                 self.logger = requestLogger
 
                 if let idleReadTimeout = newRequest.requestOptions.idleReadTimeout {
@@ -72,11 +72,13 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     private let backgroundLogger: Logger
     private var logger: Logger
     private let eventLoop: EventLoop
+    private let eventLoopDescription: Logger.MetadataValue
     private let connectionIdLoggerMetadata: Logger.MetadataValue
 
     var onConnectionIdle: () -> Void = {}
     init(eventLoop: EventLoop, backgroundLogger: Logger, connectionIdLoggerMetadata: Logger.MetadataValue) {
         self.eventLoop = eventLoop
+        self.eventLoopDescription = Logger.MetadataValue(stringLiteral: eventLoop.description)
         self.backgroundLogger = backgroundLogger
         self.logger = backgroundLogger
         self.connectionIdLoggerMetadata = connectionIdLoggerMetadata
