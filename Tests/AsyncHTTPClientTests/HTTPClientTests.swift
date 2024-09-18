@@ -3600,8 +3600,10 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             }
             let response = try client.get(url: self.defaultHTTPBinURLPrefix + "get").wait()
             XCTAssertEqual(.ok, response.status)
-        } catch let error as IOError where error.errnoCode == EINVAL {
+        } catch let error as IOError where error.errnoCode == EINVAL || error.errnoCode == EPROTONOSUPPORT || error.errnoCode == ENOPROTOOPT {
             // some old Linux kernels don't support MPTCP, skip this test in this case
+            // see https://www.mptcp.dev/implementation.html for details about each type
+            // of error
             throw XCTSkip()
         }
     }
