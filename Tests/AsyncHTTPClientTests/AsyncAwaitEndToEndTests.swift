@@ -907,7 +907,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             await XCTAssertThrowsError(
                 try await response.body.collect(upTo: 3)
             ) {
-                XCTAssertEqualTypeAndValue($0, NIOTooManyBytesError())
+                XCTAssertEqualTypeAndValue($0, NIOTooManyBytesError(maxBytes: 3))
             }
         }
     }
