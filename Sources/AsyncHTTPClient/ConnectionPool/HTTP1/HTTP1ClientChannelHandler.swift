@@ -78,7 +78,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     var onConnectionIdle: () -> Void = {}
     init(eventLoop: EventLoop, backgroundLogger: Logger, connectionIdLoggerMetadata: Logger.MetadataValue) {
         self.eventLoop = eventLoop
-        self.eventLoopDescription = Logger.MetadataValue(stringLiteral: eventLoop.description)
+        self.eventLoopDescription = "\(eventLoop.description)"
         self.backgroundLogger = backgroundLogger
         self.logger = backgroundLogger
         self.connectionIdLoggerMetadata = connectionIdLoggerMetadata
