@@ -322,6 +322,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), let tsBootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoop) {
             return tsBootstrap
                 .channelOption(NIOTSChannelOptions.waitForActivity, value: self.clientConfiguration.networkFrameworkWaitForConnectivity)
+                .channelOption(NIOTSChannelOptions.multipathServiceType, value: self.clientConfiguration.enableMultipath ? .handover : .disabled)
                 .connectTimeout(deadline - NIODeadline.now())
                 .channelInitializer { channel in
                     do {
@@ -338,6 +339,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         if let nioBootstrap = ClientBootstrap(validatingGroup: eventLoop) {
             return nioBootstrap
                 .connectTimeout(deadline - NIODeadline.now())
+                .enableMPTCP(clientConfiguration.enableMultipath)
         }
 
         preconditionFailure("No matching bootstrap found")
@@ -415,6 +417,7 @@ extension HTTPConnectionPool.ConnectionFactory {
 
                 tsBootstrap
                     .channelOption(NIOTSChannelOptions.waitForActivity, value: self.clientConfiguration.networkFrameworkWaitForConnectivity)
+                    .channelOption(NIOTSChannelOptions.multipathServiceType, value: self.clientConfiguration.enableMultipath ? .handover : .disabled)
                     .connectTimeout(deadline - NIODeadline.now())
                     .tlsOptions(options)
                     .channelInitializer { channel in
@@ -443,6 +446,7 @@ extension HTTPConnectionPool.ConnectionFactory {
 
         let bootstrap = ClientBootstrap(group: eventLoop)
             .connectTimeout(deadline - NIODeadline.now())
+            .enableMPTCP(clientConfiguration.enableMultipath)
             .channelInitializer { channel in
                 sslContextFuture.flatMap { sslContext -> EventLoopFuture<Void> in
                     do {
