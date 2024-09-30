@@ -17,13 +17,16 @@ import NIOHTTP1
 import xlocale
 #elseif canImport(locale_h)
 import locale_h
-#elseif canImport(Darwin)
+#endif
+
+#if canImport(Darwin)
 import Darwin
 #elseif canImport(Musl)
 import Musl
 #elseif canImport(Glibc)
 import Glibc
 #endif
+
 import CAsyncHTTPClient
 import NIOCore
 
