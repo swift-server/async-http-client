@@ -48,9 +48,16 @@ extension DeconstructedURL {
 
         switch scheme {
         case .http, .https:
+            #if !canImport(Darwin) && compiler(>=6.0)
+            guard let urlHost = url.host, !urlHost.isEmpty else {
+                throw HTTPClientError.emptyHost
+            }
+            let host = urlHost.trimIPv6Brackets()
+            #else
             guard let host = url.host, !host.isEmpty else {
                 throw HTTPClientError.emptyHost
             }
+            #endif
             self.init(
                 scheme: scheme,
                 connectionTarget: .init(remoteHost: host, port: url.port ?? scheme.defaultPort),
@@ -81,3 +88,26 @@ extension DeconstructedURL {
         }
     }
 }
+
+#if !canImport(Darwin) && compiler(>=6.0)
+extension String {
+    @inlinable internal func trimIPv6Brackets() -> String {
+        var utf8View = self.utf8[...]
+
+        var modified = false
+        if utf8View.first == UInt8(ascii: "[") {
+            utf8View = utf8View.dropFirst()
+            modified = true
+        }
+        if utf8View.last == UInt8(ascii: "]") {
+            utf8View = utf8View.dropLast()
+            modified = true
+        }
+
+        if modified {
+            return String(Substring(utf8View))
+        }
+        return self
+    }
+}
+#endif
