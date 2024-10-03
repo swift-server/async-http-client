@@ -45,7 +45,7 @@ extension HTTPClientRequest {
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest.Prepared {
     init(_ request: HTTPClientRequest, dnsOverride: [String: String] = [:]) throws {
-        guard let url = URL(string: request.url) else {
+        guard !request.url.isEmpty, let url = URL(string: request.url) else {
             throw HTTPClientError.invalidURL
         }
 
