@@ -27,6 +27,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         XCTAssertNoThrow(try embedded.connect(to: socketAddress).wait())
 
         let proxyConnectHandler = HTTP1ProxyConnectHandler(
+            scheme: .https,
             targetHost: "swift.org",
             targetPort: 443,
             proxyAuthorization: .none,
@@ -61,6 +62,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         XCTAssertNoThrow(try embedded.connect(to: socketAddress).wait())
 
         let proxyConnectHandler = HTTP1ProxyConnectHandler(
+            scheme: .https,
             targetHost: "swift.org",
             targetPort: 443,
             proxyAuthorization: .basic(credentials: "abc123"),
@@ -95,6 +97,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         XCTAssertNoThrow(try embedded.connect(to: socketAddress).wait())
 
         let proxyConnectHandler = HTTP1ProxyConnectHandler(
+            scheme: .https,
             targetHost: "swift.org",
             targetPort: 443,
             proxyAuthorization: .none,
@@ -135,6 +138,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         XCTAssertNoThrow(try embedded.connect(to: socketAddress).wait())
 
         let proxyConnectHandler = HTTP1ProxyConnectHandler(
+            scheme: .https,
             targetHost: "swift.org",
             targetPort: 443,
             proxyAuthorization: .none,
@@ -175,6 +179,7 @@ class HTTP1ProxyConnectHandlerTests: XCTestCase {
         XCTAssertNoThrow(try embedded.connect(to: socketAddress).wait())
 
         let proxyConnectHandler = HTTP1ProxyConnectHandler(
+            scheme: .https,
             targetHost: "swift.org",
             targetPort: 443,
             proxyAuthorization: .none,

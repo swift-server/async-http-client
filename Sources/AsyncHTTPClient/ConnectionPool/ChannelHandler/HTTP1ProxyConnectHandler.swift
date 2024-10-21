@@ -35,6 +35,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
 
     private var state: State = .initialized
 
+    private let scheme: Scheme
     private let targetHost: String
     private let targetPort: Int
     private let proxyAuthorization: HTTPClient.Authorization?
@@ -46,6 +47,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
     }
 
     convenience init(
+        scheme: Scheme,
         target: ConnectionTarget,
         proxyAuthorization: HTTPClient.Authorization?,
         deadline: NIODeadline
@@ -63,6 +65,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
             fatalError("Unix Domain Sockets do not support proxies")
         }
         self.init(
+            scheme: scheme,
             targetHost: targetHost,
             targetPort: targetPort,
             proxyAuthorization: proxyAuthorization,
@@ -70,10 +73,12 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
         )
     }
 
-    init(targetHost: String,
+    init(scheme: Scheme,
+         targetHost: String,
          targetPort: Int,
          proxyAuthorization: HTTPClient.Authorization?,
          deadline: NIODeadline) {
+        self.scheme = scheme
         self.targetHost = targetHost
         self.targetPort = targetPort
         self.proxyAuthorization = proxyAuthorization
@@ -155,7 +160,13 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
             method: .CONNECT,
             uri: "\(self.targetHost):\(self.targetPort)"
         )
-        head.headers.replaceOrAdd(name: "host", value: "\(self.targetHost)")
+        if !head.headers.contains(name: "host") {
+            var host = self.targetHost
+            if (self.targetPort != self.scheme.defaultPort) {
+                host += ":\(self.targetPort)"
+            }
+            head.headers.add(name: "host", value: host)
+        }
         if let authorization = self.proxyAuthorization {
             head.headers.replaceOrAdd(name: "proxy-authorization", value: authorization.headerValue)
         }
