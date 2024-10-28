@@ -12,12 +12,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import Logging
 import NIOCore
 import NIOEmbedded
 import NIOHTTP1
 import XCTest
+
+@testable import AsyncHTTPClient
 
 class HTTP1ClientChannelHandlerTests: XCTestCase {
     func testResponseBackpressure() {
@@ -32,27 +33,35 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
 
         let delegate = ResponseBackpressureDelegate(eventLoop: embedded.eventLoop)
         var maybeRequestBag: RequestBag<ResponseBackpressureDelegate>?
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: request,
-            eventLoopPreference: .delegate(on: embedded.eventLoop),
-            task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(30),
-            requestOptions: .forTests(),
-            delegate: delegate
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embedded.eventLoop),
+                task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(),
+                delegate: delegate
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
         testUtils.connection.executeRequest(requestBag)
 
-        XCTAssertNoThrow(try embedded.receiveHeadAndVerify {
-            XCTAssertEqual($0.method, .GET)
-            XCTAssertEqual($0.uri, "/")
-            XCTAssertEqual($0.headers.first(name: "host"), "localhost")
-        })
+        XCTAssertNoThrow(
+            try embedded.receiveHeadAndVerify {
+                XCTAssertEqual($0.method, .GET)
+                XCTAssertEqual($0.uri, "/")
+                XCTAssertEqual($0.headers.first(name: "host"), "localhost")
+            }
+        )
         XCTAssertEqual(try embedded.readOutbound(as: HTTPClientRequestPart.self), .end(nil))
 
-        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: HTTPHeaders([("content-length", "12")]))
+        let responseHead = HTTPResponseHead(
+            version: .http1_1,
+            status: .ok,
+            headers: HTTPHeaders([("content-length", "12")])
+        )
 
         XCTAssertEqual(testUtils.readEventHandler.readHitCounter, 0)
         embedded.read()
@@ -113,22 +122,30 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         guard let testUtils = maybeTestUtils else { return XCTFail("Expected connection setup works") }
 
         var maybeRequest: HTTPClient.Request?
-        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(contentLength: 100) { writer in
-            testWriter.start(writer: writer)
-        }))
+        XCTAssertNoThrow(
+            maybeRequest = try HTTPClient.Request(
+                url: "http://localhost/",
+                method: .POST,
+                body: .stream(contentLength: 100) { writer in
+                    testWriter.start(writer: writer)
+                }
+            )
+        )
         guard let request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
 
         let delegate = ResponseAccumulator(request: request)
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: request,
-            eventLoopPreference: .delegate(on: embedded.eventLoop),
-            task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(30),
-            requestOptions: .forTests(idleReadTimeout: .milliseconds(200)),
-            delegate: delegate
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embedded.eventLoop),
+                task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(idleReadTimeout: .milliseconds(200)),
+                delegate: delegate
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
         // the handler only writes once the channel is writable
@@ -143,12 +160,14 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         testWriter.writabilityChanged(true)
         embedded.pipeline.fireChannelWritabilityChanged()
 
-        XCTAssertNoThrow(try embedded.receiveHeadAndVerify {
-            XCTAssertEqual($0.method, .POST)
-            XCTAssertEqual($0.uri, "/")
-            XCTAssertEqual($0.headers.first(name: "host"), "localhost")
-            XCTAssertEqual($0.headers.first(name: "content-length"), "100")
-        })
+        XCTAssertNoThrow(
+            try embedded.receiveHeadAndVerify {
+                XCTAssertEqual($0.method, .POST)
+                XCTAssertEqual($0.uri, "/")
+                XCTAssertEqual($0.headers.first(name: "host"), "localhost")
+                XCTAssertEqual($0.headers.first(name: "content-length"), "100")
+            }
+        )
 
         // the next body write will be executed once we tick the el. before we make the channel
         // unwritable
@@ -162,9 +181,11 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
 
             embedded.embeddedEventLoop.run()
 
-            XCTAssertNoThrow(try embedded.receiveBodyAndVerify {
-                XCTAssertEqual($0.readableBytes, 2)
-            })
+            XCTAssertNoThrow(
+                try embedded.receiveBodyAndVerify {
+                    XCTAssertEqual($0.readableBytes, 2)
+                }
+            )
 
             XCTAssertEqual(testWriter.written, index + 1)
 
@@ -201,24 +222,28 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
 
         let delegate = ResponseAccumulator(request: request)
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: request,
-            eventLoopPreference: .delegate(on: embedded.eventLoop),
-            task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(30),
-            requestOptions: .forTests(idleReadTimeout: .milliseconds(200)),
-            delegate: delegate
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embedded.eventLoop),
+                task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(idleReadTimeout: .milliseconds(200)),
+                delegate: delegate
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
         testUtils.connection.executeRequest(requestBag)
 
-        XCTAssertNoThrow(try embedded.receiveHeadAndVerify {
-            XCTAssertEqual($0.method, .GET)
-            XCTAssertEqual($0.uri, "/")
-            XCTAssertEqual($0.headers.first(name: "host"), "localhost")
-        })
+        XCTAssertNoThrow(
+            try embedded.receiveHeadAndVerify {
+                XCTAssertEqual($0.method, .GET)
+                XCTAssertEqual($0.uri, "/")
+                XCTAssertEqual($0.headers.first(name: "host"), "localhost")
+            }
+        )
         XCTAssertNoThrow(try embedded.receiveEnd())
 
         XCTAssertTrue(embedded.isActive)
@@ -247,27 +272,35 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
 
         let delegate = ResponseBackpressureDelegate(eventLoop: embedded.eventLoop)
         var maybeRequestBag: RequestBag<ResponseBackpressureDelegate>?
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: request,
-            eventLoopPreference: .delegate(on: embedded.eventLoop),
-            task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(30),
-            requestOptions: .forTests(idleReadTimeout: .milliseconds(200)),
-            delegate: delegate
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embedded.eventLoop),
+                task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(idleReadTimeout: .milliseconds(200)),
+                delegate: delegate
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
         testUtils.connection.executeRequest(requestBag)
 
-        XCTAssertNoThrow(try embedded.receiveHeadAndVerify {
-            XCTAssertEqual($0.method, .GET)
-            XCTAssertEqual($0.uri, "/")
-            XCTAssertEqual($0.headers.first(name: "host"), "localhost")
-        })
+        XCTAssertNoThrow(
+            try embedded.receiveHeadAndVerify {
+                XCTAssertEqual($0.method, .GET)
+                XCTAssertEqual($0.uri, "/")
+                XCTAssertEqual($0.headers.first(name: "host"), "localhost")
+            }
+        )
         XCTAssertNoThrow(try embedded.receiveEnd())
 
-        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: HTTPHeaders([("content-length", "12")]))
+        let responseHead = HTTPResponseHead(
+            version: .http1_1,
+            status: .ok,
+            headers: HTTPHeaders([("content-length", "12")])
+        )
 
         XCTAssertEqual(testUtils.readEventHandler.readHitCounter, 0)
         embedded.read()
@@ -299,27 +332,35 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
 
         let delegate = ResponseBackpressureDelegate(eventLoop: embedded.eventLoop)
         var maybeRequestBag: RequestBag<ResponseBackpressureDelegate>?
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: request,
-            eventLoopPreference: .delegate(on: embedded.eventLoop),
-            task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(30),
-            requestOptions: .forTests(idleReadTimeout: .milliseconds(200)),
-            delegate: delegate
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embedded.eventLoop),
+                task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(idleReadTimeout: .milliseconds(200)),
+                delegate: delegate
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
         testUtils.connection.executeRequest(requestBag)
 
-        XCTAssertNoThrow(try embedded.receiveHeadAndVerify {
-            XCTAssertEqual($0.method, .GET)
-            XCTAssertEqual($0.uri, "/")
-            XCTAssertEqual($0.headers.first(name: "host"), "localhost")
-        })
+        XCTAssertNoThrow(
+            try embedded.receiveHeadAndVerify {
+                XCTAssertEqual($0.method, .GET)
+                XCTAssertEqual($0.uri, "/")
+                XCTAssertEqual($0.headers.first(name: "host"), "localhost")
+            }
+        )
         XCTAssertNoThrow(try embedded.receiveEnd())
 
-        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: HTTPHeaders([("content-length", "12")]))
+        let responseHead = HTTPResponseHead(
+            version: .http1_1,
+            status: .ok,
+            headers: HTTPHeaders([("content-length", "12")])
+        )
 
         XCTAssertEqual(testUtils.readEventHandler.readHitCounter, 0)
         embedded.read()
@@ -345,25 +386,33 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         guard let testUtils = maybeTestUtils else { return XCTFail("Expected connection setup works") }
 
         var maybeRequest: HTTPClient.Request?
-        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(contentLength: 10) { writer in
-            // Advance time by more than the idle write timeout (that's 1 millisecond) to trigger the timeout.
-            embedded.embeddedEventLoop.advanceTime(by: .milliseconds(2))
-            return testWriter.start(writer: writer)
-        }))
+        XCTAssertNoThrow(
+            maybeRequest = try HTTPClient.Request(
+                url: "http://localhost/",
+                method: .POST,
+                body: .stream(contentLength: 10) { writer in
+                    // Advance time by more than the idle write timeout (that's 1 millisecond) to trigger the timeout.
+                    embedded.embeddedEventLoop.advanceTime(by: .milliseconds(2))
+                    return testWriter.start(writer: writer)
+                }
+            )
+        )
 
         guard let request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
 
         let delegate = ResponseAccumulator(request: request)
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: request,
-            eventLoopPreference: .delegate(on: embedded.eventLoop),
-            task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(30),
-            requestOptions: .forTests(idleWriteTimeout: .milliseconds(1)),
-            delegate: delegate
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embedded.eventLoop),
+                task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(idleWriteTimeout: .milliseconds(1)),
+                delegate: delegate
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
         embedded.isWritable = true
@@ -383,27 +432,35 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         guard let testUtils = maybeTestUtils else { return XCTFail("Expected connection setup works") }
 
         var maybeRequest: HTTPClient.Request?
-        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream { _ in
-            // Advance time by more than the idle write timeout (that's 1 millisecond) to trigger the timeout.
-            let scheduled = embedded.embeddedEventLoop.flatScheduleTask(in: .milliseconds(2)) {
-                embedded.embeddedEventLoop.makeSucceededVoidFuture()
-            }
-            return scheduled.futureResult
-        }))
+        XCTAssertNoThrow(
+            maybeRequest = try HTTPClient.Request(
+                url: "http://localhost/",
+                method: .POST,
+                body: .stream { _ in
+                    // Advance time by more than the idle write timeout (that's 1 millisecond) to trigger the timeout.
+                    let scheduled = embedded.embeddedEventLoop.flatScheduleTask(in: .milliseconds(2)) {
+                        embedded.embeddedEventLoop.makeSucceededVoidFuture()
+                    }
+                    return scheduled.futureResult
+                }
+            )
+        )
 
         guard let request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
 
         let delegate = ResponseAccumulator(request: request)
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: request,
-            eventLoopPreference: .delegate(on: embedded.eventLoop),
-            task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(30),
-            requestOptions: .forTests(idleWriteTimeout: .milliseconds(5)),
-            delegate: delegate
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embedded.eventLoop),
+                task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(idleWriteTimeout: .milliseconds(5)),
+                delegate: delegate
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
         embedded.isWritable = true
@@ -434,34 +491,42 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         guard let testUtils = maybeTestUtils else { return XCTFail("Expected connection setup works") }
 
         var maybeRequest: HTTPClient.Request?
-        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(contentLength: 10) { writer in
-            embedded.isWritable = false
-            embedded.pipeline.fireChannelWritabilityChanged()
-            // This should not trigger any errors or timeouts, because the timer isn't running
-            // as the channel is not writable.
-            embedded.embeddedEventLoop.advanceTime(by: .milliseconds(20))
+        XCTAssertNoThrow(
+            maybeRequest = try HTTPClient.Request(
+                url: "http://localhost/",
+                method: .POST,
+                body: .stream(contentLength: 10) { writer in
+                    embedded.isWritable = false
+                    embedded.pipeline.fireChannelWritabilityChanged()
+                    // This should not trigger any errors or timeouts, because the timer isn't running
+                    // as the channel is not writable.
+                    embedded.embeddedEventLoop.advanceTime(by: .milliseconds(20))
 
-            // Now that the channel will become writable, this should trigger a timeout.
-            embedded.isWritable = true
-            embedded.pipeline.fireChannelWritabilityChanged()
-            embedded.embeddedEventLoop.advanceTime(by: .milliseconds(2))
+                    // Now that the channel will become writable, this should trigger a timeout.
+                    embedded.isWritable = true
+                    embedded.pipeline.fireChannelWritabilityChanged()
+                    embedded.embeddedEventLoop.advanceTime(by: .milliseconds(2))
 
-            return testWriter.start(writer: writer)
-        }))
+                    return testWriter.start(writer: writer)
+                }
+            )
+        )
 
         guard let request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
 
         let delegate = ResponseAccumulator(request: request)
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: request,
-            eventLoopPreference: .delegate(on: embedded.eventLoop),
-            task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(30),
-            requestOptions: .forTests(idleWriteTimeout: .milliseconds(1)),
-            delegate: delegate
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embedded.eventLoop),
+                task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(idleWriteTimeout: .milliseconds(1)),
+                delegate: delegate
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
         embedded.isWritable = true
@@ -482,22 +547,30 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         guard let testUtils = maybeTestUtils else { return XCTFail("Expected connection setup works") }
 
         var maybeRequest: HTTPClient.Request?
-        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(contentLength: 2) { writer in
-            return testWriter.start(writer: writer, expectedErrors: [HTTPClientError.cancelled])
-        }))
+        XCTAssertNoThrow(
+            maybeRequest = try HTTPClient.Request(
+                url: "http://localhost/",
+                method: .POST,
+                body: .stream(contentLength: 2) { writer in
+                    testWriter.start(writer: writer, expectedErrors: [HTTPClientError.cancelled])
+                }
+            )
+        )
         guard let request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
 
         let delegate = ResponseAccumulator(request: request)
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: request,
-            eventLoopPreference: .delegate(on: embedded.eventLoop),
-            task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(30),
-            requestOptions: .forTests(idleWriteTimeout: .milliseconds(1)),
-            delegate: delegate
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embedded.eventLoop),
+                task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(idleWriteTimeout: .milliseconds(1)),
+                delegate: delegate
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
         embedded.isWritable = true
@@ -528,27 +601,35 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
 
         let delegate = ResponseBackpressureDelegate(eventLoop: embedded.eventLoop)
         var maybeRequestBag: RequestBag<ResponseBackpressureDelegate>?
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: request,
-            eventLoopPreference: .delegate(on: embedded.eventLoop),
-            task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(30),
-            requestOptions: .forTests(),
-            delegate: delegate
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embedded.eventLoop),
+                task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(),
+                delegate: delegate
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
         testUtils.connection.executeRequest(requestBag)
 
-        XCTAssertNoThrow(try embedded.receiveHeadAndVerify {
-            XCTAssertEqual($0.method, .GET)
-            XCTAssertEqual($0.uri, "/")
-            XCTAssertEqual($0.headers.first(name: "host"), "localhost")
-        })
+        XCTAssertNoThrow(
+            try embedded.receiveHeadAndVerify {
+                XCTAssertEqual($0.method, .GET)
+                XCTAssertEqual($0.uri, "/")
+                XCTAssertEqual($0.headers.first(name: "host"), "localhost")
+            }
+        )
         XCTAssertNoThrow(try embedded.receiveEnd())
 
-        let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: HTTPHeaders([("content-length", "50")]))
+        let responseHead = HTTPResponseHead(
+            version: .http1_1,
+            status: .ok,
+            headers: HTTPHeaders([("content-length", "50")])
+        )
 
         XCTAssertEqual(testUtils.readEventHandler.readHitCounter, 0)
         embedded.read()
@@ -599,7 +680,12 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
             XCTAssertNoThrow(maybeTestUtils = try embedded.setupHTTP1Connection())
             guard let testUtils = maybeTestUtils else { return XCTFail("Expected connection setup works") }
 
-            XCTAssertNoThrow(try embedded.pipeline.syncOperations.addHandler(FailWriteHandler(), position: .after(testUtils.readEventHandler)))
+            XCTAssertNoThrow(
+                try embedded.pipeline.syncOperations.addHandler(
+                    FailWriteHandler(),
+                    position: .after(testUtils.readEventHandler)
+                )
+            )
 
             let logger = Logger(label: "test")
 
@@ -609,16 +695,20 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
 
             let delegate = ResponseAccumulator(request: request)
             var maybeRequestBag: RequestBag<ResponseAccumulator>?
-            XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-                request: request,
-                eventLoopPreference: .delegate(on: embedded.eventLoop),
-                task: .init(eventLoop: embedded.eventLoop, logger: logger),
-                redirectHandler: nil,
-                connectionDeadline: .now() + .seconds(30),
-                requestOptions: .forTests(idleReadTimeout: .milliseconds(200)),
-                delegate: delegate
-            ))
-            guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
+            XCTAssertNoThrow(
+                maybeRequestBag = try RequestBag(
+                    request: request,
+                    eventLoopPreference: .delegate(on: embedded.eventLoop),
+                    task: .init(eventLoop: embedded.eventLoop, logger: logger),
+                    redirectHandler: nil,
+                    connectionDeadline: .now() + .seconds(30),
+                    requestOptions: .forTests(idleReadTimeout: .milliseconds(200)),
+                    delegate: delegate
+                )
+            )
+            guard let requestBag = maybeRequestBag else {
+                return XCTFail("Expected to be able to create a request bag")
+            }
 
             embedded.isWritable = false
             XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
@@ -645,22 +735,30 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         guard let testUtils = maybeTestUtils else { return XCTFail("Expected connection setup works") }
 
         var maybeRequest: HTTPClient.Request?
-        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/", method: .POST, body: .stream(contentLength: 10) { writer in
-            testWriter.start(writer: writer)
-        }))
+        XCTAssertNoThrow(
+            maybeRequest = try HTTPClient.Request(
+                url: "http://localhost/",
+                method: .POST,
+                body: .stream(contentLength: 10) { writer in
+                    testWriter.start(writer: writer)
+                }
+            )
+        )
         guard let request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
 
         let delegate = ResponseAccumulator(request: request)
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: request,
-            eventLoopPreference: .delegate(on: embedded.eventLoop),
-            task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(30),
-            requestOptions: .forTests(idleReadTimeout: .milliseconds(200)),
-            delegate: delegate
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embedded.eventLoop),
+                task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(idleReadTimeout: .milliseconds(200)),
+                delegate: delegate
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
         XCTAssertNoThrow(try embedded.pipeline.addHandler(FailEndHandler(), position: .first).wait())
@@ -668,12 +766,14 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         // Execute the request and we'll receive the head.
         testWriter.writabilityChanged(true)
         testUtils.connection.executeRequest(requestBag)
-        XCTAssertNoThrow(try embedded.receiveHeadAndVerify {
-            XCTAssertEqual($0.method, .POST)
-            XCTAssertEqual($0.uri, "/")
-            XCTAssertEqual($0.headers.first(name: "host"), "localhost")
-            XCTAssertEqual($0.headers.first(name: "content-length"), "10")
-        })
+        XCTAssertNoThrow(
+            try embedded.receiveHeadAndVerify {
+                XCTAssertEqual($0.method, .POST)
+                XCTAssertEqual($0.uri, "/")
+                XCTAssertEqual($0.headers.first(name: "host"), "localhost")
+                XCTAssertEqual($0.headers.first(name: "content-length"), "10")
+            }
+        )
         // We're going to immediately send the response head and end.
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.head(responseHead)))
@@ -689,9 +789,11 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         embedded.embeddedEventLoop.run()
         XCTAssertEqual(testWriter.written, 5)
         for _ in 0..<5 {
-            XCTAssertNoThrow(try embedded.receiveBodyAndVerify {
-                XCTAssertEqual($0.readableBytes, 2)
-            })
+            XCTAssertNoThrow(
+                try embedded.receiveBodyAndVerify {
+                    XCTAssertEqual($0.readableBytes, 2)
+                }
+            )
         }
 
         embedded.embeddedEventLoop.run()
@@ -722,10 +824,13 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
             backgroundLogger: Logger(label: "no-op", factory: SwiftLogNoOpLogHandler.init),
             connectionIdLoggerMetadata: "test connection"
         )
-        let channel = EmbeddedChannel(handlers: [
-            ChangeWritabilityOnFlush(),
-            handler,
-        ], loop: eventLoop)
+        let channel = EmbeddedChannel(
+            handlers: [
+                ChangeWritabilityOnFlush(),
+                handler,
+            ],
+            loop: eventLoop
+        )
         try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).wait()
 
         let request = MockHTTPExecutableRequest()
@@ -825,7 +930,10 @@ class ResponseBackpressureDelegate: HTTPClientResponseDelegate {
             return newPromise.futureResult
 
         case .waitingForRemote(var promiseBuffer):
-            assert(!promiseBuffer.isEmpty, "assert expected to be waiting if we have at least one promise in the buffer")
+            assert(
+                !promiseBuffer.isEmpty,
+                "assert expected to be waiting if we have at least one promise in the buffer"
+            )
             let promise = self.eventLoop.makePromise(of: ByteBuffer?.self)
             promiseBuffer.append(promise)
             self.state = .waitingForRemote(promiseBuffer)
@@ -864,7 +972,10 @@ class ResponseBackpressureDelegate: HTTPClientResponseDelegate {
     func didReceiveBodyPart(task: HTTPClient.Task<Void>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         switch self.state {
         case .waitingForRemote(var promiseBuffer):
-            assert(!promiseBuffer.isEmpty, "assert expected to be waiting if we have at least one promise in the buffer")
+            assert(
+                !promiseBuffer.isEmpty,
+                "assert expected to be waiting if we have at least one promise in the buffer"
+            )
             let promise = promiseBuffer.removeFirst()
             if promiseBuffer.isEmpty {
                 let newBackpressurePromise = self.eventLoop.makePromise(of: Void.self)
@@ -883,7 +994,9 @@ class ResponseBackpressureDelegate: HTTPClientResponseDelegate {
             return promise.futureResult
 
         case .buffering(.some):
-            preconditionFailure("Did receive response part should not be called, before the previous promise was succeeded.")
+            preconditionFailure(
+                "Did receive response part should not be called, before the previous promise was succeeded."
+            )
 
         case .done, .consuming:
             preconditionFailure("Invalid state: \(self.state)")
@@ -893,8 +1006,8 @@ class ResponseBackpressureDelegate: HTTPClientResponseDelegate {
     func didFinishRequest(task: HTTPClient.Task<Void>) throws {
         switch self.state {
         case .waitingForRemote(let promiseBuffer):
-            promiseBuffer.forEach {
-                $0.succeed(.none)
+            for promise in promiseBuffer {
+                promise.succeed(.none)
             }
             self.state = .done
 
@@ -905,7 +1018,9 @@ class ResponseBackpressureDelegate: HTTPClientResponseDelegate {
             preconditionFailure("Invalid state: \(self.state)")
 
         case .buffering(.some):
-            preconditionFailure("Did receive response part should not be called, before the previous promise was succeeded.")
+            preconditionFailure(
+                "Did receive response part should not be called, before the previous promise was succeeded."
+            )
         }
     }
 }

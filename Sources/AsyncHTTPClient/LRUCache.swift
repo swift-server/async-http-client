@@ -52,9 +52,11 @@ struct LRUCache<Key: Equatable, Value> {
 
     @discardableResult
     mutating func append(key: Key, value: Value) -> Value {
-        let newElement = Element(generation: self.generation,
-                                 key: key,
-                                 value: value)
+        let newElement = Element(
+            generation: self.generation,
+            key: key,
+            value: value
+        )
         if let found = self.bumpGenerationAndFindIndex(key: key) {
             self.elements[found] = newElement
             return value

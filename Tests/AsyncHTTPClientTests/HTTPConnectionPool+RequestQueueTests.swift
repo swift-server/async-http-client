@@ -12,13 +12,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import Logging
 import NIOCore
 import NIOEmbedded
 import NIOHTTP1
 import NIOSSL
 import XCTest
+
+@testable import AsyncHTTPClient
 
 class HTTPConnectionPool_RequestQueueTests: XCTestCase {
     func testCountAndIsEmptyWorks() {

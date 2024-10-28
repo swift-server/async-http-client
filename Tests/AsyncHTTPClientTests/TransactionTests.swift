@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -20,6 +19,8 @@ import NIOEmbedded
 import NIOHTTP1
 import NIOPosix
 import XCTest
+
+@testable import AsyncHTTPClient
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 typealias PreparedRequest = HTTPClientRequest.Prepared
@@ -91,11 +92,18 @@ final class TransactionTests: XCTestCase {
             transaction.deadlineExceeded()
 
             struct Executor: HTTPRequestExecutor {
-                func writeRequestBodyPart(_: NIOCore.IOData, request: AsyncHTTPClient.HTTPExecutableRequest, promise: NIOCore.EventLoopPromise<Void>?) {
+                func writeRequestBodyPart(
+                    _: NIOCore.IOData,
+                    request: AsyncHTTPClient.HTTPExecutableRequest,
+                    promise: NIOCore.EventLoopPromise<Void>?
+                ) {
                     XCTFail()
                 }
 
-                func finishRequestBodyStream(_ task: AsyncHTTPClient.HTTPExecutableRequest, promise: NIOCore.EventLoopPromise<Void>?) {
+                func finishRequestBodyStream(
+                    _ task: AsyncHTTPClient.HTTPExecutableRequest,
+                    promise: NIOCore.EventLoopPromise<Void>?
+                ) {
                     XCTFail()
                 }
 
@@ -253,15 +261,17 @@ final class TransactionTests: XCTestCase {
                 XCTAssertFalse(streamWriter.hasDemand, "Did not expect to have demand yet")
 
                 transaction.resumeRequestBodyStream()
-                await streamWriter.demand() // wait's for the stream writer to signal demand
+                await streamWriter.demand()  // wait's for the stream writer to signal demand
                 transaction.pauseRequestBodyStream()
 
                 let part = ByteBuffer(integer: i)
                 streamWriter.write(part)
 
-                XCTAssertNoThrow(try executor.receiveRequestBody {
-                    XCTAssertEqual($0, part)
-                })
+                XCTAssertNoThrow(
+                    try executor.receiveRequestBody {
+                        XCTAssertEqual($0, part)
+                    }
+                )
             }
 
             transaction.resumeRequestBodyStream()
@@ -306,11 +316,13 @@ final class TransactionTests: XCTestCase {
             let connectionCreator = TestConnectionCreator()
             let delegate = TestHTTP2ConnectionDelegate()
             var maybeHTTP2Connection: HTTP2Connection?
-            XCTAssertNoThrow(maybeHTTP2Connection = try connectionCreator.createHTTP2Connection(
-                to: httpBin.port,
-                delegate: delegate,
-                on: eventLoop
-            ))
+            XCTAssertNoThrow(
+                maybeHTTP2Connection = try connectionCreator.createHTTP2Connection(
+                    to: httpBin.port,
+                    delegate: delegate,
+                    on: eventLoop
+                )
+            )
             guard let http2Connection = maybeHTTP2Connection else {
                 return XCTFail("Expected to have an HTTP2 connection here.")
             }
@@ -370,9 +382,11 @@ final class TransactionTests: XCTestCase {
             let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
             executor.runRequest(transaction)
             executor.resumeRequestBodyStream()
-            XCTAssertNoThrow(try executor.receiveRequestBody {
-                XCTAssertEqual($0.getString(at: 0, length: $0.readableBytes), "Hello world!")
-            })
+            XCTAssertNoThrow(
+                try executor.receiveRequestBody {
+                    XCTAssertEqual($0.getString(at: 0, length: $0.readableBytes), "Hello world!")
+                }
+            )
             XCTAssertNoThrow(try executor.receiveEndOfStream())
 
             let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["foo": "bar"])
@@ -413,9 +427,11 @@ final class TransactionTests: XCTestCase {
             await writer.demand()
             writer.write(.init(string: "Hello world!"))
 
-            XCTAssertNoThrow(try executor.receiveRequestBody {
-                XCTAssertEqual($0.getString(at: 0, length: $0.readableBytes), "Hello world!")
-            })
+            XCTAssertNoThrow(
+                try executor.receiveRequestBody {
+                    XCTAssertEqual($0.getString(at: 0, length: $0.readableBytes), "Hello world!")
+                }
+            )
 
             XCTAssertFalse(executor.isCancelled)
             struct WriteError: Error, Equatable {}
@@ -502,11 +518,13 @@ final class TransactionTests: XCTestCase {
             let connectionCreator = TestConnectionCreator()
             let delegate = TestHTTP2ConnectionDelegate()
             var maybeHTTP2Connection: HTTP2Connection?
-            XCTAssertNoThrow(maybeHTTP2Connection = try connectionCreator.createHTTP2Connection(
-                to: httpBin.port,
-                delegate: delegate,
-                on: eventLoop
-            ))
+            XCTAssertNoThrow(
+                maybeHTTP2Connection = try connectionCreator.createHTTP2Connection(
+                    to: httpBin.port,
+                    delegate: delegate,
+                    on: eventLoop
+                )
+            )
             guard let http2Connection = maybeHTTP2Connection else {
                 return XCTFail("Expected to have an HTTP2 connection here.")
             }
@@ -638,7 +656,8 @@ extension Transaction {
     ) async -> (Transaction, _Concurrency.Task<HTTPClientResponse, Error>) {
         let transactionPromise = Promise<Transaction>()
         let task = Task {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<HTTPClientResponse, Error>) in
+            try await withCheckedThrowingContinuation {
+                (continuation: CheckedContinuation<HTTPClientResponse, Error>) in
                 let transaction = Transaction(
                     request: request,
                     requestOptions: requestOptions,

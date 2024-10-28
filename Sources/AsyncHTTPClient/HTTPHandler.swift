@@ -43,17 +43,18 @@ extension HTTPClient {
             /// - parameters:
             ///     - data: `IOData` to write.
             public func write(_ data: IOData) -> EventLoopFuture<Void> {
-                return self.closure(data)
+                self.closure(data)
             }
 
             @inlinable
-            func writeChunks<Bytes: Collection>(of bytes: Bytes, maxChunkSize: Int) -> EventLoopFuture<Void> where Bytes.Element == UInt8 {
+            func writeChunks<Bytes: Collection>(of bytes: Bytes, maxChunkSize: Int) -> EventLoopFuture<Void>
+            where Bytes.Element == UInt8 {
                 let iterator = UnsafeMutableTransferBox(bytes.chunks(ofCount: maxChunkSize).makeIterator())
                 guard let chunk = iterator.wrappedValue.next() else {
                     return self.write(IOData.byteBuffer(.init()))
                 }
 
-                @Sendable // can't use closure here as we recursively call ourselves which closures can't do
+                @Sendable  // can't use closure here as we recursively call ourselves which closures can't do
                 func writeNextChunk(_ chunk: Bytes.SubSequence) -> EventLoopFuture<Void> {
                     if let nextChunk = iterator.wrappedValue.next() {
                         return self.write(.byteBuffer(ByteBuffer(bytes: chunk))).flatMap {
@@ -100,7 +101,7 @@ extension HTTPClient {
         /// - parameters:
         ///     - buffer: Body `ByteBuffer` representation.
         public static func byteBuffer(_ buffer: ByteBuffer) -> Body {
-            return Body(contentLength: Int64(buffer.readableBytes)) { writer in
+            Body(contentLength: Int64(buffer.readableBytes)) { writer in
                 writer.write(.byteBuffer(buffer))
             }
         }
@@ -113,8 +114,11 @@ extension HTTPClient {
         ///     - stream: Body chunk provider.
         @_disfavoredOverload
         @preconcurrency
-        public static func stream(length: Int? = nil, _ stream: @Sendable @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
-            return Body(contentLength: length.flatMap { Int64($0) }, stream: stream)
+        public static func stream(
+            length: Int? = nil,
+            _ stream: @Sendable @escaping (StreamWriter) -> EventLoopFuture<Void>
+        ) -> Body {
+            Body(contentLength: length.flatMap { Int64($0) }, stream: stream)
         }
 
         /// Create and stream body using ``StreamWriter``.
@@ -122,19 +126,23 @@ extension HTTPClient {
         /// - parameters:
         ///     - contentLength: Body size. If nil, `Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
         /// header is set with the given `contentLength`.
-        ///     - bodyStream: Body chunk provider.
-        public static func stream(contentLength: Int64? = nil, _ stream: @Sendable @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
-            return Body(contentLength: contentLength, stream: stream)
+        ///     - stream: Body chunk provider.
+        public static func stream(
+            contentLength: Int64? = nil,
+            _ stream: @Sendable @escaping (StreamWriter) -> EventLoopFuture<Void>
+        ) -> Body {
+            Body(contentLength: contentLength, stream: stream)
         }
 
         /// Create and stream body using a collection of bytes.
         ///
         /// - parameters:
-        ///     - data: Body binary representation.
+        ///     - bytes: Body binary representation.
         @preconcurrency
         @inlinable
-        public static func bytes<Bytes>(_ bytes: Bytes) -> Body where Bytes: RandomAccessCollection, Bytes: Sendable, Bytes.Element == UInt8 {
-            return Body(contentLength: Int64(bytes.count)) { writer in
+        public static func bytes<Bytes>(_ bytes: Bytes) -> Body
+        where Bytes: RandomAccessCollection, Bytes: Sendable, Bytes.Element == UInt8 {
+            Body(contentLength: Int64(bytes.count)) { writer in
                 if bytes.count <= bagOfBytesToByteBufferConversionChunkSize {
                     return writer.write(.byteBuffer(ByteBuffer(bytes: bytes)))
                 } else {
@@ -148,7 +156,7 @@ extension HTTPClient {
         /// - parameters:
         ///     - string: Body `String` representation.
         public static func string(_ string: String) -> Body {
-            return Body(contentLength: Int64(string.utf8.count)) { writer in
+            Body(contentLength: Int64(string.utf8.count)) { writer in
                 if string.utf8.count <= bagOfBytesToByteBufferConversionChunkSize {
                     return writer.write(.byteBuffer(ByteBuffer(string: string)))
                 } else {
@@ -184,7 +192,6 @@ extension HTTPClient {
         ///
         /// - parameters:
         ///     - url: Remote `URL`.
-        ///     - version: HTTP version.
         ///     - method: HTTP method.
         ///     - headers: Custom HTTP headers.
         ///     - body: Request body.
@@ -193,7 +200,12 @@ extension HTTPClient {
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
-        public init(url: String, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+        public init(
+            url: String,
+            method: HTTPMethod = .GET,
+            headers: HTTPHeaders = HTTPHeaders(),
+            body: Body? = nil
+        ) throws {
             try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: nil)
         }
 
@@ -201,7 +213,6 @@ extension HTTPClient {
         ///
         /// - parameters:
         ///     - url: Remote `URL`.
-        ///     - version: HTTP version.
         ///     - method: HTTP method.
         ///     - headers: Custom HTTP headers.
         ///     - body: Request body.
@@ -211,7 +222,13 @@ extension HTTPClient {
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
-        public init(url: String, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration?) throws {
+        public init(
+            url: String,
+            method: HTTPMethod = .GET,
+            headers: HTTPHeaders = HTTPHeaders(),
+            body: Body? = nil,
+            tlsConfiguration: TLSConfiguration?
+        ) throws {
             guard let url = URL(string: url) else {
                 throw HTTPClientError.invalidURL
             }
@@ -231,7 +248,8 @@ extension HTTPClient {
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
         ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
-        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws
+        {
             try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: nil)
         }
 
@@ -248,7 +266,13 @@ extension HTTPClient {
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
         ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
-        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration?) throws {
+        public init(
+            url: URL,
+            method: HTTPMethod = .GET,
+            headers: HTTPHeaders = HTTPHeaders(),
+            body: Body? = nil,
+            tlsConfiguration: TLSConfiguration?
+        ) throws {
             self.deconstructedURL = try DeconstructedURL(url: url)
 
             self.url = url
@@ -281,7 +305,10 @@ extension HTTPClient {
 
             head.headers.addHostIfNeeded(for: self.deconstructedURL)
 
-            let metadata = try head.headers.validateAndSetTransportFraming(method: self.method, bodyLength: .init(self.body))
+            let metadata = try head.headers.validateAndSetTransportFraming(
+                method: self.method,
+                bodyLength: .init(self.body)
+            )
 
             return (head, metadata)
         }
@@ -333,7 +360,13 @@ extension HTTPClient {
         ///     - version: Response HTTP version.
         ///     - headers: Reponse HTTP headers.
         ///     - body: Response body.
-        public init(host: String, status: HTTPResponseStatus, version: HTTPVersion, headers: HTTPHeaders, body: ByteBuffer?) {
+        public init(
+            host: String,
+            status: HTTPResponseStatus,
+            version: HTTPVersion,
+            headers: HTTPHeaders,
+            body: ByteBuffer?
+        ) {
             self.host = host
             self.status = status
             self.version = version
@@ -357,19 +390,19 @@ extension HTTPClient {
 
         /// HTTP basic auth.
         public static func basic(username: String, password: String) -> HTTPClient.Authorization {
-            return .basic(credentials: Base64.encode(bytes: "\(username):\(password)".utf8))
+            .basic(credentials: Base64.encode(bytes: "\(username):\(password)".utf8))
         }
 
         /// HTTP basic auth.
         ///
         /// This version uses the raw string directly.
         public static func basic(credentials: String) -> HTTPClient.Authorization {
-            return .init(scheme: .Basic(credentials))
+            .init(scheme: .Basic(credentials))
         }
 
         /// HTTP bearer auth
         public static func bearer(tokens: String) -> HTTPClient.Authorization {
-            return .init(scheme: .Bearer(tokens))
+            .init(scheme: .Bearer(tokens))
         }
 
         /// The header string for this auth field.
@@ -406,7 +439,7 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
         }
 
         public var description: String {
-            return "ResponseTooBigError: received response body exceeds maximum accepted size of \(self.maxBodySize) bytes"
+            "ResponseTooBigError: received response body exceeds maximum accepted size of \(self.maxBodySize) bytes"
         }
     }
 
@@ -450,9 +483,10 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
         switch self.state {
         case .idle:
             if self.requestMethod != .HEAD,
-               let contentLength = head.headers.first(name: "Content-Length"),
-               let announcedBodySize = Int(contentLength),
-               announcedBodySize > self.maxBodySize {
+                let contentLength = head.headers.first(name: "Content-Length"),
+                let announcedBodySize = Int(contentLength),
+                announcedBodySize > self.maxBodySize
+            {
                 let error = ResponseTooBigError(maxBodySize: maxBodySize)
                 self.state = .error(error)
                 return task.eventLoop.makeFailedFuture(error)
@@ -515,9 +549,21 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
         case .idle:
             preconditionFailure("no head received before end")
         case .head(let head):
-            return Response(host: self.requestHost, status: head.status, version: head.version, headers: head.headers, body: nil)
+            return Response(
+                host: self.requestHost,
+                status: head.status,
+                version: head.version,
+                headers: head.headers,
+                body: nil
+            )
         case .body(let head, let body):
-            return Response(host: self.requestHost, status: head.status, version: head.version, headers: head.headers, body: body)
+            return Response(
+                host: self.requestHost,
+                status: head.status,
+                version: head.version,
+                headers: head.headers,
+                body: body
+            )
         case .end:
             preconditionFailure("request already processed")
         case .error(let error):
@@ -650,14 +696,14 @@ extension HTTPClientResponseDelegate {
     ///
     /// By default, this does nothing.
     public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) -> EventLoopFuture<Void> {
-        return task.eventLoop.makeSucceededVoidFuture()
+        task.eventLoop.makeSucceededVoidFuture()
     }
 
     /// Default implementation of ``HTTPClientResponseDelegate/didReceiveBodyPart(task:_:)-4fd4v``.
     ///
     /// By default, this does nothing.
     public func didReceiveBodyPart(task: HTTPClient.Task<Response>, _: ByteBuffer) -> EventLoopFuture<Void> {
-        return task.eventLoop.makeSucceededVoidFuture()
+        task.eventLoop.makeSucceededVoidFuture()
     }
 
     /// Default implementation of ``HTTPClientResponseDelegate/didReceiveError(task:_:)-fhsg``.
@@ -685,7 +731,7 @@ extension URL {
     }
 
     func hasTheSameOrigin(as other: URL) -> Bool {
-        return self.host == other.host && self.scheme == other.scheme && self.port == other.port
+        self.host == other.host && self.scheme == other.scheme && self.port == other.port
     }
 
     /// Initializes a newly created HTTP URL connecting to a unix domain socket path. The socket path is encoded as the URL's host, replacing percent encoding invalid path characters, and will use the "http+unix" scheme.
@@ -732,7 +778,7 @@ extension HTTPClient {
         /// The `EventLoop` the delegate will be executed on.
         public let eventLoop: EventLoop
         /// The `Logger` used by the `Task` for logging.
-        public let logger: Logger // We are okay to store the logger here because a Task is for only one request.
+        public let logger: Logger  // We are okay to store the logger here because a Task is for only one request.
 
         let promise: EventLoopPromise<Response>
 
@@ -772,14 +818,18 @@ extension HTTPClient {
             logger: Logger,
             makeOrGetFileIOThreadPool: @escaping () -> NIOThreadPool
         ) -> Task<Response> {
-            let task = self.init(eventLoop: eventLoop, logger: logger, makeOrGetFileIOThreadPool: makeOrGetFileIOThreadPool)
+            let task = self.init(
+                eventLoop: eventLoop,
+                logger: logger,
+                makeOrGetFileIOThreadPool: makeOrGetFileIOThreadPool
+            )
             task.promise.fail(error)
             return task
         }
 
         /// `EventLoopFuture` for the response returned by this request.
         public var futureResult: EventLoopFuture<Response> {
-            return self.promise.futureResult
+            self.promise.futureResult
         }
 
         /// Waits for execution of this request to complete.
@@ -788,7 +838,7 @@ extension HTTPClient {
         /// - throws: The error value of ``futureResult`` if it errors.
         @available(*, noasync, message: "wait() can block indefinitely, prefer get()", renamed: "get()")
         public func wait() throws -> Response {
-            return try self.promise.futureResult.wait()
+            try self.promise.futureResult.wait()
         }
 
         /// Provides the result of this request.
@@ -797,7 +847,7 @@ extension HTTPClient {
         /// - throws: The error value of ``futureResult`` if it errors.
         @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
         public func get() async throws -> Response {
-            return try await self.promise.futureResult.get()
+            try await self.promise.futureResult.get()
         }
 
         /// Cancels the request execution.
@@ -806,7 +856,7 @@ extension HTTPClient {
         }
 
         /// Cancels the request execution with a custom `Error`.
-        /// - Parameter reason: the error that is used to fail the promise
+        /// - Parameter error: the error that is used to fail the promise
         public func fail(reason error: Error) {
             let taskDelegate = self.lock.withLock { () -> HTTPClientTaskDelegate? in
                 self._isCancelled = true
@@ -816,15 +866,19 @@ extension HTTPClient {
             taskDelegate?.fail(error)
         }
 
-        func succeed<Delegate: HTTPClientResponseDelegate>(promise: EventLoopPromise<Response>?,
-                                                           with value: Response,
-                                                           delegateType: Delegate.Type,
-                                                           closing: Bool) {
+        func succeed<Delegate: HTTPClientResponseDelegate>(
+            promise: EventLoopPromise<Response>?,
+            with value: Response,
+            delegateType: Delegate.Type,
+            closing: Bool
+        ) {
             promise?.succeed(value)
         }
 
-        func fail<Delegate: HTTPClientResponseDelegate>(with error: Error,
-                                                        delegateType: Delegate.Type) {
+        func fail<Delegate: HTTPClientResponseDelegate>(
+            with error: Error,
+            delegateType: Delegate.Type
+        ) {
             self.promise.fail(error)
         }
     }

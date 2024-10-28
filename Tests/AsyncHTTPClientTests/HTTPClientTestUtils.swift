@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import Atomics
 import Foundation
 import Logging
@@ -28,6 +27,9 @@ import NIOSSL
 import NIOTLS
 import NIOTransportServices
 import XCTest
+
+@testable import AsyncHTTPClient
+
 #if canImport(xlocale)
 import xlocale
 #elseif canImport(locale_h)
@@ -52,7 +54,8 @@ func isTestingNIOTS() -> Bool {
 func getDefaultEventLoopGroup(numberOfThreads: Int) -> EventLoopGroup {
     #if canImport(Network)
     if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *),
-       isTestingNIOTS() {
+        isTestingNIOTS()
+    {
         return NIOTSEventLoopGroup(loopCount: numberOfThreads, defaultQoS: .default)
     }
     #endif
@@ -144,7 +147,7 @@ class CountingDelegate: HTTPClientResponseDelegate {
     }
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Int {
-        return self.count
+        self.count
     }
 }
 
@@ -219,8 +222,8 @@ enum TemporaryFileHelpers {
         } else {
             return "/tmp"
         }
-        #endif // os
-        #endif // targetEnvironment
+        #endif  // os
+        #endif  // targetEnvironment
     }
 
     private static func openTemporaryFile() -> (CInt, String) {
@@ -240,8 +243,10 @@ enum TemporaryFileHelpers {
     ///
     /// If the temporary directory is too long to store a UNIX domain socket path, it will `chdir` into the temporary
     /// directory and return a short-enough path. The iOS simulator is known to have too long paths.
-    internal static func withTemporaryUnixDomainSocketPathName<T>(directory: String = temporaryDirectory,
-                                                                  _ body: (String) throws -> T) throws -> T {
+    internal static func withTemporaryUnixDomainSocketPathName<T>(
+        directory: String = temporaryDirectory,
+        _ body: (String) throws -> T
+    ) throws -> T {
         // this is racy but we're trying to create the shortest possible path so we can't add a directory...
         let (fd, path) = self.openTemporaryFile()
         close(fd)
@@ -256,10 +261,14 @@ enum TemporaryFileHelpers {
             shortEnoughPath = path
             restoreSavedCWD = false
         } catch SocketAddressError.unixDomainSocketPathTooLong {
-            FileManager.default.changeCurrentDirectoryPath(URL(fileURLWithPath: path).deletingLastPathComponent().absoluteString)
+            FileManager.default.changeCurrentDirectoryPath(
+                URL(fileURLWithPath: path).deletingLastPathComponent().absoluteString
+            )
             shortEnoughPath = URL(fileURLWithPath: path).lastPathComponent
             restoreSavedCWD = true
-            print("WARNING: Path '\(path)' could not be used as UNIX domain socket path, using chdir & '\(shortEnoughPath)'")
+            print(
+                "WARNING: Path '\(path)' could not be used as UNIX domain socket path, using chdir & '\(shortEnoughPath)'"
+            )
         }
         defer {
             if FileManager.default.fileExists(atPath: path) {
@@ -307,11 +316,11 @@ enum TemporaryFileHelpers {
     }
 
     internal static func fileSize(path: String) throws -> Int? {
-        return try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int
+        try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int
     }
 
     internal static func fileExists(path: String) -> Bool {
-        return FileManager.default.fileExists(atPath: path)
+        FileManager.default.fileExists(atPath: path)
     }
 }
 
@@ -324,9 +333,11 @@ enum TestTLS {
     )
 }
 
-internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
+internal final class HTTPBin<RequestHandler: ChannelInboundHandler>
+where
     RequestHandler.InboundIn == HTTPServerRequestPart,
-    RequestHandler.OutboundOut == HTTPServerResponsePart {
+    RequestHandler.OutboundOut == HTTPServerResponsePart
+{
     enum BindTarget {
         case unixDomainSocket(String)
         case localhostIPv4RandomPort
@@ -393,19 +404,19 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
 
     private let activeConnCounterHandler: ConnectionsCountHandler
     var activeConnections: Int {
-        return self.activeConnCounterHandler.currentlyActiveConnections
+        self.activeConnCounterHandler.currentlyActiveConnections
     }
 
     var createdConnections: Int {
-        return self.activeConnCounterHandler.createdConnections
+        self.activeConnCounterHandler.createdConnections
     }
 
     var port: Int {
-        return Int(self.serverChannel.localAddress!.port!)
+        Int(self.serverChannel.localAddress!.port!)
     }
 
     var socketAddress: SocketAddress {
-        return self.serverChannel.localAddress!
+        self.serverChannel.localAddress!
     }
 
     var baseURL: String {
@@ -464,7 +475,10 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
 
         self.serverChannel = try! ServerBootstrap(group: self.group)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
-            .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: reusePort ? 1 : 0)
+            .serverChannelOption(
+                ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT),
+                value: reusePort ? 1 : 0
+            )
             .serverChannelInitializer { channel in
                 channel.pipeline.addHandler(self.activeConnCounterHandler)
             }.childChannelInitializer { channel in
@@ -673,7 +687,11 @@ final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
     init(promise: EventLoopPromise<Void>, expectedAuthorization: String?) {
         self.promise = promise
         self.expectedAuthorization = expectedAuthorization
-        self.head = HTTPResponseHead(version: .init(major: 1, minor: 1), status: .ok, headers: .init([("Content-Length", "0")]))
+        self.head = HTTPResponseHead(
+            version: .init(major: 1, minor: 1),
+            status: .ok,
+            headers: .init([("Content-Length", "0")])
+        )
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -687,7 +705,8 @@ final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
 
             if let expectedAuthorization = self.expectedAuthorization {
                 guard let authorization = head.headers["proxy-authorization"].first,
-                      expectedAuthorization == authorization else {
+                    expectedAuthorization == authorization
+                else {
                     self.head.status = .proxyAuthenticationRequired
                     return
                 }
@@ -712,7 +731,11 @@ internal struct HTTPResponseBuilder {
     var head: HTTPResponseHead
     var body: ByteBuffer?
 
-    init(_ version: HTTPVersion = HTTPVersion(major: 1, minor: 1), status: HTTPResponseStatus, headers: HTTPHeaders = HTTPHeaders()) {
+    init(
+        _ version: HTTPVersion = HTTPVersion(major: 1, minor: 1),
+        status: HTTPResponseStatus,
+        headers: HTTPHeaders = HTTPHeaders()
+    ) {
         self.head = HTTPResponseHead(version: version, status: status, headers: headers)
     }
 
@@ -764,8 +787,10 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
         for header in head.headers {
             let needle = "x-send-back-header-"
             if header.name.lowercased().starts(with: needle) {
-                self.responseHeaders.add(name: String(header.name.dropFirst(needle.count)),
-                                         value: header.value)
+                self.responseHeaders.add(
+                    name: String(header.name.dropFirst(needle.count)),
+                    value: header.value
+                )
             }
         }
     }
@@ -778,7 +803,12 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
             headers = HTTPHeaders()
         }
 
-        context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))), promise: nil)
+        context.write(
+            wrapOutboundOut(
+                .head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))
+            ),
+            promise: nil
+        )
         for i in 0..<10 {
             let msg = "id: \(i)"
             var buf = context.channel.allocator.buffer(capacity: msg.count)
@@ -793,7 +823,12 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
         // This tests receiving chunks very fast: please do not insert delays here!
         let headers = HTTPHeaders([("Transfer-Encoding", "chunked")])
 
-        context.write(self.wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))), promise: nil)
+        context.write(
+            self.wrapOutboundOut(
+                .head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))
+            ),
+            promise: nil
+        )
         for i in 0..<10 {
             let msg = "id: \(i)"
             var buf = context.channel.allocator.buffer(capacity: msg.count)
@@ -808,7 +843,12 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
         // This tests receiving a lot of tiny chunks: they must all be sent in a single flush or the test doesn't work.
         let headers = HTTPHeaders([("Transfer-Encoding", "chunked")])
 
-        context.write(self.wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))), promise: nil)
+        context.write(
+            self.wrapOutboundOut(
+                .head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))
+            ),
+            promise: nil
+        )
         let message = ByteBuffer(integer: UInt8(ascii: "a"))
 
         // This number (10k) is load-bearing and a bit magic: it has been experimentally verified as being sufficient to blow the stack
@@ -928,9 +968,12 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                 context.close(promise: nil)
                 return
             case "/custom":
-                context.writeAndFlush(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
+                context.writeAndFlush(
+                    wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))),
+                    promise: nil
+                )
                 return
-            case "/events/10/1": // TODO: parse path
+            case "/events/10/1":  // TODO: parse path
                 self.writeEvents(context: context)
                 return
             case "/events/10/content-length":
@@ -954,10 +997,20 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
             case "/content-length-without-body":
                 var headers = self.responseHeaders
                 headers.replaceOrAdd(name: "content-length", value: "1234")
-                context.writeAndFlush(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))), promise: nil)
+                context.writeAndFlush(
+                    wrapOutboundOut(
+                        .head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))
+                    ),
+                    promise: nil
+                )
                 return
             default:
-                context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .notFound))), promise: nil)
+                context.write(
+                    wrapOutboundOut(
+                        .head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .notFound))
+                    ),
+                    promise: nil
+                )
                 context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
                 return
             }
@@ -976,18 +1029,26 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
             response.head.headers.add(contentsOf: self.responseHeaders)
             context.write(wrapOutboundOut(.head(response.head)), promise: nil)
             if let body = response.body {
-                let requestInfo = RequestInfo(data: String(buffer: body),
-                                              requestNumber: self.requestId,
-                                              connectionNumber: self.connectionID)
-                let responseBody = try! JSONEncoder().encodeAsByteBuffer(requestInfo,
-                                                                         allocator: context.channel.allocator)
+                let requestInfo = RequestInfo(
+                    data: String(buffer: body),
+                    requestNumber: self.requestId,
+                    connectionNumber: self.connectionID
+                )
+                let responseBody = try! JSONEncoder().encodeAsByteBuffer(
+                    requestInfo,
+                    allocator: context.channel.allocator
+                )
                 context.write(wrapOutboundOut(.body(.byteBuffer(responseBody))), promise: nil)
             } else {
-                let requestInfo = RequestInfo(data: "",
-                                              requestNumber: self.requestId,
-                                              connectionNumber: self.connectionID)
-                let responseBody = try! JSONEncoder().encodeAsByteBuffer(requestInfo,
-                                                                         allocator: context.channel.allocator)
+                let requestInfo = RequestInfo(
+                    data: "",
+                    requestNumber: self.requestId,
+                    connectionNumber: self.connectionID
+                )
+                let responseBody = try! JSONEncoder().encodeAsByteBuffer(
+                    requestInfo,
+                    allocator: context.channel.allocator
+                )
                 context.write(wrapOutboundOut(.body(.byteBuffer(responseBody))), promise: nil)
             }
             context.eventLoop.scheduleTask(in: self.delay) {
@@ -1000,8 +1061,9 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                     self.isServingRequest = false
                     switch result {
                     case .success:
-                        if self.responseHeaders[canonicalForm: "X-Close-Connection"].contains("true") ||
-                            self.shouldClose {
+                        if self.responseHeaders[canonicalForm: "X-Close-Connection"].contains("true")
+                            || self.shouldClose
+                        {
                             context.close(promise: nil)
                         }
                     case .failure(let error):
@@ -1170,7 +1232,7 @@ struct CollectEverythingLogHandler: LogHandler {
 
         var allEntries: [Entry] {
             get {
-                return self.lock.withLock { self.logs }
+                self.lock.withLock { self.logs }
             }
             set {
                 self.lock.withLock { self.logs = newValue }
@@ -1179,9 +1241,13 @@ struct CollectEverythingLogHandler: LogHandler {
 
         func append(level: Logger.Level, message: Logger.Message, metadata: Logger.Metadata?) {
             self.lock.withLock {
-                self.logs.append(Entry(level: level,
-                                       message: message.description,
-                                       metadata: metadata?.mapValues { $0.description } ?? [:]))
+                self.logs.append(
+                    Entry(
+                        level: level,
+                        message: message.description,
+                        metadata: metadata?.mapValues { $0.description } ?? [:]
+                    )
+                )
             }
         }
     }
@@ -1190,16 +1256,20 @@ struct CollectEverythingLogHandler: LogHandler {
         self.logStore = logStore
     }
 
-    func log(level: Logger.Level,
-             message: Logger.Message,
-             metadata: Logger.Metadata?,
-             file: String, function: String, line: UInt) {
+    func log(
+        level: Logger.Level,
+        message: Logger.Message,
+        metadata: Logger.Metadata?,
+        file: String,
+        function: String,
+        line: UInt
+    ) {
         self.logStore.append(level: level, message: message, metadata: self.metadata.merging(metadata ?? [:]) { $1 })
     }
 
     subscript(metadataKey key: String) -> Logger.Metadata.Value? {
         get {
-            return self.metadata[key]
+            self.metadata[key]
         }
         set {
             self.metadata[key] = newValue
@@ -1355,7 +1425,10 @@ class HTTPEchoHandler: ChannelInboundHandler {
         let request = self.unwrapInboundIn(data)
         switch request {
         case .head(let requestHead):
-            context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok, headers: requestHead.headers))), promise: nil)
+            context.writeAndFlush(
+                self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok, headers: requestHead.headers))),
+                promise: nil
+            )
         case .body(let bytes):
             context.writeAndFlush(self.wrapOutboundOut(.body(.byteBuffer(bytes))), promise: nil)
         case .end:
@@ -1374,7 +1447,10 @@ final class HTTPEchoHeaders: ChannelInboundHandler {
         let request = self.unwrapInboundIn(data)
         switch request {
         case .head(let requestHead):
-            context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok, headers: requestHead.headers))), promise: nil)
+            context.writeAndFlush(
+                self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok, headers: requestHead.headers))),
+                promise: nil
+            )
         case .body:
             break
         case .end:
@@ -1410,7 +1486,10 @@ final class HTTP200DelayedHandler: ChannelInboundHandler {
                     self.pendingBodyParts = pendingBodyParts - 1
                 } else {
                     self.pendingBodyParts = nil
-                    context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok))), promise: nil)
+                    context.writeAndFlush(
+                        self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok))),
+                        promise: nil
+                    )
                     context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
                 }
             }
@@ -1421,51 +1500,51 @@ final class HTTP200DelayedHandler: ChannelInboundHandler {
 }
 
 private let cert = """
------BEGIN CERTIFICATE-----
-MIICmDCCAYACCQCPC8JDqMh1zzANBgkqhkiG9w0BAQsFADANMQswCQYDVQQGEwJ1
-czAgFw0xODEwMzExNTU1MjJaGA8yMTE4MTAwNzE1NTUyMlowDTELMAkGA1UEBhMC
-dXMwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDiC+TGmbSP/nWWN1tj
-yNfnWCU5ATjtIOfdtP6ycx8JSeqkvyNXG21kNUn14jTTU8BglGL2hfVpCbMisUdb
-d3LpP8unSsvlOWwORFOViSy4YljSNM/FNoMtavuITA/sEELYgjWkz2o/uHPZHud9
-+JQwGJgqIlMa3mr2IaaUZlWN3D1u88bzJYhpt3YyxRy9+OEoOKy36KdWwhKzV3S8
-kXb0Y1GbAo68jJ9RfzeLy290mIs9qG2y1CNXWO6sxf6B//LaalizZiCfzYAVKcNR
-9oNYsEJc5KB/+DsAGTzR7mL+oiU4h/vwVb2GTDat5C+PFGi6j1ujxYTRPO538ljg
-dslnAgMBAAEwDQYJKoZIhvcNAQELBQADggEBAFYhA7sw8odOsRO8/DUklBOjPnmn
-a078oSumgPXXw6AgcoAJv/Qthjo6CCEtrjYfcA9jaBw9/Tii7mDmqDRS5c9ZPL8+
-NEPdHjFCFBOEvlL6uHOgw0Z9Wz+5yCXnJ8oNUEgc3H2NbbzJF6sMBXSPtFS2NOK8
-OsAI9OodMrDd6+lwljrmFoCCkJHDEfE637IcsbgFKkzhO/oNCRK6OrudG4teDahz
-Au4LoEYwT730QKC/VQxxEVZobjn9/sTrq9CZlbPYHxX4fz6e00sX7H9i49vk9zQ5
-5qCm9ljhrQPSa42Q62PPE2BEEGSP2KBm0J+H3vlvCD6+SNc/nMZjrRmgjrI=
------END CERTIFICATE-----
-"""
+    -----BEGIN CERTIFICATE-----
+    MIICmDCCAYACCQCPC8JDqMh1zzANBgkqhkiG9w0BAQsFADANMQswCQYDVQQGEwJ1
+    czAgFw0xODEwMzExNTU1MjJaGA8yMTE4MTAwNzE1NTUyMlowDTELMAkGA1UEBhMC
+    dXMwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDiC+TGmbSP/nWWN1tj
+    yNfnWCU5ATjtIOfdtP6ycx8JSeqkvyNXG21kNUn14jTTU8BglGL2hfVpCbMisUdb
+    d3LpP8unSsvlOWwORFOViSy4YljSNM/FNoMtavuITA/sEELYgjWkz2o/uHPZHud9
+    +JQwGJgqIlMa3mr2IaaUZlWN3D1u88bzJYhpt3YyxRy9+OEoOKy36KdWwhKzV3S8
+    kXb0Y1GbAo68jJ9RfzeLy290mIs9qG2y1CNXWO6sxf6B//LaalizZiCfzYAVKcNR
+    9oNYsEJc5KB/+DsAGTzR7mL+oiU4h/vwVb2GTDat5C+PFGi6j1ujxYTRPO538ljg
+    dslnAgMBAAEwDQYJKoZIhvcNAQELBQADggEBAFYhA7sw8odOsRO8/DUklBOjPnmn
+    a078oSumgPXXw6AgcoAJv/Qthjo6CCEtrjYfcA9jaBw9/Tii7mDmqDRS5c9ZPL8+
+    NEPdHjFCFBOEvlL6uHOgw0Z9Wz+5yCXnJ8oNUEgc3H2NbbzJF6sMBXSPtFS2NOK8
+    OsAI9OodMrDd6+lwljrmFoCCkJHDEfE637IcsbgFKkzhO/oNCRK6OrudG4teDahz
+    Au4LoEYwT730QKC/VQxxEVZobjn9/sTrq9CZlbPYHxX4fz6e00sX7H9i49vk9zQ5
+    5qCm9ljhrQPSa42Q62PPE2BEEGSP2KBm0J+H3vlvCD6+SNc/nMZjrRmgjrI=
+    -----END CERTIFICATE-----
+    """
 
 private let key = """
------BEGIN PRIVATE KEY-----
-MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDiC+TGmbSP/nWW
-N1tjyNfnWCU5ATjtIOfdtP6ycx8JSeqkvyNXG21kNUn14jTTU8BglGL2hfVpCbMi
-sUdbd3LpP8unSsvlOWwORFOViSy4YljSNM/FNoMtavuITA/sEELYgjWkz2o/uHPZ
-Hud9+JQwGJgqIlMa3mr2IaaUZlWN3D1u88bzJYhpt3YyxRy9+OEoOKy36KdWwhKz
-V3S8kXb0Y1GbAo68jJ9RfzeLy290mIs9qG2y1CNXWO6sxf6B//LaalizZiCfzYAV
-KcNR9oNYsEJc5KB/+DsAGTzR7mL+oiU4h/vwVb2GTDat5C+PFGi6j1ujxYTRPO53
-8ljgdslnAgMBAAECggEBANZNWFNAnYJ2R5xmVuo/GxFk68Ujd4i4TZpPYbhkk+QG
-g8I0w5htlEQQkVHfZx2CpTvq8feuAH/YhlA5qeD5WaPwq26q5qsmyV6tQGDgb9lO
-w85l6ySZDbwdVOJe2il/MSB6MclSKvTGNm59chJnfHYsmvY3HHq4qsc2F+tRKYMW
-pY75LgEbaTUV69J3cbC1wAeVjv0q/krND+YkhYpTxNZhbazK/FHOCvY+zFu9fg0L
-zpwbn5fb6wIvqG7tXp7koa3QMn64AXmO/fb5mBd8G2vBGYnxwb7Egwdg/3Dw+BXu
-ynQLP7ixWsE2KNfR9Ce1i3YvEo6QDTv2340I3dntxkECgYEA9vdaL4PGyvEbpim4
-kqz1vuug8Iq0nTVDo6jmgH1o+XdcIbW3imXtgi5zUJpj4oDD7/4aufiJZjG64i/v
-phe11xeUvh5QNNOzeMymVDoJut97F97KKKTv7bG8Rpon/WzH2I0SoAkECCwmdWAJ
-H3nvOCnXEkpbCqmIUvHVURPRDn8CgYEA6lCk3EzFQlbXs3Sj5op61R3Mscx7/35A
-eGv5axzbENHt1so+s3Zvyyi1bo4VBcwnKVCvQjmTuLiqrc9VfX8XdbiTUNnEr2u3
-992Ja6DEJTZ9gy5WiviwYnwU2HpjwOVNBb17T0NLoRHkDZ6iXj7NZgwizOki5p3j
-/hS0pObSIRkCgYEAiEdOGNIarHoHy9VR6H5QzR2xHYssx2NRA8p8B4MsnhxjVqaz
-tUcxnJiNQXkwjRiJBrGthdnD2ASxH4dcMsb6rMpyZcbMc5ouewZS8j9khx4zCqUB
-4RPC4eMmBb+jOZEBZlnSYUUYWHokbrij0B61BsTvzUQCoQuUElEoaSkKP3kCgYEA
-mwdqXHvK076jjo9w1drvtEu4IDc8H2oH++TsrEr2QiWzaDZ9z71f8BnqGNCW5jQS
-AQrqOjXgIArGmqMgXB0Xh4LsrUS4Fpx9ptiD0JsYy8pGtuGUzvQFt9OC80ve7kSI
-dnDMwj+zLUmqCrzXjuWcfpUu/UaPGeiDbZuDfcteYhkCgYBLyL5JY7Qd4gVQIhFX
-7Sv3sNJN3KZCQHEzut7IwojaxgpuxiFvgsoXXuYolVCQp32oWbYcE2Yke+hOKsTE
-sCMAWZiSGN2Nrfea730IYAXkUm8bpEd3VxDXEEv13nxVeQof+JGMdlkldFGaBRDU
-oYQsPj00S3/GA9WDapwe81Wl2A==
------END PRIVATE KEY-----
-"""
+    -----BEGIN PRIVATE KEY-----
+    MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDiC+TGmbSP/nWW
+    N1tjyNfnWCU5ATjtIOfdtP6ycx8JSeqkvyNXG21kNUn14jTTU8BglGL2hfVpCbMi
+    sUdbd3LpP8unSsvlOWwORFOViSy4YljSNM/FNoMtavuITA/sEELYgjWkz2o/uHPZ
+    Hud9+JQwGJgqIlMa3mr2IaaUZlWN3D1u88bzJYhpt3YyxRy9+OEoOKy36KdWwhKz
+    V3S8kXb0Y1GbAo68jJ9RfzeLy290mIs9qG2y1CNXWO6sxf6B//LaalizZiCfzYAV
+    KcNR9oNYsEJc5KB/+DsAGTzR7mL+oiU4h/vwVb2GTDat5C+PFGi6j1ujxYTRPO53
+    8ljgdslnAgMBAAECggEBANZNWFNAnYJ2R5xmVuo/GxFk68Ujd4i4TZpPYbhkk+QG
+    g8I0w5htlEQQkVHfZx2CpTvq8feuAH/YhlA5qeD5WaPwq26q5qsmyV6tQGDgb9lO
+    w85l6ySZDbwdVOJe2il/MSB6MclSKvTGNm59chJnfHYsmvY3HHq4qsc2F+tRKYMW
+    pY75LgEbaTUV69J3cbC1wAeVjv0q/krND+YkhYpTxNZhbazK/FHOCvY+zFu9fg0L
+    zpwbn5fb6wIvqG7tXp7koa3QMn64AXmO/fb5mBd8G2vBGYnxwb7Egwdg/3Dw+BXu
+    ynQLP7ixWsE2KNfR9Ce1i3YvEo6QDTv2340I3dntxkECgYEA9vdaL4PGyvEbpim4
+    kqz1vuug8Iq0nTVDo6jmgH1o+XdcIbW3imXtgi5zUJpj4oDD7/4aufiJZjG64i/v
+    phe11xeUvh5QNNOzeMymVDoJut97F97KKKTv7bG8Rpon/WzH2I0SoAkECCwmdWAJ
+    H3nvOCnXEkpbCqmIUvHVURPRDn8CgYEA6lCk3EzFQlbXs3Sj5op61R3Mscx7/35A
+    eGv5axzbENHt1so+s3Zvyyi1bo4VBcwnKVCvQjmTuLiqrc9VfX8XdbiTUNnEr2u3
+    992Ja6DEJTZ9gy5WiviwYnwU2HpjwOVNBb17T0NLoRHkDZ6iXj7NZgwizOki5p3j
+    /hS0pObSIRkCgYEAiEdOGNIarHoHy9VR6H5QzR2xHYssx2NRA8p8B4MsnhxjVqaz
+    tUcxnJiNQXkwjRiJBrGthdnD2ASxH4dcMsb6rMpyZcbMc5ouewZS8j9khx4zCqUB
+    4RPC4eMmBb+jOZEBZlnSYUUYWHokbrij0B61BsTvzUQCoQuUElEoaSkKP3kCgYEA
+    mwdqXHvK076jjo9w1drvtEu4IDc8H2oH++TsrEr2QiWzaDZ9z71f8BnqGNCW5jQS
+    AQrqOjXgIArGmqMgXB0Xh4LsrUS4Fpx9ptiD0JsYy8pGtuGUzvQFt9OC80ve7kSI
+    dnDMwj+zLUmqCrzXjuWcfpUu/UaPGeiDbZuDfcteYhkCgYBLyL5JY7Qd4gVQIhFX
+    7Sv3sNJN3KZCQHEzut7IwojaxgpuxiFvgsoXXuYolVCQp32oWbYcE2Yke+hOKsTE
+    sCMAWZiSGN2Nrfea730IYAXkUm8bpEd3VxDXEEv13nxVeQof+JGMdlkldFGaBRDU
+    oYQsPj00S3/GA9WDapwe81Wl2A==
+    -----END PRIVATE KEY-----
+    """

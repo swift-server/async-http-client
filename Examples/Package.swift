@@ -43,7 +43,8 @@ let package = Package(
             dependencies: [
                 .product(name: "AsyncHTTPClient", package: "async-http-client"),
                 .product(name: "NIOCore", package: "swift-nio"),
-            ], path: "GetHTML"
+            ],
+            path: "GetHTML"
         ),
         .executableTarget(
             name: "GetJSON",
@@ -51,14 +52,16 @@ let package = Package(
                 .product(name: "AsyncHTTPClient", package: "async-http-client"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOFoundationCompat", package: "swift-nio"),
-            ], path: "GetJSON"
+            ],
+            path: "GetJSON"
         ),
         .executableTarget(
             name: "StreamingByteCounter",
             dependencies: [
                 .product(name: "AsyncHTTPClient", package: "async-http-client"),
                 .product(name: "NIOCore", package: "swift-nio"),
-            ], path: "StreamingByteCounter"
+            ],
+            path: "StreamingByteCounter"
         ),
     ]
 )

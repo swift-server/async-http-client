@@ -12,10 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import Logging
 import NIOCore
 import NIOHTTP1
+
+@testable import AsyncHTTPClient
 
 /// A mock request queue (not creating any timers) that is used to validate
 /// request actions returned by the `HTTPConnectionPool.StateMachine`.

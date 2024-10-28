@@ -12,10 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-import struct Foundation.URL
 import Logging
 import NIOCore
 import NIOHTTP1
+
+import struct Foundation.URL
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClient {
@@ -85,11 +86,13 @@ extension HTTPClient {
                 return response
             }
 
-            guard let redirectURL = response.headers.extractRedirectTarget(
-                status: response.status,
-                originalURL: preparedRequest.url,
-                originalScheme: preparedRequest.poolKey.scheme
-            ) else {
+            guard
+                let redirectURL = response.headers.extractRedirectTarget(
+                    status: response.status,
+                    originalURL: preparedRequest.url,
+                    originalScheme: preparedRequest.poolKey.scheme
+                )
+            else {
                 // response does not want a redirect
                 return response
             }
@@ -120,31 +123,35 @@ extension HTTPClient {
     ) async throws -> HTTPClientResponse {
         let cancelHandler = TransactionCancelHandler()
 
-        return try await withTaskCancellationHandler(operation: { () async throws -> HTTPClientResponse in
-            let eventLoop = self.eventLoopGroup.any()
-            let deadlineTask = eventLoop.scheduleTask(deadline: deadline) {
-                cancelHandler.cancel(reason: .deadlineExceeded)
-            }
-            defer {
-                deadlineTask.cancel()
-            }
-            return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<HTTPClientResponse, Swift.Error>) -> Void in
-                let transaction = Transaction(
-                    request: request,
-                    requestOptions: .fromClientConfiguration(self.configuration),
-                    logger: logger,
-                    connectionDeadline: .now() + (self.configuration.timeout.connectionCreationTimeout),
-                    preferredEventLoop: eventLoop,
-                    responseContinuation: continuation
-                )
+        return try await withTaskCancellationHandler(
+            operation: { () async throws -> HTTPClientResponse in
+                let eventLoop = self.eventLoopGroup.any()
+                let deadlineTask = eventLoop.scheduleTask(deadline: deadline) {
+                    cancelHandler.cancel(reason: .deadlineExceeded)
+                }
+                defer {
+                    deadlineTask.cancel()
+                }
+                return try await withCheckedThrowingContinuation {
+                    (continuation: CheckedContinuation<HTTPClientResponse, Swift.Error>) -> Void in
+                    let transaction = Transaction(
+                        request: request,
+                        requestOptions: .fromClientConfiguration(self.configuration),
+                        logger: logger,
+                        connectionDeadline: .now() + (self.configuration.timeout.connectionCreationTimeout),
+                        preferredEventLoop: eventLoop,
+                        responseContinuation: continuation
+                    )
 
-                cancelHandler.registerTransaction(transaction)
+                    cancelHandler.registerTransaction(transaction)
 
-                self.poolManager.executeRequest(transaction)
+                    self.poolManager.executeRequest(transaction)
+                }
+            },
+            onCancel: {
+                cancelHandler.cancel(reason: .taskCanceled)
             }
-        }, onCancel: {
-            cancelHandler.cancel(reason: .taskCanceled)
-        })
+        )
     }
 }
 

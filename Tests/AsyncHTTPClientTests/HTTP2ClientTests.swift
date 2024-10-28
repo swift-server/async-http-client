@@ -12,16 +12,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-/* NOT @testable */ import AsyncHTTPClient // Tests that really need @testable go into HTTP2ClientInternalTests.swift
-#if canImport(Network)
-import Network
-#endif
+import AsyncHTTPClient  // NOT @testable - tests that really need @testable go into HTTP2ClientInternalTests.swift
 import Logging
 import NIOCore
 import NIOHTTP1
 import NIOPosix
 import NIOSSL
 import XCTest
+
+#if canImport(Network)
+import Network
+#endif
 
 class HTTP2ClientTests: XCTestCase {
     func makeDefaultHTTPClient(
@@ -132,8 +133,8 @@ class HTTP2ClientTests: XCTestCase {
             let q = DispatchQueue(label: "worker \(w)")
             q.async(group: allDone) {
                 func go() {
-                    allWorkersReady.signal() // tell the driver we're ready
-                    allWorkersGo.wait() // wait for the driver to let us go
+                    allWorkersReady.signal()  // tell the driver we're ready
+                    allWorkersGo.wait()  // wait for the driver to let us go
 
                     for _ in 0..<numberOfRequestsPerWorkers {
                         var response: HTTPClient.Response?
@@ -195,13 +196,14 @@ class HTTP2ClientTests: XCTestCase {
             let el = elg.next()
             q.async(group: allDone) {
                 func go() {
-                    allWorkersReady.signal() // tell the driver we're ready
-                    allWorkersGo.wait() // wait for the driver to let us go
+                    allWorkersReady.signal()  // tell the driver we're ready
+                    allWorkersGo.wait()  // wait for the driver to let us go
 
                     for _ in 0..<numberOfRequestsPerWorkers {
                         var response: HTTPClient.Response?
                         let request = try! HTTPClient.Request(url: url)
-                        let requestPromise = localClient
+                        let requestPromise =
+                            localClient
                             .execute(
                                 request: request,
                                 eventLoop: .delegateAndChannel(on: el)
@@ -251,10 +253,13 @@ class HTTP2ClientTests: XCTestCase {
         XCTAssertNoThrow(try client.syncShutdown())
 
         var results: [Result<HTTPClient.Response, Error>] = []
-        XCTAssertNoThrow(results = try EventLoopFuture
-            .whenAllComplete(responses, on: clientGroup.next())
-            .timeout(after: .seconds(2))
-            .wait())
+        XCTAssertNoThrow(
+            results =
+                try EventLoopFuture
+                .whenAllComplete(responses, on: clientGroup.next())
+                .timeout(after: .seconds(2))
+                .wait()
+        )
 
         for result in results {
             switch result {
@@ -397,7 +402,11 @@ class HTTP2ClientTests: XCTestCase {
         XCTAssertNoThrow(maybeRequest1 = try HTTPClient.Request(url: "https://localhost:\(bin.port)/get"))
         guard let request1 = maybeRequest1 else { return }
 
-        let task1 = client.execute(request: request1, delegate: ResponseAccumulator(request: request1), eventLoop: .delegateAndChannel(on: el1))
+        let task1 = client.execute(
+            request: request1,
+            delegate: ResponseAccumulator(request: request1),
+            eventLoop: .delegateAndChannel(on: el1)
+        )
         var response1: ResponseAccumulator.Response?
         XCTAssertNoThrow(response1 = try task1.wait())
 
@@ -408,15 +417,17 @@ class HTTP2ClientTests: XCTestCase {
         let serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { XCTAssertNoThrow(try serverGroup.syncShutdownGracefully()) }
         var maybeServer: Channel?
-        XCTAssertNoThrow(maybeServer = try ServerBootstrap(group: serverGroup)
-            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-            .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
-            .childChannelInitializer { channel in
-                channel.close()
-            }
-            .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-            .bind(host: "127.0.0.1", port: serverPort)
-            .wait())
+        XCTAssertNoThrow(
+            maybeServer = try ServerBootstrap(group: serverGroup)
+                .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+                .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
+                .childChannelInitializer { channel in
+                    channel.close()
+                }
+                .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+                .bind(host: "127.0.0.1", port: serverPort)
+                .wait()
+        )
         // shutting down the old server closes all connections immediately
         XCTAssertNoThrow(try bin.shutdown())
         // client is now in HTTP/2 state and the HTTPBin is closed
@@ -427,7 +438,11 @@ class HTTP2ClientTests: XCTestCase {
         XCTAssertNoThrow(maybeRequest2 = try HTTPClient.Request(url: "https://localhost:\(serverPort)/"))
         guard let request2 = maybeRequest2 else { return }
 
-        let task2 = client.execute(request: request2, delegate: ResponseAccumulator(request: request2), eventLoop: .delegateAndChannel(on: el2))
+        let task2 = client.execute(
+            request: request2,
+            delegate: ResponseAccumulator(request: request2),
+            eventLoop: .delegateAndChannel(on: el2)
+        )
         XCTAssertThrowsError(try task2.wait()) { error in
             XCTAssertNil(
                 error as? HTTPClientError,
@@ -474,11 +489,17 @@ private final class SendHeaderAndWaitChannelHandler: ChannelInboundHandler {
         let requestPart = self.unwrapInboundIn(data)
         switch requestPart {
         case .head:
-            context.writeAndFlush(self.wrapOutboundOut(.head(HTTPResponseHead(
-                version: HTTPVersion(major: 1, minor: 1),
-                status: .ok
-            ))
-            ), promise: nil)
+            context.writeAndFlush(
+                self.wrapOutboundOut(
+                    .head(
+                        HTTPResponseHead(
+                            version: HTTPVersion(major: 1, minor: 1),
+                            status: .ok
+                        )
+                    )
+                ),
+                promise: nil
+            )
         case .body, .end:
             return
         }

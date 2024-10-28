@@ -12,11 +12,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import NIOCore
 import NIOEmbedded
 import NIOHTTP1
 import XCTest
+
+@testable import AsyncHTTPClient
 
 class HTTP1ProxyConnectHandlerTests: XCTestCase {
     func testProxyConnectWithoutAuthorizationSuccess() {

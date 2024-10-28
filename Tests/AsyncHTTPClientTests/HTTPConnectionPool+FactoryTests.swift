@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import Logging
 import NIOCore
 import NIOPosix
@@ -20,18 +19,22 @@ import NIOSOCKS
 import NIOSSL
 import XCTest
 
+@testable import AsyncHTTPClient
+
 class HTTPConnectionPool_FactoryTests: XCTestCase {
     func testConnectionCreationTimesoutIfDeadlineIsInThePast() {
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { XCTAssertNoThrow(try group.syncShutdownGracefully()) }
 
         var server: Channel?
-        XCTAssertNoThrow(server = try ServerBootstrap(group: group)
-            .childChannelInitializer { channel in
-                channel.pipeline.addHandler(NeverrespondServerHandler())
-            }
-            .bind(to: .init(ipAddress: "127.0.0.1", port: 0))
-            .wait())
+        XCTAssertNoThrow(
+            server = try ServerBootstrap(group: group)
+                .childChannelInitializer { channel in
+                    channel.pipeline.addHandler(NeverrespondServerHandler())
+                }
+                .bind(to: .init(ipAddress: "127.0.0.1", port: 0))
+                .wait()
+        )
         defer {
             XCTAssertNoThrow(try server?.close().wait())
         }
@@ -45,13 +48,14 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
             sslContextCache: .init()
         )
 
-        XCTAssertThrowsError(try factory.makeChannel(
-            requester: ExplodingRequester(),
-            connectionID: 1,
-            deadline: .now() - .seconds(1),
-            eventLoop: group.next(),
-            logger: .init(label: "test")
-        ).wait()
+        XCTAssertThrowsError(
+            try factory.makeChannel(
+                requester: ExplodingRequester(),
+                connectionID: 1,
+                deadline: .now() - .seconds(1),
+                eventLoop: group.next(),
+                logger: .init(label: "test")
+            ).wait()
         ) {
             XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
         }
@@ -62,12 +66,14 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
         defer { XCTAssertNoThrow(try group.syncShutdownGracefully()) }
 
         var server: Channel?
-        XCTAssertNoThrow(server = try ServerBootstrap(group: group)
-            .childChannelInitializer { channel in
-                channel.pipeline.addHandler(NeverrespondServerHandler())
-            }
-            .bind(to: .init(ipAddress: "127.0.0.1", port: 0))
-            .wait())
+        XCTAssertNoThrow(
+            server = try ServerBootstrap(group: group)
+                .childChannelInitializer { channel in
+                    channel.pipeline.addHandler(NeverrespondServerHandler())
+                }
+                .bind(to: .init(ipAddress: "127.0.0.1", port: 0))
+                .wait()
+        )
         defer {
             XCTAssertNoThrow(try server?.close().wait())
         }
@@ -82,13 +88,14 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
             sslContextCache: .init()
         )
 
-        XCTAssertThrowsError(try factory.makeChannel(
-            requester: ExplodingRequester(),
-            connectionID: 1,
-            deadline: .now() + .seconds(1),
-            eventLoop: group.next(),
-            logger: .init(label: "test")
-        ).wait()
+        XCTAssertThrowsError(
+            try factory.makeChannel(
+                requester: ExplodingRequester(),
+                connectionID: 1,
+                deadline: .now() + .seconds(1),
+                eventLoop: group.next(),
+                logger: .init(label: "test")
+            ).wait()
         ) {
             XCTAssertEqual($0 as? HTTPClientError, .socksHandshakeTimeout)
         }
@@ -99,12 +106,14 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
         defer { XCTAssertNoThrow(try group.syncShutdownGracefully()) }
 
         var server: Channel?
-        XCTAssertNoThrow(server = try ServerBootstrap(group: group)
-            .childChannelInitializer { channel in
-                channel.pipeline.addHandler(NeverrespondServerHandler())
-            }
-            .bind(to: .init(ipAddress: "127.0.0.1", port: 0))
-            .wait())
+        XCTAssertNoThrow(
+            server = try ServerBootstrap(group: group)
+                .childChannelInitializer { channel in
+                    channel.pipeline.addHandler(NeverrespondServerHandler())
+                }
+                .bind(to: .init(ipAddress: "127.0.0.1", port: 0))
+                .wait()
+        )
         defer {
             XCTAssertNoThrow(try server?.close().wait())
         }
@@ -119,13 +128,14 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
             sslContextCache: .init()
         )
 
-        XCTAssertThrowsError(try factory.makeChannel(
-            requester: ExplodingRequester(),
-            connectionID: 1,
-            deadline: .now() + .seconds(1),
-            eventLoop: group.next(),
-            logger: .init(label: "test")
-        ).wait()
+        XCTAssertThrowsError(
+            try factory.makeChannel(
+                requester: ExplodingRequester(),
+                connectionID: 1,
+                deadline: .now() + .seconds(1),
+                eventLoop: group.next(),
+                logger: .init(label: "test")
+            ).wait()
         ) {
             XCTAssertEqual($0 as? HTTPClientError, .httpProxyHandshakeTimeout)
         }
@@ -136,12 +146,14 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
         defer { XCTAssertNoThrow(try group.syncShutdownGracefully()) }
 
         var server: Channel?
-        XCTAssertNoThrow(server = try ServerBootstrap(group: group)
-            .childChannelInitializer { channel in
-                channel.pipeline.addHandler(NeverrespondServerHandler())
-            }
-            .bind(to: .init(ipAddress: "127.0.0.1", port: 0))
-            .wait())
+        XCTAssertNoThrow(
+            server = try ServerBootstrap(group: group)
+                .childChannelInitializer { channel in
+                    channel.pipeline.addHandler(NeverrespondServerHandler())
+                }
+                .bind(to: .init(ipAddress: "127.0.0.1", port: 0))
+                .wait()
+        )
         defer {
             XCTAssertNoThrow(try server?.close().wait())
         }
@@ -158,13 +170,14 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
             sslContextCache: .init()
         )
 
-        XCTAssertThrowsError(try factory.makeChannel(
-            requester: ExplodingRequester(),
-            connectionID: 1,
-            deadline: .now() + .seconds(1),
-            eventLoop: group.next(),
-            logger: .init(label: "test")
-        ).wait()
+        XCTAssertThrowsError(
+            try factory.makeChannel(
+                requester: ExplodingRequester(),
+                connectionID: 1,
+                deadline: .now() + .seconds(1),
+                eventLoop: group.next(),
+                logger: .init(label: "test")
+            ).wait()
         ) {
             XCTAssertEqual($0 as? HTTPClientError, .tlsHandshakeTimeout)
         }

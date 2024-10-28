@@ -55,14 +55,16 @@ public struct HTTPClientResponse: Sendable {
             version: version,
             status: status,
             headers: headers,
-            body: .init(.transaction(
-                body,
-                expectedContentLength: HTTPClientResponse.expectedContentLength(
-                    requestMethod: requestMethod,
-                    headers: headers,
-                    status: status
+            body: .init(
+                .transaction(
+                    body,
+                    expectedContentLength: HTTPClientResponse.expectedContentLength(
+                        requestMethod: requestMethod,
+                        headers: headers,
+                        status: status
+                    )
                 )
-            ))
+            )
         )
     }
 }
@@ -116,7 +118,8 @@ extension HTTPClientResponse {
             }
 
             /// calling collect function within here in order to ensure the correct nested type
-            func collect<Body: AsyncSequence>(_ body: Body, maxBytes: Int) async throws -> ByteBuffer where Body.Element == ByteBuffer {
+            func collect<Body: AsyncSequence>(_ body: Body, maxBytes: Int) async throws -> ByteBuffer
+            where Body.Element == ByteBuffer {
                 try await body.collect(upTo: maxBytes)
             }
             return try await collect(self, maxBytes: maxBytes)
@@ -126,7 +129,11 @@ extension HTTPClientResponse {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse {
-    static func expectedContentLength(requestMethod: HTTPMethod, headers: HTTPHeaders, status: HTTPResponseStatus) -> Int? {
+    static func expectedContentLength(
+        requestMethod: HTTPMethod,
+        headers: HTTPHeaders,
+        status: HTTPResponseStatus
+    ) -> Int? {
         if status == .notModified {
             return 0
         } else if requestMethod == .HEAD {

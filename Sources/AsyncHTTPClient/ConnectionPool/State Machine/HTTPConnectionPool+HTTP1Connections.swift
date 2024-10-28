@@ -71,7 +71,7 @@ extension HTTPConnectionPool {
 
         var idleAndNoRemainingUses: Bool {
             switch self.state {
-            case .idle(_, since: _, remainingUses: let remainingUses):
+            case .idle(_, since: _, let remainingUses):
                 if let remainingUses = remainingUses {
                     return remainingUses <= 0
                 } else {
@@ -139,7 +139,7 @@ extension HTTPConnectionPool {
 
         mutating func lease() -> Connection {
             switch self.state {
-            case .idle(let connection, since: _, remainingUses: let remainingUses):
+            case .idle(let connection, since: _, let remainingUses):
                 self.state = .leased(connection, remainingUses: remainingUses.map { $0 - 1 })
                 return connection
             case .backingOff, .starting, .leased, .closed:
@@ -208,7 +208,9 @@ extension HTTPConnectionPool {
                 context.cancel.append(connection)
                 return .keepConnection
             case .closed:
-                preconditionFailure("Unexpected state: Did not expect to have connections with this state in the state machine: \(self.state)")
+                preconditionFailure(
+                    "Unexpected state: Did not expect to have connections with this state in the state machine: \(self.state)"
+                )
             }
         }
 
@@ -232,7 +234,9 @@ extension HTTPConnectionPool {
             case .leased:
                 return .keepConnection
             case .closed:
-                preconditionFailure("Unexpected state: Did not expect to have connections with this state in the state machine: \(self.state)")
+                preconditionFailure(
+                    "Unexpected state: Did not expect to have connections with this state in the state machine: \(self.state)"
+                )
             }
         }
     }
@@ -316,7 +320,7 @@ extension HTTPConnectionPool {
         }
 
         func startingEventLoopConnections(on eventLoop: EventLoop) -> Int {
-            return self.connections[self.overflowIndex..<self.connections.endIndex].reduce(into: 0) { count, connection in
+            self.connections[self.overflowIndex..<self.connections.endIndex].reduce(into: 0) { count, connection in
                 guard connection.eventLoop === eventLoop else { return }
                 if connection.isConnecting || connection.isBackingOff {
                     count &+= 1
@@ -395,7 +399,10 @@ extension HTTPConnectionPool {
             guard let index = self.connections.firstIndex(where: { $0.connectionID == connection.id }) else {
                 preconditionFailure("There is a new connection that we didn't request!")
             }
-            precondition(connection.eventLoop === self.connections[index].eventLoop, "Expected the new connection to be on EL")
+            precondition(
+                connection.eventLoop === self.connections[index].eventLoop,
+                "Expected the new connection to be on EL"
+            )
             self.connections[index].connected(connection)
             let context = self.generateIdleConnectionContextForConnection(at: index)
             return (index, context)
@@ -646,14 +653,16 @@ extension HTTPConnectionPool {
                 },
                 uniquingKeysWith: +
             )
-            var connectionToCreate = requiredEventLoopOfPendingRequests
+            var connectionToCreate =
+                requiredEventLoopOfPendingRequests
                 .flatMap { eventLoop, requestCount -> [(Connection.ID, EventLoop)] in
                     // We need a connection for each queued request with a required event loop.
                     // Therefore, we look how many request we have queued for a given `eventLoop` and
                     // how many connections we are already starting on the given `eventLoop`.
                     // If we have not enough, we will create additional connections to have at least
                     // on connection per request.
-                    let connectionsToStart = requestCount - startingRequiredEventLoopConnectionCount[eventLoop.id, default: 0]
+                    let connectionsToStart =
+                        requestCount - startingRequiredEventLoopConnectionCount[eventLoop.id, default: 0]
                     return stride(from: 0, to: connectionsToStart, by: 1).lazy.map { _ in
                         (self.createNewOverflowConnection(on: eventLoop), eventLoop)
                     }
@@ -668,7 +677,8 @@ extension HTTPConnectionPool {
             // event loop we will continue with the event loop with the second most queued requests
             // and so on and so forth. The `generalPurposeRequestCountGroupedByPreferredEventLoop`
             // array is already ordered so we can just iterate over it without sorting by request count.
-            let newGeneralPurposeConnections: [(Connection.ID, EventLoop)] = generalPurposeRequestCountGroupedByPreferredEventLoop
+            let newGeneralPurposeConnections: [(Connection.ID, EventLoop)] =
+                generalPurposeRequestCountGroupedByPreferredEventLoop
                 // we do not want to allocated intermediate arrays.
                 .lazy
                 // we flatten the grouped list of event loops by lazily repeating the event loop

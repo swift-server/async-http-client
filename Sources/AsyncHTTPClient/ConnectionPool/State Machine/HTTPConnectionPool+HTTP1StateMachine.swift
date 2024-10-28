@@ -80,7 +80,10 @@ extension HTTPConnectionPool {
             requests: RequestQueue
         ) -> ConnectionMigrationAction {
             precondition(self.connections.isEmpty, "expected an empty state machine but connections are not empty")
-            precondition(self.http2Connections == nil, "expected an empty state machine but http2Connections are not nil")
+            precondition(
+                self.http2Connections == nil,
+                "expected an empty state machine but http2Connections are not nil"
+            )
             precondition(self.requests.isEmpty, "expected an empty state machine but requests are not empty")
 
             self.requests = requests
@@ -100,7 +103,8 @@ extension HTTPConnectionPool {
 
             let createConnections = self.connections.createConnectionsAfterMigrationIfNeeded(
                 requiredEventLoopOfPendingRequests: requests.requestCountGroupedByRequiredEventLoop(),
-                generalPurposeRequestCountGroupedByPreferredEventLoop: requests.generalPurposeRequestCountGroupedByPreferredEventLoop()
+                generalPurposeRequestCountGroupedByPreferredEventLoop:
+                    requests.generalPurposeRequestCountGroupedByPreferredEventLoop()
             )
 
             if !http2Connections.isEmpty {
@@ -229,7 +233,9 @@ extension HTTPConnectionPool {
             case .running:
                 guard self.retryConnectionEstablishment else {
                     guard let (index, _) = self.connections.failConnection(connectionID) else {
-                        preconditionFailure("A connection attempt failed, that the state machine knows nothing about. Somewhere state was lost.")
+                        preconditionFailure(
+                            "A connection attempt failed, that the state machine knows nothing about. Somewhere state was lost."
+                        )
                     }
                     self.connections.removeConnection(at: index)
 
@@ -295,7 +301,10 @@ extension HTTPConnectionPool {
                 return .none
             }
 
-            precondition(self.lifecycleState == .running, "If we are shutting down, we must not have any idle connections")
+            precondition(
+                self.lifecycleState == .running,
+                "If we are shutting down, we must not have any idle connections"
+            )
 
             return .init(
                 request: .none,
@@ -561,7 +570,8 @@ extension HTTPConnectionPool {
 
         // MARK: HTTP2
 
-        mutating func newHTTP2MaxConcurrentStreamsReceived(_ connectionID: Connection.ID, newMaxStreams: Int) -> Action {
+        mutating func newHTTP2MaxConcurrentStreamsReceived(_ connectionID: Connection.ID, newMaxStreams: Int) -> Action
+        {
             // The `http2Connections` are optional here:
             // Connections report events back to us, if they are in a shutdown that was
             // initiated by the state machine. For this reason this callback might be invoked
@@ -663,6 +673,7 @@ extension HTTPConnectionPool.HTTP1StateMachine: CustomStringConvertible {
         let stats = self.connections.stats
         let queued = self.requests.count
 
-        return "connections: [connecting: \(stats.connecting) | backoff: \(stats.backingOff) | leased: \(stats.leased) | idle: \(stats.idle)], queued: \(queued)"
+        return
+            "connections: [connecting: \(stats.connecting) | backoff: \(stats.backingOff) | leased: \(stats.leased) | idle: \(stats.idle)], queued: \(queued)"
     }
 }

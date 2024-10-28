@@ -40,7 +40,13 @@ class MockSOCKSServer {
         self.channel.localAddress!.port!
     }
 
-    init(expectedURL: String, expectedResponse: String, misbehave: Bool = false, file: String = #filePath, line: UInt = #line) throws {
+    init(
+        expectedURL: String,
+        expectedResponse: String,
+        misbehave: Bool = false,
+        file: String = #filePath,
+        line: UInt = #line
+    ) throws {
         let elg = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         let bootstrap: ServerBootstrap
         if misbehave {
@@ -57,7 +63,12 @@ class MockSOCKSServer {
                     return channel.pipeline.addHandlers([
                         handshakeHandler,
                         SOCKSTestHandler(handshakeHandler: handshakeHandler),
-                        TestHTTPServer(expectedURL: expectedURL, expectedResponse: expectedResponse, file: file, line: line),
+                        TestHTTPServer(
+                            expectedURL: expectedURL,
+                            expectedResponse: expectedResponse,
+                            file: file,
+                            line: line
+                        ),
                     ])
                 }
         }
@@ -86,17 +97,28 @@ class SOCKSTestHandler: ChannelInboundHandler, RemovableChannelHandler {
         let message = self.unwrapInboundIn(data)
         switch message {
         case .greeting:
-            context.writeAndFlush(.init(
-                ServerMessage.selectedAuthenticationMethod(.init(method: .noneRequired))), promise: nil)
+            context.writeAndFlush(
+                .init(
+                    ServerMessage.selectedAuthenticationMethod(.init(method: .noneRequired))
+                ),
+                promise: nil
+            )
         case .authenticationData:
             context.fireErrorCaught(MockSOCKSError(description: "Received authentication data but didn't receive any."))
         case .request(let request):
-            context.writeAndFlush(.init(
-                ServerMessage.response(.init(reply: .succeeded, boundAddress: request.addressType))), promise: nil)
-            context.channel.pipeline.addHandlers([
-                ByteToMessageHandler(HTTPRequestDecoder()),
-                HTTPResponseEncoder(),
-            ], position: .after(self)).whenSuccess {
+            context.writeAndFlush(
+                .init(
+                    ServerMessage.response(.init(reply: .succeeded, boundAddress: request.addressType))
+                ),
+                promise: nil
+            )
+            context.channel.pipeline.addHandlers(
+                [
+                    ByteToMessageHandler(HTTPRequestDecoder()),
+                    HTTPResponseEncoder(),
+                ],
+                position: .after(self)
+            ).whenSuccess {
                 context.channel.pipeline.removeHandler(self, promise: nil)
                 context.channel.pipeline.removeHandler(self.handshakeHandler, promise: nil)
             }
@@ -134,7 +156,12 @@ class TestHTTPServer: ChannelInboundHandler {
             break
         case .end:
             context.write(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok))), promise: nil)
-            context.write(self.wrapOutboundOut(.body(.byteBuffer(context.channel.allocator.buffer(string: self.expectedResponse)))), promise: nil)
+            context.write(
+                self.wrapOutboundOut(
+                    .body(.byteBuffer(context.channel.allocator.buffer(string: self.expectedResponse)))
+                ),
+                promise: nil
+            )
             context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
         }
     }

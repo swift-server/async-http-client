@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOEmbedded
@@ -20,6 +19,8 @@ import NIOHTTP1
 import NIOPosix
 import NIOTestUtils
 import XCTest
+
+@testable import AsyncHTTPClient
 
 class HTTPClientInternalTests: XCTestCase {
     typealias Request = HTTPClient.Request
@@ -204,15 +205,19 @@ class HTTPClientInternalTests: XCTestCase {
                 self.receivedMessages.append(.error(error))
             }
 
-            public func didReceiveHead(task: HTTPClient.Task<Response>,
-                                       _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
+            public func didReceiveHead(
+                task: HTTPClient.Task<Response>,
+                _ head: HTTPResponseHead
+            ) -> EventLoopFuture<Void> {
                 self.eventLoop.assertInEventLoop()
                 self.receivedMessages.append(.head(head))
                 return self.randoEL.makeSucceededFuture(())
             }
 
-            func didReceiveBodyPart(task: HTTPClient.Task<Response>,
-                                    _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
+            func didReceiveBodyPart(
+                task: HTTPClient.Task<Response>,
+                _ buffer: ByteBuffer
+            ) -> EventLoopFuture<Void> {
                 self.eventLoop.assertInEventLoop()
                 self.receivedMessages.append(.bodyPart(buffer))
                 return self.randoEL.makeSucceededFuture(())
@@ -250,22 +255,38 @@ class HTTPClientInternalTests: XCTestCase {
             }
         }
 
-        let request = try Request(url: "http://127.0.0.1:\(server.serverPort)/custom",
-                                  body: body)
+        let request = try Request(
+            url: "http://127.0.0.1:\(server.serverPort)/custom",
+            body: body
+        )
         let delegate = Delegate(expectedEventLoop: delegateEL, randomOtherEventLoop: randoEL)
-        let future = httpClient.execute(request: request,
-                                        delegate: delegate,
-                                        eventLoop: .init(.testOnly_exact(channelOn: channelEL,
-                                                                         delegateOn: delegateEL))).futureResult
+        let future = httpClient.execute(
+            request: request,
+            delegate: delegate,
+            eventLoop: .init(
+                .testOnly_exact(
+                    channelOn: channelEL,
+                    delegateOn: delegateEL
+                )
+            )
+        ).futureResult
 
-        XCTAssertNoThrow(try server.readInbound()) // .head
-        XCTAssertNoThrow(try server.readInbound()) // .body
-        XCTAssertNoThrow(try server.readInbound()) // .end
+        XCTAssertNoThrow(try server.readInbound())  // .head
+        XCTAssertNoThrow(try server.readInbound())  // .body
+        XCTAssertNoThrow(try server.readInbound())  // .end
 
         // Send 3 parts, but only one should be received until the future is complete
-        XCTAssertNoThrow(try server.writeOutbound(.head(.init(version: .init(major: 1, minor: 1),
-                                                              status: .ok,
-                                                              headers: HTTPHeaders([("Transfer-Encoding", "chunked")])))))
+        XCTAssertNoThrow(
+            try server.writeOutbound(
+                .head(
+                    .init(
+                        version: .init(major: 1, minor: 1),
+                        status: .ok,
+                        headers: HTTPHeaders([("Transfer-Encoding", "chunked")])
+                    )
+                )
+            )
+        )
         let buffer = ByteBuffer(string: "1234")
         XCTAssertNoThrow(try server.writeOutbound(.body(.byteBuffer(buffer))))
         XCTAssertNoThrow(try server.writeOutbound(.end(nil)))
@@ -297,7 +318,7 @@ class HTTPClientInternalTests: XCTestCase {
 
         switch sentMessages.dropFirst(3).first {
         case .some(.sentRequest):
-            () // OK
+            ()  // OK
         default:
             XCTFail("wrong message")
         }
@@ -335,7 +356,10 @@ class HTTPClientInternalTests: XCTestCase {
             let el = group.next()
             let req1 = client.execute(request: request, eventLoop: .delegate(on: el))
             let req2 = client.execute(request: request, eventLoop: .delegateAndChannel(on: el))
-            let req3 = client.execute(request: request, eventLoop: .init(.testOnly_exact(channelOn: el, delegateOn: el)))
+            let req3 = client.execute(
+                request: request,
+                eventLoop: .init(.testOnly_exact(channelOn: el, delegateOn: el))
+            )
             XCTAssert(req1.eventLoop === el)
             XCTAssert(req2.eventLoop === el)
             XCTAssert(req3.eventLoop === el)
@@ -354,8 +378,8 @@ class HTTPClientInternalTests: XCTestCase {
 
         _ = httpClient.get(url: "http://localhost:\(server.serverPort)/wait")
 
-        XCTAssertNoThrow(try server.readInbound()) // .head
-        XCTAssertNoThrow(try server.readInbound()) // .end
+        XCTAssertNoThrow(try server.readInbound())  // .head
+        XCTAssertNoThrow(try server.readInbound())  // .end
 
         do {
             try httpClient.syncShutdown(requiresCleanClose: true)
@@ -395,10 +419,16 @@ class HTTPClientInternalTests: XCTestCase {
             }
         }
         let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/post", method: .POST, body: body)
-        let response = httpClient.execute(request: request,
-                                          delegate: ResponseAccumulator(request: request),
-                                          eventLoop: HTTPClient.EventLoopPreference(.testOnly_exact(channelOn: el2,
-                                                                                                    delegateOn: el1)))
+        let response = httpClient.execute(
+            request: request,
+            delegate: ResponseAccumulator(request: request),
+            eventLoop: HTTPClient.EventLoopPreference(
+                .testOnly_exact(
+                    channelOn: el2,
+                    delegateOn: el1
+                )
+            )
+        )
         XCTAssert(el1 === response.eventLoop)
         XCTAssertNoThrow(try response.wait())
     }
@@ -419,7 +449,11 @@ class HTTPClientInternalTests: XCTestCase {
 
         let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)//get")
         let delegate = ResponseAccumulator(request: request)
-        let task = client.execute(request: request, delegate: delegate, eventLoop: .init(.testOnly_exact(channelOn: el1, delegateOn: el2)))
+        let task = client.execute(
+            request: request,
+            delegate: delegate,
+            eventLoop: .init(.testOnly_exact(channelOn: el1, delegateOn: el2))
+        )
         XCTAssertTrue(task.futureResult.eventLoop === el2)
         XCTAssertNoThrow(try task.wait())
     }
@@ -460,7 +494,11 @@ class HTTPClientInternalTests: XCTestCase {
         let request = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/get")
         let delegate = TestDelegate(expectedEL: el1)
         XCTAssertNoThrow(try httpBin.shutdown())
-        let task = client.execute(request: request, delegate: delegate, eventLoop: .init(.testOnly_exact(channelOn: el2, delegateOn: el1)))
+        let task = client.execute(
+            request: request,
+            delegate: delegate,
+            eventLoop: .init(.testOnly_exact(channelOn: el2, delegateOn: el1))
+        )
         XCTAssertThrowsError(try task.wait())
         XCTAssertTrue(delegate.receivedError)
     }
@@ -493,10 +531,13 @@ class HTTPClientInternalTests: XCTestCase {
 
         let request6 = try Request(url: "https://127.0.0.1")
         XCTAssertEqual(request6.deconstructedURL.scheme, .https)
-        XCTAssertEqual(request6.deconstructedURL.connectionTarget, .ipAddress(
-            serialization: "127.0.0.1",
-            address: try! SocketAddress(ipAddress: "127.0.0.1", port: 443)
-        ))
+        XCTAssertEqual(
+            request6.deconstructedURL.connectionTarget,
+            .ipAddress(
+                serialization: "127.0.0.1",
+                address: try! SocketAddress(ipAddress: "127.0.0.1", port: 443)
+            )
+        )
         XCTAssertEqual(request6.deconstructedURL.uri, "/")
 
         let request7 = try Request(url: "https://0x7F.1:9999")
@@ -506,18 +547,24 @@ class HTTPClientInternalTests: XCTestCase {
 
         let request8 = try Request(url: "http://[::1]")
         XCTAssertEqual(request8.deconstructedURL.scheme, .http)
-        XCTAssertEqual(request8.deconstructedURL.connectionTarget, .ipAddress(
-            serialization: "[::1]",
-            address: try! SocketAddress(ipAddress: "::1", port: 80)
-        ))
+        XCTAssertEqual(
+            request8.deconstructedURL.connectionTarget,
+            .ipAddress(
+                serialization: "[::1]",
+                address: try! SocketAddress(ipAddress: "::1", port: 80)
+            )
+        )
         XCTAssertEqual(request8.deconstructedURL.uri, "/")
 
         let request9 = try Request(url: "http://[763e:61d9::6ACA:3100:6274]:4242/foo/bar?baz")
         XCTAssertEqual(request9.deconstructedURL.scheme, .http)
-        XCTAssertEqual(request9.deconstructedURL.connectionTarget, .ipAddress(
-            serialization: "[763e:61d9::6ACA:3100:6274]",
-            address: try! SocketAddress(ipAddress: "763e:61d9::6aca:3100:6274", port: 4242)
-        ))
+        XCTAssertEqual(
+            request9.deconstructedURL.connectionTarget,
+            .ipAddress(
+                serialization: "[763e:61d9::6ACA:3100:6274]",
+                address: try! SocketAddress(ipAddress: "763e:61d9::6aca:3100:6274", port: 4242)
+            )
+        )
         XCTAssertEqual(request9.deconstructedURL.uri, "/foo/bar?baz")
 
         // Some systems have quirks in their implementations of 'ntop' which cause them to write
@@ -526,18 +573,24 @@ class HTTPClientInternalTests: XCTestCase {
         // so the serialization must be kept verbatim as it was given in the request.
         let request10 = try Request(url: "http://[::c0a8:1]:4242/foo/bar?baz")
         XCTAssertEqual(request10.deconstructedURL.scheme, .http)
-        XCTAssertEqual(request10.deconstructedURL.connectionTarget, .ipAddress(
-            serialization: "[::c0a8:1]",
-            address: try! SocketAddress(ipAddress: "::c0a8:1", port: 4242)
-        ))
+        XCTAssertEqual(
+            request10.deconstructedURL.connectionTarget,
+            .ipAddress(
+                serialization: "[::c0a8:1]",
+                address: try! SocketAddress(ipAddress: "::c0a8:1", port: 4242)
+            )
+        )
         XCTAssertEqual(request10.deconstructedURL.uri, "/foo/bar?baz")
 
         let request11 = try Request(url: "http://[::192.168.0.1]:4242/foo/bar?baz")
         XCTAssertEqual(request11.deconstructedURL.scheme, .http)
-        XCTAssertEqual(request11.deconstructedURL.connectionTarget, .ipAddress(
-            serialization: "[::192.168.0.1]",
-            address: try! SocketAddress(ipAddress: "::192.168.0.1", port: 4242)
-        ))
+        XCTAssertEqual(
+            request11.deconstructedURL.connectionTarget,
+            .ipAddress(
+                serialization: "[::192.168.0.1]",
+                address: try! SocketAddress(ipAddress: "::192.168.0.1", port: 4242)
+            )
+        )
         XCTAssertEqual(request11.deconstructedURL.uri, "/foo/bar?baz")
     }
 
@@ -566,7 +619,7 @@ class HTTPClientInternalTests: XCTestCase {
         }
         // Empty collection.
         do {
-            let elements: Array<Int> = []
+            let elements: [Int] = []
             XCTAssertTrue(elements.hasSuffix([]))
             XCTAssertFalse(elements.hasSuffix([0]))
             XCTAssertFalse(elements.hasSuffix([42]))

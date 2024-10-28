@@ -161,10 +161,10 @@ struct HTTPRequestStateMachine {
 
         switch self.state {
         case .initialized,
-             .running(.streaming(_, _, producer: .producing), _),
-             .running(.endSent, _),
-             .finished,
-             .failed:
+            .running(.streaming(_, _, producer: .producing), _),
+            .running(.endSent, _),
+            .finished,
+            .failed:
             return .wait
 
         case .waitForChannelToBecomeWritable(let head, let metadata):
@@ -196,11 +196,11 @@ struct HTTPRequestStateMachine {
 
         switch self.state {
         case .initialized,
-             .waitForChannelToBecomeWritable,
-             .running(.streaming(_, _, producer: .paused), _),
-             .running(.endSent, _),
-             .finished,
-             .failed:
+            .waitForChannelToBecomeWritable,
+            .running(.streaming(_, _, producer: .paused), _),
+            .running(.endSent, _),
+            .finished,
+            .failed:
             return .wait
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, producer: .producing), let responseState):
@@ -219,13 +219,16 @@ struct HTTPRequestStateMachine {
 
     mutating func errorHappened(_ error: Error) -> Action {
         if let error = error as? NIOSSLError,
-           error == .uncleanShutdown,
-           let action = self.handleNIOSSLUncleanShutdownError() {
+            error == .uncleanShutdown,
+            let action = self.handleNIOSSLUncleanShutdownError()
+        {
             return action
         }
         switch self.state {
         case .initialized:
-            preconditionFailure("After the state machine has been initialized, start must be called immediately. Thus this state is unreachable")
+            preconditionFailure(
+                "After the state machine has been initialized, start must be called immediately. Thus this state is unreachable"
+            )
         case .waitForChannelToBecomeWritable:
             // the request failed, before it was sent onto the wire.
             self.state = .failed(error)
@@ -247,14 +250,14 @@ struct HTTPRequestStateMachine {
     private mutating func handleNIOSSLUncleanShutdownError() -> Action? {
         switch self.state {
         case .running(.streaming, .waitingForHead),
-             .running(.endSent, .waitingForHead):
+            .running(.endSent, .waitingForHead):
             // if we received a NIOSSL.uncleanShutdown before we got an answer we should handle
             // this like a normal connection close. We will receive a call to channelInactive after
             // this error.
             return .wait
 
         case .running(.streaming, .receivingBody(let responseHead, _)),
-             .running(.endSent, .receivingBody(let responseHead, _)):
+            .running(.endSent, .receivingBody(let responseHead, _)):
             // This code is only reachable for request and responses, which we expect to have a body.
             // We depend on logic from the HTTPResponseDecoder here. The decoder will emit an
             // HTTPResponsePart.end right after the HTTPResponsePart.head, for every request with a
@@ -263,7 +266,9 @@ struct HTTPRequestStateMachine {
             // For this reason we only need to check the "content-length" or "transfer-encoding"
             // headers here to determine if we are potentially in an EOF terminated response.
 
-            if responseHead.headers.contains(name: "content-length") || responseHead.headers.contains(name: "transfer-encoding") {
+            if responseHead.headers.contains(name: "content-length")
+                || responseHead.headers.contains(name: "transfer-encoding")
+            {
                 // If we have already received the response head, the parser will ensure that we
                 // receive a complete response, if the content-length or transfer-encoding header
                 // was set. In this case we can ignore the NIOSSLError.uncleanShutdown. We will see
@@ -285,9 +290,11 @@ struct HTTPRequestStateMachine {
     mutating func requestStreamPartReceived(_ part: IOData, promise: EventLoopPromise<Void>?) -> Action {
         switch self.state {
         case .initialized,
-             .waitForChannelToBecomeWritable,
-             .running(.endSent, _):
-            preconditionFailure("We must be in the request streaming phase, if we receive further body parts. Invalid state: \(self.state)")
+            .waitForChannelToBecomeWritable,
+            .running(.endSent, _):
+            preconditionFailure(
+                "We must be in the request streaming phase, if we receive further body parts. Invalid state: \(self.state)"
+            )
 
         case .running(.streaming(_, _, let producerState), .receivingBody(let head, _)) where head.status.code >= 300:
             // If we have already received a response head with status >= 300, we won't send out any
@@ -349,9 +356,11 @@ struct HTTPRequestStateMachine {
     mutating func requestStreamFinished(promise: EventLoopPromise<Void>?) -> Action {
         switch self.state {
         case .initialized,
-             .waitForChannelToBecomeWritable,
-             .running(.endSent, _):
-            preconditionFailure("A request body stream end is only expected if we are in state request streaming. Invalid state: \(self.state)")
+            .waitForChannelToBecomeWritable,
+            .running(.endSent, _):
+            preconditionFailure(
+                "A request body stream end is only expected if we are in state request streaming. Invalid state: \(self.state)"
+            )
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, _), .waitingForHead):
             if let expected = expectedBodyLength, expected != sentBodyBytes {
@@ -363,7 +372,10 @@ struct HTTPRequestStateMachine {
             self.state = .running(.endSent, .waitingForHead)
             return .sendRequestEnd(promise)
 
-        case .running(.streaming(let expectedBodyLength, let sentBodyBytes, _), .receivingBody(let head, let streamState)):
+        case .running(
+            .streaming(let expectedBodyLength, let sentBodyBytes, _),
+            .receivingBody(let head, let streamState)
+        ):
             assert(head.status.code < 300)
 
             if let expected = expectedBodyLength, expected != sentBodyBytes {
@@ -456,11 +468,11 @@ struct HTTPRequestStateMachine {
     mutating func read() -> Action {
         switch self.state {
         case .initialized,
-             .waitForChannelToBecomeWritable,
-             .running(_, .waitingForHead),
-             .running(_, .endReceived),
-             .finished,
-             .failed:
+            .waitForChannelToBecomeWritable,
+            .running(_, .waitingForHead),
+            .running(_, .endReceived),
+            .finished,
+            .failed:
             // If we are not in the middle of streaming the response body, we always want to get
             // more data...
             return .read
@@ -493,11 +505,11 @@ struct HTTPRequestStateMachine {
     mutating func channelReadComplete() -> Action {
         switch self.state {
         case .initialized,
-             .waitForChannelToBecomeWritable,
-             .running(_, .waitingForHead),
-             .running(_, .endReceived),
-             .finished,
-             .failed:
+            .waitForChannelToBecomeWritable,
+            .running(_, .waitingForHead),
+            .running(_, .endReceived),
+            .finished,
+            .failed:
             return .wait
 
         case .running(let requestState, .receivingBody(let head, var streamState)):
@@ -528,7 +540,9 @@ struct HTTPRequestStateMachine {
 
         switch self.state {
         case .initialized, .waitForChannelToBecomeWritable:
-            preconditionFailure("How can we receive a response head before sending a request head ourselves \(self.state)")
+            preconditionFailure(
+                "How can we receive a response head before sending a request head ourselves \(self.state)"
+            )
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, producer: .paused), .waitingForHead):
             self.state = .running(
@@ -546,7 +560,11 @@ struct HTTPRequestStateMachine {
                 return .forwardResponseHead(head, pauseRequestBodyStream: true)
             } else {
                 self.state = .running(
-                    .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: .producing),
+                    .streaming(
+                        expectedBodyLength: expectedBodyLength,
+                        sentBodyBytes: sentBodyBytes,
+                        producer: .producing
+                    ),
                     .receivingBody(head, .init())
                 )
                 return .forwardResponseHead(head, pauseRequestBodyStream: false)
@@ -557,7 +575,9 @@ struct HTTPRequestStateMachine {
             return .forwardResponseHead(head, pauseRequestBodyStream: false)
 
         case .running(_, .receivingBody), .running(_, .endReceived), .finished:
-            preconditionFailure("How can we successfully finish the request, before having received a head. Invalid state: \(self.state)")
+            preconditionFailure(
+                "How can we successfully finish the request, before having received a head. Invalid state: \(self.state)"
+            )
         case .failed:
             return .wait
 
@@ -569,10 +589,14 @@ struct HTTPRequestStateMachine {
     mutating func receivedHTTPResponseBodyPart(_ body: ByteBuffer) -> Action {
         switch self.state {
         case .initialized, .waitForChannelToBecomeWritable:
-            preconditionFailure("How can we receive a response head before completely sending a request head ourselves. Invalid state: \(self.state)")
+            preconditionFailure(
+                "How can we receive a response head before completely sending a request head ourselves. Invalid state: \(self.state)"
+            )
 
         case .running(_, .waitingForHead):
-            preconditionFailure("How can we receive a response body, if we haven't received a head. Invalid state: \(self.state)")
+            preconditionFailure(
+                "How can we receive a response body, if we haven't received a head. Invalid state: \(self.state)"
+            )
 
         case .running(let requestState, .receivingBody(let head, var responseStreamState)):
             return self.avoidingStateMachineCoW { state -> Action in
@@ -582,7 +606,9 @@ struct HTTPRequestStateMachine {
             }
 
         case .running(_, .endReceived), .finished:
-            preconditionFailure("How can we successfully finish the request, before having received a head. Invalid state: \(self.state)")
+            preconditionFailure(
+                "How can we successfully finish the request, before having received a head. Invalid state: \(self.state)"
+            )
 
         case .failed:
             return .wait
@@ -595,20 +621,31 @@ struct HTTPRequestStateMachine {
     private mutating func receivedHTTPResponseEnd() -> Action {
         switch self.state {
         case .initialized, .waitForChannelToBecomeWritable:
-            preconditionFailure("How can we receive a response end before completely sending a request head ourselves. Invalid state: \(self.state)")
+            preconditionFailure(
+                "How can we receive a response end before completely sending a request head ourselves. Invalid state: \(self.state)"
+            )
 
         case .running(_, .waitingForHead):
-            preconditionFailure("How can we receive a response end, if we haven't a received a head. Invalid state: \(self.state)")
+            preconditionFailure(
+                "How can we receive a response end, if we haven't a received a head. Invalid state: \(self.state)"
+            )
 
-        case .running(.streaming(let expectedBodyLength, let sentBodyBytes, let producerState), .receivingBody(let head, var responseStreamState))
-            where head.status.code < 300:
+        case .running(
+            .streaming(let expectedBodyLength, let sentBodyBytes, let producerState),
+            .receivingBody(let head, var responseStreamState)
+        )
+        where head.status.code < 300:
 
             return self.avoidingStateMachineCoW { state -> Action in
                 let (remainingBuffer, connectionAction) = responseStreamState.end()
                 switch connectionAction {
                 case .none:
                     state = .running(
-                        .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: producerState),
+                        .streaming(
+                            expectedBodyLength: expectedBodyLength,
+                            sentBodyBytes: sentBodyBytes,
+                            producer: producerState
+                        ),
                         .endReceived
                     )
                     return .forwardResponseBodyParts(remainingBuffer)
@@ -624,7 +661,10 @@ struct HTTPRequestStateMachine {
 
         case .running(.streaming(_, _, let producerState), .receivingBody(let head, var responseStreamState)):
             assert(head.status.code >= 300)
-            assert(producerState == .paused, "Expected to have paused the request body stream, when the head was received. Invalid state: \(self.state)")
+            assert(
+                producerState == .paused,
+                "Expected to have paused the request body stream, when the head was received. Invalid state: \(self.state)"
+            )
 
             return self.avoidingStateMachineCoW { state -> Action in
                 // We can ignore the connectionAction from the responseStreamState, since the
@@ -647,7 +687,9 @@ struct HTTPRequestStateMachine {
             }
 
         case .running(_, .endReceived), .finished:
-            preconditionFailure("How can we receive a response end, if another one was already received. Invalid state: \(self.state)")
+            preconditionFailure(
+                "How can we receive a response end, if another one was already received. Invalid state: \(self.state)"
+            )
 
         case .failed:
             return .wait
@@ -660,9 +702,11 @@ struct HTTPRequestStateMachine {
     mutating func demandMoreResponseBodyParts() -> Action {
         switch self.state {
         case .initialized,
-             .running(_, .waitingForHead),
-             .waitForChannelToBecomeWritable:
-            preconditionFailure("The response is expected to only ask for more data after the response head was forwarded \(self.state)")
+            .running(_, .waitingForHead),
+            .waitForChannelToBecomeWritable:
+            preconditionFailure(
+                "The response is expected to only ask for more data after the response head was forwarded \(self.state)"
+            )
 
         case .running(let requestState, .receivingBody(let head, var responseStreamState)):
             return self.avoidingStateMachineCoW { state -> Action in
@@ -672,8 +716,8 @@ struct HTTPRequestStateMachine {
             }
 
         case .running(_, .endReceived),
-             .finished,
-             .failed:
+            .finished,
+            .failed:
             return .wait
 
         case .modifying:
@@ -684,9 +728,11 @@ struct HTTPRequestStateMachine {
     mutating func idleReadTimeoutTriggered() -> Action {
         switch self.state {
         case .initialized,
-             .waitForChannelToBecomeWritable,
-             .running(.streaming, _):
-            preconditionFailure("We only schedule idle read timeouts after we have sent the complete request. Invalid state: \(self.state)")
+            .waitForChannelToBecomeWritable,
+            .running(.streaming, _):
+            preconditionFailure(
+                "We only schedule idle read timeouts after we have sent the complete request. Invalid state: \(self.state)"
+            )
 
         case .running(.endSent, .waitingForHead), .running(.endSent, .receivingBody):
             let error = HTTPClientError.readTimeout
@@ -707,8 +753,10 @@ struct HTTPRequestStateMachine {
     mutating func idleWriteTimeoutTriggered() -> Action {
         switch self.state {
         case .initialized,
-             .waitForChannelToBecomeWritable:
-            preconditionFailure("We only schedule idle write timeouts while the request is being sent. Invalid state: \(self.state)")
+            .waitForChannelToBecomeWritable:
+            preconditionFailure(
+                "We only schedule idle write timeouts while the request is being sent. Invalid state: \(self.state)"
+            )
 
         case .running(.streaming, _):
             let error = HTTPClientError.writeTimeout
@@ -733,7 +781,10 @@ struct HTTPRequestStateMachine {
             self.state = .running(.endSent, .waitingForHead)
             return .sendRequestHead(head, sendEnd: true)
         } else {
-            self.state = .running(.streaming(expectedBodyLength: length, sentBodyBytes: 0, producer: .paused), .waitingForHead)
+            self.state = .running(
+                .streaming(expectedBodyLength: length, sentBodyBytes: 0, producer: .paused),
+                .waitingForHead
+            )
             return .sendRequestHead(head, sendEnd: false)
         }
     }
@@ -745,11 +796,14 @@ struct HTTPRequestStateMachine {
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, producer: .paused), let responseState):
             let startProducing = self.isChannelWritable && expectedBodyLength != sentBodyBytes
-            self.state = .running(.streaming(
-                expectedBodyLength: expectedBodyLength,
-                sentBodyBytes: sentBodyBytes,
-                producer: startProducing ? .producing : .paused
-            ), responseState)
+            self.state = .running(
+                .streaming(
+                    expectedBodyLength: expectedBodyLength,
+                    sentBodyBytes: sentBodyBytes,
+                    producer: startProducing ? .producing : .paused
+                ),
+                responseState
+            )
             return .notifyRequestHeadSendSuccessfully(
                 resumeRequestBodyStream: startProducing,
                 startIdleTimer: false
@@ -757,7 +811,9 @@ struct HTTPRequestStateMachine {
         case .running(.endSent, _):
             return .notifyRequestHeadSendSuccessfully(resumeRequestBodyStream: false, startIdleTimer: true)
         case .running(.streaming(_, _, producer: .producing), _):
-            preconditionFailure("request body producing can not start before we have successfully send the header \(self.state)")
+            preconditionFailure(
+                "request body producing can not start before we have successfully send the header \(self.state)"
+            )
         case .failed:
             return .wait
 
@@ -830,7 +886,8 @@ extension HTTPRequestStateMachine: CustomStringConvertible {
         case .waitForChannelToBecomeWritable:
             return "HTTPRequestStateMachine(.waitForChannelToBecomeWritable, isWritable: \(self.isChannelWritable))"
         case .running(let requestState, let responseState):
-            return "HTTPRequestStateMachine(.running(request: \(requestState), response: \(responseState)), isWritable: \(self.isChannelWritable))"
+            return
+                "HTTPRequestStateMachine(.running(request: \(requestState), response: \(responseState)), isWritable: \(self.isChannelWritable))"
         case .finished:
             return "HTTPRequestStateMachine(.finished, isWritable: \(self.isChannelWritable))"
         case .failed(let error):
@@ -844,7 +901,7 @@ extension HTTPRequestStateMachine: CustomStringConvertible {
 extension HTTPRequestStateMachine.RequestState: CustomStringConvertible {
     var description: String {
         switch self {
-        case .streaming(expectedBodyLength: let expected, let sent, producer: let producer):
+        case .streaming(expectedBodyLength: let expected, let sent, let producer):
             return ".streaming(sent: \(expected != nil ? String(expected!) : "-"), sent: \(sent), producer: \(producer)"
         case .endSent:
             return ".endSent"

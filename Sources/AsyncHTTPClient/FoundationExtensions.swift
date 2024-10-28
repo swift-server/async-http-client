@@ -39,7 +39,16 @@ extension HTTPClient.Cookie {
     ///     - maxAge: The cookie's age in seconds, defaults to nil.
     ///     - httpOnly: Whether this cookie should be used by HTTP servers only, defaults to false.
     ///     - secure: Whether this cookie should only be sent using secure channels, defaults to false.
-    public init(name: String, value: String, path: String = "/", domain: String? = nil, expires: Date? = nil, maxAge: Int? = nil, httpOnly: Bool = false, secure: Bool = false) {
+    public init(
+        name: String,
+        value: String,
+        path: String = "/",
+        domain: String? = nil,
+        expires: Date? = nil,
+        maxAge: Int? = nil,
+        httpOnly: Bool = false,
+        secure: Bool = false
+    ) {
         // FIXME: This should be failable and validate the inputs
         // (for example, checking that the strings are ASCII, path begins with "/", domain is not empty, etc).
         self.init(
@@ -59,8 +68,8 @@ extension HTTPClient.Body {
     /// Create and stream body using `Data`.
     ///
     /// - parameters:
-    ///     - bytes: Body `Data` representation.
+    ///     - data: Body `Data` representation.
     public static func data(_ data: Data) -> HTTPClient.Body {
-        return self.bytes(data)
+        self.bytes(data)
     }
 }

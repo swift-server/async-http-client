@@ -12,8 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-import struct Foundation.URL
 import NIOHTTP1
+
+import struct Foundation.URL
 
 typealias RedirectMode = HTTPClient.Configuration.RedirectConfiguration.Mode
 

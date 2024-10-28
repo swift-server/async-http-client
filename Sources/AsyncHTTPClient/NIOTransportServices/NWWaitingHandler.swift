@@ -33,7 +33,10 @@ final class NWWaitingHandler<Requester: HTTPConnectionRequester>: ChannelInbound
 
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
         if let waitingEvent = event as? NIOTSNetworkEvents.WaitingForConnectivity {
-            self.requester.waitingForConnectivity(self.connectionID, error: HTTPClient.NWErrorHandler.translateError(waitingEvent.transientError))
+            self.requester.waitingForConnectivity(
+                self.connectionID,
+                error: HTTPClient.NWErrorHandler.translateError(waitingEvent.transientError)
+            )
         }
         context.fireUserInboundEventTriggered(event)
     }

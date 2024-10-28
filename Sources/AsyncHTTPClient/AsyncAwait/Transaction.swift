@@ -146,8 +146,8 @@ import NIOSSL
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension Transaction: HTTPSchedulableRequest {
     var poolKey: ConnectionPool.Key { self.request.poolKey }
-    var tlsConfiguration: TLSConfiguration? { return self.request.tlsConfiguration }
-    var requiredEventLoop: EventLoop? { return nil }
+    var tlsConfiguration: TLSConfiguration? { self.request.tlsConfiguration }
+    var requiredEventLoop: EventLoop? { nil }
 
     func requestWasQueued(_ scheduler: HTTPRequestScheduler) {
         self.stateLock.withLock {
@@ -290,7 +290,7 @@ extension Transaction: HTTPExecutableRequest {
         case .failResponseHead(let continuation, let error, let scheduler, let executor, let bodyStreamContinuation):
             continuation.resume(throwing: error)
             bodyStreamContinuation?.resume(throwing: error)
-            scheduler?.cancelRequest(self) // NOTE: scheduler and executor are exclusive here
+            scheduler?.cancelRequest(self)  // NOTE: scheduler and executor are exclusive here
             executor?.cancelRequest(self)
 
         case .failResponseStream(let source, let error, let executor, let requestBodyStreamContinuation):
@@ -317,7 +317,7 @@ extension Transaction: HTTPExecutableRequest {
             scheduler?.cancelRequest(self)
             executor?.cancelRequest(self)
             bodyStreamContinuation?.resume(throwing: HTTPClientError.deadlineExceeded)
-        case .cancelSchedulerOnly(scheduler: let scheduler):
+        case .cancelSchedulerOnly(let scheduler):
             scheduler.cancelRequest(self)
         case .none:
             break

@@ -12,12 +12,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if canImport(Network)
-import Network
-#endif
 import NIOCore
 import NIOHTTP1
 import NIOTransportServices
+
+#if canImport(Network)
+import Network
+#endif
 
 extension HTTPClient {
     #if canImport(Network)
@@ -38,7 +39,7 @@ extension HTTPClient {
             self.reason = reason
         }
 
-        public var description: String { return self.reason }
+        public var description: String { self.reason }
     }
 
     /// A wrapper for TLS errors thrown by `Network.framework`.
@@ -58,7 +59,7 @@ extension HTTPClient {
             self.reason = reason
         }
 
-        public var description: String { return self.reason }
+        public var description: String { self.reason }
     }
     #endif
 

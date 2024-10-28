@@ -100,9 +100,12 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     // MARK: Channel Inbound Handler
 
     func channelActive(context: ChannelHandlerContext) {
-        self.logger.trace("Channel active", metadata: [
-            "ahc-channel-writable": "\(context.channel.isWritable)",
-        ])
+        self.logger.trace(
+            "Channel active",
+            metadata: [
+                "ahc-channel-writable": "\(context.channel.isWritable)"
+            ]
+        )
 
         let action = self.state.channelActive(isWritable: context.channel.isWritable)
         self.run(action, context: context)
@@ -116,9 +119,12 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     }
 
     func channelWritabilityChanged(context: ChannelHandlerContext) {
-        self.logger.trace("Channel writability changed", metadata: [
-            "ahc-channel-writable": "\(context.channel.isWritable)",
-        ])
+        self.logger.trace(
+            "Channel writability changed",
+            metadata: [
+                "ahc-channel-writable": "\(context.channel.isWritable)"
+            ]
+        )
 
         if let timeoutAction = self.idleWriteTimeoutStateMachine?.channelWritabilityChanged(context: context) {
             self.runTimeoutAction(timeoutAction, context: context)
@@ -132,9 +138,12 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let httpPart = self.unwrapInboundIn(data)
 
-        self.logger.trace("HTTP response part received", metadata: [
-            "ahc-http-part": "\(httpPart)",
-        ])
+        self.logger.trace(
+            "HTTP response part received",
+            metadata: [
+                "ahc-http-part": "\(httpPart)"
+            ]
+        )
 
         if let timeoutAction = self.idleReadTimeoutStateMachine?.channelRead(httpPart) {
             self.runTimeoutAction(timeoutAction, context: context)
@@ -152,9 +161,12 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     }
 
     func errorCaught(context: ChannelHandlerContext, error: Error) {
-        self.logger.trace("Channel error caught", metadata: [
-            "ahc-error": "\(error)",
-        ])
+        self.logger.trace(
+            "Channel error caught",
+            metadata: [
+                "ahc-error": "\(error)"
+            ]
+        )
 
         let action = self.state.errorHappened(error)
         self.run(action, context: context)
@@ -447,7 +459,8 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
     // MARK: Private HTTPRequestExecutor
 
-    private func writeRequestBodyPart0(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
+    private func writeRequestBodyPart0(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?)
+    {
         guard self.request === request, let context = self.channelContext else {
             // Because the HTTPExecutableRequest may run in a different thread to our eventLoop,
             // calls from the HTTPExecutableRequest to our ChannelHandler may arrive here after
@@ -691,7 +704,9 @@ struct IdleWriteStateMachine {
                 self.state = .waitingForWritabilityEnabled
                 return .clearIdleWriteTimeoutTimer
             case .waitingForWritabilityEnabled:
-                preconditionFailure("If the channel was writable before, then we should have been waiting for more data.")
+                preconditionFailure(
+                    "If the channel was writable before, then we should have been waiting for more data."
+                )
             case .requestEndSent:
                 return .none
             }
