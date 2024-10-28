@@ -33,3 +33,5 @@ Dockerfile
 .dockerignore
 Snippets/*
 dev/git.commit.template
+.unacceptablelanguageignore
+Tests/AsyncHTTPClientTests/Resources/*.pem

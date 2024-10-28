@@ -18,6 +18,12 @@
   "maximumBlankLines" : 1,
   "respectsExistingLineBreaks" : true,
   "prioritizeKeepingFunctionOutputTogether" : true,
+  "noAssignmentInExpressions" : {
+    "allowedFunctions" : [
+      "XCTAssertNoThrow",
+      "XCTAssertThrowsError"
+    ]
+  },
   "rules" : {
     "AllPublicDeclarationsHaveDocumentation" : false,
     "AlwaysUseLiteralForEmptyCollectionInit" : false,
