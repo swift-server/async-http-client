@@ -29,11 +29,11 @@ public final class HTTPClientCopyingDelegate: HTTPClientResponseDelegate {
     }
 
     public func didReceiveBodyPart(task: HTTPClient.Task<Void>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
-        return self.chunkHandler(buffer)
+        self.chunkHandler(buffer)
     }
 
     public func didFinishRequest(task: HTTPClient.Task<Void>) throws {
-        return ()
+        ()
     }
 }
 
@@ -44,7 +44,12 @@ public final class HTTPClientCopyingDelegate: HTTPClientResponseDelegate {
 /// https://forums.swift.org/t/support-debug-only-code/11037 for a discussion.
 @inlinable
 internal func debugOnly(_ body: () -> Void) {
-    assert({ body(); return true }())
+    assert(
+        {
+            body()
+            return true
+        }()
+    )
 }
 
 extension BidirectionalCollection where Element: Equatable {
@@ -61,8 +66,8 @@ extension BidirectionalCollection where Element: Equatable {
             guard self[ourIdx] == suffix[suffixIdx] else { return false }
         }
         guard suffixIdx == suffix.startIndex else {
-            return false // Exhausted self, but 'suffix' has elements remaining.
+            return false  // Exhausted self, but 'suffix' has elements remaining.
         }
-        return true // Exhausted 'other' without finding a mismatch.
+        return true  // Exhausted 'other' without finding a mismatch.
     }
 }

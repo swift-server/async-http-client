@@ -12,8 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import XCTest
+
+@testable import AsyncHTTPClient
 
 class LRUCacheTests: XCTestCase {
     func testBasicsWork() {

@@ -12,10 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-import struct Foundation.URL
 import NIOCore
 import NIOHTTP1
 import NIOSSL
+
+import struct Foundation.URL
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest {
@@ -81,7 +82,11 @@ extension HTTPClientRequest.Prepared.Body {
         case .asyncSequence(let length, let makeAsyncIterator):
             self = .asyncSequence(length: length, nextBodyPart: makeAsyncIterator())
         case .sequence(let length, let canBeConsumedMultipleTimes, let makeCompleteBody):
-            self = .sequence(length: length, canBeConsumedMultipleTimes: canBeConsumedMultipleTimes, makeCompleteBody: makeCompleteBody)
+            self = .sequence(
+                length: length,
+                canBeConsumedMultipleTimes: canBeConsumedMultipleTimes,
+                makeCompleteBody: makeCompleteBody
+            )
         case .byteBuffer(let byteBuffer):
             self = .byteBuffer(byteBuffer)
         }

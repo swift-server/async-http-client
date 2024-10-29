@@ -47,8 +47,10 @@ extension HTTPConnectionPool {
             self.idGenerator = idGenerator
             self.requests = RequestQueue()
 
-            self.connections = HTTP2Connections(generator: idGenerator,
-                                                maximumConnectionUses: maximumConnectionUses)
+            self.connections = HTTP2Connections(
+                generator: idGenerator,
+                maximumConnectionUses: maximumConnectionUses
+            )
             self.lifecycleState = lifecycleState
             self.retryConnectionEstablishment = retryConnectionEstablishment
         }
@@ -83,7 +85,10 @@ extension HTTPConnectionPool {
             requests: RequestQueue
         ) -> ConnectionMigrationAction {
             precondition(self.connections.isEmpty, "expected an empty state machine but connections are not empty")
-            precondition(self.http1Connections == nil, "expected an empty state machine but http1Connections are not nil")
+            precondition(
+                self.http1Connections == nil,
+                "expected an empty state machine but http1Connections are not nil"
+            )
             precondition(self.requests.isEmpty, "expected an empty state machine but requests are not empty")
 
             self.requests = requests
@@ -93,7 +98,7 @@ extension HTTPConnectionPool {
                 self.connections = http2Connections
             }
 
-            var http1Connections = http1Connections // make http1Connections mutable
+            var http1Connections = http1Connections  // make http1Connections mutable
             let context = http1Connections.migrateToHTTP2()
             self.connections.migrateFromHTTP1(
                 starting: context.starting,
@@ -215,7 +220,10 @@ extension HTTPConnectionPool {
             .init(self._newHTTP2ConnectionEstablished(connection, maxConcurrentStreams: maxConcurrentStreams))
         }
 
-        private mutating func _newHTTP2ConnectionEstablished(_ connection: Connection, maxConcurrentStreams: Int) -> EstablishedAction {
+        private mutating func _newHTTP2ConnectionEstablished(
+            _ connection: Connection,
+            maxConcurrentStreams: Int
+        ) -> EstablishedAction {
             self.failedConsecutiveConnectionAttempts = 0
             self.lastConnectFailure = nil
             if self.connections.hasActiveConnection(for: connection.eventLoop) {
@@ -296,8 +304,14 @@ extension HTTPConnectionPool {
             }
         }
 
-        mutating func newHTTP2MaxConcurrentStreamsReceived(_ connectionID: Connection.ID, newMaxStreams: Int) -> Action {
-            guard let (index, context) = self.connections.newHTTP2MaxConcurrentStreamsReceived(connectionID, newMaxStreams: newMaxStreams) else {
+        mutating func newHTTP2MaxConcurrentStreamsReceived(_ connectionID: Connection.ID, newMaxStreams: Int) -> Action
+        {
+            guard
+                let (index, context) = self.connections.newHTTP2MaxConcurrentStreamsReceived(
+                    connectionID,
+                    newMaxStreams: newMaxStreams
+                )
+            else {
                 // When a connection close is initiated by the connection pool, the connection will
                 // still report further events (like newMaxConcurrentStreamsReceived) to the state
                 // machine. In those cases we must ignore the event.
@@ -341,15 +355,15 @@ extension HTTPConnectionPool {
                 // we need to start a new on connection in two cases:
                 let needGeneralPurposeConnection =
                     // 1. if we have general purpose requests
-                    !self.requests.isEmpty(for: nil) &&
+                    !self.requests.isEmpty(for: nil)
                     // and no connection starting or active
-                    !context.hasGeneralPurposeConnection
+                    && !context.hasGeneralPurposeConnection
 
                 let needRequiredEventLoopConnection =
                     // 2. or if we have requests for a required event loop
-                    !self.requests.isEmpty(for: eventLoop) &&
+                    !self.requests.isEmpty(for: eventLoop)
                     // and no connection starting or active for the given event loop
-                    !context.hasConnectionOnSpecifiedEventLoop
+                    && !context.hasConnectionOnSpecifiedEventLoop
 
                 guard needGeneralPurposeConnection || needRequiredEventLoopConnection else {
                     // otherwise we can remove the connection
@@ -357,7 +371,8 @@ extension HTTPConnectionPool {
                     return .none
                 }
 
-                let (newConnectionID, previousEventLoop) = self.connections.createNewConnectionByReplacingClosedConnection(at: index)
+                let (newConnectionID, previousEventLoop) = self.connections
+                    .createNewConnectionByReplacingClosedConnection(at: index)
                 precondition(previousEventLoop === eventLoop)
 
                 return .init(
@@ -413,7 +428,9 @@ extension HTTPConnectionPool {
             case .running:
                 guard self.retryConnectionEstablishment else {
                     guard let (index, _) = self.connections.failConnection(connectionID) else {
-                        preconditionFailure("A connection attempt failed, that the state machine knows nothing about. Somewhere state was lost.")
+                        preconditionFailure(
+                            "A connection attempt failed, that the state machine knows nothing about. Somewhere state was lost."
+                        )
                     }
                     self.connections.removeConnection(at: index)
 
@@ -425,10 +442,15 @@ extension HTTPConnectionPool {
 
                 let eventLoop = self.connections.backoffNextConnectionAttempt(connectionID)
                 let backoff = calculateBackoff(failedAttempt: self.failedConsecutiveConnectionAttempts)
-                return .init(request: .none, connection: .scheduleBackoffTimer(connectionID, backoff: backoff, on: eventLoop))
+                return .init(
+                    request: .none,
+                    connection: .scheduleBackoffTimer(connectionID, backoff: backoff, on: eventLoop)
+                )
             case .shuttingDown:
                 guard let (index, context) = self.connections.failConnection(connectionID) else {
-                    preconditionFailure("A connection attempt failed, that the state machine knows nothing about. Somewhere state was lost.")
+                    preconditionFailure(
+                        "A connection attempt failed, that the state machine knows nothing about. Somewhere state was lost."
+                    )
                 }
                 return self.nextActionForFailedConnection(at: index, on: context.eventLoop)
             case .shutDown:
@@ -505,7 +527,10 @@ extension HTTPConnectionPool {
                 return .none
             }
 
-            precondition(self.lifecycleState == .running, "If we are shutting down, we must not have any idle connections")
+            precondition(
+                self.lifecycleState == .running,
+                "If we are shutting down, we must not have any idle connections"
+            )
 
             return .init(
                 request: .none,
@@ -558,7 +583,10 @@ extension HTTPConnectionPool {
             case .shuttingDown(let unclean):
                 if self.connections.isEmpty {
                     // if the http2connections are empty as well, there are no more connections. Shutdown completed.
-                    return .init(request: .none, connection: .closeConnection(connection, isShutdown: .yes(unclean: unclean)))
+                    return .init(
+                        request: .none,
+                        connection: .closeConnection(connection, isShutdown: .yes(unclean: unclean))
+                    )
                 } else {
                     return .init(request: .none, connection: .closeConnection(connection, isShutdown: .no))
                 }

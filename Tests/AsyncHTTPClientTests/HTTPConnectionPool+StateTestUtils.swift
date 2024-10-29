@@ -12,12 +12,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import Atomics
 import Dispatch
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOEmbedded
+
+@testable import AsyncHTTPClient
 
 /// An `EventLoopGroup` of `EmbeddedEventLoop`s.
 final class EmbeddedEventLoopGroup: EventLoopGroup {
@@ -34,7 +35,7 @@ final class EmbeddedEventLoopGroup: EventLoopGroup {
     }
 
     internal func makeIterator() -> EventLoopIterator {
-        return EventLoopIterator(self.loops)
+        EventLoopIterator(self.loops)
     }
 
     internal func shutdownGracefully(queue: DispatchQueue, _ callback: @escaping (Error?) -> Void) {
@@ -56,7 +57,7 @@ final class EmbeddedEventLoopGroup: EventLoopGroup {
 
 extension HTTPConnectionPool.Request: Equatable {
     public static func == (lhs: Self, rhs: Self) -> Bool {
-        return lhs.id == rhs.id
+        lhs.id == rhs.id
     }
 }
 
@@ -78,15 +79,24 @@ extension HTTPConnectionPool.StateMachine.ConnectionAction: Equatable {
         switch (lhs, rhs) {
         case (.createConnection(let lhsConnID, on: let lhsEL), .createConnection(let rhsConnID, on: let rhsEL)):
             return lhsConnID == rhsConnID && lhsEL === rhsEL
-        case (.scheduleBackoffTimer(let lhsConnID, let lhsBackoff, on: let lhsEL), .scheduleBackoffTimer(let rhsConnID, let rhsBackoff, on: let rhsEL)):
+        case (
+            .scheduleBackoffTimer(let lhsConnID, let lhsBackoff, on: let lhsEL),
+            .scheduleBackoffTimer(let rhsConnID, let rhsBackoff, on: let rhsEL)
+        ):
             return lhsConnID == rhsConnID && lhsBackoff == rhsBackoff && lhsEL === rhsEL
         case (.scheduleTimeoutTimer(let lhsConnID, on: let lhsEL), .scheduleTimeoutTimer(let rhsConnID, on: let rhsEL)):
             return lhsConnID == rhsConnID && lhsEL === rhsEL
         case (.cancelTimeoutTimer(let lhsConnID), .cancelTimeoutTimer(let rhsConnID)):
             return lhsConnID == rhsConnID
-        case (.closeConnection(let lhsConn, isShutdown: let lhsShut), .closeConnection(let rhsConn, isShutdown: let rhsShut)):
+        case (
+            .closeConnection(let lhsConn, isShutdown: let lhsShut),
+            .closeConnection(let rhsConn, isShutdown: let rhsShut)
+        ):
             return lhsConn == rhsConn && lhsShut == rhsShut
-        case (.cleanupConnections(let lhsContext, isShutdown: let lhsShut), .cleanupConnections(let rhsContext, isShutdown: let rhsShut)):
+        case (
+            .cleanupConnections(let lhsContext, isShutdown: let lhsShut),
+            .cleanupConnections(let rhsContext, isShutdown: let rhsShut)
+        ):
             return lhsContext == rhsContext && lhsShut == rhsShut
         case (
             .migration(
@@ -100,12 +110,13 @@ extension HTTPConnectionPool.StateMachine.ConnectionAction: Equatable {
                 let rhsScheduleTimeout
             )
         ):
-            return lhsCreateConnections.elementsEqual(rhsCreateConnections, by: {
-                $0.0 == $1.0 && $0.1 === $1.1
-            }) &&
-                lhsCloseConnections == rhsCloseConnections &&
-                lhsScheduleTimeout?.0 == rhsScheduleTimeout?.0 &&
-                lhsScheduleTimeout?.1 === rhsScheduleTimeout?.1
+            return lhsCreateConnections.elementsEqual(
+                rhsCreateConnections,
+                by: {
+                    $0.0 == $1.0 && $0.1 === $1.1
+                }
+            ) && lhsCloseConnections == rhsCloseConnections && lhsScheduleTimeout?.0 == rhsScheduleTimeout?.0
+                && lhsScheduleTimeout?.1 === rhsScheduleTimeout?.1
         case (.none, .none):
             return true
         default:
@@ -117,15 +128,27 @@ extension HTTPConnectionPool.StateMachine.ConnectionAction: Equatable {
 extension HTTPConnectionPool.StateMachine.RequestAction: Equatable {
     public static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
-        case (.executeRequest(let lhsReq, let lhsConn, let lhsReqID), .executeRequest(let rhsReq, let rhsConn, let rhsReqID)):
+        case (
+            .executeRequest(let lhsReq, let lhsConn, let lhsReqID),
+            .executeRequest(let rhsReq, let rhsConn, let rhsReqID)
+        ):
             return lhsReq == rhsReq && lhsConn == rhsConn && lhsReqID == rhsReqID
-        case (.executeRequestsAndCancelTimeouts(let lhsReqs, let lhsConn), .executeRequestsAndCancelTimeouts(let rhsReqs, let rhsConn)):
+        case (
+            .executeRequestsAndCancelTimeouts(let lhsReqs, let lhsConn),
+            .executeRequestsAndCancelTimeouts(let rhsReqs, let rhsConn)
+        ):
             return lhsReqs.elementsEqual(rhsReqs, by: { $0 == $1 }) && lhsConn == rhsConn
-        case (.failRequest(let lhsReq, _, cancelTimeout: let lhsReqID), .failRequest(let rhsReq, _, cancelTimeout: let rhsReqID)):
+        case (
+            .failRequest(let lhsReq, _, cancelTimeout: let lhsReqID),
+            .failRequest(let rhsReq, _, cancelTimeout: let rhsReqID)
+        ):
             return lhsReq == rhsReq && lhsReqID == rhsReqID
         case (.failRequestsAndCancelTimeouts(let lhsReqs, _), .failRequestsAndCancelTimeouts(let rhsReqs, _)):
             return lhsReqs.elementsEqual(rhsReqs, by: { $0 == $1 })
-        case (.scheduleRequestTimeout(for: let lhsReq, on: let lhsEL), .scheduleRequestTimeout(for: let rhsReq, on: let rhsEL)):
+        case (
+            .scheduleRequestTimeout(for: let lhsReq, on: let lhsEL),
+            .scheduleRequestTimeout(for: let rhsReq, on: let rhsEL)
+        ):
             return lhsReq == rhsReq && lhsEL === rhsEL
         case (.none, .none):
             return true
@@ -146,7 +169,10 @@ extension HTTPConnectionPool.HTTP2StateMachine.EstablishedConnectionAction: Equa
         switch (lhs, rhs) {
         case (.scheduleTimeoutTimer(let lhsConnID, on: let lhsEL), .scheduleTimeoutTimer(let rhsConnID, on: let rhsEL)):
             return lhsConnID == rhsConnID && lhsEL === rhsEL
-        case (.closeConnection(let lhsConn, isShutdown: let lhsShut), .closeConnection(let rhsConn, isShutdown: let rhsShut)):
+        case (
+            .closeConnection(let lhsConn, isShutdown: let lhsShut),
+            .closeConnection(let rhsConn, isShutdown: let rhsShut)
+        ):
             return lhsConn == rhsConn && lhsShut == rhsShut
         case (.none, .none):
             return true

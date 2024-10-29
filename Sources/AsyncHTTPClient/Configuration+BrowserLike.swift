@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+// swift-format-ignore: DontRepeatTypeInStaticProperties
 extension HTTPClient.Configuration {
     /// The ``HTTPClient/Configuration`` for ``HTTPClient/shared`` which tries to mimic the platform's default or prevalent browser as closely as possible.
     ///
@@ -27,7 +28,7 @@ extension HTTPClient.Configuration {
     ///  - Linux (non-Android): Google Chrome
     public static var singletonConfiguration: HTTPClient.Configuration {
         // To start with, let's go with these values. Obtained from Firefox's config.
-        return HTTPClient.Configuration(
+        HTTPClient.Configuration(
             certificateVerification: .fullVerification,
             redirectConfiguration: .follow(max: 20, allowCycles: false),
             timeout: Timeout(connect: .seconds(90), read: .seconds(90)),

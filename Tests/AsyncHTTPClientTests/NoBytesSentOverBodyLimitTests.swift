@@ -14,9 +14,6 @@
 
 import AsyncHTTPClient
 import Atomics
-#if canImport(Network)
-import Network
-#endif
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -28,6 +25,10 @@ import NIOSSL
 import NIOTestUtils
 import NIOTransportServices
 import XCTest
+
+#if canImport(Network)
+import Network
+#endif
 
 final class NoBytesSentOverBodyLimitTests: XCTestCaseHTTPClientTestsBaseClass {
     func testNoBytesSentOverBodyLimit() throws {

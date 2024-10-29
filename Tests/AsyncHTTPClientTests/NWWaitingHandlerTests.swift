@@ -47,9 +47,14 @@ class NWWaitingHandlerTests: XCTestCase {
         let waitingEventHandler = NWWaitingHandler(requester: requester, connectionID: connectionID)
         let embedded = EmbeddedChannel(handlers: [waitingEventHandler])
 
-        embedded.pipeline.fireUserInboundEventTriggered(NIOTSNetworkEvents.WaitingForConnectivity(transientError: .dns(1)))
+        embedded.pipeline.fireUserInboundEventTriggered(
+            NIOTSNetworkEvents.WaitingForConnectivity(transientError: .dns(1))
+        )
 
-        XCTAssertTrue(requester.waitingForConnectivityCalled, "Expected the handler to invoke .waitingForConnectivity on the requester")
+        XCTAssertTrue(
+            requester.waitingForConnectivityCalled,
+            "Expected the handler to invoke .waitingForConnectivity on the requester"
+        )
         XCTAssertEqual(requester.connectionID, connectionID, "Expected the handler to pass connectionID to requester")
         XCTAssertEqual(requester.transientError, NWError.dns(1))
     }
@@ -60,7 +65,10 @@ class NWWaitingHandlerTests: XCTestCase {
         let embedded = EmbeddedChannel(handlers: [waitingEventHandler])
         embedded.pipeline.fireUserInboundEventTriggered(NIOTSNetworkEvents.BetterPathAvailable())
 
-        XCTAssertFalse(requester.waitingForConnectivityCalled, "Should not call .waitingForConnectivity on unrelated events")
+        XCTAssertFalse(
+            requester.waitingForConnectivityCalled,
+            "Should not call .waitingForConnectivity on unrelated events"
+        )
     }
 
     func testWaitingHandlerPassesTheEventDownTheContext() {

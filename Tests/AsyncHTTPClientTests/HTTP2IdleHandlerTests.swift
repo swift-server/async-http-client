@@ -12,12 +12,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import Logging
 import NIOCore
 import NIOEmbedded
 import NIOHTTP2
 import XCTest
+
+@testable import AsyncHTTPClient
 
 class HTTP2IdleHandlerTests: XCTestCase {
     func testReceiveSettingsWithMaxConcurrentStreamSetting() {
@@ -26,7 +27,10 @@ class HTTP2IdleHandlerTests: XCTestCase {
         let embedded = EmbeddedChannel(handlers: [idleHandler])
         XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
 
-        let settingsFrame = HTTP2Frame(streamID: 0, payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 10)])))
+        let settingsFrame = HTTP2Frame(
+            streamID: 0,
+            payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 10)]))
+        )
         XCTAssertEqual(delegate.maxStreams, nil)
         XCTAssertNoThrow(try embedded.writeInbound(settingsFrame))
         XCTAssertEqual(delegate.maxStreams, 10)
@@ -41,7 +45,11 @@ class HTTP2IdleHandlerTests: XCTestCase {
         let settingsFrame = HTTP2Frame(streamID: 0, payload: .settings(.settings([])))
         XCTAssertEqual(delegate.maxStreams, nil)
         XCTAssertNoThrow(try embedded.writeInbound(settingsFrame))
-        XCTAssertEqual(delegate.maxStreams, 100, "Expected to assume 100 maxConcurrentConnection, if no setting was present")
+        XCTAssertEqual(
+            delegate.maxStreams,
+            100,
+            "Expected to assume 100 maxConcurrentConnection, if no setting was present"
+        )
     }
 
     func testEmptySettingsDontOverwriteMaxConcurrentStreamSetting() {
@@ -50,7 +58,10 @@ class HTTP2IdleHandlerTests: XCTestCase {
         let embedded = EmbeddedChannel(handlers: [idleHandler])
         XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
 
-        let settingsFrame = HTTP2Frame(streamID: 0, payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 10)])))
+        let settingsFrame = HTTP2Frame(
+            streamID: 0,
+            payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 10)]))
+        )
         XCTAssertEqual(delegate.maxStreams, nil)
         XCTAssertNoThrow(try embedded.writeInbound(settingsFrame))
         XCTAssertEqual(delegate.maxStreams, 10)
@@ -66,12 +77,18 @@ class HTTP2IdleHandlerTests: XCTestCase {
         let embedded = EmbeddedChannel(handlers: [idleHandler])
         XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
 
-        let settingsFrame = HTTP2Frame(streamID: 0, payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 10)])))
+        let settingsFrame = HTTP2Frame(
+            streamID: 0,
+            payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 10)]))
+        )
         XCTAssertEqual(delegate.maxStreams, nil)
         XCTAssertNoThrow(try embedded.writeInbound(settingsFrame))
         XCTAssertEqual(delegate.maxStreams, 10)
 
-        let emptySettings = HTTP2Frame(streamID: 0, payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 20)])))
+        let emptySettings = HTTP2Frame(
+            streamID: 0,
+            payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 20)]))
+        )
         XCTAssertNoThrow(try embedded.writeInbound(emptySettings))
         XCTAssertEqual(delegate.maxStreams, 20)
     }
@@ -83,7 +100,10 @@ class HTTP2IdleHandlerTests: XCTestCase {
         XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
 
         let randomStreamID = HTTP2StreamID((0..<Int32.max).randomElement()!)
-        let goAwayFrame = HTTP2Frame(streamID: randomStreamID, payload: .goAway(lastStreamID: 0, errorCode: .http11Required, opaqueData: nil))
+        let goAwayFrame = HTTP2Frame(
+            streamID: randomStreamID,
+            payload: .goAway(lastStreamID: 0, errorCode: .http11Required, opaqueData: nil)
+        )
         XCTAssertEqual(delegate.goAwayReceived, false)
         XCTAssertNoThrow(try embedded.writeInbound(goAwayFrame))
         XCTAssertEqual(delegate.goAwayReceived, true)
@@ -100,13 +120,19 @@ class HTTP2IdleHandlerTests: XCTestCase {
         let embedded = EmbeddedChannel(handlers: [idleHandler])
         XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
 
-        let settingsFrame = HTTP2Frame(streamID: 0, payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 10)])))
+        let settingsFrame = HTTP2Frame(
+            streamID: 0,
+            payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 10)]))
+        )
         XCTAssertEqual(delegate.maxStreams, nil)
         XCTAssertNoThrow(try embedded.writeInbound(settingsFrame))
         XCTAssertEqual(delegate.maxStreams, 10)
 
         let randomStreamID = HTTP2StreamID((0..<Int32.max).randomElement()!)
-        let goAwayFrame = HTTP2Frame(streamID: randomStreamID, payload: .goAway(lastStreamID: 0, errorCode: .http11Required, opaqueData: nil))
+        let goAwayFrame = HTTP2Frame(
+            streamID: randomStreamID,
+            payload: .goAway(lastStreamID: 0, errorCode: .http11Required, opaqueData: nil)
+        )
         XCTAssertEqual(delegate.goAwayReceived, false)
         XCTAssertNoThrow(try embedded.writeInbound(goAwayFrame))
         XCTAssertEqual(delegate.goAwayReceived, true)
@@ -138,7 +164,10 @@ class HTTP2IdleHandlerTests: XCTestCase {
         let embedded = EmbeddedChannel(handlers: [idleHandler])
         XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
 
-        let settingsFrame = HTTP2Frame(streamID: 0, payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 10)])))
+        let settingsFrame = HTTP2Frame(
+            streamID: 0,
+            payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 10)]))
+        )
         XCTAssertEqual(delegate.maxStreams, nil)
         XCTAssertNoThrow(try embedded.writeInbound(settingsFrame))
         XCTAssertEqual(delegate.maxStreams, 10)
@@ -154,7 +183,10 @@ class HTTP2IdleHandlerTests: XCTestCase {
         let embedded = EmbeddedChannel(handlers: [idleHandler])
         XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
 
-        let settingsFrame = HTTP2Frame(streamID: 0, payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 10)])))
+        let settingsFrame = HTTP2Frame(
+            streamID: 0,
+            payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 10)]))
+        )
         XCTAssertEqual(delegate.maxStreams, nil)
         XCTAssertNoThrow(try embedded.writeInbound(settingsFrame))
         XCTAssertEqual(delegate.maxStreams, 10)
@@ -163,7 +195,11 @@ class HTTP2IdleHandlerTests: XCTestCase {
 
         for i in 0..<(1...100).randomElement()! {
             let streamID = HTTP2StreamID(i)
-            let event = NIOHTTP2StreamCreatedEvent(streamID: streamID, localInitialWindowSize: nil, remoteInitialWindowSize: nil)
+            let event = NIOHTTP2StreamCreatedEvent(
+                streamID: streamID,
+                localInitialWindowSize: nil,
+                remoteInitialWindowSize: nil
+            )
             embedded.pipeline.fireUserInboundEventTriggered(event)
             openStreams.insert(streamID)
         }
@@ -191,7 +227,10 @@ class HTTP2IdleHandlerTests: XCTestCase {
         let embedded = EmbeddedChannel(handlers: [idleHandler])
         XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
 
-        let settingsFrame = HTTP2Frame(streamID: 0, payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 10)])))
+        let settingsFrame = HTTP2Frame(
+            streamID: 0,
+            payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 10)]))
+        )
         XCTAssertEqual(delegate.maxStreams, nil)
         XCTAssertNoThrow(try embedded.writeInbound(settingsFrame))
         XCTAssertEqual(delegate.maxStreams, 10)
@@ -200,13 +239,20 @@ class HTTP2IdleHandlerTests: XCTestCase {
 
         for i in 0..<(1...100).randomElement()! {
             let streamID = HTTP2StreamID(i)
-            let event = NIOHTTP2StreamCreatedEvent(streamID: streamID, localInitialWindowSize: nil, remoteInitialWindowSize: nil)
+            let event = NIOHTTP2StreamCreatedEvent(
+                streamID: streamID,
+                localInitialWindowSize: nil,
+                remoteInitialWindowSize: nil
+            )
             embedded.pipeline.fireUserInboundEventTriggered(event)
             openStreams.insert(streamID)
         }
 
         let goAwayStreamID = HTTP2StreamID(openStreams.count)
-        let goAwayFrame = HTTP2Frame(streamID: goAwayStreamID, payload: .goAway(lastStreamID: 0, errorCode: .http11Required, opaqueData: nil))
+        let goAwayFrame = HTTP2Frame(
+            streamID: goAwayStreamID,
+            payload: .goAway(lastStreamID: 0, errorCode: .http11Required, opaqueData: nil)
+        )
         XCTAssertEqual(delegate.goAwayReceived, false)
         XCTAssertNoThrow(try embedded.writeInbound(goAwayFrame))
         XCTAssertEqual(delegate.goAwayReceived, true)
@@ -232,7 +278,10 @@ class HTTP2IdleHandlerTests: XCTestCase {
         let embedded = EmbeddedChannel(handlers: [idleHandler])
         XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
 
-        let settingsFrame = HTTP2Frame(streamID: 0, payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 10)])))
+        let settingsFrame = HTTP2Frame(
+            streamID: 0,
+            payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 10)]))
+        )
         XCTAssertEqual(delegate.maxStreams, nil)
         XCTAssertNoThrow(try embedded.writeInbound(settingsFrame))
         XCTAssertEqual(delegate.maxStreams, 10)
@@ -241,12 +290,18 @@ class HTTP2IdleHandlerTests: XCTestCase {
         embedded.pipeline.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
         XCTAssertFalse(embedded.isActive)
 
-        let newSettingsFrame = HTTP2Frame(streamID: 0, payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 20)])))
+        let newSettingsFrame = HTTP2Frame(
+            streamID: 0,
+            payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 20)]))
+        )
         XCTAssertEqual(delegate.maxStreams, 10)
         XCTAssertNoThrow(try embedded.writeInbound(newSettingsFrame))
         XCTAssertEqual(delegate.maxStreams, 10, "Expected message to not be forwarded.")
 
-        let goAwayFrame = HTTP2Frame(streamID: HTTP2StreamID(0), payload: .goAway(lastStreamID: 2, errorCode: .http11Required, opaqueData: nil))
+        let goAwayFrame = HTTP2Frame(
+            streamID: HTTP2StreamID(0),
+            payload: .goAway(lastStreamID: 2, errorCode: .http11Required, opaqueData: nil)
+        )
         XCTAssertEqual(delegate.goAwayReceived, false)
         XCTAssertNoThrow(try embedded.writeInbound(goAwayFrame))
         XCTAssertEqual(delegate.goAwayReceived, false, "Expected go away to not be forwarded.")
@@ -258,19 +313,30 @@ class HTTP2IdleHandlerTests: XCTestCase {
         let embedded = EmbeddedChannel(handlers: [idleHandler])
         XCTAssertNoThrow(try embedded.connect(to: .makeAddressResolvingHost("localhost", port: 0)).wait())
 
-        let settingsFrame = HTTP2Frame(streamID: 0, payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 100)])))
+        let settingsFrame = HTTP2Frame(
+            streamID: 0,
+            payload: .settings(.settings([.init(parameter: .maxConcurrentStreams, value: 100)]))
+        )
         XCTAssertEqual(delegate.maxStreams, nil)
         XCTAssertNoThrow(try embedded.writeInbound(settingsFrame))
         XCTAssertEqual(delegate.maxStreams, 100)
 
         for streamID in HTTP2StreamID(1)..<HTTP2StreamID(5) {
-            let event = NIOHTTP2StreamCreatedEvent(streamID: streamID, localInitialWindowSize: nil, remoteInitialWindowSize: nil)
+            let event = NIOHTTP2StreamCreatedEvent(
+                streamID: streamID,
+                localInitialWindowSize: nil,
+                remoteInitialWindowSize: nil
+            )
             embedded.pipeline.fireUserInboundEventTriggered(event)
             XCTAssertFalse(delegate.goAwayReceived)
         }
 
         // Open one the last stream.
-        let event = NIOHTTP2StreamCreatedEvent(streamID: HTTP2StreamID(5), localInitialWindowSize: nil, remoteInitialWindowSize: nil)
+        let event = NIOHTTP2StreamCreatedEvent(
+            streamID: HTTP2StreamID(5),
+            localInitialWindowSize: nil,
+            remoteInitialWindowSize: nil
+        )
         embedded.pipeline.fireUserInboundEventTriggered(event)
         XCTAssertTrue(delegate.goAwayReceived)
 

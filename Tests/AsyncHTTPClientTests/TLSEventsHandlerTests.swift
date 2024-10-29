@@ -12,12 +12,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import NIOCore
 import NIOEmbedded
 import NIOSSL
 import NIOTLS
 import XCTest
+
+@testable import AsyncHTTPClient
 
 class TLSEventsHandlerTests: XCTestCase {
     func testHandlerHappyPath() {

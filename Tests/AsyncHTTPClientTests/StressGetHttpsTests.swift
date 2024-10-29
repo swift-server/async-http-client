@@ -14,9 +14,6 @@
 
 import AsyncHTTPClient
 import Atomics
-#if canImport(Network)
-import Network
-#endif
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -29,11 +26,17 @@ import NIOTestUtils
 import NIOTransportServices
 import XCTest
 
+#if canImport(Network)
+import Network
+#endif
+
 final class StressGetHttpsTests: XCTestCaseHTTPClientTestsBaseClass {
     func testStressGetHttps() throws {
         let localHTTPBin = HTTPBin(.http1_1(ssl: true))
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: HTTPClient.Configuration(certificateVerification: .none))
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: HTTPClient.Configuration(certificateVerification: .none)
+        )
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
             XCTAssertNoThrow(try localHTTPBin.shutdown())
@@ -43,7 +46,11 @@ final class StressGetHttpsTests: XCTestCaseHTTPClientTestsBaseClass {
         let requestCount = 200
         var futureResults = [EventLoopFuture<HTTPClient.Response>]()
         for _ in 1...requestCount {
-            let req = try HTTPClient.Request(url: "https://localhost:\(localHTTPBin.port)/get", method: .GET, headers: ["X-internal-delay": "100"])
+            let req = try HTTPClient.Request(
+                url: "https://localhost:\(localHTTPBin.port)/get",
+                method: .GET,
+                headers: ["X-internal-delay": "100"]
+            )
             futureResults.append(localClient.execute(request: req))
         }
         XCTAssertNoThrow(try EventLoopFuture<HTTPClient.Response>.andAllSucceed(futureResults, on: eventLoop).wait())

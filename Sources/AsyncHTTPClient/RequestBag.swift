@@ -58,13 +58,15 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
 
     let eventLoopPreference: HTTPClient.EventLoopPreference
 
-    init(request: HTTPClient.Request,
-         eventLoopPreference: HTTPClient.EventLoopPreference,
-         task: HTTPClient.Task<Delegate.Response>,
-         redirectHandler: RedirectHandler<Delegate.Response>?,
-         connectionDeadline: NIODeadline,
-         requestOptions: RequestOptions,
-         delegate: Delegate) throws {
+    init(
+        request: HTTPClient.Request,
+        eventLoopPreference: HTTPClient.EventLoopPreference,
+        task: HTTPClient.Task<Delegate.Response>,
+        redirectHandler: RedirectHandler<Delegate.Response>?,
+        connectionDeadline: NIODeadline,
+        requestOptions: RequestOptions,
+        delegate: Delegate
+    ) throws {
         self.poolKey = .init(request, dnsOverride: requestOptions.dnsOverride)
         self.eventLoopPreference = eventLoopPreference
         self.task = task
@@ -435,8 +437,8 @@ extension RequestBag: HTTPExecutableRequest {
         case .indifferent:
             return self.task.eventLoop
         case .delegate(let eventLoop),
-             .delegateAndChannel(on: let eventLoop),
-             .testOnly_exact(channelOn: let eventLoop, delegateOn: _):
+            .delegateAndChannel(on: let eventLoop),
+            .testOnly_exact(channelOn: let eventLoop, delegateOn: _):
             return eventLoop
         }
     }

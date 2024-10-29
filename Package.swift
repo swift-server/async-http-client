@@ -18,7 +18,7 @@ import PackageDescription
 let package = Package(
     name: "async-http-client",
     products: [
-        .library(name: "AsyncHTTPClient", targets: ["AsyncHTTPClient"]),
+        .library(name: "AsyncHTTPClient", targets: ["AsyncHTTPClient"])
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.71.0"),
@@ -28,14 +28,13 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.19.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.4.4"),
         .package(url: "https://github.com/apple/swift-atomics.git", from: "1.0.2"),
-        .package(url: "https://github.com/apple/swift-docc-plugin.git", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.0.0"),
     ],
     targets: [
         .target(
             name: "CAsyncHTTPClient",
             cSettings: [
-                .define("_GNU_SOURCE"),
+                .define("_GNU_SOURCE")
             ]
         ),
         .target(

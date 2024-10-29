@@ -38,7 +38,7 @@ struct GetJSON {
             let request = HTTPClientRequest(url: "https://xkcd.com/info.0.json")
             let response = try await httpClient.execute(request, timeout: .seconds(30))
             print("HTTP head", response)
-            let body = try await response.body.collect(upTo: 1024 * 1024) // 1 MB
+            let body = try await response.body.collect(upTo: 1024 * 1024)  // 1 MB
             // we use an overload defined in `NIOFoundationCompat` for `decode(_:from:)` to
             // efficiently decode from a `ByteBuffer`
             let comic = try JSONDecoder().decode(Comic.self, from: body)

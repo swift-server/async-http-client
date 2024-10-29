@@ -20,7 +20,7 @@ extension HTTPClient {
     /// - `EventLoopGroup` is ``HTTPClient/defaultEventLoopGroup`` (matching the platform default)
     /// - logging is disabled
     public static var shared: HTTPClient {
-        return globallySharedHTTPClient
+        globallySharedHTTPClient
     }
 }
 

@@ -89,12 +89,14 @@ final class HTTP2Connection {
         self.channel.closeFuture
     }
 
-    init(channel: Channel,
-         connectionID: HTTPConnectionPool.Connection.ID,
-         decompression: HTTPClient.Decompression,
-         maximumConnectionUses: Int?,
-         delegate: HTTP2ConnectionDelegate,
-         logger: Logger) {
+    init(
+        channel: Channel,
+        connectionID: HTTPConnectionPool.Connection.ID,
+        decompression: HTTPClient.Decompression,
+        maximumConnectionUses: Int?,
+        delegate: HTTP2ConnectionDelegate,
+        logger: Logger
+    ) {
         self.channel = channel
         self.id = connectionID
         self.decompression = decompression
@@ -103,7 +105,7 @@ final class HTTP2Connection {
         self.multiplexer = HTTP2StreamMultiplexer(
             mode: .client,
             channel: channel,
-            targetWindowSize: 8 * 1024 * 1024, // 8mb
+            targetWindowSize: 8 * 1024 * 1024,  // 8mb
             outboundBufferSizeHighWatermark: 8196,
             outboundBufferSizeLowWatermark: 4092,
             inboundStreamInitializer: { channel -> EventLoopFuture<Void> in
@@ -162,7 +164,7 @@ final class HTTP2Connection {
     }
 
     func close(promise: EventLoopPromise<Void>?) {
-        return self.channel.close(mode: .all, promise: promise)
+        self.channel.close(mode: .all, promise: promise)
     }
 
     func close() -> EventLoopFuture<Void> {
@@ -199,7 +201,11 @@ final class HTTP2Connection {
             let sync = self.channel.pipeline.syncOperations
 
             let http2Handler = NIOHTTP2Handler(mode: .client, initialSettings: Self.defaultSettings)
-            let idleHandler = HTTP2IdleHandler(delegate: self, logger: self.logger, maximumConnectionUses: self.maximumConnectionUses)
+            let idleHandler = HTTP2IdleHandler(
+                delegate: self,
+                logger: self.logger,
+                maximumConnectionUses: self.maximumConnectionUses
+            )
 
             try sync.addHandler(http2Handler, position: .last)
             try sync.addHandler(idleHandler, position: .last)
@@ -221,7 +227,8 @@ final class HTTP2Connection {
 
         case .active:
             let createStreamChannelPromise = self.channel.eventLoop.makePromise(of: Channel.self)
-            self.multiplexer.createStreamChannel(promise: createStreamChannelPromise) { channel -> EventLoopFuture<Void> in
+            self.multiplexer.createStreamChannel(promise: createStreamChannelPromise) {
+                channel -> EventLoopFuture<Void> in
                 do {
                     // the connection may have been asked to shutdown while we created the child. in
                     // this
@@ -278,7 +285,7 @@ final class HTTP2Connection {
             self.state = .closing
 
             // inform all open streams, that the currently running request should be cancelled.
-            self.openStreams.forEach { box in
+            for box in self.openStreams {
                 box.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
             }
 

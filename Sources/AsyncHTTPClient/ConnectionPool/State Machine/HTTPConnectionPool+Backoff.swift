@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import NIOCore
+
 #if canImport(Darwin)
 import func Darwin.pow
 #elseif canImport(Musl)

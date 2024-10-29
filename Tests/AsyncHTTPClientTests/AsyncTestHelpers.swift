@@ -33,7 +33,7 @@ final class AsyncSequenceWriter<Element>: AsyncSequence, @unchecked Sendable {
     }
 
     func makeAsyncIterator() -> Iterator {
-        return Iterator(self)
+        Iterator(self)
     }
 
     private enum State {
@@ -117,7 +117,9 @@ final class AsyncSequenceWriter<Element>: AsyncSequence, @unchecked Sendable {
         case .waiting:
             let state = self._state
             self.lock.unlock()
-            preconditionFailure("Expected that there is always only one concurrent call to next. Invalid state: \(state)")
+            preconditionFailure(
+                "Expected that there is always only one concurrent call to next. Invalid state: \(state)"
+            )
         }
     }
 

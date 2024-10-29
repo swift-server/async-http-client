@@ -12,9 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import NIOConcurrencyHelpers
 import NIOCore
+
+@testable import AsyncHTTPClient
 
 // This is a MockRequestExecutor, that is synchronized on its EventLoop.
 final class MockRequestExecutor {
@@ -47,7 +48,7 @@ final class MockRequestExecutor {
     }
 
     var requestBodyPartsCount: Int {
-        return self.blockingQueue.count
+        self.blockingQueue.count
     }
 
     let eventLoop: EventLoop
@@ -82,7 +83,8 @@ final class MockRequestExecutor {
         request.requestHeadSent()
     }
 
-    func receiveRequestBody(deadline: NIODeadline = .now() + .seconds(5), _ verify: (ByteBuffer) throws -> Void) throws {
+    func receiveRequestBody(deadline: NIODeadline = .now() + .seconds(5), _ verify: (ByteBuffer) throws -> Void) throws
+    {
         enum ReceiveAction {
             case value(RequestParts)
             case future(EventLoopFuture<RequestParts>)
@@ -155,10 +157,11 @@ final class MockRequestExecutor {
 
     func receiveResponseDemand(deadline: NIODeadline = .now() + .seconds(5)) throws {
         let secondsUntilDeath = deadline - NIODeadline.now()
-        guard self.responseBodyDemandLock.lock(
-            whenValue: true,
-            timeoutSeconds: .init(secondsUntilDeath.nanoseconds / 1_000_000_000)
-        )
+        guard
+            self.responseBodyDemandLock.lock(
+                whenValue: true,
+                timeoutSeconds: .init(secondsUntilDeath.nanoseconds / 1_000_000_000)
+            )
         else {
             throw TimeoutError()
         }
@@ -168,10 +171,11 @@ final class MockRequestExecutor {
 
     func receiveCancellation(deadline: NIODeadline = .now() + .seconds(5)) throws {
         let secondsUntilDeath = deadline - NIODeadline.now()
-        guard self.cancellationLock.lock(
-            whenValue: true,
-            timeoutSeconds: .init(secondsUntilDeath.nanoseconds / 1_000_000_000)
-        )
+        guard
+            self.cancellationLock.lock(
+                whenValue: true,
+                timeoutSeconds: .init(secondsUntilDeath.nanoseconds / 1_000_000_000)
+            )
         else {
             throw TimeoutError()
         }
@@ -265,8 +269,12 @@ extension MockRequestExecutor {
 
         internal func popFirst(deadline: NIODeadline) throws -> Element {
             let secondsUntilDeath = deadline - NIODeadline.now()
-            guard self.condition.lock(whenValue: true,
-                                      timeoutSeconds: .init(secondsUntilDeath.nanoseconds / 1_000_000_000)) else {
+            guard
+                self.condition.lock(
+                    whenValue: true,
+                    timeoutSeconds: .init(secondsUntilDeath.nanoseconds / 1_000_000_000)
+                )
+            else {
                 throw TimeoutError()
             }
             let first = self.buffer.removeFirst()

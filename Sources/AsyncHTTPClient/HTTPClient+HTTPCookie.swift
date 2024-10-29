@@ -12,7 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+import CAsyncHTTPClient
+import NIOCore
 import NIOHTTP1
+
 #if canImport(xlocale)
 import xlocale
 #elseif canImport(locale_h)
@@ -26,9 +29,6 @@ import Musl
 #elseif canImport(Glibc)
 import Glibc
 #endif
-
-import CAsyncHTTPClient
-import NIOCore
 
 extension HTTPClient {
     /// A representation of an HTTP cookie.
@@ -55,7 +55,6 @@ extension HTTPClient {
         /// - parameters:
         ///     - header: String representation of the `Set-Cookie` response header.
         ///     - defaultDomain: Default domain to use if cookie was sent without one.
-        /// - returns: nil if the header is invalid.
         public init?(header: String, defaultDomain: String) {
             // The parsing of "Set-Cookie" headers is defined by Section 5.2, RFC-6265:
             // https://datatracker.ietf.org/doc/html/rfc6265#section-5.2
@@ -136,7 +135,16 @@ extension HTTPClient {
         ///     - maxAge: The cookie's age in seconds, defaults to nil.
         ///     - httpOnly: Whether this cookie should be used by HTTP servers only, defaults to false.
         ///     - secure: Whether this cookie should only be sent using secure channels, defaults to false.
-        internal init(name: String, value: String, path: String = "/", domain: String? = nil, expires_timestamp: Int64? = nil, maxAge: Int? = nil, httpOnly: Bool = false, secure: Bool = false) {
+        internal init(
+            name: String,
+            value: String,
+            path: String = "/",
+            domain: String? = nil,
+            expires_timestamp: Int64? = nil,
+            maxAge: Int? = nil,
+            httpOnly: Bool = false,
+            secure: Bool = false
+        ) {
             self.name = name
             self.value = value
             self.path = path
@@ -152,7 +160,7 @@ extension HTTPClient {
 extension HTTPClient.Response {
     /// List of HTTP cookies returned by the server.
     public var cookies: [HTTPClient.Cookie] {
-        return self.headers["set-cookie"].compactMap { HTTPClient.Cookie(header: $0, defaultDomain: self.host) }
+        self.headers["set-cookie"].compactMap { HTTPClient.Cookie(header: $0, defaultDomain: self.host) }
     }
 }
 
@@ -222,7 +230,8 @@ private func parseTimestamp(_ utf8: String.UTF8View.SubSequence, format: String)
 }
 
 private func parseCookieTime(_ timestampUTF8: String.UTF8View.SubSequence) -> Int64? {
-    if timestampUTF8.contains(where: { $0 < 0x20 /* Control characters */ || $0 == 0x7F /* DEL */ }) {
+    // 0x20: Control characters or 0x7F: DEL
+    if timestampUTF8.contains(where: { $0 < 0x20 || $0 == 0x7F }) {
         return nil
     }
     var timestampUTF8 = timestampUTF8
@@ -235,8 +244,8 @@ private func parseCookieTime(_ timestampUTF8: String.UTF8View.SubSequence) -> In
     }
     guard
         var timeComponents = parseTimestamp(timestampUTF8, format: "%a, %d %b %Y %H:%M:%S")
-        ?? parseTimestamp(timestampUTF8, format: "%a, %d-%b-%y %H:%M:%S")
-        ?? parseTimestamp(timestampUTF8, format: "%a %b %d %H:%M:%S %Y")
+            ?? parseTimestamp(timestampUTF8, format: "%a, %d-%b-%y %H:%M:%S")
+            ?? parseTimestamp(timestampUTF8, format: "%a %b %d %H:%M:%S %Y")
     else {
         return nil
     }

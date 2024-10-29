@@ -12,11 +12,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import Logging
 import NIOCore
 import NIOHTTP1
 import XCTest
+
+@testable import AsyncHTTPClient
 
 final class MockHTTPExecutableRequest: HTTPExecutableRequest {
     enum Event {

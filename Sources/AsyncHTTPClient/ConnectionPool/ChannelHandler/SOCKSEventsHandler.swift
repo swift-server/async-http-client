@@ -31,7 +31,7 @@ final class SOCKSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
 
     private var socksEstablishedPromise: EventLoopPromise<Void>?
     var socksEstablishedFuture: EventLoopFuture<Void>? {
-        return self.socksEstablishedPromise?.futureResult
+        self.socksEstablishedPromise?.futureResult
     }
 
     private let deadline: NIODeadline

@@ -39,9 +39,11 @@ final class HTTP1Connection {
 
     let id: HTTPConnectionPool.Connection.ID
 
-    init(channel: Channel,
-         connectionID: HTTPConnectionPool.Connection.ID,
-         delegate: HTTP1ConnectionDelegate) {
+    init(
+        channel: Channel,
+        connectionID: HTTPConnectionPool.Connection.ID,
+        delegate: HTTP1ConnectionDelegate
+    ) {
         self.channel = channel
         self.id = connectionID
         self.delegate = delegate
@@ -80,7 +82,7 @@ final class HTTP1Connection {
     }
 
     func close(promise: EventLoopPromise<Void>?) {
-        return self.channel.close(mode: .all, promise: promise)
+        self.channel.close(mode: .all, promise: promise)
     }
 
     func close() -> EventLoopFuture<Void> {

@@ -184,9 +184,15 @@ extension HTTP2IdleHandler {
                 self.state = .active(openStreams: 0, maxStreams: maxStreams, remainingUses: remainingUses)
                 return .notifyConnectionNewMaxStreamsSettings(maxStreams)
 
-            case .active(openStreams: let openStreams, maxStreams: let maxStreams, remainingUses: let remainingUses):
-                if let newMaxStreams = settings.last(where: { $0.parameter == .maxConcurrentStreams })?.value, newMaxStreams != maxStreams {
-                    self.state = .active(openStreams: openStreams, maxStreams: newMaxStreams, remainingUses: remainingUses)
+            case .active(let openStreams, let maxStreams, let remainingUses):
+                if let newMaxStreams = settings.last(where: { $0.parameter == .maxConcurrentStreams })?.value,
+                    newMaxStreams != maxStreams
+                {
+                    self.state = .active(
+                        openStreams: openStreams,
+                        maxStreams: newMaxStreams,
+                        remainingUses: remainingUses
+                    )
                     return .notifyConnectionNewMaxStreamsSettings(newMaxStreams)
                 }
                 return .nothing

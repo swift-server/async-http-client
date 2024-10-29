@@ -19,7 +19,8 @@ import XCTest
 
 class HTTPClientCookieTests: XCTestCase {
     func testCookie() {
-        let v = "key=value; PaTh=/path; DoMaIn=EXampLE.CoM; eXpIRes=Wed, 21 Oct 2015 07:28:00 GMT; max-AGE=42; seCURE; HTTPOnly"
+        let v =
+            "key=value; PaTh=/path; DoMaIn=EXampLE.CoM; eXpIRes=Wed, 21 Oct 2015 07:28:00 GMT; max-AGE=42; seCURE; HTTPOnly"
         guard let c = HTTPClient.Cookie(header: v, defaultDomain: "exAMPle.cOm") else {
             XCTFail("Failed to parse cookie")
             return
@@ -67,7 +68,16 @@ class HTTPClientCookieTests: XCTestCase {
     }
 
     func testCookieInit() {
-        let c = HTTPClient.Cookie(name: "key", value: "value", path: "/path", domain: "example.com", expires: Date(timeIntervalSince1970: 1_445_412_480), maxAge: 42, httpOnly: true, secure: true)
+        let c = HTTPClient.Cookie(
+            name: "key",
+            value: "value",
+            path: "/path",
+            domain: "example.com",
+            expires: Date(timeIntervalSince1970: 1_445_412_480),
+            maxAge: 42,
+            httpOnly: true,
+            secure: true
+        )
         XCTAssertEqual("key", c.name)
         XCTAssertEqual("value", c.value)
         XCTAssertEqual("/path", c.path)
@@ -118,17 +128,26 @@ class HTTPClientCookieTests: XCTestCase {
         XCTAssertNil(c?.expires)
 
         // Later values override earlier values, except if they are ignored.
-        c = HTTPClient.Cookie(header: "key=value; expires=Sunday, 06-Nov-94 08:49:37 GMT; expires=04/01/2022", defaultDomain: "example.com")
+        c = HTTPClient.Cookie(
+            header: "key=value; expires=Sunday, 06-Nov-94 08:49:37 GMT; expires=04/01/2022",
+            defaultDomain: "example.com"
+        )
         XCTAssertEqual("key", c?.name)
         XCTAssertEqual("value", c?.value)
         XCTAssertEqual(Date(timeIntervalSince1970: 784_111_777), c?.expires)
 
-        c = HTTPClient.Cookie(header: "key=value; expires=Sunday, 06-Nov-94 08:49:37 GMT; expires=", defaultDomain: "example.com")
+        c = HTTPClient.Cookie(
+            header: "key=value; expires=Sunday, 06-Nov-94 08:49:37 GMT; expires=",
+            defaultDomain: "example.com"
+        )
         XCTAssertEqual("key", c?.name)
         XCTAssertEqual("value", c?.value)
         XCTAssertEqual(Date(timeIntervalSince1970: 784_111_777), c?.expires)
 
-        c = HTTPClient.Cookie(header: "key=value; expires=Sunday, 06-Nov-94 08:49:37 GMT; expires", defaultDomain: "example.com")
+        c = HTTPClient.Cookie(
+            header: "key=value; expires=Sunday, 06-Nov-94 08:49:37 GMT; expires",
+            defaultDomain: "example.com"
+        )
         XCTAssertEqual("key", c?.name)
         XCTAssertEqual("value", c?.value)
         XCTAssertEqual(Date(timeIntervalSince1970: 784_111_777), c?.expires)
@@ -467,11 +486,17 @@ class HTTPClientCookieTests: XCTestCase {
             try XCTSkipIf(localeCheck.tm_mon != 1, "Unable to set locale")
 
             // Cookie parsing should be independent of C locale.
-            var c = HTTPClient.Cookie(header: "key=value; eXpIRes=Sunday, 06-Nov-94 08:49:37 GMT;", defaultDomain: "example.org")
+            var c = HTTPClient.Cookie(
+                header: "key=value; eXpIRes=Sunday, 06-Nov-94 08:49:37 GMT;",
+                defaultDomain: "example.org"
+            )
             XCTAssertEqual(Date(timeIntervalSince1970: 784_111_777), c?.expires)
             c = HTTPClient.Cookie(header: "key=value; eXpIRes=Sun Nov  6 08:49:37 1994;", defaultDomain: "example.org")!
             XCTAssertEqual(Date(timeIntervalSince1970: 784_111_777), c?.expires)
-            c = HTTPClient.Cookie(header: "key=value; eXpIRes=Sonntag, 06-Nov-94 08:49:37 GMT;", defaultDomain: "example.org")!
+            c = HTTPClient.Cookie(
+                header: "key=value; eXpIRes=Sonntag, 06-Nov-94 08:49:37 GMT;",
+                defaultDomain: "example.org"
+            )!
             XCTAssertNil(c?.expires)
         }
     }

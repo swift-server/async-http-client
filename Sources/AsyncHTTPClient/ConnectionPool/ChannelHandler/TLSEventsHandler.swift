@@ -31,7 +31,7 @@ final class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
 
     private var tlsEstablishedPromise: EventLoopPromise<String?>?
     var tlsEstablishedFuture: EventLoopFuture<String?>? {
-        return self.tlsEstablishedPromise?.futureResult
+        self.tlsEstablishedPromise?.futureResult
     }
 
     private let deadline: NIODeadline?

@@ -25,30 +25,38 @@ final class SSLContextCache {
 }
 
 extension SSLContextCache {
-    func sslContext(tlsConfiguration: TLSConfiguration,
-                    eventLoop: EventLoop,
-                    logger: Logger) -> EventLoopFuture<NIOSSLContext> {
+    func sslContext(
+        tlsConfiguration: TLSConfiguration,
+        eventLoop: EventLoop,
+        logger: Logger
+    ) -> EventLoopFuture<NIOSSLContext> {
         let eqTLSConfiguration = BestEffortHashableTLSConfiguration(wrapping: tlsConfiguration)
         let sslContext = self.lock.withLock {
             self.sslContextCache.find(key: eqTLSConfiguration)
         }
 
         if let sslContext = sslContext {
-            logger.trace("found SSL context in cache",
-                         metadata: ["ahc-tls-config": "\(tlsConfiguration)"])
+            logger.trace(
+                "found SSL context in cache",
+                metadata: ["ahc-tls-config": "\(tlsConfiguration)"]
+            )
             return eventLoop.makeSucceededFuture(sslContext)
         }
 
-        logger.trace("creating new SSL context",
-                     metadata: ["ahc-tls-config": "\(tlsConfiguration)"])
+        logger.trace(
+            "creating new SSL context",
+            metadata: ["ahc-tls-config": "\(tlsConfiguration)"]
+        )
         let newSSLContext = self.offloadQueue.asyncWithFuture(eventLoop: eventLoop) {
             try NIOSSLContext(configuration: tlsConfiguration)
         }
 
         newSSLContext.whenSuccess { (newSSLContext: NIOSSLContext) -> Void in
             self.lock.withLock { () -> Void in
-                self.sslContextCache.append(key: eqTLSConfiguration,
-                                            value: newSSLContext)
+                self.sslContextCache.append(
+                    key: eqTLSConfiguration,
+                    value: newSSLContext
+                )
             }
         }
 
