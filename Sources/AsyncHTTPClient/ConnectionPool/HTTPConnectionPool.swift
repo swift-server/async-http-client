@@ -21,7 +21,10 @@ protocol HTTPConnectionPoolDelegate {
     func connectionPoolDidShutdown(_ pool: HTTPConnectionPool, unclean: Bool)
 }
 
-final class HTTPConnectionPool {
+final class HTTPConnectionPool:
+    // TODO: Refactor to use `NIOLockedValueBox` which will allow this to be checked
+    @unchecked Sendable
+{
     private let stateLock = NIOLock()
     private var _state: StateMachine
     /// The connection idle timeout timers. Protected by the stateLock

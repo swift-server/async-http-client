@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Atomics
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -1052,7 +1053,11 @@ class UploadCountingDelegate: HTTPClientResponseDelegate {
 }
 
 final class MockTaskQueuer: HTTPRequestScheduler {
-    private(set) var hitCancelCount = 0
+    private let _hitCancelCount = ManagedAtomic(0)
+
+    var hitCancelCount: Int {
+        self._hitCancelCount.load(ordering: .sequentiallyConsistent)
+    }
 
     let onCancelRequest: (@Sendable (HTTPSchedulableRequest) -> Void)?
 
@@ -1061,7 +1066,7 @@ final class MockTaskQueuer: HTTPRequestScheduler {
     }
 
     func cancelRequest(_ request: HTTPSchedulableRequest) {
-        self.hitCancelCount += 1
+        self._hitCancelCount.wrappingIncrement(ordering: .sequentiallyConsistent)
         self.onCancelRequest?(request)
     }
 }

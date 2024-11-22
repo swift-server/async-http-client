@@ -47,25 +47,67 @@ extension HTTPClient {
             }
 
             @inlinable
-            func writeChunks<Bytes: Collection>(of bytes: Bytes, maxChunkSize: Int) -> EventLoopFuture<Void>
-            where Bytes.Element == UInt8 {
-                let iterator = UnsafeMutableTransferBox(bytes.chunks(ofCount: maxChunkSize).makeIterator())
-                guard let chunk = iterator.wrappedValue.next() else {
+            func writeChunks<Bytes: Collection>(
+                of bytes: Bytes,
+                maxChunkSize: Int
+            ) -> EventLoopFuture<Void> where Bytes.Element == UInt8 {
+                // `StreamWriter` is has design issues, for example
+                // - https://github.com/swift-server/async-http-client/issues/194
+                // - https://github.com/swift-server/async-http-client/issues/264
+                // - We're not told the EventLoop the task runs on and the user is free to return whatever EL they
+                //   want.
+                // One important consideration then is that we must lock around the iterator because we could be hopping
+                // between threads.
+                typealias Iterator = EnumeratedSequence<ChunksOfCountCollection<Bytes>>.Iterator
+                typealias Chunk = (offset: Int, element: ChunksOfCountCollection<Bytes>.Element)
+
+                func makeIteratorAndFirstChunk(
+                    bytes: Bytes
+                ) -> (
+                    iterator: NIOLockedValueBox<Iterator>,
+                    chunk: Chunk
+                )? {
+                    var iterator = bytes.chunks(ofCount: maxChunkSize).enumerated().makeIterator()
+                    guard let chunk = iterator.next() else {
+                        return nil
+                    }
+
+                    return (NIOLockedValueBox(iterator), chunk)
+                }
+
+                guard let (iterator, chunk) = makeIteratorAndFirstChunk(bytes: bytes) else {
                     return self.write(IOData.byteBuffer(.init()))
                 }
 
                 @Sendable  // can't use closure here as we recursively call ourselves which closures can't do
-                func writeNextChunk(_ chunk: Bytes.SubSequence) -> EventLoopFuture<Void> {
-                    if let nextChunk = iterator.wrappedValue.next() {
-                        return self.write(.byteBuffer(ByteBuffer(bytes: chunk))).flatMap {
-                            writeNextChunk(nextChunk)
-                        }
+                func writeNextChunk(_ chunk: Chunk, allDone: EventLoopPromise<Void>) {
+                    if let nextElement = iterator.withLockedValue({ $0.next() }) {
+                        self.write(.byteBuffer(ByteBuffer(bytes: chunk.element))).map {
+                            let index = nextElement.offset
+                            if (index + 1) % 4 == 0 {
+                                // Let's not stack-overflow if the futures insta-complete which they at least in HTTP/2
+                                // mode.
+                                // Also, we must frequently return to the EventLoop because we may get the pause signal
+                                // from another thread. If we fail to do that promptly, we may balloon our body chunks
+                                // into memory.
+                                allDone.futureResult.eventLoop.execute {
+                                    writeNextChunk(nextElement, allDone: allDone)
+                                }
+                            } else {
+                                writeNextChunk(nextElement, allDone: allDone)
+                            }
+                        }.cascadeFailure(to: allDone)
                     } else {
-                        return self.write(.byteBuffer(ByteBuffer(bytes: chunk)))
+                        self.write(.byteBuffer(ByteBuffer(bytes: chunk.element))).cascade(to: allDone)
                     }
                 }
 
-                return writeNextChunk(chunk)
+                // HACK (again, we're not told the right EventLoop): Let's write 0 bytes to make the user tell us...
+                return self.write(.byteBuffer(ByteBuffer())).flatMapWithEventLoop { (_, loop) in
+                    let allDone = loop.makePromise(of: Void.self)
+                    writeNextChunk(chunk, allDone: allDone)
+                    return allDone.futureResult
+                }
             }
         }
 

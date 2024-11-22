@@ -34,14 +34,14 @@ extension Transaction {
             case finished(error: Error?)
         }
 
-        fileprivate enum RequestStreamState {
+        fileprivate enum RequestStreamState: Sendable {
             case requestHeadSent
             case producing
             case paused(continuation: CheckedContinuation<Void, Error>?)
             case finished
         }
 
-        fileprivate enum ResponseStreamState {
+        fileprivate enum ResponseStreamState: Sendable {
             // Waiting for response head. Valid transitions to: streamingBody.
             case waitingForResponseHead
             // streaming response body. Valid transitions to: finished.

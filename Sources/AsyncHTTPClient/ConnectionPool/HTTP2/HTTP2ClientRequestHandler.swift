@@ -432,6 +432,9 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
     }
 }
 
+@available(*, unavailable)
+extension HTTP2ClientRequestHandler: Sendable {}
+
 extension HTTP2ClientRequestHandler: HTTPRequestExecutor {
     func writeRequestBodyPart(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
         if self.eventLoop.inEventLoop {

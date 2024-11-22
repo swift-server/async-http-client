@@ -453,6 +453,7 @@ where
         proxy: Proxy = .none,
         bindTarget: BindTarget = .localhostIPv4RandomPort,
         reusePort: Bool = false,
+        trafficShapingTargetBytesPerSecond: Int? = nil,
         handlerFactory: @escaping (Int) -> (RequestHandler)
     ) {
         self.mode = mode
@@ -482,6 +483,13 @@ where
             .serverChannelInitializer { channel in
                 channel.pipeline.addHandler(self.activeConnCounterHandler)
             }.childChannelInitializer { channel in
+                if let trafficShapingTargetBytesPerSecond = trafficShapingTargetBytesPerSecond {
+                    try! channel.pipeline.syncOperations.addHandler(
+                        BasicInboundTrafficShapingHandler(
+                            targetBytesPerSecond: trafficShapingTargetBytesPerSecond
+                        )
+                    )
+                }
                 do {
                     let connectionID = connectionIDAtomic.loadThenWrappingIncrement(ordering: .relaxed)
 
@@ -606,6 +614,7 @@ where
                     let multiplexer = HTTP2StreamMultiplexer(
                         mode: .server,
                         channel: channel,
+                        targetWindowSize: 16 * 1024 * 1024,  // 16 MiB
                         inboundStreamInitializer: { channel in
                             do {
                                 let sync = channel.pipeline.syncOperations
@@ -662,9 +671,16 @@ extension HTTPBin where RequestHandler == HTTPBinHandler {
         _ mode: Mode = .http1_1(ssl: false, compress: false),
         proxy: Proxy = .none,
         bindTarget: BindTarget = .localhostIPv4RandomPort,
-        reusePort: Bool = false
+        reusePort: Bool = false,
+        trafficShapingTargetBytesPerSecond: Int? = nil
     ) {
-        self.init(mode, proxy: proxy, bindTarget: bindTarget, reusePort: reusePort) { HTTPBinHandler(connectionID: $0) }
+        self.init(
+            mode,
+            proxy: proxy,
+            bindTarget: bindTarget,
+            reusePort: reusePort,
+            trafficShapingTargetBytesPerSecond: trafficShapingTargetBytesPerSecond
+        ) { HTTPBinHandler(connectionID: $0) }
     }
 }
 
@@ -730,16 +746,31 @@ final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
 internal struct HTTPResponseBuilder {
     var head: HTTPResponseHead
     var body: ByteBuffer?
+    var requestBodyByteCount: Int
+    let responseBodyIsRequestBodyByteCount: Bool
 
     init(
         _ version: HTTPVersion = HTTPVersion(major: 1, minor: 1),
         status: HTTPResponseStatus,
-        headers: HTTPHeaders = HTTPHeaders()
+        headers: HTTPHeaders = HTTPHeaders(),
+        responseBodyIsRequestBodyByteCount: Bool = false
     ) {
         self.head = HTTPResponseHead(version: version, status: status, headers: headers)
+        self.requestBodyByteCount = 0
+        self.responseBodyIsRequestBodyByteCount = responseBodyIsRequestBodyByteCount
     }
 
     mutating func add(_ part: ByteBuffer) {
+        self.requestBodyByteCount += part.readableBytes
+        guard !self.responseBodyIsRequestBodyByteCount else {
+            if self.body == nil {
+                self.body = ByteBuffer()
+                self.body!.reserveCapacity(100)
+            }
+            self.body!.clear()
+            self.body!.writeString("\(self.requestBodyByteCount)")
+            return
+        }
         if var body = body {
             var part = part
             body.writeBuffer(&part)
@@ -907,6 +938,13 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                     return
                 }
                 self.resps.append(HTTPResponseBuilder(status: .ok))
+                return
+            case "/post-respond-with-byte-count":
+                if req.method != .POST {
+                    self.resps.append(HTTPResponseBuilder(status: .methodNotAllowed))
+                    return
+                }
+                self.resps.append(HTTPResponseBuilder(status: .ok, responseBodyIsRequestBodyByteCount: true))
                 return
             case "/redirect/302":
                 var headers = self.responseHeaders
@@ -1548,3 +1586,88 @@ private let key = """
     oYQsPj00S3/GA9WDapwe81Wl2A==
     -----END PRIVATE KEY-----
     """
+
+final class BasicInboundTrafficShapingHandler: ChannelDuplexHandler {
+    typealias OutboundIn = ByteBuffer
+    typealias InboundIn = ByteBuffer
+    typealias OutboundOut = ByteBuffer
+
+    enum ReadState {
+        case flowingFreely
+        case pausing
+        case paused
+
+        mutating func pause() {
+            switch self {
+            case .flowingFreely:
+                self = .pausing
+            case .pausing, .paused:
+                ()  // nothing to do
+            }
+        }
+
+        mutating func unpause() -> Bool {
+            switch self {
+            case .flowingFreely:
+                return false  // no extra `read` needed
+            case .pausing:
+                self = .flowingFreely
+                return false  // no extra `read` needed
+            case .paused:
+                self = .flowingFreely
+                return true  // yes, we need an extra read
+            }
+        }
+
+        mutating func shouldRead() -> Bool {
+            switch self {
+            case .flowingFreely:
+                return true
+            case .pausing:
+                self = .paused
+                return false
+            case .paused:
+                return false
+            }
+        }
+    }
+
+    private let targetBytesPerSecond: Int
+    private var currentSecondBytesSeen: Int = 0
+    private var readState: ReadState = .flowingFreely
+
+    init(targetBytesPerSecond: Int) {
+        self.targetBytesPerSecond = targetBytesPerSecond
+    }
+
+    func evaluatePause(context: ChannelHandlerContext) {
+        if self.currentSecondBytesSeen >= self.targetBytesPerSecond {
+            self.readState.pause()
+        } else if self.currentSecondBytesSeen < self.targetBytesPerSecond {
+            if self.readState.unpause() {
+                context.read()
+            }
+        }
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        let loopBoundContext = NIOLoopBound(context, eventLoop: context.eventLoop)
+        defer {
+            context.fireChannelRead(data)
+        }
+        let buffer = Self.unwrapInboundIn(data)
+        let byteCount = buffer.readableBytes
+        self.currentSecondBytesSeen += byteCount
+        context.eventLoop.scheduleTask(in: .seconds(1)) {
+            self.currentSecondBytesSeen -= byteCount
+            self.evaluatePause(context: loopBoundContext.value)
+        }
+        self.evaluatePause(context: context)
+    }
+
+    func read(context: ChannelHandlerContext) {
+        if self.readState.shouldRead() {
+            context.read()
+        }
+    }
+}
