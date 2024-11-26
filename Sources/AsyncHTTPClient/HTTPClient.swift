@@ -222,21 +222,20 @@ public class HTTPClient {
                 """
             )
         }
-        let errorStorageLock = NIOLock()
-        let errorStorage: UnsafeMutableTransferBox<Error?> = .init(nil)
+        let errorStorage: NIOLockedValueBox<Error?> = NIOLockedValueBox(nil)
         let continuation = DispatchWorkItem {}
         self.shutdown(requiresCleanClose: requiresCleanClose, queue: DispatchQueue(label: "async-http-client.shutdown"))
         { error in
             if let error = error {
-                errorStorageLock.withLock {
-                    errorStorage.wrappedValue = error
+                errorStorage.withLockedValue { errorStorage in
+                    errorStorage = error
                 }
             }
             continuation.perform()
         }
         continuation.wait()
-        try errorStorageLock.withLock {
-            if let error = errorStorage.wrappedValue {
+        try errorStorage.withLockedValue { errorStorage in
+            if let error = errorStorage {
                 throw error
             }
         }

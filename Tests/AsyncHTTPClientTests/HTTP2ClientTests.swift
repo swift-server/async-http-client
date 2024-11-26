@@ -16,6 +16,7 @@ import AsyncHTTPClient  // NOT @testable - tests that really need @testable go i
 import Logging
 import NIOCore
 import NIOHTTP1
+import NIOHTTP2
 import NIOPosix
 import NIOSSL
 import XCTest
@@ -462,6 +463,84 @@ class HTTP2ClientTests: XCTestCase {
         XCTAssertEqual(.ok, response?.status)
         XCTAssertEqual(response?.version, .http2)
         XCTAssertEqual(response?.body?.readableBytes, 10_000)
+    }
+
+    func testSimplePost() {
+        let bin = HTTPBin(.http2(compress: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+        let client = self.makeDefaultHTTPClient()
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+        var response: HTTPClient.Response?
+        XCTAssertNoThrow(
+            response = try client.post(
+                url: "https://localhost:\(bin.port)/post",
+                body: .byteBuffer(ByteBuffer(repeating: 0, count: 12345))
+            ).wait()
+        )
+        XCTAssertEqual(.ok, response?.status)
+        XCTAssertEqual(response?.version, .http2)
+        XCTAssertEqual(
+            String(buffer: ByteBuffer(repeating: 0, count: 12345)),
+            try response?.body.map { body in
+                try JSONDecoder().decode(RequestInfo.self, from: body)
+            }?.data
+        )
+    }
+
+    func testHugePost() {
+        // Regression test for https://github.com/swift-server/async-http-client/issues/784
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 2)  // This needs to be more than 1!
+        defer {
+            XCTAssertNoThrow(try group.syncShutdownGracefully())
+        }
+        var serverH2Settings: HTTP2Settings = HTTP2Settings()
+        serverH2Settings.append(HTTP2Setting(parameter: .maxFrameSize, value: 16 * 1024 * 1024 - 1))
+        serverH2Settings.append(HTTP2Setting(parameter: .initialWindowSize, value: Int(Int32.max)))
+        let bin = HTTPBin(
+            .http2(compress: false, settings: serverH2Settings)
+        )
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+        var clientConfig = HTTPClient.Configuration()
+        clientConfig.tlsConfiguration = .clientDefault
+        clientConfig.tlsConfiguration?.certificateVerification = .none
+        clientConfig.httpVersion = .automatic
+        let client = HTTPClient(
+            eventLoopGroupProvider: .shared(group),
+            configuration: clientConfig,
+            backgroundActivityLogger: Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+        )
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        let loop1 = group.next()
+        let loop2 = group.next()
+        precondition(loop1 !== loop2, "bug in test setup, need two distinct loops")
+
+        XCTAssertNoThrow(
+            try client.execute(
+                request: .init(url: "https://localhost:\(bin.port)/get"),
+                eventLoop: .delegateAndChannel(on: loop1)  // This will force the channel to live on `loop1`.
+            ).wait()
+        )
+        var response: HTTPClient.Response?
+        let byteCount = 1024 * 1024 * 1024  // 1 GiB (unfortunately it has to be that big to trigger the bug)
+        XCTAssertNoThrow(
+            response = try client.execute(
+                request: HTTPClient.Request(
+                    url: "https://localhost:\(bin.port)/post-respond-with-byte-count",
+                    method: .POST,
+                    body: .data(Data(repeating: 0, count: byteCount))
+                ),
+                eventLoop: .delegate(on: loop2)
+            ).wait()
+        )
+        XCTAssertEqual(.ok, response?.status)
+        XCTAssertEqual(response?.version, .http2)
+        XCTAssertEqual(
+            "\(byteCount)",
+            try response?.body.map { body in
+                try JSONDecoder().decode(RequestInfo.self, from: body)
+            }?.data
+        )
     }
 }
 
