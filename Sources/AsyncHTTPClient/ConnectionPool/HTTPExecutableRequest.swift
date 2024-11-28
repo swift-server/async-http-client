@@ -132,7 +132,7 @@ import NIOSSL
 ///
 /// Use this handle to cancel the request, while it is waiting for a free connection, to execute the request.
 /// This protocol is only intended to be implemented by the `HTTPConnectionPool`.
-protocol HTTPRequestScheduler {
+protocol HTTPRequestScheduler: Sendable {
     /// Informs the task queuer that a request has been cancelled.
     func cancelRequest(_: HTTPSchedulableRequest)
 }

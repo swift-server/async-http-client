@@ -690,6 +690,7 @@ class HTTPClientRequestTests: XCTestCase {
         ).collect().wait()
 
         let expectedChunks = [
+            ByteBuffer(),  // We're currently emitting an empty chunk first.
             ByteBuffer(repeating: UInt8(ascii: "0"), count: bagOfBytesToByteBufferConversionChunkSize),
             ByteBuffer(repeating: UInt8(ascii: "1"), count: bagOfBytesToByteBufferConversionChunkSize),
             ByteBuffer(repeating: UInt8(ascii: "2"), count: bagOfBytesToByteBufferConversionChunkSize),
@@ -706,6 +707,7 @@ class HTTPClientRequestTests: XCTestCase {
         ).collect().wait()
 
         let expectedChunks = [
+            ByteBuffer(),  // We're currently emitting an empty chunk first.
             ByteBuffer(repeating: 0, count: bagOfBytesToByteBufferConversionChunkSize),
             ByteBuffer(repeating: 1, count: bagOfBytesToByteBufferConversionChunkSize),
             ByteBuffer(repeating: 2, count: bagOfBytesToByteBufferConversionChunkSize),
