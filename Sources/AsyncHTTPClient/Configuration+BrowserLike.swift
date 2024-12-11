@@ -11,6 +11,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //===----------------------------------------------------------------------===//
+import NIOCore
+import NIOHTTPCompression
+import NIOSSL
 
 // swift-format-ignore: DontRepeatTypeInStaticProperties
 extension HTTPClient.Configuration {
