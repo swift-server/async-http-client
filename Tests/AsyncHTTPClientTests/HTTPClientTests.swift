@@ -20,6 +20,7 @@ import NIOCore
 import NIOEmbedded
 import NIOFoundationCompat
 import NIOHTTP1
+import NIOHTTP2
 import NIOHTTPCompression
 import NIOPosix
 import NIOSSL

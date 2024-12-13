@@ -16,6 +16,7 @@ import Logging
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOEmbedded
+import NIOHPACK
 import NIOHTTP1
 import NIOHTTP2
 import NIOPosix
