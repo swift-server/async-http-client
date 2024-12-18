@@ -1,14 +1,14 @@
 changelog:
   categories:
-    - title: SemVer Major
+    - title: ⚠️ SemVer Major
       labels:
-        - semver/major
-    - title: SemVer Minor
+        - ⚠️ semver/major
+    - title: 🆕 SemVer Minor
       labels:
-        - semver/minor
-    - title: SemVer Patch
+        - 🆕 semver/minor
+    - title: 🔨 SemVer Patch
       labels:
-        - semver/patch
+        - 🔨 semver/patch
     - title: Other Changes
       labels:
         - semver/none
