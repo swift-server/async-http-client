@@ -14,6 +14,7 @@
 
 import Algorithms
 import NIOCore
+import NIOHTTP1
 import XCTest
 
 @testable import AsyncHTTPClient

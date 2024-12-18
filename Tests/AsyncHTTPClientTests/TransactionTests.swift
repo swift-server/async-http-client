@@ -16,6 +16,7 @@ import Logging
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOEmbedded
+import NIOFoundationCompat
 import NIOHTTP1
 import NIOPosix
 import XCTest
