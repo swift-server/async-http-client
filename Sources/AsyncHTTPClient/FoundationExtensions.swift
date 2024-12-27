@@ -15,7 +15,11 @@
 // Extensions which provide better ergonomics when using Foundation types,
 // or by using Foundation APIs.
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
 
 extension HTTPClient.Cookie {
     /// The cookie's expiration date.
