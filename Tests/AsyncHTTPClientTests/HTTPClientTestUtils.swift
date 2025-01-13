@@ -39,6 +39,8 @@ import locale_h
 import Darwin
 #elseif canImport(Musl)
 import Musl
+#elseif canImport(Android)
+import Android
 #elseif canImport(Glibc)
 import Glibc
 #endif
