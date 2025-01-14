@@ -59,17 +59,19 @@ class MockSOCKSServer {
             bootstrap = ServerBootstrap(group: elg)
                 .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
                 .childChannelInitializer { channel in
-                    let handshakeHandler = SOCKSServerHandshakeHandler()
-                    return channel.pipeline.addHandlers([
-                        handshakeHandler,
-                        SOCKSTestHandler(handshakeHandler: handshakeHandler),
-                        TestHTTPServer(
-                            expectedURL: expectedURL,
-                            expectedResponse: expectedResponse,
-                            file: file,
-                            line: line
-                        ),
-                    ])
+                    channel.eventLoop.makeCompletedFuture {
+                        let handshakeHandler = SOCKSServerHandshakeHandler()
+                        try channel.pipeline.syncOperations.addHandlers([
+                            handshakeHandler,
+                            SOCKSTestHandler(handshakeHandler: handshakeHandler),
+                            TestHTTPServer(
+                                expectedURL: expectedURL,
+                                expectedResponse: expectedResponse,
+                                file: file,
+                                line: line
+                            ),
+                        ])
+                    }
                 }
         }
         self.channel = try bootstrap.bind(host: "localhost", port: 0).wait()
@@ -112,15 +114,19 @@ class SOCKSTestHandler: ChannelInboundHandler, RemovableChannelHandler {
                 ),
                 promise: nil
             )
-            context.channel.pipeline.addHandlers(
-                [
-                    ByteToMessageHandler(HTTPRequestDecoder()),
-                    HTTPResponseEncoder(),
-                ],
-                position: .after(self)
-            ).whenSuccess {
-                context.channel.pipeline.removeHandler(self, promise: nil)
-                context.channel.pipeline.removeHandler(self.handshakeHandler, promise: nil)
+
+            do {
+                try context.channel.pipeline.syncOperations.addHandlers(
+                    [
+                        ByteToMessageHandler(HTTPRequestDecoder()),
+                        HTTPResponseEncoder(),
+                    ],
+                    position: .after(self)
+                )
+                context.channel.pipeline.syncOperations.removeHandler(self, promise: nil)
+                context.channel.pipeline.syncOperations.removeHandler(self.handshakeHandler, promise: nil)
+            } catch {
+                context.fireErrorCaught(error)
             }
         }
     }

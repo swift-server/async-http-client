@@ -1600,7 +1600,9 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         let server = ServerBootstrap(group: serverGroup)
             .childChannelInitializer { channel in
-                channel.pipeline.addHandler(NIOSSLServerHandler(context: sslContext))
+                channel.eventLoop.makeCompletedFuture {
+                    try channel.pipeline.syncOperations.addHandler(NIOSSLServerHandler(context: sslContext))
+                }
             }
         let serverChannel = try server.bind(host: "localhost", port: 0).wait()
         defer { XCTAssertNoThrow(try serverChannel.close().wait()) }
@@ -1642,7 +1644,9 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         let server = ServerBootstrap(group: serverGroup)
             .childChannelInitializer { channel in
-                channel.pipeline.addHandler(NIOSSLServerHandler(context: sslContext))
+                channel.eventLoop.makeCompletedFuture {
+                    try channel.pipeline.syncOperations.addHandler(NIOSSLServerHandler(context: sslContext))
+                }
             }
         let serverChannel = try server.bind(host: "localhost", port: 0).wait()
         defer { XCTAssertNoThrow(try serverChannel.close().wait()) }

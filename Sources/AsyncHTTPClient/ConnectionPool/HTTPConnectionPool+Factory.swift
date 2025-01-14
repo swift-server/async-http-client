@@ -249,15 +249,15 @@ extension HTTPConnectionPool.ConnectionFactory {
 
             // The proxyEstablishedFuture is set as soon as the HTTP1ProxyConnectHandler is in a
             // pipeline. It is created in HTTP1ProxyConnectHandler's handlerAdded method.
-            return proxyHandler.proxyEstablishedFuture!.flatMap {
-                channel.pipeline.removeHandler(proxyHandler).flatMap {
-                    channel.pipeline.removeHandler(decoder).flatMap {
-                        channel.pipeline.removeHandler(encoder)
-                    }
-                }
+            return proxyHandler.proxyEstablishedFuture!.assumeIsolated().flatMap {
+                channel.pipeline.syncOperations.removeHandler(proxyHandler).assumeIsolated().flatMap {
+                    channel.pipeline.syncOperations.removeHandler(decoder).assumeIsolated().flatMap {
+                        channel.pipeline.syncOperations.removeHandler(encoder)
+                    }.nonisolated()
+                }.nonisolated()
             }.flatMap {
                 self.setupTLSInProxyConnectionIfNeeded(channel, deadline: deadline, logger: logger)
-            }
+            }.nonisolated()
         }
     }
 
@@ -291,13 +291,13 @@ extension HTTPConnectionPool.ConnectionFactory {
 
             // The socksEstablishedFuture is set as soon as the SOCKSEventsHandler is in a
             // pipeline. It is created in SOCKSEventsHandler's handlerAdded method.
-            return socksEventHandler.socksEstablishedFuture!.flatMap {
-                channel.pipeline.removeHandler(socksEventHandler).flatMap {
-                    channel.pipeline.removeHandler(socksConnectHandler)
-                }
+            return socksEventHandler.socksEstablishedFuture!.assumeIsolated().flatMap {
+                channel.pipeline.syncOperations.removeHandler(socksEventHandler).assumeIsolated().flatMap {
+                    channel.pipeline.syncOperations.removeHandler(socksConnectHandler)
+                }.nonisolated()
             }.flatMap {
                 self.setupTLSInProxyConnectionIfNeeded(channel, deadline: deadline, logger: logger)
-            }
+            }.nonisolated()
         }
     }
 

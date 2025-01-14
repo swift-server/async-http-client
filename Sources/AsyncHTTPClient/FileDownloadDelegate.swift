@@ -167,7 +167,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
             }
         } else {
             let fileHandleFuture = io.openFile(
-                path: self.filePath,
+                _deprecatedPath: self.filePath,
                 mode: .write,
                 flags: .allowFileCreation(),
                 eventLoop: task.eventLoop
