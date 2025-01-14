@@ -544,12 +544,12 @@ where
         try sync.addHandler(requestDecoder)
         try sync.addHandler(proxySimulator)
 
-        promise.futureResult.flatMap { _ in
-            channel.pipeline.removeHandler(proxySimulator)
+        promise.futureResult.assumeIsolated().flatMap { _ in
+            channel.pipeline.syncOperations.removeHandler(proxySimulator)
         }.flatMap { _ in
-            channel.pipeline.removeHandler(responseEncoder)
+            channel.pipeline.syncOperations.removeHandler(responseEncoder)
         }.flatMap { _ in
-            channel.pipeline.removeHandler(requestDecoder)
+            channel.pipeline.syncOperations.removeHandler(requestDecoder)
         }.whenComplete { result in
             switch result {
             case .failure:
@@ -653,8 +653,8 @@ where
             }
         }
 
+        try channel.pipeline.syncOperations.addHandler(sslHandler)
         try channel.pipeline.syncOperations.addHandler(alpnHandler)
-        try channel.pipeline.syncOperations.addHandler(sslHandler, position: .before(alpnHandler))
     }
 
     func shutdown() throws {

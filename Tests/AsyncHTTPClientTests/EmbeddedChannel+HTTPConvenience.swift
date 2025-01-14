@@ -87,8 +87,8 @@ extension EmbeddedChannel {
         let decoder = try self.pipeline.syncOperations.handler(type: ByteToMessageHandler<HTTPResponseDecoder>.self)
         let encoder = try self.pipeline.syncOperations.handler(type: HTTPRequestEncoder.self)
 
-        let removeDecoderFuture = self.pipeline.removeHandler(decoder)
-        let removeEncoderFuture = self.pipeline.removeHandler(encoder)
+        let removeDecoderFuture = self.pipeline.syncOperations.removeHandler(decoder)
+        let removeEncoderFuture = self.pipeline.syncOperations.removeHandler(encoder)
 
         self.embeddedEventLoop.run()
 
