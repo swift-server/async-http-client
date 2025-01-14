@@ -31,7 +31,7 @@ bool swiftahc_cshims_strptime(const char * string, const char * format, struct t
 
 bool swiftahc_cshims_strptime_l(const char * string, const char * format, struct tm * result, void * locale) {
     // The pointer cast is fine as long we make sure it really points to a locale_t.
-#ifdef __musl__
+#if defined(__musl__) || defined(__ANDROID__)
     const char * firstNonProcessed = strptime(string, format, result);
 #else
     const char * firstNonProcessed = strptime_l(string, format, result, (locale_t)locale);

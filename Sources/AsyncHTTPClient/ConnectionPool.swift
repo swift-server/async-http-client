@@ -20,7 +20,9 @@ import NIOSSL
 import Darwin.C
 #elseif canImport(Musl)
 import Musl
-#elseif os(Linux) || os(FreeBSD) || os(Android)
+#elseif canImport(Android)
+import Android
+#elseif os(Linux) || os(FreeBSD)
 import Glibc
 #else
 #error("unsupported target operating system")
