@@ -85,10 +85,10 @@ extension HTTPConnectionPool.ConnectionFactory {
                         logger: logger
                     )
 
-                    if let debugInitializer
+                    if let connectionDebugInitializer
                         = self.clientConfiguration.http1_1ConnectionDebugInitializer
                     {
-                        debugInitializer(channel).whenComplete { debugInitializerResult in
+                        connectionDebugInitializer(channel).whenComplete { debugInitializerResult in
                             switch debugInitializerResult {
                             case .success:
                                 requester.http1ConnectionCreated(connection)
@@ -109,14 +109,17 @@ extension HTTPConnectionPool.ConnectionFactory {
                     delegate: http2ConnectionDelegate,
                     decompression: self.clientConfiguration.decompression,
                     maximumConnectionUses: self.clientConfiguration.maximumUsesPerConnection,
-                    logger: logger
+                    logger: logger,
+                    streamChannelDebugInitializer:
+                        self.clientConfiguration.http2StreamChannelDebugInitializer
                 ).whenComplete { result in
                     switch result {
                     case .success((let connection, let maximumStreams)):
-                        if let debugInitializer
+                        if let connectionDebugInitializer
                             = self.clientConfiguration.http2ConnectionDebugInitializer
                         {
-                            debugInitializer(channel).whenComplete { debugInitializerResult in
+                            connectionDebugInitializer(channel).whenComplete {
+                                debugInitializerResult in
                                 switch debugInitializerResult {
                                 case .success:
                                     requester.http2ConnectionCreated(

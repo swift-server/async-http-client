@@ -321,19 +321,11 @@ final class HTTPConnectionPool:
     private func runUnlockedRequestAction(_ action: Actions.RequestAction.Unlocked) {
         switch action {
         case .executeRequest(let request, let connection):
-            connection.executeRequest(
-                request.req,
-                http2StreamChannelDebugInitializer:
-                    self.clientConfiguration.http2StreamChannelDebugInitializer
-            )
+            connection.executeRequest(request.req)
 
         case .executeRequests(let requests, let connection):
             for request in requests {
-                connection.executeRequest(
-                    request.req,
-                    http2StreamChannelDebugInitializer:
-                        self.clientConfiguration.http2StreamChannelDebugInitializer
-                )
+                connection.executeRequest(request.req)
             }
 
         case .failRequest(let request, let error):
@@ -661,18 +653,12 @@ extension HTTPConnectionPool {
             }
         }
 
-        fileprivate func executeRequest(
-            _ request: HTTPExecutableRequest,
-            http2StreamChannelDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)?
-        ) {
+        fileprivate func executeRequest(_ request: HTTPExecutableRequest) {
             switch self._ref {
             case .http1_1(let connection):
                 return connection.executeRequest(request)
             case .http2(let connection):
-                return connection.executeRequest(
-                    request,
-                    streamChannelDebugInitializer: http2StreamChannelDebugInitializer
-                )
+                return connection.executeRequest(request)
             case .__testOnly_connection:
                 break
             }

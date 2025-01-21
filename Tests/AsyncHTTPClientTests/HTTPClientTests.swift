@@ -4308,13 +4308,18 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
     }
 
     func testHTTP1ConnectionDebugInitializer() {
-        let connectionDebugInitializerUtil = DebugInitializerUtil()
+        let connectionDebugInitializerUtil = CountingDebugInitializerUtil()
 
-        var config = HTTPClient.Configuration()
+        // Initializing even with just `http1_1ConnectionDebugInitializer` (rather than manually
+        // modifying `config`) to ensure that the matching `init` actually wires up this argument
+        // with the respective property. This is necessary as these parameters are defaulted and can
+        // be easy to miss.
+        var config = HTTPClient.Configuration(
+            http1_1ConnectionDebugInitializer: connectionDebugInitializerUtil.initialize(channel:)
+        )
         config.tlsConfiguration = .clientDefault
         config.tlsConfiguration?.certificateVerification = .none
         config.httpVersion = .http1Only
-        config.http1_1ConnectionDebugInitializer = connectionDebugInitializerUtil.operation
 
         let client = HTTPClient(
             eventLoopGroupProvider: .singleton,
@@ -4335,19 +4340,26 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         // Even though multiple requests were made, the connection debug initializer must be called
         // only once.
-        XCTAssertEqual(connectionDebugInitializerUtil.executionCount, 1)
+        XCTAssertEqual(connectionDebugInitializerUtil.executionCount.withLockedValue { $0 }, 1)
     }
 
     func testHTTP2ConnectionAndStreamChannelDebugInitializers() {
-        let connectionDebugInitializerUtil = DebugInitializerUtil()
-        let streamChannelDebugInitializerUtil = DebugInitializerUtil()
+        let connectionDebugInitializerUtil = CountingDebugInitializerUtil()
+        let streamChannelDebugInitializerUtil = CountingDebugInitializerUtil()
 
-        var config = HTTPClient.Configuration()
+        // Initializing even with just `http2ConnectionDebugInitializer` and
+        // `http2StreamChannelDebugInitializer` (rather than manually modifying `config`) to ensure
+        // that the matching `init` actually wires up these arguments with the respective
+        // properties. This is necessary as these parameters are defaulted and can be easy to miss.
+        var config = HTTPClient.Configuration(
+            http2ConnectionDebugInitializer:
+                connectionDebugInitializerUtil.initialize(channel:),
+            http2StreamChannelDebugInitializer:
+                streamChannelDebugInitializerUtil.initialize(channel:)
+        )
         config.tlsConfiguration = .clientDefault
         config.tlsConfiguration?.certificateVerification = .none
         config.httpVersion = .automatic
-        config.http2ConnectionDebugInitializer = connectionDebugInitializerUtil.operation
-        config.http2StreamChannelDebugInitializer = streamChannelDebugInitializerUtil.operation
 
         let client = HTTPClient(
             eventLoopGroupProvider: .singleton,
@@ -4370,25 +4382,32 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         // Even though multiple requests were made, the connection debug initializer must be called
         // only once.
-        XCTAssertEqual(connectionDebugInitializerUtil.executionCount, 1)
+        XCTAssertEqual(
+            connectionDebugInitializerUtil.executionCount.withLockedValue { $0 },
+            1
+        )
 
         // The stream channel debug initializer must be called only as much as the number of
         // requests made.
-        XCTAssertEqual(streamChannelDebugInitializerUtil.executionCount, numberOfRequests)
+        XCTAssertEqual(
+            streamChannelDebugInitializerUtil.executionCount.withLockedValue { $0 },
+            numberOfRequests
+        )
     }
 }
 
-class DebugInitializerUtil {
-    var executionCount: Int
+final class CountingDebugInitializerUtil: Sendable {
+    let executionCount: NIOLockedValueBox<Int>
 
+    /// The acual debug initializer.
     @Sendable
-    func operation(channel: Channel) -> EventLoopFuture<Void> {
-        self.executionCount += 1
+    func initialize(channel: Channel) -> EventLoopFuture<Void> {
+        self.executionCount.withLockedValue { $0 += 1 }
 
         return channel.eventLoop.makeSucceededVoidFuture()
     }
 
     init() {
-        self.executionCount = 0
+        self.executionCount = .init(0)
     }
 }

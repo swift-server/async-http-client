@@ -866,13 +866,7 @@ public class HTTPClient {
             connectionPool: ConnectionPool = ConnectionPool(),
             proxy: Proxy? = nil,
             ignoreUncleanSSLShutdown: Bool = false,
-            decompression: Decompression = .disabled,
-            http1_1ConnectionDebugInitializer:
-                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
-            http2ConnectionDebugInitializer:
-                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
-            http2StreamChannelDebugInitializer:
-                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil
+            decompression: Decompression = .disabled
         ) {
             self.tlsConfiguration = tlsConfiguration
             self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
@@ -883,15 +877,96 @@ public class HTTPClient {
             self.httpVersion = .automatic
             self.networkFrameworkWaitForConnectivity = true
             self.enableMultipath = false
-            self.http1_1ConnectionDebugInitializer = http1_1ConnectionDebugInitializer
-            self.http2ConnectionDebugInitializer = http2ConnectionDebugInitializer
-            self.http2StreamChannelDebugInitializer = http2StreamChannelDebugInitializer
         }
 
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
             timeout: Timeout = Timeout(),
+            proxy: Proxy? = nil,
+            ignoreUncleanSSLShutdown: Bool = false,
+            decompression: Decompression = .disabled
+        ) {
+            self.init(
+                tlsConfiguration: tlsConfiguration,
+                redirectConfiguration: redirectConfiguration,
+                timeout: timeout,
+                connectionPool: ConnectionPool(),
+                proxy: proxy,
+                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
+                decompression: decompression
+            )
+        }
+
+        public init(
+            certificateVerification: CertificateVerification,
+            redirectConfiguration: RedirectConfiguration? = nil,
+            timeout: Timeout = Timeout(),
+            maximumAllowedIdleTimeInConnectionPool: TimeAmount = .seconds(60),
+            proxy: Proxy? = nil,
+            ignoreUncleanSSLShutdown: Bool = false,
+            decompression: Decompression = .disabled
+        ) {
+            var tlsConfig = TLSConfiguration.makeClientConfiguration()
+            tlsConfig.certificateVerification = certificateVerification
+            self.init(
+                tlsConfiguration: tlsConfig,
+                redirectConfiguration: redirectConfiguration,
+                timeout: timeout,
+                connectionPool: ConnectionPool(idleTimeout: maximumAllowedIdleTimeInConnectionPool),
+                proxy: proxy,
+                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
+                decompression: decompression
+            )
+        }
+
+        public init(
+            certificateVerification: CertificateVerification,
+            redirectConfiguration: RedirectConfiguration? = nil,
+            timeout: Timeout = Timeout(),
+            connectionPool: TimeAmount = .seconds(60),
+            proxy: Proxy? = nil,
+            ignoreUncleanSSLShutdown: Bool = false,
+            decompression: Decompression = .disabled,
+            backgroundActivityLogger: Logger?
+        ) {
+            var tlsConfig = TLSConfiguration.makeClientConfiguration()
+            tlsConfig.certificateVerification = certificateVerification
+            self.init(
+                tlsConfiguration: tlsConfig,
+                redirectConfiguration: redirectConfiguration,
+                timeout: timeout,
+                connectionPool: ConnectionPool(idleTimeout: connectionPool),
+                proxy: proxy,
+                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
+                decompression: decompression
+            )
+        }
+
+        public init(
+            certificateVerification: CertificateVerification,
+            redirectConfiguration: RedirectConfiguration? = nil,
+            timeout: Timeout = Timeout(),
+            proxy: Proxy? = nil,
+            ignoreUncleanSSLShutdown: Bool = false,
+            decompression: Decompression = .disabled
+        ) {
+            self.init(
+                certificateVerification: certificateVerification,
+                redirectConfiguration: redirectConfiguration,
+                timeout: timeout,
+                maximumAllowedIdleTimeInConnectionPool: .seconds(60),
+                proxy: proxy,
+                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
+                decompression: decompression
+            )
+        }
+
+        public init(
+            tlsConfiguration: TLSConfiguration? = nil,
+            redirectConfiguration: RedirectConfiguration? = nil,
+            timeout: Timeout = Timeout(),
+            connectionPool: ConnectionPool = ConnectionPool(),
             proxy: Proxy? = nil,
             ignoreUncleanSSLShutdown: Bool = false,
             decompression: Decompression = .disabled,
@@ -906,105 +981,14 @@ public class HTTPClient {
                 tlsConfiguration: tlsConfiguration,
                 redirectConfiguration: redirectConfiguration,
                 timeout: timeout,
-                connectionPool: ConnectionPool(),
+                connectionPool: connectionPool,
                 proxy: proxy,
                 ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
-                decompression: decompression,
-                http1_1ConnectionDebugInitializer: http1_1ConnectionDebugInitializer,
-                http2ConnectionDebugInitializer: http2ConnectionDebugInitializer,
-                http2StreamChannelDebugInitializer: http2StreamChannelDebugInitializer
+                decompression: decompression
             )
-        }
-
-        public init(
-            certificateVerification: CertificateVerification,
-            redirectConfiguration: RedirectConfiguration? = nil,
-            timeout: Timeout = Timeout(),
-            maximumAllowedIdleTimeInConnectionPool: TimeAmount = .seconds(60),
-            proxy: Proxy? = nil,
-            ignoreUncleanSSLShutdown: Bool = false,
-            decompression: Decompression = .disabled,
-            http1_1ConnectionDebugInitializer:
-                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
-            http2ConnectionDebugInitializer:
-                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
-            http2StreamChannelDebugInitializer:
-                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil
-        ) {
-            var tlsConfig = TLSConfiguration.makeClientConfiguration()
-            tlsConfig.certificateVerification = certificateVerification
-            self.init(
-                tlsConfiguration: tlsConfig,
-                redirectConfiguration: redirectConfiguration,
-                timeout: timeout,
-                connectionPool: ConnectionPool(idleTimeout: maximumAllowedIdleTimeInConnectionPool),
-                proxy: proxy,
-                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
-                decompression: decompression,
-                http1_1ConnectionDebugInitializer: http1_1ConnectionDebugInitializer,
-                http2ConnectionDebugInitializer: http2ConnectionDebugInitializer,
-                http2StreamChannelDebugInitializer: http2StreamChannelDebugInitializer
-            )
-        }
-
-        public init(
-            certificateVerification: CertificateVerification,
-            redirectConfiguration: RedirectConfiguration? = nil,
-            timeout: Timeout = Timeout(),
-            connectionPool: TimeAmount = .seconds(60),
-            proxy: Proxy? = nil,
-            ignoreUncleanSSLShutdown: Bool = false,
-            decompression: Decompression = .disabled,
-            backgroundActivityLogger: Logger?,
-            http1_1ConnectionDebugInitializer:
-                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
-            http2ConnectionDebugInitializer:
-                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
-            http2StreamChannelDebugInitializer:
-                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil
-        ) {
-            var tlsConfig = TLSConfiguration.makeClientConfiguration()
-            tlsConfig.certificateVerification = certificateVerification
-            self.init(
-                tlsConfiguration: tlsConfig,
-                redirectConfiguration: redirectConfiguration,
-                timeout: timeout,
-                connectionPool: ConnectionPool(idleTimeout: connectionPool),
-                proxy: proxy,
-                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
-                decompression: decompression,
-                http1_1ConnectionDebugInitializer: http1_1ConnectionDebugInitializer,
-                http2ConnectionDebugInitializer: http2ConnectionDebugInitializer,
-                http2StreamChannelDebugInitializer: http2StreamChannelDebugInitializer
-            )
-        }
-
-        public init(
-            certificateVerification: CertificateVerification,
-            redirectConfiguration: RedirectConfiguration? = nil,
-            timeout: Timeout = Timeout(),
-            proxy: Proxy? = nil,
-            ignoreUncleanSSLShutdown: Bool = false,
-            decompression: Decompression = .disabled,
-            http1_1ConnectionDebugInitializer:
-                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
-            http2ConnectionDebugInitializer:
-                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
-            http2StreamChannelDebugInitializer:
-                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil
-        ) {
-            self.init(
-                certificateVerification: certificateVerification,
-                redirectConfiguration: redirectConfiguration,
-                timeout: timeout,
-                maximumAllowedIdleTimeInConnectionPool: .seconds(60),
-                proxy: proxy,
-                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
-                decompression: decompression,
-                http1_1ConnectionDebugInitializer: http1_1ConnectionDebugInitializer,
-                http2ConnectionDebugInitializer: http2ConnectionDebugInitializer,
-                http2StreamChannelDebugInitializer: http2StreamChannelDebugInitializer
-            )
+            self.http1_1ConnectionDebugInitializer = http1_1ConnectionDebugInitializer
+            self.http2ConnectionDebugInitializer = http2ConnectionDebugInitializer
+            self.http2StreamChannelDebugInitializer = http2StreamChannelDebugInitializer
         }
     }
 
