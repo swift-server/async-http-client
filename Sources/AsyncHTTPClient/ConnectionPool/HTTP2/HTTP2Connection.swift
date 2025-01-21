@@ -141,12 +141,21 @@ final class HTTP2Connection {
         return connection._start0().map { maxStreams in (connection, maxStreams) }
     }
 
-    func executeRequest(_ request: HTTPExecutableRequest) {
+    func executeRequest(
+        _ request: HTTPExecutableRequest,
+        streamChannelDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil
+    ) {
         if self.channel.eventLoop.inEventLoop {
-            self.executeRequest0(request)
+            self.executeRequest0(
+                request,
+                streamChannelDebugInitializer: streamChannelDebugInitializer
+            )
         } else {
             self.channel.eventLoop.execute {
-                self.executeRequest0(request)
+                self.executeRequest0(
+                    request,
+                    streamChannelDebugInitializer: streamChannelDebugInitializer
+                )
             }
         }
     }
@@ -218,7 +227,10 @@ final class HTTP2Connection {
         return readyToAcceptConnectionsPromise.futureResult
     }
 
-    private func executeRequest0(_ request: HTTPExecutableRequest) {
+    private func executeRequest0(
+        _ request: HTTPExecutableRequest,
+        streamChannelDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)?
+    ) {
         self.channel.eventLoop.assertInEventLoop()
 
         switch self.state {
@@ -259,8 +271,14 @@ final class HTTP2Connection {
                         self.openStreams.remove(box)
                     }
 
-                    channel.write(request, promise: nil)
-                    return channel.eventLoop.makeSucceededVoidFuture()
+                    if let streamChannelDebugInitializer {
+                        return streamChannelDebugInitializer(channel).map { _ in
+                            channel.write(request, promise: nil)
+                        }
+                    } else {
+                        channel.write(request, promise: nil)
+                        return channel.eventLoop.makeSucceededVoidFuture()
+                    }
                 } catch {
                     return channel.eventLoop.makeFailedFuture(error)
                 }

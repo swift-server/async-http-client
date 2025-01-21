@@ -4306,4 +4306,89 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         request.setBasicAuth(username: "foo", password: "bar")
         XCTAssertEqual(request.headers.first(name: "Authorization"), "Basic Zm9vOmJhcg==")
     }
+
+    func testHTTP1ConnectionDebugInitializer() {
+        let connectionDebugInitializerUtil = DebugInitializerUtil()
+
+        var config = HTTPClient.Configuration()
+        config.tlsConfiguration = .clientDefault
+        config.tlsConfiguration?.certificateVerification = .none
+        config.httpVersion = .http1Only
+        config.http1_1ConnectionDebugInitializer = connectionDebugInitializerUtil.operation
+
+        let client = HTTPClient(
+            eventLoopGroupProvider: .singleton,
+            configuration: config,
+            backgroundActivityLogger: Logger(
+                label: "HTTPClient",
+                factory: StreamLogHandler.standardOutput(label:)
+            )
+        )
+        defer { XCTAssertNoThrow(client.shutdown()) }
+
+        let bin = HTTPBin(.http1_1(ssl: true, compress: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        for _ in 0..<3 {
+            XCTAssertNoThrow(try client.get(url: "https://localhost:\(bin.port)/get").wait())
+        }
+
+        // Even though multiple requests were made, the connection debug initializer must be called
+        // only once.
+        XCTAssertEqual(connectionDebugInitializerUtil.executionCount, 1)
+    }
+
+    func testHTTP2ConnectionAndStreamChannelDebugInitializers() {
+        let connectionDebugInitializerUtil = DebugInitializerUtil()
+        let streamChannelDebugInitializerUtil = DebugInitializerUtil()
+
+        var config = HTTPClient.Configuration()
+        config.tlsConfiguration = .clientDefault
+        config.tlsConfiguration?.certificateVerification = .none
+        config.httpVersion = .automatic
+        config.http2ConnectionDebugInitializer = connectionDebugInitializerUtil.operation
+        config.http2StreamChannelDebugInitializer = streamChannelDebugInitializerUtil.operation
+
+        let client = HTTPClient(
+            eventLoopGroupProvider: .singleton,
+            configuration: config,
+            backgroundActivityLogger: Logger(
+                label: "HTTPClient",
+                factory: StreamLogHandler.standardOutput(label:)
+            )
+        )
+        defer { XCTAssertNoThrow(client.shutdown()) }
+
+        let bin = HTTPBin(.http2(compress: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        let numberOfRequests = 3
+
+        for _ in 0..<numberOfRequests {
+            XCTAssertNoThrow(try client.get(url: "https://localhost:\(bin.port)/get").wait())
+        }
+
+        // Even though multiple requests were made, the connection debug initializer must be called
+        // only once.
+        XCTAssertEqual(connectionDebugInitializerUtil.executionCount, 1)
+
+        // The stream channel debug initializer must be called only as much as the number of
+        // requests made.
+        XCTAssertEqual(streamChannelDebugInitializerUtil.executionCount, numberOfRequests)
+    }
+}
+
+class DebugInitializerUtil {
+    var executionCount: Int
+
+    @Sendable
+    func operation(channel: Channel) -> EventLoopFuture<Void> {
+        self.executionCount += 1
+
+        return channel.eventLoop.makeSucceededVoidFuture()
+    }
+
+    init() {
+        self.executionCount = 0
+    }
 }

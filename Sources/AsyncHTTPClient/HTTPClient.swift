@@ -847,6 +847,18 @@ public class HTTPClient {
         /// By default, don't use it
         public var enableMultipath: Bool
 
+        /// A method with access to the HTTP/1 connection channel that is called when creating the connection.
+        public var http1_1ConnectionDebugInitializer:
+            (@Sendable (Channel) -> EventLoopFuture<Void>)?
+
+        /// A method with access to the HTTP/2 connection channel that is called when creating the connection.
+        public var http2ConnectionDebugInitializer:
+            (@Sendable (Channel) -> EventLoopFuture<Void>)?
+
+        /// A method with access to the HTTP/2 stream channel that is called when creating the stream.
+        public var http2StreamChannelDebugInitializer:
+            (@Sendable (Channel) -> EventLoopFuture<Void>)?
+
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
@@ -854,7 +866,13 @@ public class HTTPClient {
             connectionPool: ConnectionPool = ConnectionPool(),
             proxy: Proxy? = nil,
             ignoreUncleanSSLShutdown: Bool = false,
-            decompression: Decompression = .disabled
+            decompression: Decompression = .disabled,
+            http1_1ConnectionDebugInitializer:
+                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2ConnectionDebugInitializer:
+                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2StreamChannelDebugInitializer:
+                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil
         ) {
             self.tlsConfiguration = tlsConfiguration
             self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
@@ -865,6 +883,9 @@ public class HTTPClient {
             self.httpVersion = .automatic
             self.networkFrameworkWaitForConnectivity = true
             self.enableMultipath = false
+            self.http1_1ConnectionDebugInitializer = http1_1ConnectionDebugInitializer
+            self.http2ConnectionDebugInitializer = http2ConnectionDebugInitializer
+            self.http2StreamChannelDebugInitializer = http2StreamChannelDebugInitializer
         }
 
         public init(
@@ -873,7 +894,13 @@ public class HTTPClient {
             timeout: Timeout = Timeout(),
             proxy: Proxy? = nil,
             ignoreUncleanSSLShutdown: Bool = false,
-            decompression: Decompression = .disabled
+            decompression: Decompression = .disabled,
+            http1_1ConnectionDebugInitializer:
+                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2ConnectionDebugInitializer:
+                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2StreamChannelDebugInitializer:
+                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil
         ) {
             self.init(
                 tlsConfiguration: tlsConfiguration,
@@ -882,7 +909,10 @@ public class HTTPClient {
                 connectionPool: ConnectionPool(),
                 proxy: proxy,
                 ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
-                decompression: decompression
+                decompression: decompression,
+                http1_1ConnectionDebugInitializer: http1_1ConnectionDebugInitializer,
+                http2ConnectionDebugInitializer: http2ConnectionDebugInitializer,
+                http2StreamChannelDebugInitializer: http2StreamChannelDebugInitializer
             )
         }
 
@@ -893,7 +923,13 @@ public class HTTPClient {
             maximumAllowedIdleTimeInConnectionPool: TimeAmount = .seconds(60),
             proxy: Proxy? = nil,
             ignoreUncleanSSLShutdown: Bool = false,
-            decompression: Decompression = .disabled
+            decompression: Decompression = .disabled,
+            http1_1ConnectionDebugInitializer:
+                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2ConnectionDebugInitializer:
+                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2StreamChannelDebugInitializer:
+                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil
         ) {
             var tlsConfig = TLSConfiguration.makeClientConfiguration()
             tlsConfig.certificateVerification = certificateVerification
@@ -904,7 +940,10 @@ public class HTTPClient {
                 connectionPool: ConnectionPool(idleTimeout: maximumAllowedIdleTimeInConnectionPool),
                 proxy: proxy,
                 ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
-                decompression: decompression
+                decompression: decompression,
+                http1_1ConnectionDebugInitializer: http1_1ConnectionDebugInitializer,
+                http2ConnectionDebugInitializer: http2ConnectionDebugInitializer,
+                http2StreamChannelDebugInitializer: http2StreamChannelDebugInitializer
             )
         }
 
@@ -916,7 +955,13 @@ public class HTTPClient {
             proxy: Proxy? = nil,
             ignoreUncleanSSLShutdown: Bool = false,
             decompression: Decompression = .disabled,
-            backgroundActivityLogger: Logger?
+            backgroundActivityLogger: Logger?,
+            http1_1ConnectionDebugInitializer:
+                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2ConnectionDebugInitializer:
+                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2StreamChannelDebugInitializer:
+                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil
         ) {
             var tlsConfig = TLSConfiguration.makeClientConfiguration()
             tlsConfig.certificateVerification = certificateVerification
@@ -927,7 +972,10 @@ public class HTTPClient {
                 connectionPool: ConnectionPool(idleTimeout: connectionPool),
                 proxy: proxy,
                 ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
-                decompression: decompression
+                decompression: decompression,
+                http1_1ConnectionDebugInitializer: http1_1ConnectionDebugInitializer,
+                http2ConnectionDebugInitializer: http2ConnectionDebugInitializer,
+                http2StreamChannelDebugInitializer: http2StreamChannelDebugInitializer
             )
         }
 
@@ -937,7 +985,13 @@ public class HTTPClient {
             timeout: Timeout = Timeout(),
             proxy: Proxy? = nil,
             ignoreUncleanSSLShutdown: Bool = false,
-            decompression: Decompression = .disabled
+            decompression: Decompression = .disabled,
+            http1_1ConnectionDebugInitializer:
+                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2ConnectionDebugInitializer:
+                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2StreamChannelDebugInitializer:
+                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil
         ) {
             self.init(
                 certificateVerification: certificateVerification,
@@ -946,7 +1000,10 @@ public class HTTPClient {
                 maximumAllowedIdleTimeInConnectionPool: .seconds(60),
                 proxy: proxy,
                 ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
-                decompression: decompression
+                decompression: decompression,
+                http1_1ConnectionDebugInitializer: http1_1ConnectionDebugInitializer,
+                http2ConnectionDebugInitializer: http2ConnectionDebugInitializer,
+                http2StreamChannelDebugInitializer: http2StreamChannelDebugInitializer
             )
         }
     }
