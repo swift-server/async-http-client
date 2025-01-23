@@ -4307,7 +4307,41 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         XCTAssertEqual(request.headers.first(name: "Authorization"), "Basic Zm9vOmJhcg==")
     }
 
-    func testHTTP1ConnectionDebugInitializer() {
+    func testHTTP1PlainTextConnectionDebugInitializer() {
+        let connectionDebugInitializerUtil = CountingDebugInitializerUtil()
+
+        // Initializing even with just `http1_1ConnectionDebugInitializer` (rather than manually
+        // modifying `config`) to ensure that the matching `init` actually wires up this argument
+        // with the respective property. This is necessary as these parameters are defaulted and can
+        // be easy to miss.
+        var config = HTTPClient.Configuration(
+            http1_1ConnectionDebugInitializer: connectionDebugInitializerUtil.initialize(channel:)
+        )
+        config.httpVersion = .http1Only
+
+        let client = HTTPClient(
+            eventLoopGroupProvider: .singleton,
+            configuration: config,
+            backgroundActivityLogger: Logger(
+                label: "HTTPClient",
+                factory: StreamLogHandler.standardOutput(label:)
+            )
+        )
+        defer { XCTAssertNoThrow(client.shutdown()) }
+
+        let bin = HTTPBin(.http1_1(ssl: false, compress: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        for _ in 0..<3 {
+            XCTAssertNoThrow(try client.get(url: "http://localhost:\(bin.port)/get").wait())
+        }
+
+        // Even though multiple requests were made, the connection debug initializer must be called
+        // only once.
+        XCTAssertEqual(connectionDebugInitializerUtil.executionCount, 1)
+    }
+
+    func testHTTP1EncryptedConnectionDebugInitializer() {
         let connectionDebugInitializerUtil = CountingDebugInitializerUtil()
 
         // Initializing even with just `http1_1ConnectionDebugInitializer` (rather than manually
@@ -4340,7 +4374,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         // Even though multiple requests were made, the connection debug initializer must be called
         // only once.
-        XCTAssertEqual(connectionDebugInitializerUtil.executionCount.withLockedValue { $0 }, 1)
+        XCTAssertEqual(connectionDebugInitializerUtil.executionCount, 1)
     }
 
     func testHTTP2ConnectionAndStreamChannelDebugInitializers() {
@@ -4382,32 +4416,27 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         // Even though multiple requests were made, the connection debug initializer must be called
         // only once.
-        XCTAssertEqual(
-            connectionDebugInitializerUtil.executionCount.withLockedValue { $0 },
-            1
-        )
+        XCTAssertEqual(connectionDebugInitializerUtil.executionCount, 1)
 
         // The stream channel debug initializer must be called only as much as the number of
         // requests made.
-        XCTAssertEqual(
-            streamChannelDebugInitializerUtil.executionCount.withLockedValue { $0 },
-            numberOfRequests
-        )
+        XCTAssertEqual(streamChannelDebugInitializerUtil.executionCount, numberOfRequests)
     }
 }
 
 final class CountingDebugInitializerUtil: Sendable {
-    let executionCount: NIOLockedValueBox<Int>
+    private let _executionCount: NIOLockedValueBox<Int>
+    var executionCount: Int { self._executionCount.withLockedValue { $0 } }
 
     /// The acual debug initializer.
     @Sendable
     func initialize(channel: Channel) -> EventLoopFuture<Void> {
-        self.executionCount.withLockedValue { $0 += 1 }
+        self._executionCount.withLockedValue { $0 += 1 }
 
         return channel.eventLoop.makeSucceededVoidFuture()
     }
 
     init() {
-        self.executionCount = .init(0)
+        self._executionCount = .init(0)
     }
 }
