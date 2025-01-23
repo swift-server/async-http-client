@@ -4307,7 +4307,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         XCTAssertEqual(request.headers.first(name: "Authorization"), "Basic Zm9vOmJhcg==")
     }
 
-    func testHTTP1PlainTextConnectionDebugInitializer() {
+    func runBaseTestForHTTP1ConnectionDebugInitializer(ssl: Bool) {
         let connectionDebugInitializerUtil = CountingDebugInitializerUtil()
 
         // Initializing even with just `http1_1ConnectionDebugInitializer` (rather than manually
@@ -4315,9 +4315,16 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         // with the respective property. This is necessary as these parameters are defaulted and can
         // be easy to miss.
         var config = HTTPClient.Configuration(
-            http1_1ConnectionDebugInitializer: connectionDebugInitializerUtil.initialize(channel:)
+            http1_1ConnectionDebugInitializer: { channel in
+                return connectionDebugInitializerUtil.initialize(channel: channel)
+            }
         )
         config.httpVersion = .http1Only
+
+        if ssl {
+            config.tlsConfiguration = .clientDefault
+            config.tlsConfiguration?.certificateVerification = .none
+        }
 
         let client = HTTPClient(
             eventLoopGroupProvider: .singleton,
@@ -4329,11 +4336,13 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         )
         defer { XCTAssertNoThrow(client.shutdown()) }
 
-        let bin = HTTPBin(.http1_1(ssl: false, compress: false))
+        let bin = HTTPBin(.http1_1(ssl: ssl, compress: false))
         defer { XCTAssertNoThrow(try bin.shutdown()) }
 
+        let scheme = ssl ? "https" : "http"
+
         for _ in 0..<3 {
-            XCTAssertNoThrow(try client.get(url: "http://localhost:\(bin.port)/get").wait())
+            XCTAssertNoThrow(try client.get(url: "\(scheme)://localhost:\(bin.port)/get").wait())
         }
 
         // Even though multiple requests were made, the connection debug initializer must be called
@@ -4341,40 +4350,12 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         XCTAssertEqual(connectionDebugInitializerUtil.executionCount, 1)
     }
 
+    func testHTTP1PlainTextConnectionDebugInitializer() {
+        runBaseTestForHTTP1ConnectionDebugInitializer(ssl: false)
+    }
+
     func testHTTP1EncryptedConnectionDebugInitializer() {
-        let connectionDebugInitializerUtil = CountingDebugInitializerUtil()
-
-        // Initializing even with just `http1_1ConnectionDebugInitializer` (rather than manually
-        // modifying `config`) to ensure that the matching `init` actually wires up this argument
-        // with the respective property. This is necessary as these parameters are defaulted and can
-        // be easy to miss.
-        var config = HTTPClient.Configuration(
-            http1_1ConnectionDebugInitializer: connectionDebugInitializerUtil.initialize(channel:)
-        )
-        config.tlsConfiguration = .clientDefault
-        config.tlsConfiguration?.certificateVerification = .none
-        config.httpVersion = .http1Only
-
-        let client = HTTPClient(
-            eventLoopGroupProvider: .singleton,
-            configuration: config,
-            backgroundActivityLogger: Logger(
-                label: "HTTPClient",
-                factory: StreamLogHandler.standardOutput(label:)
-            )
-        )
-        defer { XCTAssertNoThrow(client.shutdown()) }
-
-        let bin = HTTPBin(.http1_1(ssl: true, compress: false))
-        defer { XCTAssertNoThrow(try bin.shutdown()) }
-
-        for _ in 0..<3 {
-            XCTAssertNoThrow(try client.get(url: "https://localhost:\(bin.port)/get").wait())
-        }
-
-        // Even though multiple requests were made, the connection debug initializer must be called
-        // only once.
-        XCTAssertEqual(connectionDebugInitializerUtil.executionCount, 1)
+        runBaseTestForHTTP1ConnectionDebugInitializer(ssl: true)
     }
 
     func testHTTP2ConnectionAndStreamChannelDebugInitializers() {
@@ -4386,10 +4367,12 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         // that the matching `init` actually wires up these arguments with the respective
         // properties. This is necessary as these parameters are defaulted and can be easy to miss.
         var config = HTTPClient.Configuration(
-            http2ConnectionDebugInitializer:
-                connectionDebugInitializerUtil.initialize(channel:),
-            http2StreamChannelDebugInitializer:
-                streamChannelDebugInitializerUtil.initialize(channel:)
+            http2ConnectionDebugInitializer: { channel in
+                return connectionDebugInitializerUtil.initialize(channel: channel)
+            },
+            http2StreamChannelDebugInitializer: { channel in
+                return streamChannelDebugInitializerUtil.initialize(channel: channel)
+            }
         )
         config.tlsConfiguration = .clientDefault
         config.tlsConfiguration?.certificateVerification = .none
@@ -4429,7 +4412,6 @@ final class CountingDebugInitializerUtil: Sendable {
     var executionCount: Int { self._executionCount.withLockedValue { $0 } }
 
     /// The acual debug initializer.
-    @Sendable
     func initialize(channel: Channel) -> EventLoopFuture<Void> {
         self._executionCount.withLockedValue { $0 += 1 }
 
