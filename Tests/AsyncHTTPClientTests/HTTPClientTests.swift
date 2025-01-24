@@ -4411,7 +4411,7 @@ final class CountingDebugInitializerUtil: Sendable {
     private let _executionCount: NIOLockedValueBox<Int>
     var executionCount: Int { self._executionCount.withLockedValue { $0 } }
 
-    /// The acual debug initializer.
+    /// The actual debug initializer.
     func initialize(channel: Channel) -> EventLoopFuture<Void> {
         self._executionCount.withLockedValue { $0 += 1 }
 
