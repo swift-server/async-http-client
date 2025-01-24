@@ -4326,15 +4326,19 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             config.tlsConfiguration?.certificateVerification = .none
         }
 
-        let client = HTTPClient(
+        let higherConnectTimeout = CountingDebugInitializerUtil.duration + .milliseconds(100)
+        var configWithHigherTimeout = config
+        configWithHigherTimeout.timeout = .init(connect: higherConnectTimeout)
+
+        let clientWithHigherTimeout = HTTPClient(
             eventLoopGroupProvider: .singleton,
-            configuration: config,
+            configuration: configWithHigherTimeout,
             backgroundActivityLogger: Logger(
                 label: "HTTPClient",
                 factory: StreamLogHandler.standardOutput(label:)
             )
         )
-        defer { XCTAssertNoThrow(client.shutdown()) }
+        defer { XCTAssertNoThrow(try clientWithHigherTimeout.syncShutdown()) }
 
         let bin = HTTPBin(.http1_1(ssl: ssl, compress: false))
         defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -4342,12 +4346,34 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let scheme = ssl ? "https" : "http"
 
         for _ in 0..<3 {
-            XCTAssertNoThrow(try client.get(url: "\(scheme)://localhost:\(bin.port)/get").wait())
+            XCTAssertNoThrow(
+                try clientWithHigherTimeout.get(url: "\(scheme)://localhost:\(bin.port)/get").wait()
+            )
         }
 
         // Even though multiple requests were made, the connection debug initializer must be called
         // only once.
         XCTAssertEqual(connectionDebugInitializerUtil.executionCount, 1)
+
+        let lowerConnectTimeout = CountingDebugInitializerUtil.duration - .milliseconds(100)
+        var configWithLowerTimeout = config
+        configWithLowerTimeout.timeout = .init(connect: lowerConnectTimeout)
+
+        let clientWithLowerTimeout = HTTPClient(
+            eventLoopGroupProvider: .singleton,
+            configuration: configWithLowerTimeout,
+            backgroundActivityLogger: Logger(
+                label: "HTTPClient",
+                factory: StreamLogHandler.standardOutput(label:)
+            )
+        )
+        defer { XCTAssertNoThrow(try clientWithLowerTimeout.syncShutdown()) }
+
+        XCTAssertThrowsError(
+            try clientWithLowerTimeout.get(url: "\(scheme)://localhost:\(bin.port)/get").wait()
+        ) {
+            XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
+        }
     }
 
     func testHTTP1PlainTextConnectionDebugInitializer() {
@@ -4378,15 +4404,19 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         config.tlsConfiguration?.certificateVerification = .none
         config.httpVersion = .automatic
 
-        let client = HTTPClient(
+        let higherConnectTimeout = CountingDebugInitializerUtil.duration + .milliseconds(100)
+        var configWithHigherTimeout = config
+        configWithHigherTimeout.timeout = .init(connect: higherConnectTimeout)
+
+        let clientWithHigherTimeout = HTTPClient(
             eventLoopGroupProvider: .singleton,
-            configuration: config,
+            configuration: configWithHigherTimeout,
             backgroundActivityLogger: Logger(
                 label: "HTTPClient",
                 factory: StreamLogHandler.standardOutput(label:)
             )
         )
-        defer { XCTAssertNoThrow(client.shutdown()) }
+        defer { XCTAssertNoThrow(try clientWithHigherTimeout.syncShutdown()) }
 
         let bin = HTTPBin(.http2(compress: false))
         defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -4394,7 +4424,9 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let numberOfRequests = 3
 
         for _ in 0..<numberOfRequests {
-            XCTAssertNoThrow(try client.get(url: "https://localhost:\(bin.port)/get").wait())
+            XCTAssertNoThrow(
+                try clientWithHigherTimeout.get(url: "https://localhost:\(bin.port)/get").wait()
+            )
         }
 
         // Even though multiple requests were made, the connection debug initializer must be called
@@ -4404,21 +4436,44 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         // The stream channel debug initializer must be called only as much as the number of
         // requests made.
         XCTAssertEqual(streamChannelDebugInitializerUtil.executionCount, numberOfRequests)
+
+        let lowerConnectTimeout = CountingDebugInitializerUtil.duration - .milliseconds(100)
+        var configWithLowerTimeout = config
+        configWithLowerTimeout.timeout = .init(connect: lowerConnectTimeout)
+
+        let clientWithLowerTimeout = HTTPClient(
+            eventLoopGroupProvider: .singleton,
+            configuration: configWithLowerTimeout,
+            backgroundActivityLogger: Logger(
+                label: "HTTPClient",
+                factory: StreamLogHandler.standardOutput(label:)
+            )
+        )
+        defer { XCTAssertNoThrow(try clientWithLowerTimeout.syncShutdown()) }
+
+        XCTAssertThrowsError(
+            try clientWithLowerTimeout.get(url: "https://localhost:\(bin.port)/get").wait()
+        ) {
+            XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
+        }
     }
 }
 
 final class CountingDebugInitializerUtil: Sendable {
-    private let _executionCount: NIOLockedValueBox<Int>
+    private let _executionCount = NIOLockedValueBox<Int>(0)
     var executionCount: Int { self._executionCount.withLockedValue { $0 } }
+
+    /// The minimum time to spend running the debug initializer.
+    static let duration: TimeAmount = .milliseconds(300)
 
     /// The actual debug initializer.
     func initialize(channel: Channel) -> EventLoopFuture<Void> {
         self._executionCount.withLockedValue { $0 += 1 }
 
-        return channel.eventLoop.makeSucceededVoidFuture()
-    }
+        let someScheduledTask = channel.eventLoop.scheduleTask(in: Self.duration) {
+            return channel.eventLoop.makeSucceededVoidFuture()
+        }
 
-    init() {
-        self._executionCount = .init(0)
+        return someScheduledTask.futureResult.flatMap { $0 }
     }
 }
