@@ -4316,7 +4316,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         // be easy to miss.
         var config = HTTPClient.Configuration(
             http1_1ConnectionDebugInitializer: { channel in
-                return connectionDebugInitializerUtil.initialize(channel: channel)
+                connectionDebugInitializerUtil.initialize(channel: channel)
             }
         )
         config.httpVersion = .http1Only
@@ -4394,10 +4394,10 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         // properties. This is necessary as these parameters are defaulted and can be easy to miss.
         var config = HTTPClient.Configuration(
             http2ConnectionDebugInitializer: { channel in
-                return connectionDebugInitializerUtil.initialize(channel: channel)
+                connectionDebugInitializerUtil.initialize(channel: channel)
             },
             http2StreamChannelDebugInitializer: { channel in
-                return streamChannelDebugInitializerUtil.initialize(channel: channel)
+                streamChannelDebugInitializerUtil.initialize(channel: channel)
             }
         )
         config.tlsConfiguration = .clientDefault
@@ -4471,7 +4471,7 @@ final class CountingDebugInitializerUtil: Sendable {
         self._executionCount.withLockedValue { $0 += 1 }
 
         let someScheduledTask = channel.eventLoop.scheduleTask(in: Self.duration) {
-            return channel.eventLoop.makeSucceededVoidFuture()
+            channel.eventLoop.makeSucceededVoidFuture()
         }
 
         return someScheduledTask.futureResult.flatMap { $0 }
