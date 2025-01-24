@@ -85,9 +85,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                         logger: logger
                     )
 
-                    if let connectionDebugInitializer
-                        = self.clientConfiguration.http1_1ConnectionDebugInitializer
-                    {
+                    if let connectionDebugInitializer = self.clientConfiguration.http1_1ConnectionDebugInitializer {
                         connectionDebugInitializer(channel).whenComplete { debugInitializerResult in
                             switch debugInitializerResult {
                             case .success:
@@ -115,9 +113,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                 ).whenComplete { result in
                     switch result {
                     case .success((let connection, let maximumStreams)):
-                        if let connectionDebugInitializer
-                            = self.clientConfiguration.http2ConnectionDebugInitializer
-                        {
+                        if let connectionDebugInitializer = self.clientConfiguration.http2ConnectionDebugInitializer {
                             connectionDebugInitializer(channel).whenComplete {
                                 debugInitializerResult in
                                 switch debugInitializerResult {

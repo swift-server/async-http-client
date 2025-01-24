@@ -848,16 +848,13 @@ public class HTTPClient {
         public var enableMultipath: Bool
 
         /// A method with access to the HTTP/1 connection channel that is called when creating the connection.
-        public var http1_1ConnectionDebugInitializer:
-            (@Sendable (Channel) -> EventLoopFuture<Void>)?
+        public var http1_1ConnectionDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)?
 
         /// A method with access to the HTTP/2 connection channel that is called when creating the connection.
-        public var http2ConnectionDebugInitializer:
-            (@Sendable (Channel) -> EventLoopFuture<Void>)?
+        public var http2ConnectionDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)?
 
         /// A method with access to the HTTP/2 stream channel that is called when creating the stream.
-        public var http2StreamChannelDebugInitializer:
-            (@Sendable (Channel) -> EventLoopFuture<Void>)?
+        public var http2StreamChannelDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)?
 
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
@@ -970,12 +967,9 @@ public class HTTPClient {
             proxy: Proxy? = nil,
             ignoreUncleanSSLShutdown: Bool = false,
             decompression: Decompression = .disabled,
-            http1_1ConnectionDebugInitializer:
-                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
-            http2ConnectionDebugInitializer:
-                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
-            http2StreamChannelDebugInitializer:
-                (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil
+            http1_1ConnectionDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2ConnectionDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2StreamChannelDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil
         ) {
             self.init(
                 tlsConfiguration: tlsConfiguration,
