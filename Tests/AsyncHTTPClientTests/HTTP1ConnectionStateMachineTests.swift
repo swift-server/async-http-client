@@ -101,6 +101,26 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         XCTAssertEqual(state.read(), .read)
     }
 
+    func testWriteTimeoutAfterErrorDoesntCrash() {
+        var state = HTTP1ConnectionStateMachine()
+        XCTAssertEqual(state.channelActive(isWritable: true), .fireChannelActive)
+
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .GET, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .fixedSize(0))
+        let newRequestAction = state.runNewRequest(head: requestHead, metadata: metadata)
+        XCTAssertEqual(newRequestAction, .sendRequestHead(requestHead, sendEnd: true))
+        XCTAssertEqual(
+            state.headSent(),
+            .notifyRequestHeadSendSuccessfully(resumeRequestBodyStream: false, startIdleTimer: true)
+        )
+
+        struct MyError: Error, Equatable {}
+        XCTAssertEqual(state.errorHappened(MyError()), .failRequest(MyError(), .close(nil)))
+
+        // Primarily we care that we don't crash here
+        XCTAssertEqual(state.idleWriteTimeoutTriggered(), .wait)
+    }
+
     func testAConnectionCloseHeaderInTheRequestLeadsToConnectionCloseAfterRequest() {
         var state = HTTP1ConnectionStateMachine()
         XCTAssertEqual(state.channelActive(isWritable: true), .fireChannelActive)

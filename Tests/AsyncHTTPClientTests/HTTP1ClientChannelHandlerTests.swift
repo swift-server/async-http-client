@@ -841,17 +841,6 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         XCTAssertEqual(request.events.map(\.kind), [.willExecuteRequest, .requestHeadSent])
     }
 
-    class SlowHandler: ChannelOutboundHandler {
-        typealias OutboundIn = HTTPClientRequestPart
-        typealias OutboundOut = HTTPClientRequestPart
-
-        func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
-            context.eventLoop.scheduleTask(in: .milliseconds(300)) {
-                promise?.succeed()
-            }
-        }
-    }
-
     func testIdleWriteTimeoutOutsideOfRunningState() {
         let embedded = EmbeddedChannel()
         var maybeTestUtils: HTTP1TestTools?
@@ -870,8 +859,8 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         }
         request.body = .init(contentLength: nil, stream: streamCallback)
 
-        let delegate = NullResponseDelegate()
-        var maybeRequestBag: RequestBag<NullResponseDelegate>?
+        let accumulator = ResponseAccumulator(request: request)
+        var maybeRequestBag: RequestBag<ResponseAccumulator>?
         XCTAssertNoThrow(
             maybeRequestBag = try RequestBag(
                 request: request,
@@ -883,7 +872,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
                     idleReadTimeout: .milliseconds(10),
                     idleWriteTimeout: .milliseconds(2)
                 ),
-                delegate: delegate
+                delegate: accumulator
             )
         )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
@@ -906,15 +895,6 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         // and ensure that the state machine can tolerate this
         embedded.embeddedEventLoop.advanceTime(by: .milliseconds(250))
     }
-}
-
-class NullResponseDelegate: HTTPClientResponseDelegate {
-    typealias Response = Void
-
-    func didFinishRequest(task: AsyncHTTPClient.HTTPClient.Task<Void>) throws {
-        ()
-    }
-
 }
 
 class TestBackpressureWriter {
