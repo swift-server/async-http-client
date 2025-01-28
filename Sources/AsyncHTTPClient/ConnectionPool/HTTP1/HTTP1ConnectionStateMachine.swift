@@ -83,6 +83,8 @@ struct HTTP1ConnectionStateMachine {
         case fireChannelActive
         case fireChannelInactive
         case fireChannelError(Error, closeConnection: Bool)
+
+        case noAction
     }
 
     private var state: State
@@ -359,7 +361,7 @@ struct HTTP1ConnectionStateMachine {
 
     mutating func idleWriteTimeoutTriggered() -> Action {
         guard case .inRequest(var requestStateMachine, let close) = self.state else {
-            preconditionFailure("Invalid state: \(self.state)")
+            return .noAction
         }
 
         return self.avoidingStateMachineCoW { state -> Action in

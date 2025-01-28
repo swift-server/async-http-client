@@ -281,7 +281,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         case .close:
             context.close(promise: nil)
 
-        case .wait:
+        case .wait, .noAction:
             break
 
         case .forwardResponseHead(let head, let pauseRequestBodyStream):
