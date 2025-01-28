@@ -314,6 +314,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             let oldRequest = self.request!
             self.request = nil
             self.runTimeoutAction(.clearIdleReadTimeoutTimer, context: context)
+            self.runTimeoutAction(.clearIdleWriteTimeoutTimer, context: context)
 
             switch finalAction {
             case .close:
@@ -353,6 +354,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             let oldRequest = self.request!
             self.request = nil
             self.runTimeoutAction(.clearIdleReadTimeoutTimer, context: context)
+            self.runTimeoutAction(.clearIdleWriteTimeoutTimer, context: context)
 
             switch finalAction {
             case .close(let writePromise):
