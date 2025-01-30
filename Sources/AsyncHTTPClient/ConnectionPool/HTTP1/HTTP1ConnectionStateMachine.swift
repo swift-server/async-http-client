@@ -359,7 +359,7 @@ struct HTTP1ConnectionStateMachine {
 
     mutating func idleWriteTimeoutTriggered() -> Action {
         guard case .inRequest(var requestStateMachine, let close) = self.state else {
-            preconditionFailure("Invalid state: \(self.state)")
+            return .wait
         }
 
         return self.avoidingStateMachineCoW { state -> Action in
