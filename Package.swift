@@ -27,6 +27,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.13.0"),
         .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.19.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.4.4"),
+        .package(url: "https://github.com/apple/swift-distributed-tracing.git", from: "1.0.0"),
+        .package(url: "https://github.com/apple/swift-service-context.git", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-atomics.git", from: "1.0.2"),
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.0.0"),
     ],
@@ -53,6 +55,8 @@ let package = Package(
                 .product(name: "NIOSOCKS", package: "swift-nio-extras"),
                 .product(name: "NIOTransportServices", package: "swift-nio-transport-services"),
                 .product(name: "Logging", package: "swift-log"),
+                .product(name: "Tracing", package: "swift-distributed-tracing"),
+                .product(name: "ServiceContextModule", package: "swift-service-context"),
                 .product(name: "Atomics", package: "swift-atomics"),
                 .product(name: "Algorithms", package: "swift-algorithms"),
             ]
