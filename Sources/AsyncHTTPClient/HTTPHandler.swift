@@ -885,6 +885,8 @@ extension HTTPClient {
 
         /// Provides the result of this request.
         ///
+        /// - warning: This method may violates Structured Concurrency because doesn't respect cancellation.
+        ///
         /// - returns: The value of ``futureResult`` when it completes.
         /// - throws: The error value of ``futureResult`` if it errors.
         @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
@@ -892,12 +894,17 @@ extension HTTPClient {
             try await self.promise.futureResult.get()
         }
 
-        /// Cancels the request execution.
+        /// Initiate cancellation of a HTTP request.
+        ///
+        /// This method will return immeidately and doesn't wait for the cancellation to complete.
         public func cancel() {
             self.fail(reason: HTTPClientError.cancelled)
         }
 
-        /// Cancels the request execution with a custom `Error`.
+        /// Initiate cancellation of a HTTP request with an `error`.
+        ///
+        /// This method will return immeidately and doesn't wait for the cancellation to complete.
+        ///
         /// - Parameter error: the error that is used to fail the promise
         public func fail(reason error: Error) {
             let taskDelegate = self.lock.withLock { () -> HTTPClientTaskDelegate? in
