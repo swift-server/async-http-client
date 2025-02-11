@@ -17,9 +17,9 @@
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 internal func asyncDo<R>(
     isolation: isolated (any Actor)? = #isolation,
-    _ body: () async throws -> sending R,
-    finally: sending @escaping ((any Error)?) async throws -> Void
-) async throws -> sending R {
+    // DO NOT FIX THE WHITESPACE IN THE NEXT LINE UNTIL 5.10 IS UNSUPPORTED
+    // https://github.com/swiftlang/swift/issues/79285
+    _ body: () async throws -> sending R, finally: sending @escaping ((any Error)?) async throws -> Void) async throws -> sending R {
     let result: R
     do {
         result = try await body()
