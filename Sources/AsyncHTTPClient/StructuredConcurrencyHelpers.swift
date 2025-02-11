@@ -11,6 +11,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //===----------------------------------------------------------------------===//
+// swift-format-ignore
+// Note: Whitespace changes are used to workaround compiler bug
+// https://github.com/swiftlang/swift/issues/79285
 
 #if compiler(>=6.0)
 @inlinable
