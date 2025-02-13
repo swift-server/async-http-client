@@ -23,10 +23,10 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     public struct Progress: Sendable {
         public var totalBytes: Int?
         public var receivedBytes: Int
-        public var responseHead: HTTPResponseHead!
+        public var head: HTTPResponseHead!
     }
 
-    private var progress = Progress(totalBytes: nil, receivedBytes: 0, responseHead: nil)
+    private var progress = Progress(totalBytes: nil, receivedBytes: 0, head: nil)
 
     public typealias Response = Progress
 
@@ -136,7 +136,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     ) -> EventLoopFuture<Void> {
         self.reportHead?(task, head)
 
-        self.progress.responseHead = head
+        self.progress.head = head
 
         if let totalBytesString = head.headers.first(name: "Content-Length"),
             let totalBytes = Int(totalBytesString)
