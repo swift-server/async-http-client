@@ -744,7 +744,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                 return response
             }
 
-        XCTAssertEqual(response.head.status, .ok)
+        XCTAssertEqual(.ok, response.head.status)
         XCTAssertEqual("50", response.head.headers.first(name: "content-length"))
 
         XCTAssertEqual(50, response.totalBytes)
@@ -775,7 +775,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                 return response
             }
 
-        XCTAssertEqual(response.head.status, .notFound)
+        XCTAssertEqual(.notFound, response.head.status)
         XCTAssertFalse(response.head.headers.contains(name: "content-length"))
 
         XCTAssertEqual(nil, response.totalBytes)
