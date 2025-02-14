@@ -3917,7 +3917,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         request.headers.add(name: "Accept", value: "text/event-stream")
 
         let response =
-            try TemporaryFileHelpers.withTemporaryFilePath { path -> FileDownloadDelegate.Progress in
+            try TemporaryFileHelpers.withTemporaryFilePath { path -> FileDownloadDelegate.Response in
                 let delegate = try FileDownloadDelegate(path: path)
 
                 let response = try self.defaultClient.execute(
