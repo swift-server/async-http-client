@@ -27,13 +27,10 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
 
         public var head: HTTPResponseHead {
             get {
-                #if DEBUG
-                _head!
-                #else
-                _head ?? .init(version: .init(major: 0, minor: 0), status: .init(statusCode: 0))
-                #endif
+                assert(self._head != nil)
+                return self._head!
             } set {
-                _head = newValue
+                self._head = newValue
             }
         }
 
