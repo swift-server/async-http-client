@@ -29,7 +29,8 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
             get {
                 assert(self._head != nil)
                 return self._head!
-            } set {
+            }
+            set {
                 self._head = newValue
             }
         }
