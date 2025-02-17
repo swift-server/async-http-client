@@ -43,6 +43,9 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
     // the consume body part stack depth is synchronized on the task event loop.
     private var consumeBodyPartStackDepth: Int
 
+    // if a redirect occurs, we store the task for it so we can propagate cancellation
+    private var redirectTask: HTTPClient.Task<Delegate.Response>? = nil
+
     // MARK: HTTPClientTask properties
 
     var logger: Logger {
@@ -234,7 +237,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             executor.demandResponseBodyStream(self)
 
         case .redirect(let executor, let handler, let head, let newURL):
-            handler.redirect(status: head.status, to: newURL, promise: self.task.promise)
+            self.redirectTask = handler.redirect(status: head.status, to: newURL, promise: self.task.promise)
             executor.cancelRequest(self)
 
         case .forwardResponseHead(let head):
@@ -258,7 +261,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             executor.demandResponseBodyStream(self)
 
         case .redirect(let executor, let handler, let head, let newURL):
-            handler.redirect(status: head.status, to: newURL, promise: self.task.promise)
+            self.redirectTask = handler.redirect(status: head.status, to: newURL, promise: self.task.promise)
             executor.cancelRequest(self)
 
         case .forwardResponsePart(let part):
@@ -294,7 +297,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             }
 
         case .redirect(let handler, let head, let newURL):
-            handler.redirect(status: head.status, to: newURL, promise: self.task.promise)
+            self.redirectTask = handler.redirect(status: head.status, to: newURL, promise: self.task.promise)
         }
     }
 
@@ -368,6 +371,8 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             self.failTask0(error)
         case .cancelExecutor(let executor):
             executor.cancelRequest(self)
+        case .propagateCancellation:
+            self.redirectTask?.cancel()
         case .none:
             break
         }
