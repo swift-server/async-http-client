@@ -15,6 +15,7 @@
 import AsyncHTTPClient
 import NIO
 import NIOFoundationCompat
+import NIOHTTP1
 import XCTest
 
 final class HTTPClientStructuredConcurrencyTests: XCTestCase {
