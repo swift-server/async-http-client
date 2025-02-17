@@ -33,8 +33,8 @@ final class TransactionTests: XCTestCase {
         // therefore we create it here as a workaround which works fine
         let scheduledRequestCanceled = self.expectation(description: "scheduled request canceled")
         XCTAsyncTest {
-            let embeddedEventLoop = EmbeddedEventLoop()
-            defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+            let loop = NIOAsyncTestingEventLoop()
+            defer { XCTAssertNoThrow(try loop.syncShutdownGracefully()) }
 
             var request = HTTPClientRequest(url: "https://localhost/")
             request.method = .GET
@@ -45,7 +45,7 @@ final class TransactionTests: XCTestCase {
             }
             let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
-                preferredEventLoop: embeddedEventLoop
+                preferredEventLoop: loop
             )
 
             let queuer = MockTaskQueuer { _ in
@@ -72,8 +72,8 @@ final class TransactionTests: XCTestCase {
 
     func testDeadlineExceededWhileQueuedAndExecutorImmediatelyCancelsTask() {
         XCTAsyncTest {
-            let embeddedEventLoop = EmbeddedEventLoop()
-            defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+            let loop = NIOAsyncTestingEventLoop()
+            defer { XCTAssertNoThrow(try loop.syncShutdownGracefully()) }
 
             var request = HTTPClientRequest(url: "https://localhost/")
             request.method = .GET
@@ -84,7 +84,7 @@ final class TransactionTests: XCTestCase {
             }
             let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
-                preferredEventLoop: embeddedEventLoop
+                preferredEventLoop: loop
             )
 
             let queuer = MockTaskQueuer()
@@ -127,8 +127,8 @@ final class TransactionTests: XCTestCase {
 
     func testResponseStreamingWorks() {
         XCTAsyncTest {
-            let embeddedEventLoop = EmbeddedEventLoop()
-            defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+            let loop = NIOAsyncTestingEventLoop()
+            defer { XCTAssertNoThrow(try loop.syncShutdownGracefully()) }
 
             var request = HTTPClientRequest(url: "https://localhost/")
             request.method = .GET
@@ -140,12 +140,12 @@ final class TransactionTests: XCTestCase {
             }
             let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
-                preferredEventLoop: embeddedEventLoop
+                preferredEventLoop: loop
             )
 
             let executor = MockRequestExecutor(
                 pauseRequestBodyPartStreamAfterASingleWrite: true,
-                eventLoop: embeddedEventLoop
+                eventLoop: loop
             )
 
             transaction.willExecuteRequest(executor)
@@ -186,8 +186,8 @@ final class TransactionTests: XCTestCase {
 
     func testIgnoringResponseBodyWorks() {
         XCTAsyncTest {
-            let embeddedEventLoop = EmbeddedEventLoop()
-            defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+            let loop = NIOAsyncTestingEventLoop()
+            defer { XCTAssertNoThrow(try loop.syncShutdownGracefully()) }
 
             var request = HTTPClientRequest(url: "https://localhost/")
             request.method = .GET
@@ -199,7 +199,7 @@ final class TransactionTests: XCTestCase {
             }
             var tuple: (Transaction, Task<HTTPClientResponse, Error>)! = await Transaction.makeWithResultTask(
                 request: preparedRequest,
-                preferredEventLoop: embeddedEventLoop
+                preferredEventLoop: loop
             )
 
             let transaction = tuple.0
@@ -208,9 +208,10 @@ final class TransactionTests: XCTestCase {
 
             let executor = MockRequestExecutor(
                 pauseRequestBodyPartStreamAfterASingleWrite: true,
-                eventLoop: embeddedEventLoop
+                eventLoop: loop
             )
             executor.runRequest(transaction)
+            await loop.run()
 
             let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["foo": "bar"])
             XCTAssertFalse(executor.signalledDemandForResponseBody)
@@ -234,8 +235,8 @@ final class TransactionTests: XCTestCase {
 
     func testWriteBackpressureWorks() {
         XCTAsyncTest {
-            let embeddedEventLoop = EmbeddedEventLoop()
-            defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+            let loop = NIOAsyncTestingEventLoop()
+            defer { XCTAssertNoThrow(try loop.syncShutdownGracefully()) }
 
             let streamWriter = AsyncSequenceWriter<ByteBuffer>()
             XCTAssertFalse(streamWriter.hasDemand, "Did not expect to have a demand at this point")
@@ -251,12 +252,13 @@ final class TransactionTests: XCTestCase {
             }
             let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
-                preferredEventLoop: embeddedEventLoop
+                preferredEventLoop: loop
             )
 
-            let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
+            let executor = MockRequestExecutor(eventLoop: loop)
 
             executor.runRequest(transaction)
+            await loop.run()
 
             for i in 0..<100 {
                 XCTAssertFalse(streamWriter.hasDemand, "Did not expect to have demand yet")
@@ -364,8 +366,8 @@ final class TransactionTests: XCTestCase {
 
     func testSimplePostRequest() {
         XCTAsyncTest {
-            let embeddedEventLoop = EmbeddedEventLoop()
-            defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+            let loop = NIOAsyncTestingEventLoop()
+            defer { XCTAssertNoThrow(try loop.syncShutdownGracefully()) }
 
             var request = HTTPClientRequest(url: "https://localhost/")
             request.method = .POST
@@ -377,11 +379,12 @@ final class TransactionTests: XCTestCase {
             }
             let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
-                preferredEventLoop: embeddedEventLoop
+                preferredEventLoop: loop
             )
 
-            let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
+            let executor = MockRequestExecutor(eventLoop: loop)
             executor.runRequest(transaction)
+            await loop.run()
             executor.resumeRequestBodyStream()
             XCTAssertNoThrow(
                 try executor.receiveRequestBody {
@@ -403,8 +406,8 @@ final class TransactionTests: XCTestCase {
 
     func testPostStreamFails() {
         XCTAsyncTest {
-            let embeddedEventLoop = EmbeddedEventLoop()
-            defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+            let loop = NIOAsyncTestingEventLoop()
+            defer { XCTAssertNoThrow(try loop.syncShutdownGracefully()) }
 
             let writer = AsyncSequenceWriter<ByteBuffer>()
 
@@ -418,11 +421,12 @@ final class TransactionTests: XCTestCase {
             }
             let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
-                preferredEventLoop: embeddedEventLoop
+                preferredEventLoop: loop
             )
 
-            let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
+            let executor = MockRequestExecutor(eventLoop: loop)
             executor.runRequest(transaction)
+            await loop.run()
             executor.resumeRequestBodyStream()
 
             await writer.demand()
@@ -447,8 +451,8 @@ final class TransactionTests: XCTestCase {
 
     func testResponseStreamFails() {
         XCTAsyncTest(timeout: 30) {
-            let embeddedEventLoop = EmbeddedEventLoop()
-            defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+            let loop = NIOAsyncTestingEventLoop()
+            defer { XCTAssertNoThrow(try loop.syncShutdownGracefully()) }
 
             var request = HTTPClientRequest(url: "https://localhost/")
             request.method = .GET
@@ -460,12 +464,12 @@ final class TransactionTests: XCTestCase {
             }
             let (transaction, responseTask) = await Transaction.makeWithResultTask(
                 request: preparedRequest,
-                preferredEventLoop: embeddedEventLoop
+                preferredEventLoop: loop
             )
 
             let executor = MockRequestExecutor(
                 pauseRequestBodyPartStreamAfterASingleWrite: true,
-                eventLoop: embeddedEventLoop
+                eventLoop: loop
             )
 
             transaction.willExecuteRequest(executor)
