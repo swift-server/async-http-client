@@ -24,16 +24,30 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     public struct Progress: Sendable {
         public var totalBytes: Int?
         public var receivedBytes: Int
-        public var head: HTTPResponseHead
+
+        public var head: HTTPResponseHead {
+            get {
+                #if DEBUG
+                _head!
+                #else
+                _head ?? .init(version: .init(major: 0, minor: 0), status: .init(statusCode: 0))
+                #endif
+            } set {
+                _head = newValue
+            }
+        }
+
+        fileprivate var _head: HTTPResponseHead? = nil
+
+        internal init(totalBytes: Int? = nil, receivedBytes: Int) {
+            self.totalBytes = totalBytes
+            self.receivedBytes = receivedBytes
+        }
     }
 
     private var progress = Progress(
         totalBytes: nil,
-        receivedBytes: 0,
-        head: .init(
-            version: .init(major: 0, minor: 0),
-            status: .init(statusCode: 0)
-        )
+        receivedBytes: 0
     )
 
     public typealias Response = Progress
@@ -142,7 +156,7 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
         task: HTTPClient.Task<Response>,
         _ head: HTTPResponseHead
     ) -> EventLoopFuture<Void> {
-        self.progress.head = head
+        self.progress._head = head
 
         self.reportHead?(task, head)
 
