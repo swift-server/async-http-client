@@ -361,6 +361,8 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
         let action = self.state.fail(error)
 
         self.executeFailAction0(action)
+
+        self.redirectTask?.cancel()
     }
 
     private func executeFailAction0(_ action: RequestBag<Delegate>.StateMachine.FailAction) {
@@ -371,8 +373,6 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             self.failTask0(error)
         case .cancelExecutor(let executor):
             executor.cancelRequest(self)
-        case .propagateCancellation:
-            self.redirectTask?.cancel()
         case .none:
             break
         }

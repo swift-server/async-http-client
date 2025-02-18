@@ -594,7 +594,6 @@ extension RequestBag.StateMachine {
     enum FailAction {
         case failTask(Error, HTTPRequestScheduler?, HTTPRequestExecutor?)
         case cancelExecutor(HTTPRequestExecutor)
-        case propagateCancellation
         case none
     }
 
@@ -625,11 +624,8 @@ extension RequestBag.StateMachine {
             self.state = .finished(error: error)
             return .failTask(error, nil, nil)
         case .finished(.none):
-            if (error as? HTTPClientError) == .cancelled {
-                return .propagateCancellation
-            } else {
-                return .none
-            }
+            // An error occurred after the request has finished. Ignore...
+            return .none
         case .deadlineExceededWhileQueued:
             let realError: Error = {
                 if (error as? HTTPClientError) == .cancelled {
