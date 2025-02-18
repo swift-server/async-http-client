@@ -729,11 +729,11 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         var request = try Request(url: self.defaultHTTPBinURLPrefix + "events/10/content-length")
         request.headers.add(name: "Accept", value: "text/event-stream")
 
-        let progress =
-            try TemporaryFileHelpers.withTemporaryFilePath { path -> FileDownloadDelegate.Progress in
+        let response =
+            try TemporaryFileHelpers.withTemporaryFilePath { path -> FileDownloadDelegate.Response in
                 let delegate = try FileDownloadDelegate(path: path)
 
-                let progress = try self.defaultClient.execute(
+                let response = try self.defaultClient.execute(
                     request: request,
                     delegate: delegate
                 )
@@ -741,19 +741,22 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
                 try XCTAssertEqual(50, TemporaryFileHelpers.fileSize(path: path))
 
-                return progress
+                return response
             }
 
-        XCTAssertEqual(50, progress.totalBytes)
-        XCTAssertEqual(50, progress.receivedBytes)
+        XCTAssertEqual(.ok, response.head.status)
+        XCTAssertEqual("50", response.head.headers.first(name: "content-length"))
+
+        XCTAssertEqual(50, response.totalBytes)
+        XCTAssertEqual(50, response.receivedBytes)
     }
 
     func testFileDownloadError() throws {
         var request = try Request(url: self.defaultHTTPBinURLPrefix + "not-found")
         request.headers.add(name: "Accept", value: "text/event-stream")
 
-        let progress =
-            try TemporaryFileHelpers.withTemporaryFilePath { path -> FileDownloadDelegate.Progress in
+        let response =
+            try TemporaryFileHelpers.withTemporaryFilePath { path -> FileDownloadDelegate.Response in
                 let delegate = try FileDownloadDelegate(
                     path: path,
                     reportHead: {
@@ -761,7 +764,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                     }
                 )
 
-                let progress = try self.defaultClient.execute(
+                let response = try self.defaultClient.execute(
                     request: request,
                     delegate: delegate
                 )
@@ -769,11 +772,14 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
                 XCTAssertFalse(TemporaryFileHelpers.fileExists(path: path))
 
-                return progress
+                return response
             }
 
-        XCTAssertEqual(nil, progress.totalBytes)
-        XCTAssertEqual(0, progress.receivedBytes)
+        XCTAssertEqual(.notFound, response.head.status)
+        XCTAssertFalse(response.head.headers.contains(name: "content-length"))
+
+        XCTAssertEqual(nil, response.totalBytes)
+        XCTAssertEqual(0, response.receivedBytes)
     }
 
     func testFileDownloadCustomError() throws {
@@ -3910,11 +3916,11 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         var request = try Request(url: self.defaultHTTPBinURLPrefix + "chunked")
         request.headers.add(name: "Accept", value: "text/event-stream")
 
-        let progress =
-            try TemporaryFileHelpers.withTemporaryFilePath { path -> FileDownloadDelegate.Progress in
+        let response =
+            try TemporaryFileHelpers.withTemporaryFilePath { path -> FileDownloadDelegate.Response in
                 let delegate = try FileDownloadDelegate(path: path)
 
-                let progress = try self.defaultClient.execute(
+                let response = try self.defaultClient.execute(
                     request: request,
                     delegate: delegate
                 )
@@ -3922,11 +3928,15 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
                 try XCTAssertEqual(50, TemporaryFileHelpers.fileSize(path: path))
 
-                return progress
+                return response
             }
 
-        XCTAssertEqual(nil, progress.totalBytes)
-        XCTAssertEqual(50, progress.receivedBytes)
+        XCTAssertEqual(.ok, response.head.status)
+        XCTAssertEqual("chunked", response.head.headers.first(name: "transfer-encoding"))
+        XCTAssertFalse(response.head.headers.contains(name: "content-length"))
+
+        XCTAssertEqual(nil, response.totalBytes)
+        XCTAssertEqual(50, response.receivedBytes)
     }
 
     func testCloseWhileBackpressureIsExertedIsFine() throws {
