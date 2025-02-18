@@ -4132,6 +4132,33 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         XCTAssertNoThrow(try client.execute(request: request).wait())
     }
 
+    func testCancelingRequestAfterRedirect() throws {
+        let request = try Request(
+            url: self.defaultHTTPBinURLPrefix + "redirect/target",
+            method: .GET,
+            headers: ["X-Target-Redirect-URL": self.defaultHTTPBinURLPrefix + "wait"],
+            body: nil
+        )
+
+        class CancelAfterRedirect: HTTPClientResponseDelegate {
+            init() {}
+            func didFinishRequest(task: AsyncHTTPClient.HTTPClient.Task<Void>) throws {}
+        }
+
+        let task = defaultClient.execute(request: request, delegate: CancelAfterRedirect(), deadline: .now() + .seconds(1))
+
+        // there is currently no HTTPClientResponseDelegate method to ensure the redirect occurs before we cancel, so we just sleep for 500ms
+        Thread.sleep(forTimeInterval: 0.5)
+
+        task.cancel()
+
+        XCTAssertThrowsError(try task.wait()) { error in
+            guard case let error = error as? HTTPClientError, error == .cancelled else {
+                return XCTFail("Should fail with cancelled")
+            }
+        }
+    }
+
     func testCancelingHTTP1RequestAfterHeaderSend() throws {
         var request = try HTTPClient.Request(url: self.defaultHTTPBin.baseURL + "/wait", method: .POST)
         // non-empty body is important
