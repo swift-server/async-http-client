@@ -362,7 +362,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
 
         self.executeFailAction0(action)
 
-        self.redirectTask?.cancel()
+        self.redirectTask?.fail(reason: error)
     }
 
     private func executeFailAction0(_ action: RequestBag<Delegate>.StateMachine.FailAction) {
