@@ -85,7 +85,19 @@ extension HTTPConnectionPool.ConnectionFactory {
                         decompression: self.clientConfiguration.decompression,
                         logger: logger
                     )
-                    requester.http1ConnectionCreated(connection)
+
+                    if let connectionDebugInitializer = self.clientConfiguration.http1_1ConnectionDebugInitializer {
+                        connectionDebugInitializer(channel).whenComplete { debugInitializerResult in
+                            switch debugInitializerResult {
+                            case .success:
+                                requester.http1ConnectionCreated(connection)
+                            case .failure(let error):
+                                requester.failedToCreateHTTPConnection(connectionID, error: error)
+                            }
+                        }
+                    } else {
+                        requester.http1ConnectionCreated(connection)
+                    }
                 } catch {
                     requester.failedToCreateHTTPConnection(connectionID, error: error)
                 }
@@ -96,11 +108,34 @@ extension HTTPConnectionPool.ConnectionFactory {
                     delegate: http2ConnectionDelegate,
                     decompression: self.clientConfiguration.decompression,
                     maximumConnectionUses: self.clientConfiguration.maximumUsesPerConnection,
-                    logger: logger
+                    logger: logger,
+                    streamChannelDebugInitializer:
+                        self.clientConfiguration.http2StreamChannelDebugInitializer
                 ).whenComplete { result in
                     switch result {
                     case .success((let connection, let maximumStreams)):
-                        requester.http2ConnectionCreated(connection, maximumStreams: maximumStreams)
+                        if let connectionDebugInitializer = self.clientConfiguration.http2ConnectionDebugInitializer {
+                            connectionDebugInitializer(channel).whenComplete {
+                                debugInitializerResult in
+                                switch debugInitializerResult {
+                                case .success:
+                                    requester.http2ConnectionCreated(
+                                        connection,
+                                        maximumStreams: maximumStreams
+                                    )
+                                case .failure(let error):
+                                    requester.failedToCreateHTTPConnection(
+                                        connectionID,
+                                        error: error
+                                    )
+                                }
+                            }
+                        } else {
+                            requester.http2ConnectionCreated(
+                                connection,
+                                maximumStreams: maximumStreams
+                            )
+                        }
                     case .failure(let error):
                         requester.failedToCreateHTTPConnection(connectionID, error: error)
                     }
