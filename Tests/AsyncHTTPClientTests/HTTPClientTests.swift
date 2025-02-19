@@ -4145,7 +4145,11 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             func didFinishRequest(task: AsyncHTTPClient.HTTPClient.Task<Void>) throws {}
         }
 
-        let task = defaultClient.execute(request: request, delegate: CancelAfterRedirect(), deadline: .now() + .seconds(1))
+        let task = defaultClient.execute(
+            request: request,
+            delegate: CancelAfterRedirect(),
+            deadline: .now() + .seconds(1)
+        )
 
         // there is currently no HTTPClientResponseDelegate method to ensure the redirect occurs before we cancel, so we just sleep for 500ms
         Thread.sleep(forTimeInterval: 0.5)
@@ -4172,7 +4176,11 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             func didFinishRequest(task: AsyncHTTPClient.HTTPClient.Task<Void>) throws {}
         }
 
-        let task = defaultClient.execute(request: request, delegate: FailAfterRedirect(), deadline: .now() + .seconds(1))
+        let task = defaultClient.execute(
+            request: request,
+            delegate: FailAfterRedirect(),
+            deadline: .now() + .seconds(1)
+        )
 
         // there is currently no HTTPClientResponseDelegate method to ensure the redirect occurs before we fail, so we just sleep for 500ms
         Thread.sleep(forTimeInterval: 0.5)
