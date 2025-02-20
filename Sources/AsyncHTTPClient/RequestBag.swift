@@ -43,6 +43,9 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
     // the consume body part stack depth is synchronized on the task event loop.
     private var consumeBodyPartStackDepth: Int
 
+    // if a redirect occurs, we store the task for it so we can propagate cancellation
+    private var redirectTask: HTTPClient.Task<Delegate.Response>? = nil
+
     // MARK: HTTPClientTask properties
 
     var logger: Logger {
@@ -236,7 +239,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             executor.demandResponseBodyStream(self)
 
         case .redirect(let executor, let handler, let head, let newURL):
-            handler.redirect(status: head.status, to: newURL, promise: self.task.promise)
+            self.redirectTask = handler.redirect(status: head.status, to: newURL, promise: self.task.promise)
             executor.cancelRequest(self)
 
         case .forwardResponseHead(let head):
@@ -260,7 +263,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             executor.demandResponseBodyStream(self)
 
         case .redirect(let executor, let handler, let head, let newURL):
-            handler.redirect(status: head.status, to: newURL, promise: self.task.promise)
+            self.redirectTask = handler.redirect(status: head.status, to: newURL, promise: self.task.promise)
             executor.cancelRequest(self)
 
         case .forwardResponsePart(let part):
@@ -296,7 +299,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
             }
 
         case .redirect(let handler, let head, let newURL):
-            handler.redirect(status: head.status, to: newURL, promise: self.task.promise)
+            self.redirectTask = handler.redirect(status: head.status, to: newURL, promise: self.task.promise)
         }
     }
 
@@ -360,6 +363,8 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
         let action = self.state.fail(error)
 
         self.executeFailAction0(action)
+
+        self.redirectTask?.fail(reason: error)
     }
 
     private func executeFailAction0(_ action: RequestBag<Delegate>.StateMachine.FailAction) {
