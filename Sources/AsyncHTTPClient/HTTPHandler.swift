@@ -668,7 +668,16 @@ public protocol HTTPClientResponseDelegate: AnyObject {
     ///     - task: Current request context.
     func didSendRequest(task: HTTPClient.Task<Response>)
 
-    /// Called when response head is received. Will be called once.
+    /// Called each time a response head is received (including redirects), and always called before ``HTTPClientResponseDelegate/didReceiveHead(task:_:)-9r4xd``.
+    /// You can use this method to keep an entire history of the request/response chain.
+    ///
+    /// - parameters:
+    ///     - task: Current request context.
+    ///     - request: The request that was sent.
+    ///     - head: Received response head.
+    func didVisitURL(task: HTTPClient.Task<Response>, _ request: HTTPClient.Request, _ head: HTTPResponseHead)
+
+    /// Called when the final response head is received (after redirects).
     /// You must return an `EventLoopFuture<Void>` that you complete when you have finished processing the body part.
     /// You can create an already succeeded future by calling `task.eventLoop.makeSucceededFuture(())`.
     ///
@@ -733,6 +742,11 @@ extension HTTPClientResponseDelegate {
     ///
     /// By default, this does nothing.
     public func didSendRequest(task: HTTPClient.Task<Response>) {}
+
+    /// Default implementation of ``HTTPClientResponseDelegate/didVisitURL(task:_:_:)-2el9y``.
+    ///
+    /// By default, this does nothing.
+    public func didVisitURL(task: HTTPClient.Task<Response>, _: HTTPClient.Request, _: HTTPResponseHead) {}
 
     /// Default implementation of ``HTTPClientResponseDelegate/didReceiveHead(task:_:)-9r4xd``.
     ///

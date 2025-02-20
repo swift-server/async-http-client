@@ -225,6 +225,8 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate> {
     private func receiveResponseHead0(_ head: HTTPResponseHead) {
         self.task.eventLoop.assertInEventLoop()
 
+        self.delegate.didVisitURL(task: self.task, self.request, head)
+
         // runs most likely on channel eventLoop
         switch self.state.receiveResponseHead(head) {
         case .none:
