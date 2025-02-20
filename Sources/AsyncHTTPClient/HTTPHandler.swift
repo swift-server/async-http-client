@@ -956,7 +956,7 @@ internal struct RedirectHandler<ResponseType> {
         status: HTTPResponseStatus,
         to redirectURL: URL,
         promise: EventLoopPromise<ResponseType>
-    ) {
+    ) -> HTTPClient.Task<ResponseType>? {
         do {
             var redirectState = self.redirectState
             try redirectState.redirect(to: redirectURL.absoluteString)
@@ -976,13 +976,19 @@ internal struct RedirectHandler<ResponseType> {
                 headers: headers,
                 body: body
             )
-            self.execute(newRequest, redirectState).futureResult.whenComplete { result in
+
+            let newTask = self.execute(newRequest, redirectState)
+
+            newTask.futureResult.whenComplete { result in
                 promise.futureResult.eventLoop.execute {
                     promise.completeWith(result)
                 }
             }
+
+            return newTask
         } catch {
             promise.fail(error)
+            return nil
         }
     }
 }
