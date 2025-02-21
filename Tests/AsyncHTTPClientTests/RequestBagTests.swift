@@ -127,6 +127,7 @@ final class RequestBagTests: XCTestCase {
         XCTAssertNoThrow(try executor.receiveEndOfStream())
         XCTAssertEqual(receivedBytes, bytesToSent, "We have sent all request bytes...")
 
+        XCTAssertTrue(delegate.history.isEmpty)
         XCTAssertNil(delegate.receivedHead, "Expected not to have a response head, before `receiveResponseHead`")
         let responseHead = HTTPResponseHead(
             version: .http1_1,
@@ -140,6 +141,10 @@ final class RequestBagTests: XCTestCase {
         XCTAssertEqual(responseHead, delegate.receivedHead)
         XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
         XCTAssertTrue(executor.signalledDemandForResponseBody)
+
+        XCTAssertEqual(delegate.history.map(\.request.url), [request.url])
+        XCTAssertEqual(delegate.history.map(\.response), [responseHead])
+
         executor.resetResponseStreamDemandSignal()
 
         // we will receive 20 chunks with each 10 byteBuffers and 32 bytes
@@ -747,13 +752,15 @@ final class RequestBagTests: XCTestCase {
         let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
         executor.runRequest(bag)
         XCTAssertFalse(executor.signalledDemandForResponseBody)
-        bag.receiveResponseHead(
-            .init(
-                version: .http1_1,
-                status: .permanentRedirect,
-                headers: ["content-length": "\(3 * 1024)", "location": "https://swift.org/sswg"]
-            )
+        XCTAssertTrue(delegate.history.isEmpty)
+        let responseHead = HTTPResponseHead(
+            version: .http1_1,
+            status: .permanentRedirect,
+            headers: ["content-length": "\(3 * 1024)", "location": "https://swift.org/sswg"]
         )
+        bag.receiveResponseHead(responseHead)
+        XCTAssertEqual(delegate.history.map(\.request.url), [request.url])
+        XCTAssertEqual(delegate.history.map(\.response), [responseHead])
         XCTAssertNil(delegate.backpressurePromise)
         XCTAssertTrue(executor.signalledDemandForResponseBody)
         executor.resetResponseStreamDemandSignal()
@@ -833,13 +840,15 @@ final class RequestBagTests: XCTestCase {
         let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
         executor.runRequest(bag)
         XCTAssertFalse(executor.signalledDemandForResponseBody)
-        bag.receiveResponseHead(
-            .init(
-                version: .http1_1,
-                status: .permanentRedirect,
-                headers: ["content-length": "\(4 * 1024)", "location": "https://swift.org/sswg"]
-            )
+        XCTAssertTrue(delegate.history.isEmpty)
+        let responseHead = HTTPResponseHead(
+            version: .http1_1,
+            status: .permanentRedirect,
+            headers: ["content-length": "\(4 * 1024)", "location": "https://swift.org/sswg"]
         )
+        bag.receiveResponseHead(responseHead)
+        XCTAssertEqual(delegate.history.map(\.request.url), [request.url])
+        XCTAssertEqual(delegate.history.map(\.response), [responseHead])
         XCTAssertNil(delegate.backpressurePromise)
         XCTAssertFalse(executor.signalledDemandForResponseBody)
         XCTAssertTrue(executor.isCancelled)
@@ -893,13 +902,15 @@ final class RequestBagTests: XCTestCase {
         let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
         executor.runRequest(bag)
         XCTAssertFalse(executor.signalledDemandForResponseBody)
-        bag.receiveResponseHead(
-            .init(
-                version: .http1_1,
-                status: .permanentRedirect,
-                headers: ["content-length": "\(3 * 1024)", "location": "https://swift.org/sswg"]
-            )
+        XCTAssertTrue(delegate.history.isEmpty)
+        let responseHead = HTTPResponseHead(
+            version: .http1_1,
+            status: .permanentRedirect,
+            headers: ["content-length": "\(3 * 1024)", "location": "https://swift.org/sswg"]
         )
+        bag.receiveResponseHead(responseHead)
+        XCTAssertEqual(delegate.history.map(\.request.url), [request.url])
+        XCTAssertEqual(delegate.history.map(\.response), [responseHead])
         XCTAssertNil(delegate.backpressurePromise)
         XCTAssertTrue(executor.signalledDemandForResponseBody)
         executor.resetResponseStreamDemandSignal()
@@ -1001,6 +1012,7 @@ class UploadCountingDelegate: HTTPClientResponseDelegate {
     private(set) var hitDidReceiveBodyPart = 0
     private(set) var hitDidReceiveError = 0
 
+    private(set) var history: [(request: HTTPClient.Request, response: HTTPResponseHead)] = []
     private(set) var receivedHead: HTTPResponseHead?
     private(set) var lastBodyPart: ByteBuffer?
     private(set) var backpressurePromise: EventLoopPromise<Void>?
@@ -1020,6 +1032,10 @@ class UploadCountingDelegate: HTTPClientResponseDelegate {
 
     func didSendRequest(task: HTTPClient.Task<Void>) {
         self.hitDidSendRequest += 1
+    }
+
+    func didVisitURL(task: HTTPClient.Task<Void>, _ request: HTTPClient.Request, _ head: HTTPResponseHead) {
+        self.history.append((request, head))
     }
 
     func didReceiveHead(task: HTTPClient.Task<Void>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
