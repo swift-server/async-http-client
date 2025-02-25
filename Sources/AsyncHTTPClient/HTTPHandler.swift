@@ -23,7 +23,7 @@ import NIOSSL
 
 extension HTTPClient {
     /// A request body.
-    public struct Body {
+    public struct Body: Sendable {
         /// A streaming uploader.
         ///
         /// ``StreamWriter`` abstracts
@@ -209,7 +209,7 @@ extension HTTPClient {
     }
 
     /// Represents an HTTP request.
-    public struct Request {
+    public struct Request: Sendable {
         /// Request HTTP method, defaults to `GET`.
         public let method: HTTPMethod
         /// Remote URL.
@@ -469,7 +469,7 @@ extension HTTPClient {
         }
     }
 
-    public struct RequestResponse {
+    public struct RequestResponse: Sendable {
         public var request: Request
         public var responseHead: HTTPResponseHead
 
