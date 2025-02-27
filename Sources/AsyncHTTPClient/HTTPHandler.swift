@@ -13,9 +13,10 @@
 //===----------------------------------------------------------------------===//
 
 import Algorithms
+#if compiler(>=6.0)
 import Foundation
-#if compiler(<6.0)
-@preconcurrency import struct Foundation.URL
+#else
+@preconcurrency import Foundation
 #endif
 import Logging
 import NIOConcurrencyHelpers
