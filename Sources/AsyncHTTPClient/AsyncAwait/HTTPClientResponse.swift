@@ -50,6 +50,19 @@ public struct HTTPClientResponse: Sendable {
         version: HTTPVersion = .http1_1,
         status: HTTPResponseStatus = .ok,
         headers: HTTPHeaders = [:],
+        body: Body = Body()
+    ) {
+        self.version = version
+        self.status = status
+        self.headers = headers
+        self.body = body
+        self.history = []
+    }
+
+    @inlinable public init(
+        version: HTTPVersion = .http1_1,
+        status: HTTPResponseStatus = .ok,
+        headers: HTTPHeaders = [:],
         body: Body = Body(),
         history: [HTTPClientRequestResponse] = []
     ) {
@@ -66,7 +79,7 @@ public struct HTTPClientResponse: Sendable {
         status: HTTPResponseStatus,
         headers: HTTPHeaders,
         body: TransactionBody,
-        history: [HTTPClientRequestResponse] = []
+        history: [HTTPClientRequestResponse]
     ) {
         self.init(
             version: version,

@@ -413,6 +413,29 @@ extension HTTPClient {
         ///     - version: Response HTTP version.
         ///     - headers: Reponse HTTP headers.
         ///     - body: Response body.
+        public init(
+            host: String,
+            status: HTTPResponseStatus,
+            version: HTTPVersion,
+            headers: HTTPHeaders,
+            body: ByteBuffer?
+        ) {
+            self.host = host
+            self.status = status
+            self.version = version
+            self.headers = headers
+            self.body = body
+            self.history = []
+        }
+
+        /// Create HTTP `Response`.
+        ///
+        /// - parameters:
+        ///     - host: Remote host of the request.
+        ///     - status: Response HTTP status.
+        ///     - version: Response HTTP version.
+        ///     - headers: Reponse HTTP headers.
+        ///     - body: Response body.
         ///     - history: History of all requests and responses in redirect order.
         public init(
             host: String,
