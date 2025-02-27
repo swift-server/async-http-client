@@ -14,6 +14,9 @@
 
 import Algorithms
 import Foundation
+#if compiler(<6.0)
+@preconcurrency import struct Foundation.URL
+#endif
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
