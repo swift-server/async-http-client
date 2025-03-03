@@ -85,11 +85,29 @@ extension HTTPClient {
     ) async throws -> HTTPClientResponse {
         var currentRequest = request
         var currentRedirectState = redirectState
+        var history: [HTTPClientRequestResponse] = []
 
         // this loop is there to follow potential redirects
         while true {
             let preparedRequest = try HTTPClientRequest.Prepared(currentRequest, dnsOverride: configuration.dnsOverride)
-            let response = try await self.executeCancellable(preparedRequest, deadline: deadline, logger: logger)
+            let response = try await {
+                var response = try await self.executeCancellable(preparedRequest, deadline: deadline, logger: logger)
+
+                history.append(
+                    .init(
+                        request: currentRequest,
+                        responseHead: .init(
+                            version: response.version,
+                            status: response.status,
+                            headers: response.headers
+                        )
+                    )
+                )
+
+                response.history = history
+
+                return response
+            }()
 
             guard var redirectState = currentRedirectState else {
                 // a `nil` redirectState means we should not follow redirects

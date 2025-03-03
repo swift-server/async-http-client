@@ -13,7 +13,6 @@
 //===----------------------------------------------------------------------===//
 
 import Algorithms
-import Foundation
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -21,9 +20,15 @@ import NIOHTTP1
 import NIOPosix
 import NIOSSL
 
+#if compiler(>=6.0)
+import Foundation
+#else
+@preconcurrency import Foundation
+#endif
+
 extension HTTPClient {
     /// A request body.
-    public struct Body {
+    public struct Body: Sendable {
         /// A streaming uploader.
         ///
         /// ``StreamWriter`` abstracts
@@ -209,7 +214,7 @@ extension HTTPClient {
     }
 
     /// Represents an HTTP request.
-    public struct Request {
+    public struct Request: Sendable {
         /// Request HTTP method, defaults to `GET`.
         public let method: HTTPMethod
         /// Remote URL.
@@ -377,6 +382,13 @@ extension HTTPClient {
         public var headers: HTTPHeaders
         /// Response body.
         public var body: ByteBuffer?
+        /// The history of all requests and responses in redirect order.
+        public var history: [RequestResponse]
+
+        /// The target URL (after redirects) of the response.
+        public var url: URL? {
+            self.history.last?.request.url
+        }
 
         /// Create HTTP `Response`.
         ///
@@ -392,6 +404,7 @@ extension HTTPClient {
             self.version = HTTPVersion(major: 1, minor: 1)
             self.headers = headers
             self.body = body
+            self.history = []
         }
 
         /// Create HTTP `Response`.
@@ -414,6 +427,32 @@ extension HTTPClient {
             self.version = version
             self.headers = headers
             self.body = body
+            self.history = []
+        }
+
+        /// Create HTTP `Response`.
+        ///
+        /// - parameters:
+        ///     - host: Remote host of the request.
+        ///     - status: Response HTTP status.
+        ///     - version: Response HTTP version.
+        ///     - headers: Reponse HTTP headers.
+        ///     - body: Response body.
+        ///     - history: History of all requests and responses in redirect order.
+        public init(
+            host: String,
+            status: HTTPResponseStatus,
+            version: HTTPVersion,
+            headers: HTTPHeaders,
+            body: ByteBuffer?,
+            history: [RequestResponse]
+        ) {
+            self.host = host
+            self.status = status
+            self.version = version
+            self.headers = headers
+            self.body = body
+            self.history = history
         }
     }
 
@@ -457,6 +496,16 @@ extension HTTPClient {
             }
         }
     }
+
+    public struct RequestResponse: Sendable {
+        public var request: Request
+        public var responseHead: HTTPResponseHead
+
+        public init(request: Request, responseHead: HTTPResponseHead) {
+            self.request = request
+            self.responseHead = responseHead
+        }
+    }
 }
 
 /// The default ``HTTPClientResponseDelegate``.
@@ -485,6 +534,7 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
         }
     }
 
+    var history = [HTTPClient.RequestResponse]()
     var state = State.idle
     let requestMethod: HTTPMethod
     let requestHost: String
@@ -519,6 +569,14 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
         self.requestMethod = request.method
         self.requestHost = request.host
         self.maxBodySize = maxBodySize
+    }
+
+    public func didVisitURL(
+        task: HTTPClient.Task<HTTPClient.Response>,
+        _ request: HTTPClient.Request,
+        _ head: HTTPResponseHead
+    ) {
+        self.history.append(.init(request: request, responseHead: head))
     }
 
     public func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
@@ -596,7 +654,8 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
                 status: head.status,
                 version: head.version,
                 headers: head.headers,
-                body: nil
+                body: nil,
+                history: self.history
             )
         case .body(let head, let body):
             return Response(
@@ -604,7 +663,8 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
                 status: head.status,
                 version: head.version,
                 headers: head.headers,
-                body: body
+                body: body,
+                history: self.history
             )
         case .end:
             preconditionFailure("request already processed")
