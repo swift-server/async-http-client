@@ -242,7 +242,8 @@ extension Transaction: HTTPExecutableRequest {
                 version: head.version,
                 status: head.status,
                 headers: head.headers,
-                body: body
+                body: body,
+                history: []
             )
             continuation.resume(returning: response)
         }

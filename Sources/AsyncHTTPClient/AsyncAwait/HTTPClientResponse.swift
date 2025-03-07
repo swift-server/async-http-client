@@ -15,6 +15,8 @@
 import NIOCore
 import NIOHTTP1
 
+import struct Foundation.URL
+
 /// A representation of an HTTP response for the Swift Concurrency HTTPClient API.
 ///
 /// This object is similar to ``HTTPClient/Response``, but used for the Swift Concurrency API.
@@ -32,6 +34,18 @@ public struct HTTPClientResponse: Sendable {
     /// The body of this HTTP response.
     public var body: Body
 
+    /// The history of all requests and responses in redirect order.
+    public var history: [HTTPClientRequestResponse]
+
+    /// The target URL (after redirects) of the response.
+    public var url: URL? {
+        guard let lastRequestURL = self.history.last?.request.url else {
+            return nil
+        }
+
+        return URL(string: lastRequestURL)
+    }
+
     @inlinable public init(
         version: HTTPVersion = .http1_1,
         status: HTTPResponseStatus = .ok,
@@ -42,6 +56,21 @@ public struct HTTPClientResponse: Sendable {
         self.status = status
         self.headers = headers
         self.body = body
+        self.history = []
+    }
+
+    @inlinable public init(
+        version: HTTPVersion = .http1_1,
+        status: HTTPResponseStatus = .ok,
+        headers: HTTPHeaders = [:],
+        body: Body = Body(),
+        history: [HTTPClientRequestResponse] = []
+    ) {
+        self.version = version
+        self.status = status
+        self.headers = headers
+        self.body = body
+        self.history = history
     }
 
     init(
@@ -49,7 +78,8 @@ public struct HTTPClientResponse: Sendable {
         version: HTTPVersion,
         status: HTTPResponseStatus,
         headers: HTTPHeaders,
-        body: TransactionBody
+        body: TransactionBody,
+        history: [HTTPClientRequestResponse]
     ) {
         self.init(
             version: version,
@@ -64,8 +94,20 @@ public struct HTTPClientResponse: Sendable {
                         status: status
                     )
                 )
-            )
+            ),
+            history: history
         )
+    }
+}
+
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+public struct HTTPClientRequestResponse: Sendable {
+    public var request: HTTPClientRequest
+    public var responseHead: HTTPResponseHead
+
+    public init(request: HTTPClientRequest, responseHead: HTTPResponseHead) {
+        self.request = request
+        self.responseHead = responseHead
     }
 }
 

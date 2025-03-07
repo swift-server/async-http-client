@@ -16,14 +16,24 @@ import NIOCore
 import NIOHTTP1
 import NIOPosix
 
+import struct Foundation.URL
+
 /// Handles a streaming download to a given file path, allowing headers and progress to be reported.
 public final class FileDownloadDelegate: HTTPClientResponseDelegate {
     /// The response type for this delegate: the total count of bytes as reported by the response
-    /// "Content-Length" header (if available), the count of bytes downloaded, and the
-    /// response head.
+    /// "Content-Length" header (if available), the count of bytes downloaded, the
+    /// response head, and a history of requests and responses.
     public struct Progress: Sendable {
         public var totalBytes: Int?
         public var receivedBytes: Int
+
+        /// The history of all requests and responses in redirect order.
+        public var history: [HTTPClient.RequestResponse] = []
+
+        /// The target URL (after redirects) of the response.
+        public var url: URL? {
+            self.history.last?.request.url
+        }
 
         public var head: HTTPResponseHead {
             get {
@@ -148,6 +158,10 @@ public final class FileDownloadDelegate: HTTPClientResponseDelegate {
                 }
             }
         )
+    }
+
+    public func didVisitURL(task: HTTPClient.Task<Progress>, _ request: HTTPClient.Request, _ head: HTTPResponseHead) {
+        self.progress.history.append(.init(request: request, responseHead: head))
     }
 
     public func didReceiveHead(
