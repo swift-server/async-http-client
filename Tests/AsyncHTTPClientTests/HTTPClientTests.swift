@@ -46,7 +46,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         let request3 = try Request(url: "unix:///tmp/file")
         XCTAssertEqual(request3.host, "")
-        #if os(Linux) && compiler(>=6.0) && compiler(<6.2)
+        #if os(Linux) && compiler(>=6.0) && compiler(<6.1)
         XCTAssertEqual(request3.url.host, "")
         #else
         XCTAssertNil(request3.url.host)
