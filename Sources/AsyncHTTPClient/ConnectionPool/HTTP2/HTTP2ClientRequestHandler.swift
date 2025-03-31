@@ -240,6 +240,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             self.request!.fail(error)
             self.request = nil
             self.runTimeoutAction(.clearIdleReadTimeoutTimer, context: context)
+            self.runTimeoutAction(.clearIdleWriteTimeoutTimer, context: context)
             // No matter the error reason, we must always make sure the h2 stream is closed. Only
             // once the h2 stream is closed, it is released from the h2 multiplexer. The
             // HTTPRequestStateMachine may signal finalAction: .none in the error case (as this is
@@ -252,6 +253,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             self.request!.succeedRequest(finalParts)
             self.request = nil
             self.runTimeoutAction(.clearIdleReadTimeoutTimer, context: context)
+            self.runTimeoutAction(.clearIdleWriteTimeoutTimer, context: context)
             self.runSuccessfulFinalAction(finalAction, context: context)
 
         case .failSendBodyPart(let error, let writePromise), .failSendStreamFinished(let error, let writePromise):

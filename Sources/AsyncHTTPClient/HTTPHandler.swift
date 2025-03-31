@@ -13,7 +13,6 @@
 //===----------------------------------------------------------------------===//
 
 import Algorithms
-import Foundation
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -21,9 +20,15 @@ import NIOHTTP1
 import NIOPosix
 import NIOSSL
 
+#if compiler(>=6.0)
+import Foundation
+#else
+@preconcurrency import Foundation
+#endif
+
 extension HTTPClient {
     /// A request body.
-    public struct Body {
+    public struct Body: Sendable {
         /// A streaming uploader.
         ///
         /// ``StreamWriter`` abstracts
@@ -209,7 +214,7 @@ extension HTTPClient {
     }
 
     /// Represents an HTTP request.
-    public struct Request {
+    public struct Request: Sendable {
         /// Request HTTP method, defaults to `GET`.
         public let method: HTTPMethod
         /// Remote URL.
@@ -377,6 +382,13 @@ extension HTTPClient {
         public var headers: HTTPHeaders
         /// Response body.
         public var body: ByteBuffer?
+        /// The history of all requests and responses in redirect order.
+        public var history: [RequestResponse]
+
+        /// The target URL (after redirects) of the response.
+        public var url: URL? {
+            self.history.last?.request.url
+        }
 
         /// Create HTTP `Response`.
         ///
@@ -392,6 +404,7 @@ extension HTTPClient {
             self.version = HTTPVersion(major: 1, minor: 1)
             self.headers = headers
             self.body = body
+            self.history = []
         }
 
         /// Create HTTP `Response`.
@@ -414,6 +427,32 @@ extension HTTPClient {
             self.version = version
             self.headers = headers
             self.body = body
+            self.history = []
+        }
+
+        /// Create HTTP `Response`.
+        ///
+        /// - parameters:
+        ///     - host: Remote host of the request.
+        ///     - status: Response HTTP status.
+        ///     - version: Response HTTP version.
+        ///     - headers: Reponse HTTP headers.
+        ///     - body: Response body.
+        ///     - history: History of all requests and responses in redirect order.
+        public init(
+            host: String,
+            status: HTTPResponseStatus,
+            version: HTTPVersion,
+            headers: HTTPHeaders,
+            body: ByteBuffer?,
+            history: [RequestResponse]
+        ) {
+            self.host = host
+            self.status = status
+            self.version = version
+            self.headers = headers
+            self.body = body
+            self.history = history
         }
     }
 
@@ -457,6 +496,16 @@ extension HTTPClient {
             }
         }
     }
+
+    public struct RequestResponse: Sendable {
+        public var request: Request
+        public var responseHead: HTTPResponseHead
+
+        public init(request: Request, responseHead: HTTPResponseHead) {
+            self.request = request
+            self.responseHead = responseHead
+        }
+    }
 }
 
 /// The default ``HTTPClientResponseDelegate``.
@@ -485,6 +534,7 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
         }
     }
 
+    var history = [HTTPClient.RequestResponse]()
     var state = State.idle
     let requestMethod: HTTPMethod
     let requestHost: String
@@ -519,6 +569,14 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
         self.requestMethod = request.method
         self.requestHost = request.host
         self.maxBodySize = maxBodySize
+    }
+
+    public func didVisitURL(
+        task: HTTPClient.Task<HTTPClient.Response>,
+        _ request: HTTPClient.Request,
+        _ head: HTTPResponseHead
+    ) {
+        self.history.append(.init(request: request, responseHead: head))
     }
 
     public func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
@@ -596,7 +654,8 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
                 status: head.status,
                 version: head.version,
                 headers: head.headers,
-                body: nil
+                body: nil,
+                history: self.history
             )
         case .body(let head, let body):
             return Response(
@@ -604,7 +663,8 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
                 status: head.status,
                 version: head.version,
                 headers: head.headers,
-                body: body
+                body: body,
+                history: self.history
             )
         case .end:
             preconditionFailure("request already processed")
@@ -668,7 +728,16 @@ public protocol HTTPClientResponseDelegate: AnyObject {
     ///     - task: Current request context.
     func didSendRequest(task: HTTPClient.Task<Response>)
 
-    /// Called when response head is received. Will be called once.
+    /// Called each time a response head is received (including redirects), and always called before ``HTTPClientResponseDelegate/didReceiveHead(task:_:)-9r4xd``.
+    /// You can use this method to keep an entire history of the request/response chain.
+    ///
+    /// - parameters:
+    ///     - task: Current request context.
+    ///     - request: The request that was sent.
+    ///     - head: Received response head.
+    func didVisitURL(task: HTTPClient.Task<Response>, _ request: HTTPClient.Request, _ head: HTTPResponseHead)
+
+    /// Called when the final response head is received (after redirects).
     /// You must return an `EventLoopFuture<Void>` that you complete when you have finished processing the body part.
     /// You can create an already succeeded future by calling `task.eventLoop.makeSucceededFuture(())`.
     ///
@@ -733,6 +802,11 @@ extension HTTPClientResponseDelegate {
     ///
     /// By default, this does nothing.
     public func didSendRequest(task: HTTPClient.Task<Response>) {}
+
+    /// Default implementation of ``HTTPClientResponseDelegate/didVisitURL(task:_:_:)-2el9y``.
+    ///
+    /// By default, this does nothing.
+    public func didVisitURL(task: HTTPClient.Task<Response>, _: HTTPClient.Request, _: HTTPResponseHead) {}
 
     /// Default implementation of ``HTTPClientResponseDelegate/didReceiveHead(task:_:)-9r4xd``.
     ///
@@ -885,6 +959,8 @@ extension HTTPClient {
 
         /// Provides the result of this request.
         ///
+        /// - warning: This method may violates Structured Concurrency because doesn't respect cancellation.
+        ///
         /// - returns: The value of ``futureResult`` when it completes.
         /// - throws: The error value of ``futureResult`` if it errors.
         @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
@@ -892,12 +968,17 @@ extension HTTPClient {
             try await self.promise.futureResult.get()
         }
 
-        /// Cancels the request execution.
+        /// Initiate cancellation of a HTTP request.
+        ///
+        /// This method will return immeidately and doesn't wait for the cancellation to complete.
         public func cancel() {
             self.fail(reason: HTTPClientError.cancelled)
         }
 
-        /// Cancels the request execution with a custom `Error`.
+        /// Initiate cancellation of a HTTP request with an `error`.
+        ///
+        /// This method will return immeidately and doesn't wait for the cancellation to complete.
+        ///
         /// - Parameter error: the error that is used to fail the promise
         public func fail(reason error: Error) {
             let taskDelegate = self.lock.withLock { () -> HTTPClientTaskDelegate? in
@@ -949,7 +1030,7 @@ internal struct RedirectHandler<ResponseType> {
         status: HTTPResponseStatus,
         to redirectURL: URL,
         promise: EventLoopPromise<ResponseType>
-    ) {
+    ) -> HTTPClient.Task<ResponseType>? {
         do {
             var redirectState = self.redirectState
             try redirectState.redirect(to: redirectURL.absoluteString)
@@ -969,13 +1050,19 @@ internal struct RedirectHandler<ResponseType> {
                 headers: headers,
                 body: body
             )
-            self.execute(newRequest, redirectState).futureResult.whenComplete { result in
+
+            let newTask = self.execute(newRequest, redirectState)
+
+            newTask.futureResult.whenComplete { result in
                 promise.futureResult.eventLoop.execute {
                     promise.completeWith(result)
                 }
             }
+
+            return newTask
         } catch {
             promise.fail(error)
+            return nil
         }
     }
 }

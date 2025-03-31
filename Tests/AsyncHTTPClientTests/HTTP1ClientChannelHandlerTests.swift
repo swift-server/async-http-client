@@ -840,6 +840,61 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         channel.writeAndFlush(request, promise: nil)
         XCTAssertEqual(request.events.map(\.kind), [.willExecuteRequest, .requestHeadSent])
     }
+
+    func testIdleWriteTimeoutOutsideOfRunningState() {
+        let embedded = EmbeddedChannel()
+        var maybeTestUtils: HTTP1TestTools?
+        XCTAssertNoThrow(maybeTestUtils = try embedded.setupHTTP1Connection())
+        print("pipeline", embedded.pipeline)
+        guard let testUtils = maybeTestUtils else { return XCTFail("Expected connection setup works") }
+
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost/"))
+        guard var request = maybeRequest else { return XCTFail("Expected to be able to create a request") }
+
+        // start a request stream we'll never write to
+        let streamPromise = embedded.eventLoop.makePromise(of: Void.self)
+        let streamCallback = { @Sendable (streamWriter: HTTPClient.Body.StreamWriter) -> EventLoopFuture<Void> in
+            streamPromise.futureResult
+        }
+        request.body = .init(contentLength: nil, stream: streamCallback)
+
+        let accumulator = ResponseAccumulator(request: request)
+        var maybeRequestBag: RequestBag<ResponseAccumulator>?
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embedded.eventLoop),
+                task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(
+                    idleReadTimeout: .milliseconds(10),
+                    idleWriteTimeout: .milliseconds(2)
+                ),
+                delegate: accumulator
+            )
+        )
+        guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
+
+        testUtils.connection.executeRequest(requestBag)
+
+        XCTAssertNoThrow(
+            try embedded.receiveHeadAndVerify {
+                XCTAssertEqual($0.method, .GET)
+                XCTAssertEqual($0.uri, "/")
+                XCTAssertEqual($0.headers.first(name: "host"), "localhost")
+            }
+        )
+
+        // close the pipeline to simulate a server-side close
+        // note this happens before we write so the idle write timeout is still running
+        try! embedded.pipeline.close().wait()
+
+        // advance time to trigger the idle write timeout
+        // and ensure that the state machine can tolerate this
+        embedded.embeddedEventLoop.advanceTime(by: .milliseconds(250))
+    }
 }
 
 class TestBackpressureWriter {

@@ -26,6 +26,10 @@ extension HTTPClient {
     ///   - request: HTTP request to execute.
     ///   - deadline: Point in time by which the request must complete.
     ///   - logger: The logger to use for this request.
+    ///
+    /// - warning: This method may violates Structured Concurrency because it returns a `HTTPClientResponse` that needs to be
+    ///            streamed by the user. This means the request, the connection and other resources are still alive when the request returns.
+    ///
     /// - Returns: The response to the request. Note that the `body` of the response may not yet have been fully received.
     public func execute(
         _ request: HTTPClientRequest,
@@ -51,6 +55,10 @@ extension HTTPClient {
     ///   - request: HTTP request to execute.
     ///   - timeout: time the the request has to complete.
     ///   - logger: The logger to use for this request.
+    ///
+    /// - warning: This method may violates Structured Concurrency because it returns a `HTTPClientResponse` that needs to be
+    ///            streamed by the user. This means the request, the connection and other resources are still alive when the request returns.
+    ///
     /// - Returns: The response to the request. Note that the `body` of the response may not yet have been fully received.
     public func execute(
         _ request: HTTPClientRequest,
@@ -67,6 +75,8 @@ extension HTTPClient {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClient {
+    /// - warning: This method may violates Structured Concurrency because it returns a `HTTPClientResponse` that needs to be
+    ///            streamed by the user. This means the request, the connection and other resources are still alive when the request returns.
     private func executeAndFollowRedirectsIfNeeded(
         _ request: HTTPClientRequest,
         deadline: NIODeadline,
@@ -75,11 +85,29 @@ extension HTTPClient {
     ) async throws -> HTTPClientResponse {
         var currentRequest = request
         var currentRedirectState = redirectState
+        var history: [HTTPClientRequestResponse] = []
 
         // this loop is there to follow potential redirects
         while true {
             let preparedRequest = try HTTPClientRequest.Prepared(currentRequest, dnsOverride: configuration.dnsOverride)
-            let response = try await self.executeCancellable(preparedRequest, deadline: deadline, logger: logger)
+            let response = try await {
+                var response = try await self.executeCancellable(preparedRequest, deadline: deadline, logger: logger)
+
+                history.append(
+                    .init(
+                        request: currentRequest,
+                        responseHead: .init(
+                            version: response.version,
+                            status: response.status,
+                            headers: response.headers
+                        )
+                    )
+                )
+
+                response.history = history
+
+                return response
+            }()
 
             guard var redirectState = currentRedirectState else {
                 // a `nil` redirectState means we should not follow redirects
@@ -116,6 +144,8 @@ extension HTTPClient {
         }
     }
 
+    /// - warning: This method may violates Structured Concurrency because it returns a `HTTPClientResponse` that needs to be
+    ///            streamed by the user. This means the request, the connection and other resources are still alive when the request returns.
     private func executeCancellable(
         _ request: HTTPClientRequest.Prepared,
         deadline: NIODeadline,

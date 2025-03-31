@@ -22,6 +22,7 @@ import NIOSSL
 import NIOTLS
 
 #if canImport(Network)
+import Network
 import NIOTransportServices
 #endif
 
