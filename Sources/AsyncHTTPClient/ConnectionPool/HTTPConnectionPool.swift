@@ -324,7 +324,9 @@ final class HTTPConnectionPool:
             connection.executeRequest(request.req)
 
         case .executeRequests(let requests, let connection):
-            for request in requests { connection.executeRequest(request.req) }
+            for request in requests {
+                connection.executeRequest(request.req)
+            }
 
         case .failRequest(let request, let error):
             request.req.fail(error)
