@@ -148,6 +148,14 @@ static func postJSON() async throws {
     request.headers.add(name: "Accept", value: "application/json")
     request.method = .POST
     request.body = .bytes(jsonData)    
+    
+    // Execute the request
+    let response = try await httpClient.execute(request, timeout: .seconds(30))
+    
+    // Process the response
+    let responseData = try await response.body.collect(upTo: 1024 * 1024) // 1 MB
+    let returnedCar = try JSONDecoder().decode(Car.self, from: responseData)
+    
     try await httpClient.shutdown()
 }
 ```

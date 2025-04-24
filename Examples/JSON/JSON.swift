@@ -17,7 +17,7 @@ import Foundation
 import NIOCore
 import NIOFoundationCompat
 
-struct Comic: Codable{
+struct Comic: Codable {
     var num: Int
     var title: String
     var day: String
@@ -28,6 +28,17 @@ struct Comic: Codable{
     var news: String
     var link: String
     var transcript: String
+}
+
+// Structure to match httpbin.org response format
+struct HttpBinResponse: Codable {
+    let json: Comic
+    let url: String
+    let headers: [String: String]
+    let origin: String
+    let data: String?
+    let form: [String: String]?
+    let files: [String: String]?
 }
 
 @main
@@ -86,9 +97,11 @@ struct JSON {
             // we use an overload defined in `NIOFoundationCompat` for `decode(_:from:)` to
             // efficiently decode from a `ByteBuffer`
 
-            // httpbin.org returns a JSON response with what we sent over the HTTP POST request, 
-            // the json should be identical
-            let returnedComic = try JSONDecoder().decode(Comic.self, from: responseBody)
+            // httpbin.org returns a JSON response that wraps our posted data in a "json" field
+            let httpBinResponse = try JSONDecoder().decode(HttpBinResponse.self, from: responseBody)
+            let returnedComic = httpBinResponse.json
+            
+            // Verify the data matches what we sent
             assert(comic.title == returnedComic.title)
             assert(comic.img == returnedComic.img)
             assert(comic.alt == returnedComic.alt)
