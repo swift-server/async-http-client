@@ -31,5 +31,3 @@ jobs:
         name: Static SDK
         # Workaround https://github.com/nektos/act/issues/1875
         uses: apple/swift-nio/.github/workflows/static_sdk.yml@main
-        with:
-            linux_5_9_enabled: false
