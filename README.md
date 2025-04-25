@@ -306,7 +306,7 @@ Please have a look at [SECURITY.md](SECURITY.md) for AsyncHTTPClient's security 
 
 ## Supported Versions
 
-The most recent versions of AsyncHTTPClient support Swift 5.6 and newer. The minimum Swift version supported by AsyncHTTPClient releases are detailed below:
+The most recent versions of AsyncHTTPClient support Swift 5.9 and newer. The minimum Swift version supported by AsyncHTTPClient releases are detailed below:
 
 AsyncHTTPClient     | Minimum Swift Version
 --------------------|----------------------
@@ -316,4 +316,5 @@ AsyncHTTPClient     | Minimum Swift Version
 `1.13.0 ..< 1.18.0` | 5.5.2
 `1.18.0 ..< 1.20.0` | 5.6
 `1.20.0 ..< 1.21.0` | 5.7
-`1.21.0 ...`        | 5.8
+`1.21.0 ..< 1.26.0` | 5.8
+`1.26.0 ...`        | 5.9
