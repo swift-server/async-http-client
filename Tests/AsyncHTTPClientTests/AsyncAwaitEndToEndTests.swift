@@ -635,33 +635,33 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
     func testDnsOverride() {
         XCTAsyncTest(timeout: 5) {
-            /// key + cert was created with the following code (depends on swift-certificates)
-            /// ```
-            /// import X509
-            /// import CryptoKit
-            /// import Foundation
-            ///
-            /// let privateKey = P384.Signing.PrivateKey()
-            /// let name = try DistinguishedName {
-            ///     OrganizationName("Self Signed")
-            ///     CommonName("localhost")
-            /// }
-            /// let certificate = try Certificate(
-            ///     version: .v3,
-            ///     serialNumber: .init(),
-            ///     publicKey: .init(privateKey.publicKey),
-            ///     notValidBefore: Date(),
-            ///     notValidAfter: Date().advanced(by: 365 * 24 * 3600),
-            ///     issuer: name,
-            ///     subject: name,
-            ///     signatureAlgorithm: .ecdsaWithSHA384,
-            ///     extensions: try .init {
-            ///         SubjectAlternativeNames([.dnsName("example.com")])
-            ///         try ExtendedKeyUsage([.serverAuth])
-            ///     },
-            ///     issuerPrivateKey: .init(privateKey)
-            /// )
-            /// ```
+            // key + cert was created with the following code (depends on swift-certificates)
+            // ```
+            // import X509
+            // import CryptoKit
+            // import Foundation
+            //
+            // let privateKey = P384.Signing.PrivateKey()
+            // let name = try DistinguishedName {
+            //     OrganizationName("Self Signed")
+            //     CommonName("localhost")
+            // }
+            // let certificate = try Certificate(
+            //     version: .v3,
+            //     serialNumber: .init(),
+            //     publicKey: .init(privateKey.publicKey),
+            //     notValidBefore: Date(),
+            //     notValidAfter: Date().advanced(by: 365 * 24 * 3600),
+            //     issuer: name,
+            //     subject: name,
+            //     signatureAlgorithm: .ecdsaWithSHA384,
+            //     extensions: try .init {
+            //         SubjectAlternativeNames([.dnsName("example.com")])
+            //         try ExtendedKeyUsage([.serverAuth])
+            //     },
+            //     issuerPrivateKey: .init(privateKey)
+            // )
+            // ```
             let certPath = Bundle.module.path(forResource: "example.com.cert", ofType: "pem")!
             let keyPath = Bundle.module.path(forResource: "example.com.private-key", ofType: "pem")!
             let key = try NIOSSLPrivateKey(file: keyPath, format: .pem)
