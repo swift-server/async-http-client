@@ -365,3 +365,5 @@ AsyncHTTPClient     | Minimum Swift Version
 `1.18.0 ..< 1.20.0` | 5.6
 `1.20.0 ..< 1.21.0` | 5.7
 `1.21.0 ...`        | 5.8
+
+> **Note:** For complete working examples of HTTP requests including both GET and POST JSON operations with proper request/response handling, see the [Examples/JSON/JSON.swift](./Examples/JSON/JSON.swift) file.
