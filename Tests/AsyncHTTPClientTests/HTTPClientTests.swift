@@ -4436,4 +4436,174 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         request.setBasicAuth(username: "foo", password: "bar")
         XCTAssertEqual(request.headers.first(name: "Authorization"), "Basic Zm9vOmJhcg==")
     }
+
+    func runBaseTestForHTTP1ConnectionDebugInitializer(ssl: Bool) {
+        let connectionDebugInitializerUtil = CountingDebugInitializerUtil()
+
+        // Initializing even with just `http1_1ConnectionDebugInitializer` (rather than manually
+        // modifying `config`) to ensure that the matching `init` actually wires up this argument
+        // with the respective property. This is necessary as these parameters are defaulted and can
+        // be easy to miss.
+        var config = HTTPClient.Configuration(
+            http1_1ConnectionDebugInitializer: { channel in
+                connectionDebugInitializerUtil.initialize(channel: channel)
+            }
+        )
+        config.httpVersion = .http1Only
+
+        if ssl {
+            config.tlsConfiguration = .clientDefault
+            config.tlsConfiguration?.certificateVerification = .none
+        }
+
+        let higherConnectTimeout = CountingDebugInitializerUtil.duration + .milliseconds(100)
+        var configWithHigherTimeout = config
+        configWithHigherTimeout.timeout = .init(connect: higherConnectTimeout)
+
+        let clientWithHigherTimeout = HTTPClient(
+            eventLoopGroupProvider: .singleton,
+            configuration: configWithHigherTimeout,
+            backgroundActivityLogger: Logger(
+                label: "HTTPClient",
+                factory: StreamLogHandler.standardOutput(label:)
+            )
+        )
+        defer { XCTAssertNoThrow(try clientWithHigherTimeout.syncShutdown()) }
+
+        let bin = HTTPBin(.http1_1(ssl: ssl, compress: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        let scheme = ssl ? "https" : "http"
+
+        for _ in 0..<3 {
+            XCTAssertNoThrow(
+                try clientWithHigherTimeout.get(url: "\(scheme)://localhost:\(bin.port)/get").wait()
+            )
+        }
+
+        // Even though multiple requests were made, the connection debug initializer must be called
+        // only once.
+        XCTAssertEqual(connectionDebugInitializerUtil.executionCount, 1)
+
+        let lowerConnectTimeout = CountingDebugInitializerUtil.duration - .milliseconds(100)
+        var configWithLowerTimeout = config
+        configWithLowerTimeout.timeout = .init(connect: lowerConnectTimeout)
+
+        let clientWithLowerTimeout = HTTPClient(
+            eventLoopGroupProvider: .singleton,
+            configuration: configWithLowerTimeout,
+            backgroundActivityLogger: Logger(
+                label: "HTTPClient",
+                factory: StreamLogHandler.standardOutput(label:)
+            )
+        )
+        defer { XCTAssertNoThrow(try clientWithLowerTimeout.syncShutdown()) }
+
+        XCTAssertThrowsError(
+            try clientWithLowerTimeout.get(url: "\(scheme)://localhost:\(bin.port)/get").wait()
+        ) {
+            XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
+        }
+    }
+
+    func testHTTP1PlainTextConnectionDebugInitializer() {
+        runBaseTestForHTTP1ConnectionDebugInitializer(ssl: false)
+    }
+
+    func testHTTP1EncryptedConnectionDebugInitializer() {
+        runBaseTestForHTTP1ConnectionDebugInitializer(ssl: true)
+    }
+
+    func testHTTP2ConnectionAndStreamChannelDebugInitializers() {
+        let connectionDebugInitializerUtil = CountingDebugInitializerUtil()
+        let streamChannelDebugInitializerUtil = CountingDebugInitializerUtil()
+
+        // Initializing even with just `http2ConnectionDebugInitializer` and
+        // `http2StreamChannelDebugInitializer` (rather than manually modifying `config`) to ensure
+        // that the matching `init` actually wires up these arguments with the respective
+        // properties. This is necessary as these parameters are defaulted and can be easy to miss.
+        var config = HTTPClient.Configuration(
+            http2ConnectionDebugInitializer: { channel in
+                connectionDebugInitializerUtil.initialize(channel: channel)
+            },
+            http2StreamChannelDebugInitializer: { channel in
+                streamChannelDebugInitializerUtil.initialize(channel: channel)
+            }
+        )
+        config.tlsConfiguration = .clientDefault
+        config.tlsConfiguration?.certificateVerification = .none
+        config.httpVersion = .automatic
+
+        let higherConnectTimeout = CountingDebugInitializerUtil.duration + .milliseconds(100)
+        var configWithHigherTimeout = config
+        configWithHigherTimeout.timeout = .init(connect: higherConnectTimeout)
+
+        let clientWithHigherTimeout = HTTPClient(
+            eventLoopGroupProvider: .singleton,
+            configuration: configWithHigherTimeout,
+            backgroundActivityLogger: Logger(
+                label: "HTTPClient",
+                factory: StreamLogHandler.standardOutput(label:)
+            )
+        )
+        defer { XCTAssertNoThrow(try clientWithHigherTimeout.syncShutdown()) }
+
+        let bin = HTTPBin(.http2(compress: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        let numberOfRequests = 3
+
+        for _ in 0..<numberOfRequests {
+            XCTAssertNoThrow(
+                try clientWithHigherTimeout.get(url: "https://localhost:\(bin.port)/get").wait()
+            )
+        }
+
+        // Even though multiple requests were made, the connection debug initializer must be called
+        // only once.
+        XCTAssertEqual(connectionDebugInitializerUtil.executionCount, 1)
+
+        // The stream channel debug initializer must be called only as much as the number of
+        // requests made.
+        XCTAssertEqual(streamChannelDebugInitializerUtil.executionCount, numberOfRequests)
+
+        let lowerConnectTimeout = CountingDebugInitializerUtil.duration - .milliseconds(100)
+        var configWithLowerTimeout = config
+        configWithLowerTimeout.timeout = .init(connect: lowerConnectTimeout)
+
+        let clientWithLowerTimeout = HTTPClient(
+            eventLoopGroupProvider: .singleton,
+            configuration: configWithLowerTimeout,
+            backgroundActivityLogger: Logger(
+                label: "HTTPClient",
+                factory: StreamLogHandler.standardOutput(label:)
+            )
+        )
+        defer { XCTAssertNoThrow(try clientWithLowerTimeout.syncShutdown()) }
+
+        XCTAssertThrowsError(
+            try clientWithLowerTimeout.get(url: "https://localhost:\(bin.port)/get").wait()
+        ) {
+            XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
+        }
+    }
+}
+
+final class CountingDebugInitializerUtil: Sendable {
+    private let _executionCount = NIOLockedValueBox<Int>(0)
+    var executionCount: Int { self._executionCount.withLockedValue { $0 } }
+
+    /// The minimum time to spend running the debug initializer.
+    static let duration: TimeAmount = .milliseconds(300)
+
+    /// The actual debug initializer.
+    func initialize(channel: Channel) -> EventLoopFuture<Void> {
+        self._executionCount.withLockedValue { $0 += 1 }
+
+        let someScheduledTask = channel.eventLoop.scheduleTask(in: Self.duration) {
+            channel.eventLoop.makeSucceededVoidFuture()
+        }
+
+        return someScheduledTask.futureResult.flatMap { $0 }
+    }
 }

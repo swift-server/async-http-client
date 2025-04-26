@@ -35,6 +35,9 @@ final class HTTP2Connection {
     let multiplexer: HTTP2StreamMultiplexer
     let logger: Logger
 
+    /// A method with access to the stream channel that is called when creating the stream.
+    let streamChannelDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)?
+
     /// the connection pool that created the connection
     let delegate: HTTP2ConnectionDelegate
 
@@ -95,7 +98,8 @@ final class HTTP2Connection {
         decompression: HTTPClient.Decompression,
         maximumConnectionUses: Int?,
         delegate: HTTP2ConnectionDelegate,
-        logger: Logger
+        logger: Logger,
+        streamChannelDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil
     ) {
         self.channel = channel
         self.id = connectionID
@@ -114,6 +118,7 @@ final class HTTP2Connection {
         )
         self.delegate = delegate
         self.state = .initialized
+        self.streamChannelDebugInitializer = streamChannelDebugInitializer
     }
 
     deinit {
@@ -128,7 +133,8 @@ final class HTTP2Connection {
         delegate: HTTP2ConnectionDelegate,
         decompression: HTTPClient.Decompression,
         maximumConnectionUses: Int?,
-        logger: Logger
+        logger: Logger,
+        streamChannelDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil
     ) -> EventLoopFuture<(HTTP2Connection, Int)> {
         let connection = HTTP2Connection(
             channel: channel,
@@ -136,7 +142,8 @@ final class HTTP2Connection {
             decompression: decompression,
             maximumConnectionUses: maximumConnectionUses,
             delegate: delegate,
-            logger: logger
+            logger: logger,
+            streamChannelDebugInitializer: streamChannelDebugInitializer
         )
         return connection._start0().map { maxStreams in (connection, maxStreams) }
     }
@@ -259,8 +266,14 @@ final class HTTP2Connection {
                         self.openStreams.remove(box)
                     }
 
-                    channel.write(request, promise: nil)
-                    return channel.eventLoop.makeSucceededVoidFuture()
+                    if let streamChannelDebugInitializer = self.streamChannelDebugInitializer {
+                        return streamChannelDebugInitializer(channel).map { _ in
+                            channel.write(request, promise: nil)
+                        }
+                    } else {
+                        channel.write(request, promise: nil)
+                        return channel.eventLoop.makeSucceededVoidFuture()
+                    }
                 } catch {
                     return channel.eventLoop.makeFailedFuture(error)
                 }
