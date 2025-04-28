@@ -318,7 +318,7 @@ final class TransactionTests: XCTestCase {
 
             let connectionCreator = TestConnectionCreator()
             let delegate = TestHTTP2ConnectionDelegate()
-            var maybeHTTP2Connection: HTTP2Connection?
+            var maybeHTTP2Connection: HTTP2Connection.SendableView?
             XCTAssertNoThrow(
                 maybeHTTP2Connection = try connectionCreator.createHTTP2Connection(
                     to: httpBin.port,
@@ -522,7 +522,7 @@ final class TransactionTests: XCTestCase {
 
             let connectionCreator = TestConnectionCreator()
             let delegate = TestHTTP2ConnectionDelegate()
-            var maybeHTTP2Connection: HTTP2Connection?
+            var maybeHTTP2Connection: HTTP2Connection.SendableView?
             XCTAssertNoThrow(
                 maybeHTTP2Connection = try connectionCreator.createHTTP2Connection(
                     to: httpBin.port,

@@ -44,7 +44,7 @@ class HTTP2ConnectionTests: XCTestCase {
                 decompression: .disabled,
                 maximumConnectionUses: nil,
                 logger: logger
-            ).wait()
+            ).map { _ in }.nonisolated().wait()
         )
     }
 
@@ -70,7 +70,7 @@ class HTTP2ConnectionTests: XCTestCase {
         XCTAssertThrowsError(try startFuture.wait())
 
         // should not crash
-        connection.shutdown()
+        connection.sendableView.shutdown()
     }
 
     func testSimpleGetRequest() {
@@ -83,7 +83,7 @@ class HTTP2ConnectionTests: XCTestCase {
 
         let connectionCreator = TestConnectionCreator()
         let delegate = TestHTTP2ConnectionDelegate()
-        var maybeHTTP2Connection: HTTP2Connection?
+        var maybeHTTP2Connection: HTTP2Connection.SendableView?
         XCTAssertNoThrow(
             maybeHTTP2Connection = try connectionCreator.createHTTP2Connection(
                 to: httpBin.port,
@@ -142,7 +142,7 @@ class HTTP2ConnectionTests: XCTestCase {
 
         let connectionCreator = TestConnectionCreator()
         let delegate = TestHTTP2ConnectionDelegate()
-        var maybeHTTP2Connection: HTTP2Connection?
+        var maybeHTTP2Connection: HTTP2Connection.SendableView?
         XCTAssertNoThrow(
             maybeHTTP2Connection = try connectionCreator.createHTTP2Connection(
                 to: httpBin.port,
@@ -210,7 +210,7 @@ class HTTP2ConnectionTests: XCTestCase {
 
         let connectionCreator = TestConnectionCreator()
         let delegate = TestHTTP2ConnectionDelegate()
-        var maybeHTTP2Connection: HTTP2Connection?
+        var maybeHTTP2Connection: HTTP2Connection.SendableView?
         XCTAssertNoThrow(
             maybeHTTP2Connection = try connectionCreator.createHTTP2Connection(
                 to: httpBin.port,
@@ -277,7 +277,7 @@ class HTTP2ConnectionTests: XCTestCase {
             func channelRead(context: ChannelHandlerContext, data: NIOAny) {
                 self.dataArrivedPromise.succeed(())
 
-                self.triggerResponseFuture.hop(to: context.eventLoop).whenSuccess {
+                self.triggerResponseFuture.hop(to: context.eventLoop).assumeIsolated().whenSuccess {
                     switch self.unwrapInboundIn(data) {
                     case .head:
                         context.write(self.wrapOutboundOut(.head(.init(version: .http2, status: .ok))), promise: nil)
@@ -305,7 +305,7 @@ class HTTP2ConnectionTests: XCTestCase {
 
         let connectionCreator = TestConnectionCreator()
         let delegate = TestHTTP2ConnectionDelegate()
-        var maybeHTTP2Connection: HTTP2Connection?
+        var maybeHTTP2Connection: HTTP2Connection.SendableView?
         XCTAssertNoThrow(
             maybeHTTP2Connection = try connectionCreator.createHTTP2Connection(
                 to: httpBin.port,
@@ -385,7 +385,7 @@ class HTTP2ConnectionTests: XCTestCase {
     }
 }
 
-class TestConnectionCreator {
+final class TestConnectionCreator {
     enum Error: Swift.Error {
         case alreadyCreatingAnotherConnection
         case wantedHTTP2ConnectionButGotHTTP1
@@ -394,12 +394,11 @@ class TestConnectionCreator {
 
     enum State {
         case idle
-        case waitingForHTTP1Connection(EventLoopPromise<HTTP1Connection>)
-        case waitingForHTTP2Connection(EventLoopPromise<HTTP2Connection>)
+        case waitingForHTTP1Connection(EventLoopPromise<HTTP1Connection.SendableView>)
+        case waitingForHTTP2Connection(EventLoopPromise<HTTP2Connection.SendableView>)
     }
 
-    private var state: State = .idle
-    private let lock = NIOLock()
+    private let lock = NIOLockedValueBox<State>(.idle)
 
     init() {}
 
@@ -409,7 +408,7 @@ class TestConnectionCreator {
         connectionID: HTTPConnectionPool.Connection.ID = 0,
         on eventLoop: EventLoop,
         logger: Logger = .init(label: "test")
-    ) throws -> HTTP1Connection {
+    ) throws -> HTTP1Connection.SendableView {
         let request = try! HTTPClient.Request(url: "https://localhost:\(port)")
 
         var tlsConfiguration = TLSConfiguration.makeClientConfiguration()
@@ -423,13 +422,13 @@ class TestConnectionCreator {
             sslContextCache: .init()
         )
 
-        let promise = try self.lock.withLock { () -> EventLoopPromise<HTTP1Connection> in
-            guard case .idle = self.state else {
+        let promise = try self.lock.withLockedValue { state in
+            guard case .idle = state else {
                 throw Error.alreadyCreatingAnotherConnection
             }
 
-            let promise = eventLoop.makePromise(of: HTTP1Connection.self)
-            self.state = .waitingForHTTP1Connection(promise)
+            let promise = eventLoop.makePromise(of: HTTP1Connection.SendableView.self)
+            state = .waitingForHTTP1Connection(promise)
             return promise
         }
 
@@ -452,7 +451,7 @@ class TestConnectionCreator {
         connectionID: HTTPConnectionPool.Connection.ID = 0,
         on eventLoop: EventLoop,
         logger: Logger = .init(label: "test")
-    ) throws -> HTTP2Connection {
+    ) throws -> HTTP2Connection.SendableView {
         let request = try! HTTPClient.Request(url: "https://localhost:\(port)")
 
         var tlsConfiguration = TLSConfiguration.makeClientConfiguration()
@@ -466,13 +465,13 @@ class TestConnectionCreator {
             sslContextCache: .init()
         )
 
-        let promise = try self.lock.withLock { () -> EventLoopPromise<HTTP2Connection> in
-            guard case .idle = self.state else {
+        let promise = try self.lock.withLockedValue { state in
+            guard case .idle = state else {
                 throw Error.alreadyCreatingAnotherConnection
             }
 
-            let promise = eventLoop.makePromise(of: HTTP2Connection.self)
-            self.state = .waitingForHTTP2Connection(promise)
+            let promise = eventLoop.makePromise(of: HTTP2Connection.SendableView.self)
+            state = .waitingForHTTP2Connection(promise)
             return promise
         }
 
@@ -491,7 +490,7 @@ class TestConnectionCreator {
 }
 
 extension TestConnectionCreator: HTTPConnectionRequester {
-    enum EitherPromiseWrapper<SucceedType, FailType> {
+    enum EitherPromiseWrapper<SucceedType: Sendable, FailType: Sendable>: Sendable {
         case succeed(EventLoopPromise<SucceedType>, SucceedType)
         case fail(EventLoopPromise<FailType>, Error)
 
@@ -505,37 +504,38 @@ extension TestConnectionCreator: HTTPConnectionRequester {
         }
     }
 
-    func http1ConnectionCreated(_ connection: HTTP1Connection) {
-        let wrapper = self.lock.withLock { () -> (EitherPromiseWrapper<HTTP1Connection, HTTP2Connection>) in
+    func http1ConnectionCreated(_ connection: HTTP1Connection.SendableView) {
+        let wrapper: EitherPromiseWrapper<HTTP1Connection.SendableView, HTTP2Connection.SendableView> = self.lock
+            .withLockedValue { state in
 
-            switch self.state {
-            case .waitingForHTTP1Connection(let promise):
-                return .succeed(promise, connection)
+                switch state {
+                case .waitingForHTTP1Connection(let promise):
+                    return .succeed(promise, connection)
 
-            case .waitingForHTTP2Connection(let promise):
-                return .fail(promise, Error.wantedHTTP2ConnectionButGotHTTP1)
+                case .waitingForHTTP2Connection(let promise):
+                    return .fail(promise, Error.wantedHTTP2ConnectionButGotHTTP1)
 
-            case .idle:
-                preconditionFailure("Invalid state: \(self.state)")
+                case .idle:
+                    preconditionFailure("Invalid state: \(state)")
+                }
             }
-        }
         wrapper.complete()
     }
 
-    func http2ConnectionCreated(_ connection: HTTP2Connection, maximumStreams: Int) {
-        let wrapper = self.lock.withLock { () -> (EitherPromiseWrapper<HTTP2Connection, HTTP1Connection>) in
+    func http2ConnectionCreated(_ connection: HTTP2Connection.SendableView, maximumStreams: Int) {
+        let wrapper: EitherPromiseWrapper<HTTP2Connection.SendableView, HTTP1Connection.SendableView> = self.lock
+            .withLockedValue { state in
+                switch state {
+                case .waitingForHTTP1Connection(let promise):
+                    return .fail(promise, Error.wantedHTTP1ConnectionButGotHTTP2)
 
-            switch self.state {
-            case .waitingForHTTP1Connection(let promise):
-                return .fail(promise, Error.wantedHTTP1ConnectionButGotHTTP2)
+                case .waitingForHTTP2Connection(let promise):
+                    return .succeed(promise, connection)
 
-            case .waitingForHTTP2Connection(let promise):
-                return .succeed(promise, connection)
-
-            case .idle:
-                preconditionFailure("Invalid state: \(self.state)")
+                case .idle:
+                    preconditionFailure("Invalid state: \(state)")
+                }
             }
-        }
         wrapper.complete()
     }
 
@@ -554,19 +554,20 @@ extension TestConnectionCreator: HTTPConnectionRequester {
     }
 
     func failedToCreateHTTPConnection(_: HTTPConnectionPool.Connection.ID, error: Swift.Error) {
-        let wrapper = self.lock.withLock { () -> (FailPromiseWrapper<HTTP1Connection, HTTP2Connection>) in
+        let wrapper: FailPromiseWrapper<HTTP1Connection.SendableView, HTTP2Connection.SendableView> = self.lock
+            .withLockedValue { state in
 
-            switch self.state {
-            case .waitingForHTTP1Connection(let promise):
-                return .type1(promise)
+                switch state {
+                case .waitingForHTTP1Connection(let promise):
+                    return .type1(promise)
 
-            case .waitingForHTTP2Connection(let promise):
-                return .type2(promise)
+                case .waitingForHTTP2Connection(let promise):
+                    return .type2(promise)
 
-            case .idle:
-                preconditionFailure("Invalid state: \(self.state)")
+                case .idle:
+                    preconditionFailure("Invalid state: \(state)")
+                }
             }
-        }
         wrapper.fail(error)
     }
 
@@ -575,76 +576,78 @@ extension TestConnectionCreator: HTTPConnectionRequester {
     }
 }
 
-class TestHTTP2ConnectionDelegate: HTTP2ConnectionDelegate {
+final class TestHTTP2ConnectionDelegate: HTTP2ConnectionDelegate {
     var hitStreamClosed: Int {
-        self.lock.withLock { self._hitStreamClosed }
+        self.lock.withLockedValue { $0.hitStreamClosed }
     }
 
     var hitGoAwayReceived: Int {
-        self.lock.withLock { self._hitGoAwayReceived }
+        self.lock.withLockedValue { $0.hitGoAwayReceived }
     }
 
     var hitConnectionClosed: Int {
-        self.lock.withLock { self._hitConnectionClosed }
+        self.lock.withLockedValue { $0.hitConnectionClosed }
     }
 
     var maxStreamSetting: Int {
-        self.lock.withLock { self._maxStreamSetting }
+        self.lock.withLockedValue { $0.maxStreamSetting }
     }
 
-    private let lock = NIOLock()
-    private var _hitStreamClosed: Int = 0
-    private var _hitGoAwayReceived: Int = 0
-    private var _hitConnectionClosed: Int = 0
-    private var _maxStreamSetting: Int = 100
+    private let lock = NIOLockedValueBox<Counts>(.init())
+    private struct Counts {
+        var hitStreamClosed: Int = 0
+        var hitGoAwayReceived: Int = 0
+        var hitConnectionClosed: Int = 0
+        var maxStreamSetting: Int = 100
+    }
 
     init() {}
 
-    func http2Connection(_: HTTP2Connection, newMaxStreamSetting: Int) {}
+    func http2Connection(_: HTTPConnectionPool.Connection.ID, newMaxStreamSetting: Int) {}
 
-    func http2ConnectionStreamClosed(_: HTTP2Connection, availableStreams: Int) {
-        self.lock.withLock {
-            self._hitStreamClosed += 1
+    func http2ConnectionStreamClosed(_: HTTPConnectionPool.Connection.ID, availableStreams: Int) {
+        self.lock.withLockedValue {
+            $0.hitStreamClosed += 1
         }
     }
 
-    func http2ConnectionGoAwayReceived(_: HTTP2Connection) {
-        self.lock.withLock {
-            self._hitGoAwayReceived += 1
+    func http2ConnectionGoAwayReceived(_: HTTPConnectionPool.Connection.ID) {
+        self.lock.withLockedValue {
+            $0.hitGoAwayReceived += 1
         }
     }
 
-    func http2ConnectionClosed(_: HTTP2Connection) {
-        self.lock.withLock {
-            self._hitConnectionClosed += 1
+    func http2ConnectionClosed(_: HTTPConnectionPool.Connection.ID) {
+        self.lock.withLockedValue {
+            $0.hitConnectionClosed += 1
         }
     }
 }
 
 final class EmptyHTTP2ConnectionDelegate: HTTP2ConnectionDelegate {
-    func http2Connection(_: HTTP2Connection, newMaxStreamSetting: Int) {
+    func http2Connection(_: HTTPConnectionPool.Connection.ID, newMaxStreamSetting: Int) {
         preconditionFailure("Unimplemented")
     }
 
-    func http2ConnectionStreamClosed(_: HTTP2Connection, availableStreams: Int) {
+    func http2ConnectionStreamClosed(_: HTTPConnectionPool.Connection.ID, availableStreams: Int) {
         preconditionFailure("Unimplemented")
     }
 
-    func http2ConnectionGoAwayReceived(_: HTTP2Connection) {
+    func http2ConnectionGoAwayReceived(_: HTTPConnectionPool.Connection.ID) {
         preconditionFailure("Unimplemented")
     }
 
-    func http2ConnectionClosed(_: HTTP2Connection) {
+    func http2ConnectionClosed(_: HTTPConnectionPool.Connection.ID) {
         preconditionFailure("Unimplemented")
     }
 }
 
 final class EmptyHTTP1ConnectionDelegate: HTTP1ConnectionDelegate {
-    func http1ConnectionReleased(_: HTTP1Connection) {
+    func http1ConnectionReleased(_: HTTPConnectionPool.Connection.ID) {
         preconditionFailure("Unimplemented")
     }
 
-    func http1ConnectionClosed(_: HTTP1Connection) {
+    func http1ConnectionClosed(_: HTTPConnectionPool.Connection.ID) {
         preconditionFailure("Unimplemented")
     }
 }

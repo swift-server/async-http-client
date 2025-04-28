@@ -17,9 +17,9 @@ import NIOCore
 import NIOHTTP1
 import NIOHTTPCompression
 
-protocol HTTP1ConnectionDelegate {
-    func http1ConnectionReleased(_: HTTP1Connection)
-    func http1ConnectionClosed(_: HTTP1Connection)
+protocol HTTP1ConnectionDelegate: Sendable {
+    func http1ConnectionReleased(_: HTTPConnectionPool.Connection.ID)
+    func http1ConnectionClosed(_: HTTPConnectionPool.Connection.ID)
 }
 
 final class HTTP1Connection {
@@ -67,32 +67,45 @@ final class HTTP1Connection {
         return connection
     }
 
-    func executeRequest(_ request: HTTPExecutableRequest) {
-        if self.channel.eventLoop.inEventLoop {
-            self.execute0(request: request)
-        } else {
-            self.channel.eventLoop.execute {
-                self.execute0(request: request)
+    var sendableView: SendableView {
+        SendableView(self)
+    }
+
+    struct SendableView: Sendable {
+        private let connection: NIOLoopBound<HTTP1Connection>
+        let channel: Channel
+        let id: HTTPConnectionPool.Connection.ID
+        private var eventLoop: EventLoop { self.connection.eventLoop }
+
+        init(_ connection: HTTP1Connection) {
+            self.connection = NIOLoopBound(connection, eventLoop: connection.channel.eventLoop)
+            self.id = connection.id
+            self.channel = connection.channel
+        }
+
+        func executeRequest(_ request: HTTPExecutableRequest) {
+            self.connection.execute {
+                $0.execute0(request: request)
             }
+        }
+
+        func shutdown() {
+            self.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
+        }
+
+        func close(promise: EventLoopPromise<Void>?) {
+            self.channel.close(mode: .all, promise: promise)
+        }
+
+        func close() -> EventLoopFuture<Void> {
+            let promise = self.eventLoop.makePromise(of: Void.self)
+            self.close(promise: promise)
+            return promise.futureResult
         }
     }
 
-    func shutdown() {
-        self.channel.triggerUserOutboundEvent(HTTPConnectionEvent.shutdownRequested, promise: nil)
-    }
-
-    func close(promise: EventLoopPromise<Void>?) {
-        self.channel.close(mode: .all, promise: promise)
-    }
-
-    func close() -> EventLoopFuture<Void> {
-        let promise = self.channel.eventLoop.makePromise(of: Void.self)
-        self.close(promise: promise)
-        return promise.futureResult
-    }
-
     func taskCompleted() {
-        self.delegate.http1ConnectionReleased(self)
+        self.delegate.http1ConnectionReleased(self.id)
     }
 
     private func execute0(request: HTTPExecutableRequest) {
@@ -100,7 +113,7 @@ final class HTTP1Connection {
             return request.fail(ChannelError.ioOnClosedChannel)
         }
 
-        self.channel.write(request, promise: nil)
+        self.channel.pipeline.syncOperations.write(NIOAny(request), promise: nil)
     }
 
     private func start(decompression: HTTPClient.Decompression, logger: Logger) throws {
@@ -111,9 +124,9 @@ final class HTTP1Connection {
         }
 
         self.state = .active
-        self.channel.closeFuture.whenComplete { _ in
+        self.channel.closeFuture.assumeIsolated().whenComplete { _ in
             self.state = .closed
-            self.delegate.http1ConnectionClosed(self)
+            self.delegate.http1ConnectionClosed(self.id)
         }
 
         do {
@@ -150,3 +163,6 @@ final class HTTP1Connection {
         }
     }
 }
+
+@available(*, unavailable)
+extension HTTP1Connection: Sendable {}

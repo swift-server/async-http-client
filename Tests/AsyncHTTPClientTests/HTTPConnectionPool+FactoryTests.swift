@@ -194,11 +194,11 @@ class NeverrespondServerHandler: ChannelInboundHandler {
 
 /// A `HTTPConnectionRequester` that will fail a test if any of its methods are ever called.
 final class ExplodingRequester: HTTPConnectionRequester {
-    func http1ConnectionCreated(_: HTTP1Connection) {
+    func http1ConnectionCreated(_: HTTP1Connection.SendableView) {
         XCTFail("http1ConnectionCreated called unexpectedly")
     }
 
-    func http2ConnectionCreated(_: HTTP2Connection, maximumStreams: Int) {
+    func http2ConnectionCreated(_: HTTP2Connection.SendableView, maximumStreams: Int) {
         XCTFail("http2ConnectionCreated called unexpectedly")
     }
 

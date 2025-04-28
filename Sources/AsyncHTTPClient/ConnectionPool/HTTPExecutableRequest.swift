@@ -176,7 +176,7 @@ protocol HTTPSchedulableRequest: HTTPExecutableRequest {
 /// A handle to the request executor.
 ///
 /// This protocol is implemented by the `HTTP1ClientChannelHandler`.
-protocol HTTPRequestExecutor {
+protocol HTTPRequestExecutor: Sendable {
     /// Writes a body part into the channel pipeline
     ///
     /// This method may be **called on any thread**. The executor needs to ensure thread safety.
@@ -201,7 +201,7 @@ protocol HTTPRequestExecutor {
     func cancelRequest(_ task: HTTPExecutableRequest)
 }
 
-protocol HTTPExecutableRequest: AnyObject {
+protocol HTTPExecutableRequest: AnyObject, Sendable {
     /// The request's logger
     var logger: Logger { get }
 

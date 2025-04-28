@@ -17,11 +17,11 @@ import NIOCore
 import NIOHTTP2
 import NIOHTTPCompression
 
-protocol HTTP2ConnectionDelegate {
-    func http2Connection(_: HTTP2Connection, newMaxStreamSetting: Int)
-    func http2ConnectionStreamClosed(_: HTTP2Connection, availableStreams: Int)
-    func http2ConnectionGoAwayReceived(_: HTTP2Connection)
-    func http2ConnectionClosed(_: HTTP2Connection)
+protocol HTTP2ConnectionDelegate: Sendable {
+    func http2Connection(_: HTTPConnectionPool.Connection.ID, newMaxStreamSetting: Int)
+    func http2ConnectionStreamClosed(_: HTTPConnectionPool.Connection.ID, availableStreams: Int)
+    func http2ConnectionGoAwayReceived(_: HTTPConnectionPool.Connection.ID)
+    func http2ConnectionClosed(_: HTTPConnectionPool.Connection.ID)
 }
 
 struct HTTP2PushNotSupportedError: Error {}
@@ -135,7 +135,7 @@ final class HTTP2Connection {
         maximumConnectionUses: Int?,
         logger: Logger,
         streamChannelDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil
-    ) -> EventLoopFuture<(HTTP2Connection, Int)> {
+    ) -> EventLoopFuture<(HTTP2Connection, Int)>.Isolated {
         let connection = HTTP2Connection(
             channel: channel,
             connectionID: connectionID,
@@ -145,39 +145,60 @@ final class HTTP2Connection {
             logger: logger,
             streamChannelDebugInitializer: streamChannelDebugInitializer
         )
-        return connection._start0().map { maxStreams in (connection, maxStreams) }
-    }
 
-    func executeRequest(_ request: HTTPExecutableRequest) {
-        if self.channel.eventLoop.inEventLoop {
-            self.executeRequest0(request)
-        } else {
-            self.channel.eventLoop.execute {
-                self.executeRequest0(request)
-            }
+        return connection._start0().assumeIsolated().map { maxStreams in
+            (connection, maxStreams)
         }
     }
 
-    /// shuts down the connection by cancelling all running tasks and closing the connection once
-    /// all child streams/channels are closed.
-    func shutdown() {
-        if self.channel.eventLoop.inEventLoop {
-            self.shutdown0()
-        } else {
-            self.channel.eventLoop.execute {
-                self.shutdown0()
+    var sendableView: SendableView {
+        SendableView(self)
+    }
+
+    struct SendableView: Sendable {
+        private let connection: NIOLoopBound<HTTP2Connection>
+        let id: HTTPConnectionPool.Connection.ID
+        let channel: Channel
+
+        var eventLoop: EventLoop {
+            self.connection.eventLoop
+        }
+
+        var closeFuture: EventLoopFuture<Void> {
+            self.channel.closeFuture
+        }
+
+        func __forTesting_getStreamChannels() -> [Channel] {
+            self.connection.value.__forTesting_getStreamChannels()
+        }
+
+        init(_ connection: HTTP2Connection) {
+            self.connection = NIOLoopBound(connection, eventLoop: connection.channel.eventLoop)
+            self.id = connection.id
+            self.channel = connection.channel
+        }
+
+        func executeRequest(_ request: HTTPExecutableRequest) {
+            self.connection.execute {
+                $0.executeRequest0(request)
             }
         }
-    }
 
-    func close(promise: EventLoopPromise<Void>?) {
-        self.channel.close(mode: .all, promise: promise)
-    }
+        func shutdown() {
+            self.connection.execute {
+                $0.shutdown0()
+            }
+        }
 
-    func close() -> EventLoopFuture<Void> {
-        let promise = self.channel.eventLoop.makePromise(of: Void.self)
-        self.close(promise: promise)
-        return promise.futureResult
+        func close(promise: EventLoopPromise<Void>?) {
+            self.channel.close(mode: .all, promise: promise)
+        }
+
+        func close() -> EventLoopFuture<Void> {
+            let promise = self.eventLoop.makePromise(of: Void.self)
+            self.close(promise: promise)
+            return promise.futureResult
+        }
     }
 
     func _start0() -> EventLoopFuture<Int> {
@@ -186,7 +207,7 @@ final class HTTP2Connection {
         let readyToAcceptConnectionsPromise = self.channel.eventLoop.makePromise(of: Int.self)
 
         self.state = .starting(readyToAcceptConnectionsPromise)
-        self.channel.closeFuture.whenComplete { _ in
+        self.channel.closeFuture.assumeIsolated().whenComplete { _ in
             switch self.state {
             case .initialized, .closed:
                 preconditionFailure("invalid state \(self.state)")
@@ -195,7 +216,7 @@ final class HTTP2Connection {
                 readyToAcceptConnectionsPromise.fail(HTTPClientError.remoteConnectionClosed)
             case .active, .closing:
                 self.state = .closed
-                self.delegate.http2ConnectionClosed(self)
+                self.delegate.http2ConnectionClosed(self.id)
             }
         }
 
@@ -234,13 +255,18 @@ final class HTTP2Connection {
 
         case .active:
             let createStreamChannelPromise = self.channel.eventLoop.makePromise(of: Channel.self)
-            self.multiplexer.createStreamChannel(promise: createStreamChannelPromise) {
-                channel -> EventLoopFuture<Void> in
+            let loopBoundSelf = NIOLoopBound(self, eventLoop: self.channel.eventLoop)
+
+            self.multiplexer.createStreamChannel(
+                promise: createStreamChannelPromise
+            ) { [streamChannelDebugInitializer] channel -> EventLoopFuture<Void> in
+                let connection = loopBoundSelf.value
+
                 do {
                     // the connection may have been asked to shutdown while we created the child. in
                     // this
                     // channel.
-                    guard case .active = self.state else {
+                    guard case .active = connection.state else {
                         throw HTTPClientError.cancelled
                     }
 
@@ -249,7 +275,7 @@ final class HTTP2Connection {
                     let translate = HTTP2FramePayloadToHTTP1ClientCodec(httpProtocol: .https)
                     try channel.pipeline.syncOperations.addHandler(translate)
 
-                    if case .enabled(let limit) = self.decompression {
+                    if case .enabled(let limit) = connection.decompression {
                         let decompressHandler = NIOHTTPResponseDecompressor(limit: limit)
                         try channel.pipeline.syncOperations.addHandler(decompressHandler)
                     }
@@ -261,17 +287,17 @@ final class HTTP2Connection {
                     // request to it. In case of an error, we are sure that the channel was added
                     // before.
                     let box = ChannelBox(channel)
-                    self.openStreams.insert(box)
-                    channel.closeFuture.whenComplete { _ in
-                        self.openStreams.remove(box)
+                    connection.openStreams.insert(box)
+                    channel.closeFuture.assumeIsolated().whenComplete { _ in
+                        connection.openStreams.remove(box)
                     }
 
-                    if let streamChannelDebugInitializer = self.streamChannelDebugInitializer {
+                    if let streamChannelDebugInitializer = streamChannelDebugInitializer {
                         return streamChannelDebugInitializer(channel).map { _ in
                             channel.write(request, promise: nil)
                         }
                     } else {
-                        channel.write(request, promise: nil)
+                        channel.pipeline.syncOperations.write(NIOAny(request), promise: nil)
                         return channel.eventLoop.makeSucceededVoidFuture()
                     }
                 } catch {
@@ -335,7 +361,7 @@ extension HTTP2Connection: HTTP2IdleHandlerDelegate {
 
         case .active:
             self.state = .active(maxStreams: maxStreams)
-            self.delegate.http2Connection(self, newMaxStreamSetting: maxStreams)
+            self.delegate.http2Connection(self.id, newMaxStreamSetting: maxStreams)
 
         case .closing, .closed:
             // ignore. we only wait for all connections to be closed anyway.
@@ -356,7 +382,7 @@ extension HTTP2Connection: HTTP2IdleHandlerDelegate {
 
         case .active:
             self.state = .closing
-            self.delegate.http2ConnectionGoAwayReceived(self)
+            self.delegate.http2ConnectionGoAwayReceived(self.id)
 
         case .closing, .closed:
             // we are already closing. Nothing new
@@ -367,6 +393,9 @@ extension HTTP2Connection: HTTP2IdleHandlerDelegate {
     func http2StreamClosed(availableStreams: Int) {
         self.channel.eventLoop.assertInEventLoop()
 
-        self.delegate.http2ConnectionStreamClosed(self, availableStreams: availableStreams)
+        self.delegate.http2ConnectionStreamClosed(self.id, availableStreams: availableStreams)
     }
 }
+
+@available(*, unavailable)
+extension HTTP2Connection: Sendable {}

@@ -48,7 +48,7 @@ class HTTP1ConnectionTests: XCTestCase {
         )
         XCTAssertNotNil(try embedded.pipeline.syncOperations.handler(type: NIOHTTPResponseDecompressor.self))
 
-        XCTAssertNoThrow(try connection?.close().wait())
+        XCTAssertNoThrow(try connection?.sendableView.close().wait())
         embedded.embeddedEventLoop.run()
         XCTAssert(!embedded.isActive)
     }
@@ -108,8 +108,7 @@ class HTTP1ConnectionTests: XCTestCase {
         defer { XCTAssertNoThrow(try server.stop()) }
 
         let logger = Logger(label: "test")
-        let delegate = MockHTTP1ConnectionDelegate()
-        delegate.closePromise = clientEL.makePromise(of: Void.self)
+        let delegate = MockHTTP1ConnectionDelegate(closePromise: clientEL.makePromise())
 
         let connection = try! ClientBootstrap(group: clientEL)
             .connect(to: .init(ipAddress: "127.0.0.1", port: server.serverPort))
@@ -120,7 +119,7 @@ class HTTP1ConnectionTests: XCTestCase {
                     delegate: delegate,
                     decompression: .disabled,
                     logger: logger
-                )
+                ).sendableView
             }
             .wait()
 
@@ -223,16 +222,16 @@ class HTTP1ConnectionTests: XCTestCase {
         )
         let connectionDelegate = MockConnectionDelegate()
         let logger = Logger(label: "test")
-        var maybeConnection: HTTP1Connection?
+        var maybeConnection: HTTP1Connection.SendableView?
         XCTAssertNoThrow(
-            maybeConnection = try eventLoop.submit {
+            maybeConnection = try eventLoop.submit { [maybeChannel] in
                 try HTTP1Connection.start(
                     channel: XCTUnwrap(maybeChannel),
                     connectionID: 0,
                     delegate: connectionDelegate,
                     decompression: .disabled,
                     logger: logger
-                )
+                ).sendableView
             }.wait()
         )
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection here") }
@@ -287,16 +286,16 @@ class HTTP1ConnectionTests: XCTestCase {
         )
         let connectionDelegate = MockConnectionDelegate()
         let logger = Logger(label: "test")
-        var maybeConnection: HTTP1Connection?
+        var maybeConnection: HTTP1Connection.SendableView?
         XCTAssertNoThrow(
-            maybeConnection = try eventLoop.submit {
+            maybeConnection = try eventLoop.submit { [maybeChannel] in
                 try HTTP1Connection.start(
                     channel: XCTUnwrap(maybeChannel),
                     connectionID: 0,
                     delegate: connectionDelegate,
                     decompression: .disabled,
                     logger: logger
-                )
+                ).sendableView
             }.wait()
         )
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection here") }
@@ -372,16 +371,16 @@ class HTTP1ConnectionTests: XCTestCase {
         )
         let connectionDelegate = MockConnectionDelegate()
         let logger = Logger(label: "test")
-        var maybeConnection: HTTP1Connection?
+        var maybeConnection: HTTP1Connection.SendableView?
         XCTAssertNoThrow(
-            maybeConnection = try eventLoop.submit {
+            maybeConnection = try eventLoop.submit { [maybeChannel] in
                 try HTTP1Connection.start(
                     channel: XCTUnwrap(maybeChannel),
                     connectionID: 0,
                     delegate: connectionDelegate,
                     decompression: .disabled,
                     logger: logger
-                )
+                ).sendableView
             }.wait()
         )
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection here") }
@@ -454,7 +453,7 @@ class HTTP1ConnectionTests: XCTestCase {
         )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
-        connection.executeRequest(requestBag)
+        connection.sendableView.executeRequest(requestBag)
 
         XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self))  // head
         XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self))  // end
@@ -523,7 +522,7 @@ class HTTP1ConnectionTests: XCTestCase {
         )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
-        connection.executeRequest(requestBag)
+        connection.sendableView.executeRequest(requestBag)
 
         XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self))  // head
         XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self))  // end
@@ -626,7 +625,7 @@ class HTTP1ConnectionTests: XCTestCase {
         )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
-        connection.executeRequest(requestBag)
+        connection.sendableView.executeRequest(requestBag)
 
         let responseString = """
             HTTP/1.0 200 OK\r\n\
@@ -654,31 +653,31 @@ class HTTP1ConnectionTests: XCTestCase {
     // bytes a ready to be read as well. This will allow us to test if subsequent reads
     // are waiting for backpressure promise.
     func testDownloadStreamingBackpressure() {
-        class BackpressureTestDelegate: HTTPClientResponseDelegate {
+        final class BackpressureTestDelegate: HTTPClientResponseDelegate {
             typealias Response = Void
 
-            var _reads = 0
-            var _channel: Channel?
+            private struct State: Sendable {
+                var reads = 0
+                var channel: Channel?
+            }
 
-            let lock: NIOLock
+            private let state = NIOLockedValueBox(State())
+
+            var reads: Int {
+                self.state.withLockedValue { $0.reads }
+            }
+
             let backpressurePromise: EventLoopPromise<Void>
             let messageReceived: EventLoopPromise<Void>
 
             init(eventLoop: EventLoop) {
-                self.lock = NIOLock()
                 self.backpressurePromise = eventLoop.makePromise()
                 self.messageReceived = eventLoop.makePromise()
             }
 
-            var reads: Int {
-                self.lock.withLock {
-                    self._reads
-                }
-            }
-
             func willExecuteOnChannel(_ channel: Channel) {
-                self.lock.withLock {
-                    self._channel = channel
+                self.state.withLockedValue {
+                    $0.channel = channel
                 }
             }
 
@@ -688,8 +687,8 @@ class HTTP1ConnectionTests: XCTestCase {
 
             func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
                 // We count a number of reads received.
-                self.lock.withLock {
-                    self._reads += 1
+                self.state.withLockedValue {
+                    $0.reads += 1
                 }
                 // We need to notify the test when first byte of the message is arrived.
                 self.messageReceived.succeed(())
@@ -721,8 +720,8 @@ class HTTP1ConnectionTests: XCTestCase {
                     let buffer = context.channel.allocator.buffer(string: "1234")
                     context.writeAndFlush(self.wrapOutboundOut(.body(.byteBuffer(buffer))), promise: nil)
 
-                    self.endFuture.hop(to: context.eventLoop).whenSuccess {
-                        context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+                    self.endFuture.hop(to: context.eventLoop).assumeIsolated().whenSuccess {
+                        context.writeAndFlush(Self.wrapOutboundOut(.end(nil)), promise: nil)
                     }
                 }
             }
@@ -753,7 +752,7 @@ class HTTP1ConnectionTests: XCTestCase {
         )
         guard let channel = maybeChannel else { return XCTFail("Expected to have a channel at this point") }
         let connectionDelegate = MockConnectionDelegate()
-        var maybeConnection: HTTP1Connection?
+        var maybeConnection: HTTP1Connection.SendableView?
         XCTAssertNoThrow(
             maybeConnection = try channel.eventLoop.submit {
                 try HTTP1Connection.start(
@@ -762,7 +761,7 @@ class HTTP1ConnectionTests: XCTestCase {
                     delegate: connectionDelegate,
                     decompression: .disabled,
                     logger: logger
-                )
+                ).sendableView
             }.wait()
         )
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection at this point") }
@@ -802,15 +801,20 @@ class HTTP1ConnectionTests: XCTestCase {
     }
 }
 
-class MockHTTP1ConnectionDelegate: HTTP1ConnectionDelegate {
-    var releasePromise: EventLoopPromise<Void>?
-    var closePromise: EventLoopPromise<Void>?
+final class MockHTTP1ConnectionDelegate: HTTP1ConnectionDelegate {
+    let releasePromise: EventLoopPromise<Void>?
+    let closePromise: EventLoopPromise<Void>?
 
-    func http1ConnectionReleased(_: HTTP1Connection) {
+    init(releasePromise: EventLoopPromise<Void>? = nil, closePromise: EventLoopPromise<Void>? = nil) {
+        self.releasePromise = releasePromise
+        self.closePromise = closePromise
+    }
+
+    func http1ConnectionReleased(_: HTTPConnectionPool.Connection.ID) {
         self.releasePromise?.succeed(())
     }
 
-    func http1ConnectionClosed(_: HTTP1Connection) {
+    func http1ConnectionClosed(_: HTTPConnectionPool.Connection.ID) {
         self.closePromise?.succeed(())
     }
 }
@@ -875,38 +879,40 @@ class AfterRequestCloseConnectionChannelHandler: ChannelInboundHandler {
             context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
             context.flush()
 
-            context.eventLoop.scheduleTask(in: .milliseconds(20)) {
+            context.eventLoop.assumeIsolated().scheduleTask(in: .milliseconds(20)) {
                 context.close(promise: nil)
             }
         }
     }
 }
 
-class MockConnectionDelegate: HTTP1ConnectionDelegate {
-    private var lock = NIOLock()
+final class MockConnectionDelegate: HTTP1ConnectionDelegate {
+    private let counts = NIOLockedValueBox<Counts>(Counts())
 
-    private var _hitConnectionReleased = 0
-    private var _hitConnectionClosed = 0
+    private struct Counts: Sendable {
+        var hitConnectionReleased = 0
+        var hitConnectionClosed = 0
+    }
 
     var hitConnectionReleased: Int {
-        self.lock.withLock { self._hitConnectionReleased }
+        self.counts.withLockedValue { $0.hitConnectionReleased }
     }
 
     var hitConnectionClosed: Int {
-        self.lock.withLock { self._hitConnectionClosed }
+        self.counts.withLockedValue { $0.hitConnectionClosed }
     }
 
     init() {}
 
-    func http1ConnectionReleased(_: HTTP1Connection) {
-        self.lock.withLock {
-            self._hitConnectionReleased += 1
+    func http1ConnectionReleased(_: HTTPConnectionPool.Connection.ID) {
+        self.counts.withLockedValue {
+            $0.hitConnectionReleased += 1
         }
     }
 
-    func http1ConnectionClosed(_: HTTP1Connection) {
-        self.lock.withLock {
-            self._hitConnectionClosed += 1
+    func http1ConnectionClosed(_: HTTPConnectionPool.Connection.ID) {
+        self.counts.withLockedValue {
+            $0.hitConnectionClosed += 1
         }
     }
 }
