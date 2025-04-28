@@ -32,14 +32,15 @@ extension HTTPClient {
         /// A streaming uploader.
         ///
         /// ``StreamWriter`` abstracts
-        public struct StreamWriter {
-            let closure: (IOData) -> EventLoopFuture<Void>
+        public struct StreamWriter: Sendable {
+            let closure: @Sendable (IOData) -> EventLoopFuture<Void>
 
             /// Create new ``HTTPClient/Body/StreamWriter``
             ///
             /// - parameters:
             ///     - closure: function that will be called to write actual bytes to the channel.
-            public init(closure: @escaping (IOData) -> EventLoopFuture<Void>) {
+            @preconcurrency
+            public init(closure: @escaping @Sendable (IOData) -> EventLoopFuture<Void>) {
                 self.closure = closure
             }
 
@@ -55,15 +56,15 @@ extension HTTPClient {
             func writeChunks<Bytes: Collection>(
                 of bytes: Bytes,
                 maxChunkSize: Int
-            ) -> EventLoopFuture<Void> where Bytes.Element == UInt8 {
-                // `StreamWriter` is has design issues, for example
+            ) -> EventLoopFuture<Void> where Bytes.Element == UInt8, Bytes: Sendable, Bytes.SubSequence: Sendable {
+                // `StreamWriter` has design issues, for example
                 // - https://github.com/swift-server/async-http-client/issues/194
                 // - https://github.com/swift-server/async-http-client/issues/264
                 // - We're not told the EventLoop the task runs on and the user is free to return whatever EL they
                 //   want.
                 // One important consideration then is that we must lock around the iterator because we could be hopping
                 // between threads.
-                typealias Iterator = EnumeratedSequence<ChunksOfCountCollection<Bytes>>.Iterator
+                typealias Iterator = BodyStreamIterator<Bytes>
                 typealias Chunk = (offset: Int, element: ChunksOfCountCollection<Bytes>.Element)
 
                 func makeIteratorAndFirstChunk(
@@ -77,7 +78,7 @@ extension HTTPClient {
                         return nil
                     }
 
-                    return (NIOLockedValueBox(iterator), chunk)
+                    return (NIOLockedValueBox(BodyStreamIterator(iterator)), chunk)
                 }
 
                 guard let (iterator, chunk) = makeIteratorAndFirstChunk(bytes: bytes) else {
@@ -86,9 +87,8 @@ extension HTTPClient {
 
                 @Sendable  // can't use closure here as we recursively call ourselves which closures can't do
                 func writeNextChunk(_ chunk: Chunk, allDone: EventLoopPromise<Void>) {
-                    if let nextElement = iterator.withLockedValue({ $0.next() }) {
+                    if let (index, element) = iterator.withLockedValue({ $0.next() }) {
                         self.write(.byteBuffer(ByteBuffer(bytes: chunk.element))).map {
-                            let index = nextElement.offset
                             if (index + 1) % 4 == 0 {
                                 // Let's not stack-overflow if the futures insta-complete which they at least in HTTP/2
                                 // mode.
@@ -96,10 +96,10 @@ extension HTTPClient {
                                 // from another thread. If we fail to do that promptly, we may balloon our body chunks
                                 // into memory.
                                 allDone.futureResult.eventLoop.execute {
-                                    writeNextChunk(nextElement, allDone: allDone)
+                                    writeNextChunk((offset: index, element: element), allDone: allDone)
                                 }
                             } else {
-                                writeNextChunk(nextElement, allDone: allDone)
+                                writeNextChunk((offset: index, element: element), allDone: allDone)
                             }
                         }.cascadeFailure(to: allDone)
                     } else {
@@ -188,7 +188,7 @@ extension HTTPClient {
         @preconcurrency
         @inlinable
         public static func bytes<Bytes>(_ bytes: Bytes) -> Body
-        where Bytes: RandomAccessCollection, Bytes: Sendable, Bytes.Element == UInt8 {
+        where Bytes: RandomAccessCollection, Bytes: Sendable, Bytes.SubSequence: Sendable, Bytes.Element == UInt8 {
             Body(contentLength: Int64(bytes.count)) { writer in
                 if bytes.count <= bagOfBytesToByteBufferConversionChunkSize {
                     return writer.write(.byteBuffer(ByteBuffer(bytes: bytes)))
@@ -1078,5 +1078,28 @@ extension RequestBodyLength {
             return
         }
         self = .known(length)
+    }
+}
+
+@usableFromInline
+struct BodyStreamIterator<
+    Bytes: Collection
+>: IteratorProtocol, @unchecked Sendable where Bytes.Element == UInt8, Bytes: Sendable {
+    // @unchecked: swift-algorithms hasn't adopted Sendable yet. By inspection, the iterator
+    // is safe to annotate as sendable.
+    @usableFromInline
+    typealias Element = (offset: Int, element: Bytes.SubSequence)
+
+    @usableFromInline
+    var _backing: EnumeratedSequence<ChunksOfCountCollection<Bytes>>.Iterator
+
+    @inlinable
+    init(_ backing: EnumeratedSequence<ChunksOfCountCollection<Bytes>>.Iterator) {
+        self._backing = backing
+    }
+
+    @inlinable
+    mutating func next() -> Element? {
+        self._backing.next()
     }
 }
