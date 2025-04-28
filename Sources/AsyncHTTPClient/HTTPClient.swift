@@ -223,7 +223,8 @@ public class HTTPClient {
             )
         }
         let errorStorage: NIOLockedValueBox<Error?> = NIOLockedValueBox(nil)
-        let continuation = DispatchWorkItem {}
+        let dispatchGroup = DispatchGroup()
+        dispatchGroup.enter()
         self.shutdown(requiresCleanClose: requiresCleanClose, queue: DispatchQueue(label: "async-http-client.shutdown"))
         { error in
             if let error = error {
@@ -231,9 +232,9 @@ public class HTTPClient {
                     errorStorage = error
                 }
             }
-            continuation.perform()
+            dispatchGroup.leave()
         }
-        continuation.wait()
+        dispatchGroup.wait()
         try errorStorage.withLockedValue { errorStorage in
             if let error = errorStorage {
                 throw error
@@ -756,14 +757,13 @@ public class HTTPClient {
                 delegate: delegate
             )
 
-            var deadlineSchedule: Scheduled<Void>?
             if let deadline = deadline {
-                deadlineSchedule = taskEL.scheduleTask(deadline: deadline) {
+                let deadlineSchedule = taskEL.scheduleTask(deadline: deadline) {
                     requestBag.deadlineExceeded()
                 }
 
                 task.promise.futureResult.whenComplete { _ in
-                    deadlineSchedule?.cancel()
+                    deadlineSchedule.cancel()
                 }
             }
 
