@@ -461,7 +461,7 @@ final class HTTPConnectionPool:
 // MARK: - Protocol methods -
 
 extension HTTPConnectionPool: HTTPConnectionRequester {
-    func http1ConnectionCreated(_ connection: HTTP1Connection) {
+    func http1ConnectionCreated(_ connection: HTTP1Connection.SendableView) {
         self.logger.trace(
             "successfully created connection",
             metadata: [
@@ -474,7 +474,7 @@ extension HTTPConnectionPool: HTTPConnectionRequester {
         }
     }
 
-    func http2ConnectionCreated(_ connection: HTTP2Connection, maximumStreams: Int) {
+    func http2ConnectionCreated(_ connection: HTTP2Connection.SendableView, maximumStreams: Int) {
         self.logger.trace(
             "successfully created connection",
             metadata: [
@@ -516,84 +516,84 @@ extension HTTPConnectionPool: HTTPConnectionRequester {
 }
 
 extension HTTPConnectionPool: HTTP1ConnectionDelegate {
-    func http1ConnectionClosed(_ connection: HTTP1Connection) {
+    func http1ConnectionClosed(_ id: HTTPConnectionPool.Connection.ID) {
         self.logger.debug(
             "connection closed",
             metadata: [
-                "ahc-connection-id": "\(connection.id)",
+                "ahc-connection-id": "\(id)",
                 "ahc-http-version": "http/1.1",
             ]
         )
         self.modifyStateAndRunActions {
-            $0.http1ConnectionClosed(connection.id)
+            $0.http1ConnectionClosed(id)
         }
     }
 
-    func http1ConnectionReleased(_ connection: HTTP1Connection) {
+    func http1ConnectionReleased(_ id: HTTPConnectionPool.Connection.ID) {
         self.logger.trace(
             "releasing connection",
             metadata: [
-                "ahc-connection-id": "\(connection.id)",
+                "ahc-connection-id": "\(id)",
                 "ahc-http-version": "http/1.1",
             ]
         )
         self.modifyStateAndRunActions {
-            $0.http1ConnectionReleased(connection.id)
+            $0.http1ConnectionReleased(id)
         }
     }
 }
 
 extension HTTPConnectionPool: HTTP2ConnectionDelegate {
-    func http2Connection(_ connection: HTTP2Connection, newMaxStreamSetting: Int) {
+    func http2Connection(_ id: HTTPConnectionPool.Connection.ID, newMaxStreamSetting: Int) {
         self.logger.debug(
             "new max stream setting",
             metadata: [
-                "ahc-connection-id": "\(connection.id)",
+                "ahc-connection-id": "\(id)",
                 "ahc-http-version": "http/2",
                 "ahc-max-streams": "\(newMaxStreamSetting)",
             ]
         )
         self.modifyStateAndRunActions {
-            $0.newHTTP2MaxConcurrentStreamsReceived(connection.id, newMaxStreams: newMaxStreamSetting)
+            $0.newHTTP2MaxConcurrentStreamsReceived(id, newMaxStreams: newMaxStreamSetting)
         }
     }
 
-    func http2ConnectionGoAwayReceived(_ connection: HTTP2Connection) {
+    func http2ConnectionGoAwayReceived(_ id: HTTPConnectionPool.Connection.ID) {
         self.logger.debug(
             "connection go away received",
             metadata: [
-                "ahc-connection-id": "\(connection.id)",
+                "ahc-connection-id": "\(id)",
                 "ahc-http-version": "http/2",
             ]
         )
         self.modifyStateAndRunActions {
-            $0.http2ConnectionGoAwayReceived(connection.id)
+            $0.http2ConnectionGoAwayReceived(id)
         }
     }
 
-    func http2ConnectionClosed(_ connection: HTTP2Connection) {
+    func http2ConnectionClosed(_ id: HTTPConnectionPool.Connection.ID) {
         self.logger.debug(
             "connection closed",
             metadata: [
-                "ahc-connection-id": "\(connection.id)",
+                "ahc-connection-id": "\(id)",
                 "ahc-http-version": "http/2",
             ]
         )
         self.modifyStateAndRunActions {
-            $0.http2ConnectionClosed(connection.id)
+            $0.http2ConnectionClosed(id)
         }
     }
 
-    func http2ConnectionStreamClosed(_ connection: HTTP2Connection, availableStreams: Int) {
+    func http2ConnectionStreamClosed(_ id: HTTPConnectionPool.Connection.ID, availableStreams: Int) {
         self.logger.trace(
             "stream closed",
             metadata: [
-                "ahc-connection-id": "\(connection.id)",
+                "ahc-connection-id": "\(id)",
                 "ahc-http-version": "http/2",
             ]
         )
         self.modifyStateAndRunActions {
-            $0.http2ConnectionStreamClosed(connection.id)
+            $0.http2ConnectionStreamClosed(id)
         }
     }
 }
@@ -612,18 +612,18 @@ extension HTTPConnectionPool {
         typealias ID = Int
 
         private enum Reference {
-            case http1_1(HTTP1Connection)
-            case http2(HTTP2Connection)
+            case http1_1(HTTP1Connection.SendableView)
+            case http2(HTTP2Connection.SendableView)
             case __testOnly_connection(ID, EventLoop)
         }
 
         private let _ref: Reference
 
-        fileprivate static func http1_1(_ conn: HTTP1Connection) -> Self {
+        fileprivate static func http1_1(_ conn: HTTP1Connection.SendableView) -> Self {
             Connection(_ref: .http1_1(conn))
         }
 
-        fileprivate static func http2(_ conn: HTTP2Connection) -> Self {
+        fileprivate static func http2(_ conn: HTTP2Connection.SendableView) -> Self {
             Connection(_ref: .http2(conn))
         }
 

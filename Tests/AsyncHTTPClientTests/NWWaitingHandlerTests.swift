@@ -16,6 +16,7 @@
 @testable import AsyncHTTPClient
 import Network
 import NIOCore
+import NIOConcurrencyHelpers
 import NIOEmbedded
 import NIOSSL
 import NIOTransportServices
@@ -23,21 +24,41 @@ import XCTest
 
 @available(macOS 10.14, iOS 12.0, tvOS 12.0, watchOS 5.0, *)
 class NWWaitingHandlerTests: XCTestCase {
-    class MockRequester: HTTPConnectionRequester {
-        var waitingForConnectivityCalled = false
-        var connectionID: AsyncHTTPClient.HTTPConnectionPool.Connection.ID?
-        var transientError: NWError?
+    final class MockRequester: HTTPConnectionRequester {
+        private struct State: Sendable {
+            var waitingForConnectivityCalled = false
+            var connectionID: AsyncHTTPClient.HTTPConnectionPool.Connection.ID?
+            var transientError: NWError?
+        }
 
-        func http1ConnectionCreated(_: AsyncHTTPClient.HTTP1Connection) {}
+        private let state = NIOLockedValueBox(State())
 
-        func http2ConnectionCreated(_: AsyncHTTPClient.HTTP2Connection, maximumStreams: Int) {}
+        var waitingForConnectivityCalled: Bool {
+            self.state.withLockedValue { $0.waitingForConnectivityCalled }
+        }
+
+        var connectionID: AsyncHTTPClient.HTTPConnectionPool.Connection.ID? {
+            self.state.withLockedValue { $0.connectionID }
+        }
+
+        var transientError: NWError? {
+            self.state.withLockedValue {
+                $0.transientError
+            }
+        }
+
+        func http1ConnectionCreated(_: AsyncHTTPClient.HTTP1Connection.SendableView) {}
+
+        func http2ConnectionCreated(_: AsyncHTTPClient.HTTP2Connection.SendableView, maximumStreams: Int) {}
 
         func failedToCreateHTTPConnection(_: AsyncHTTPClient.HTTPConnectionPool.Connection.ID, error: Error) {}
 
         func waitingForConnectivity(_ connectionID: AsyncHTTPClient.HTTPConnectionPool.Connection.ID, error: Error) {
-            self.waitingForConnectivityCalled = true
-            self.connectionID = connectionID
-            self.transientError = error as? NWError
+            self.state.withLockedValue {
+                $0.waitingForConnectivityCalled = true
+                $0.connectionID = connectionID
+                $0.transientError = error as? NWError
+            }
         }
     }
 

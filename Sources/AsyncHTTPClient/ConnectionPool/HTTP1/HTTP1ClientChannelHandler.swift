@@ -185,7 +185,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             self.runTimeoutAction(timeoutAction, context: context)
         }
 
-        req.willExecuteRequest(self)
+        req.willExecuteRequest(self.requestExecutor)
 
         let action = self.state.runNewRequest(
             head: req.requestHead,
@@ -323,7 +323,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             case .sendRequestEnd(let writePromise, let shouldClose):
                 let writePromise = writePromise ?? context.eventLoop.makePromise(of: Void.self)
                 // We need to defer succeeding the old request to avoid ordering issues
-                writePromise.futureResult.hop(to: context.eventLoop).whenComplete { result in
+                writePromise.futureResult.hop(to: context.eventLoop).assumeIsolated().whenComplete { result in
                     switch result {
                     case .success:
                         // If our final action was `sendRequestEnd`, that means we've already received
@@ -396,7 +396,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             assert(self.idleReadTimeoutTimer == nil, "Expected there is no timeout timer so far.")
 
             let timerID = self.currentIdleReadTimeoutTimerID
-            self.idleReadTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
+            self.idleReadTimeoutTimer = self.eventLoop.assumeIsolated().scheduleTask(in: timeAmount) {
                 guard self.currentIdleReadTimeoutTimerID == timerID else { return }
                 let action = self.state.idleReadTimeoutTriggered()
                 self.run(action, context: context)
@@ -409,7 +409,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
             self.currentIdleReadTimeoutTimerID &+= 1
             let timerID = self.currentIdleReadTimeoutTimerID
-            self.idleReadTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
+            self.idleReadTimeoutTimer = self.eventLoop.assumeIsolated().scheduleTask(in: timeAmount) {
                 guard self.currentIdleReadTimeoutTimerID == timerID else { return }
                 let action = self.state.idleReadTimeoutTriggered()
                 self.run(action, context: context)
@@ -431,7 +431,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             assert(self.idleWriteTimeoutTimer == nil, "Expected there is no timeout timer so far.")
 
             let timerID = self.currentIdleWriteTimeoutTimerID
-            self.idleWriteTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
+            self.idleWriteTimeoutTimer = self.eventLoop.assumeIsolated().scheduleTask(in: timeAmount) {
                 guard self.currentIdleWriteTimeoutTimerID == timerID else { return }
                 let action = self.state.idleWriteTimeoutTriggered()
                 self.run(action, context: context)
@@ -443,7 +443,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
             self.currentIdleWriteTimeoutTimerID &+= 1
             let timerID = self.currentIdleWriteTimeoutTimerID
-            self.idleWriteTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
+            self.idleWriteTimeoutTimer = self.eventLoop.assumeIsolated().scheduleTask(in: timeAmount) {
                 guard self.currentIdleWriteTimeoutTimerID == timerID else { return }
                 let action = self.state.idleWriteTimeoutTriggered()
                 self.run(action, context: context)
@@ -461,8 +461,11 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
     // MARK: Private HTTPRequestExecutor
 
-    private func writeRequestBodyPart0(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?)
-    {
+    fileprivate func writeRequestBodyPart0(
+        _ data: IOData,
+        request: HTTPExecutableRequest,
+        promise: EventLoopPromise<Void>?
+    ) {
         guard self.request === request, let context = self.channelContext else {
             // Because the HTTPExecutableRequest may run in a different thread to our eventLoop,
             // calls from the HTTPExecutableRequest to our ChannelHandler may arrive here after
@@ -481,7 +484,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         self.run(action, context: context)
     }
 
-    private func finishRequestBodyStream0(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
+    fileprivate func finishRequestBodyStream0(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
         guard self.request === request, let context = self.channelContext else {
             // See code comment in `writeRequestBodyPart0`
             promise?.fail(HTTPClientError.requestStreamCancelled)
@@ -492,7 +495,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         self.run(action, context: context)
     }
 
-    private func demandResponseBodyStream0(_ request: HTTPExecutableRequest) {
+    fileprivate func demandResponseBodyStream0(_ request: HTTPExecutableRequest) {
         guard self.request === request, let context = self.channelContext else {
             // See code comment in `writeRequestBodyPart0`
             return
@@ -504,7 +507,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         self.run(action, context: context)
     }
 
-    private func cancelRequest0(_ request: HTTPExecutableRequest) {
+    fileprivate func cancelRequest0(_ request: HTTPExecutableRequest) {
         guard self.request === request, let context = self.channelContext else {
             // See code comment in `writeRequestBodyPart0`
             return
@@ -524,43 +527,39 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 @available(*, unavailable)
 extension HTTP1ClientChannelHandler: Sendable {}
 
-extension HTTP1ClientChannelHandler: HTTPRequestExecutor {
-    func writeRequestBodyPart(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
-        if self.eventLoop.inEventLoop {
-            self.writeRequestBodyPart0(data, request: request, promise: promise)
-        } else {
-            self.eventLoop.execute {
-                self.writeRequestBodyPart0(data, request: request, promise: promise)
-            }
-        }
+extension HTTP1ClientChannelHandler {
+    var requestExecutor: RequestExecutor {
+        RequestExecutor(self)
     }
 
-    func finishRequestBodyStream(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
-        if self.eventLoop.inEventLoop {
-            self.finishRequestBodyStream0(request, promise: promise)
-        } else {
-            self.eventLoop.execute {
-                self.finishRequestBodyStream0(request, promise: promise)
+    struct RequestExecutor: HTTPRequestExecutor, Sendable {
+        private let loopBound: NIOLoopBound<HTTP1ClientChannelHandler>
+
+        init(_ handler: HTTP1ClientChannelHandler) {
+            self.loopBound = NIOLoopBound(handler, eventLoop: handler.eventLoop)
+        }
+
+        func writeRequestBodyPart(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
+            self.loopBound.execute {
+                $0.writeRequestBodyPart0(data, request: request, promise: promise)
             }
         }
-    }
 
-    func demandResponseBodyStream(_ request: HTTPExecutableRequest) {
-        if self.eventLoop.inEventLoop {
-            self.demandResponseBodyStream0(request)
-        } else {
-            self.eventLoop.execute {
-                self.demandResponseBodyStream0(request)
+        func finishRequestBodyStream(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
+            self.loopBound.execute {
+                $0.finishRequestBodyStream0(request, promise: promise)
             }
         }
-    }
 
-    func cancelRequest(_ request: HTTPExecutableRequest) {
-        if self.eventLoop.inEventLoop {
-            self.cancelRequest0(request)
-        } else {
-            self.eventLoop.execute {
-                self.cancelRequest0(request)
+        func demandResponseBodyStream(_ request: HTTPExecutableRequest) {
+            self.loopBound.execute {
+                $0.demandResponseBodyStream0(request)
+            }
+        }
+
+        func cancelRequest(_ request: HTTPExecutableRequest) {
+            self.loopBound.execute {
+                $0.cancelRequest0(request)
             }
         }
     }

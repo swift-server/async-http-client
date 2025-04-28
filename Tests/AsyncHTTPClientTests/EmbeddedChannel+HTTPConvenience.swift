@@ -59,7 +59,7 @@ extension EmbeddedChannel {
 }
 
 struct HTTP1TestTools {
-    let connection: HTTP1Connection
+    let connection: HTTP1Connection.SendableView
     let connectionDelegate: MockConnectionDelegate
     let readEventHandler: ReadEventHitHandler
     let logger: Logger
@@ -96,7 +96,7 @@ extension EmbeddedChannel {
         try removeEncoderFuture.wait()
 
         return .init(
-            connection: connection,
+            connection: connection.sendableView,
             connectionDelegate: connectionDelegate,
             readEventHandler: readEventHandler,
             logger: logger

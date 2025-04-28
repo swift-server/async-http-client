@@ -137,7 +137,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             self.runTimeoutAction(timeoutAction, context: context)
         }
 
-        request.willExecuteRequest(self)
+        request.willExecuteRequest(self.requestExecutor)
 
         let action = self.state.startRequest(
             head: request.requestHead,
@@ -313,7 +313,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             assert(self.idleReadTimeoutTimer == nil, "Expected there is no timeout timer so far.")
 
             let timerID = self.currentIdleReadTimeoutTimerID
-            self.idleReadTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
+            self.idleReadTimeoutTimer = self.eventLoop.assumeIsolated().scheduleTask(in: timeAmount) {
                 guard self.currentIdleReadTimeoutTimerID == timerID else { return }
                 let action = self.state.idleReadTimeoutTriggered()
                 self.run(action, context: context)
@@ -326,7 +326,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
             self.currentIdleReadTimeoutTimerID &+= 1
             let timerID = self.currentIdleReadTimeoutTimerID
-            self.idleReadTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
+            self.idleReadTimeoutTimer = self.eventLoop.assumeIsolated().scheduleTask(in: timeAmount) {
                 guard self.currentIdleReadTimeoutTimerID == timerID else { return }
                 let action = self.state.idleReadTimeoutTriggered()
                 self.run(action, context: context)
@@ -349,7 +349,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             assert(self.idleWriteTimeoutTimer == nil, "Expected there is no timeout timer so far.")
 
             let timerID = self.currentIdleWriteTimeoutTimerID
-            self.idleWriteTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
+            self.idleWriteTimeoutTimer = self.eventLoop.assumeIsolated().scheduleTask(in: timeAmount) {
                 guard self.currentIdleWriteTimeoutTimerID == timerID else { return }
                 let action = self.state.idleWriteTimeoutTriggered()
                 self.run(action, context: context)
@@ -361,7 +361,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
             self.currentIdleWriteTimeoutTimerID &+= 1
             let timerID = self.currentIdleWriteTimeoutTimerID
-            self.idleWriteTimeoutTimer = self.eventLoop.scheduleTask(in: timeAmount) {
+            self.idleWriteTimeoutTimer = self.eventLoop.assumeIsolated().scheduleTask(in: timeAmount) {
                 guard self.currentIdleWriteTimeoutTimerID == timerID else { return }
                 let action = self.state.idleWriteTimeoutTriggered()
                 self.run(action, context: context)
@@ -437,43 +437,39 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 @available(*, unavailable)
 extension HTTP2ClientRequestHandler: Sendable {}
 
-extension HTTP2ClientRequestHandler: HTTPRequestExecutor {
-    func writeRequestBodyPart(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
-        if self.eventLoop.inEventLoop {
-            self.writeRequestBodyPart0(data, request: request, promise: promise)
-        } else {
-            self.eventLoop.execute {
-                self.writeRequestBodyPart0(data, request: request, promise: promise)
-            }
-        }
+extension HTTP2ClientRequestHandler {
+    var requestExecutor: RequestExecutor {
+        RequestExecutor(self)
     }
 
-    func finishRequestBodyStream(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
-        if self.eventLoop.inEventLoop {
-            self.finishRequestBodyStream0(request, promise: promise)
-        } else {
-            self.eventLoop.execute {
-                self.finishRequestBodyStream0(request, promise: promise)
+    struct RequestExecutor: HTTPRequestExecutor, Sendable {
+        private let loopBound: NIOLoopBound<HTTP2ClientRequestHandler>
+
+        init(_ handler: HTTP2ClientRequestHandler) {
+            self.loopBound = NIOLoopBound(handler, eventLoop: handler.eventLoop)
+        }
+
+        func writeRequestBodyPart(_ data: IOData, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
+            self.loopBound.execute {
+                $0.writeRequestBodyPart0(data, request: request, promise: promise)
             }
         }
-    }
 
-    func demandResponseBodyStream(_ request: HTTPExecutableRequest) {
-        if self.eventLoop.inEventLoop {
-            self.demandResponseBodyStream0(request)
-        } else {
-            self.eventLoop.execute {
-                self.demandResponseBodyStream0(request)
+        func finishRequestBodyStream(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
+            self.loopBound.execute {
+                $0.finishRequestBodyStream0(request, promise: promise)
             }
         }
-    }
 
-    func cancelRequest(_ request: HTTPExecutableRequest) {
-        if self.eventLoop.inEventLoop {
-            self.cancelRequest0(request)
-        } else {
-            self.eventLoop.execute {
-                self.cancelRequest0(request)
+        func demandResponseBodyStream(_ request: HTTPExecutableRequest) {
+            self.loopBound.execute {
+                $0.demandResponseBodyStream0(request)
+            }
+        }
+
+        func cancelRequest(_ request: HTTPExecutableRequest) {
+            self.loopBound.execute {
+                $0.cancelRequest0(request)
             }
         }
     }
