@@ -29,7 +29,7 @@ extension String {
 
 // swift-format-ignore: DontRepeatTypeInStaticProperties
 @usableFromInline
-internal struct Base64 {
+internal struct Base64: Sendable {
 
     @inlinable
     static func encode<Buffer: Collection>(

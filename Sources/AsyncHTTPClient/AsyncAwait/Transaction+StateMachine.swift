@@ -552,3 +552,6 @@ extension Transaction {
         }
     }
 }
+
+@available(*, unavailable)
+extension Transaction.StateMachine: Sendable {}
