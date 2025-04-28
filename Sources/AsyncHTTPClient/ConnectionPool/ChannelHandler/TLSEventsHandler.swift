@@ -104,7 +104,7 @@ final class TLSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
 
         var scheduled: Scheduled<Void>?
         if let deadline = deadline {
-            scheduled = context.eventLoop.scheduleTask(deadline: deadline) {
+            scheduled = context.eventLoop.assumeIsolated().scheduleTask(deadline: deadline) {
                 switch self.state {
                 case .initialized, .channelActive:
                     // close the connection, if the handshake timed out

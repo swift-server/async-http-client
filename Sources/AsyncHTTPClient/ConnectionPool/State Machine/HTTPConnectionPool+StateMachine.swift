@@ -26,7 +26,9 @@ extension HTTPConnectionPool {
                 self.connection = connection
             }
 
-            static let none = Action(request: .none, connection: .none)
+            static var none: Action {
+                Action(request: .none, connection: .none)
+            }
         }
 
         enum ConnectionAction {
@@ -397,7 +399,9 @@ extension HTTPConnectionPool.StateMachine {
     }
 
     struct EstablishedAction {
-        static let none: Self = .init(request: .none, connection: .none)
+        static var none: Self {
+            Self(request: .none, connection: .none)
+        }
         let request: HTTPConnectionPool.StateMachine.RequestAction
         let connection: EstablishedConnectionAction
     }

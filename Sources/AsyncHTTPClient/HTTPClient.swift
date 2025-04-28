@@ -222,22 +222,49 @@ public class HTTPClient {
                 """
             )
         }
-        let errorStorage: NIOLockedValueBox<Error?> = NIOLockedValueBox(nil)
-        let continuation = DispatchWorkItem {}
-        self.shutdown(requiresCleanClose: requiresCleanClose, queue: DispatchQueue(label: "async-http-client.shutdown"))
-        { error in
-            if let error = error {
-                errorStorage.withLockedValue { errorStorage in
-                    errorStorage = error
+
+        final class ShutdownError: @unchecked Sendable {
+            // @unchecked because error is protected by lock.
+
+            // Stores whether the shutdown has happened or not.
+            private let lock: ConditionLock<Bool>
+            private var error: Error?
+
+            init() {
+                self.error = nil
+                self.lock = ConditionLock(value: false)
+            }
+
+            func didShutdown(_ error: (any Error)?) {
+                self.lock.lock(whenValue: false)
+                defer {
+                    self.lock.unlock(withValue: true)
                 }
+                self.error = error
             }
-            continuation.perform()
+
+            func blockUntilShutdown() -> (any Error)? {
+                self.lock.lock(whenValue: true)
+                defer {
+                    self.lock.unlock(withValue: true)
+                }
+                return self.error
+            }
         }
-        continuation.wait()
-        try errorStorage.withLockedValue { errorStorage in
-            if let error = errorStorage {
-                throw error
-            }
+
+        let shutdownError = ShutdownError()
+
+        self.shutdown(
+            requiresCleanClose: requiresCleanClose,
+            queue: DispatchQueue(label: "async-http-client.shutdown")
+        ) { error in
+            shutdownError.didShutdown(error)
+        }
+
+        let error = shutdownError.blockUntilShutdown()
+
+        if let error = error {
+            throw error
         }
     }
 
@@ -756,14 +783,13 @@ public class HTTPClient {
                 delegate: delegate
             )
 
-            var deadlineSchedule: Scheduled<Void>?
             if let deadline = deadline {
-                deadlineSchedule = taskEL.scheduleTask(deadline: deadline) {
+                let deadlineSchedule = taskEL.scheduleTask(deadline: deadline) {
                     requestBag.deadlineExceeded()
                 }
 
                 task.promise.futureResult.whenComplete { _ in
-                    deadlineSchedule?.cancel()
+                    deadlineSchedule.cancel()
                 }
             }
 

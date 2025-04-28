@@ -99,7 +99,7 @@ final class SOCKSEventsHandler: ChannelInboundHandler, RemovableChannelHandler {
             return
         }
 
-        let scheduled = context.eventLoop.scheduleTask(deadline: self.deadline) {
+        let scheduled = context.eventLoop.assumeIsolated().scheduleTask(deadline: self.deadline) {
             switch self.state {
             case .initialized, .channelActive:
                 // close the connection, if the handshake timed out
