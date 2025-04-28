@@ -46,3 +46,6 @@ struct AnyAsyncSequence<Element>: Sendable, AsyncSequence {
         .init(nextCallback: self.makeAsyncIteratorCallback())
     }
 }
+
+@available(*, unavailable)
+extension AnyAsyncSequence.AsyncIterator: Sendable {}

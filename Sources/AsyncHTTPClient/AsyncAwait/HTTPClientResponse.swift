@@ -259,3 +259,9 @@ extension HTTPClientResponse.Body {
         .stream(CollectionOfOne(byteBuffer).async)
     }
 }
+
+@available(*, unavailable)
+extension HTTPClientResponse.Body.AsyncIterator: Sendable {}
+
+@available(*, unavailable)
+extension HTTPClientResponse.Body.Storage.AsyncIterator: Sendable {}
