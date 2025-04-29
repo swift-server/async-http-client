@@ -53,11 +53,10 @@ extension HTTPClient {
             }
 
             @inlinable
-            @preconcurrency
             func writeChunks<Bytes: Collection>(
                 of bytes: Bytes,
                 maxChunkSize: Int
-            ) -> EventLoopFuture<Void> where Bytes.Element == UInt8, Bytes: Sendable, Bytes.SubSequence: Sendable {
+            ) -> EventLoopFuture<Void> where Bytes.Element == UInt8, Bytes: Sendable {
                 // `StreamWriter` has design issues, for example
                 // - https://github.com/swift-server/async-http-client/issues/194
                 // - https://github.com/swift-server/async-http-client/issues/264
@@ -65,51 +64,54 @@ extension HTTPClient {
                 //   want.
                 // One important consideration then is that we must lock around the iterator because we could be hopping
                 // between threads.
-                typealias Iterator = BodyStreamIterator<Bytes>
+                typealias Iterator = EnumeratedSequence<ChunksOfCountCollection<Bytes>>.Iterator
                 typealias Chunk = (offset: Int, element: ChunksOfCountCollection<Bytes>.Element)
-
-                func makeIteratorAndFirstChunk(
-                    bytes: Bytes
-                ) -> (
-                    iterator: NIOLockedValueBox<Iterator>,
-                    chunk: Chunk
-                )? {
-                    var iterator = bytes.chunks(ofCount: maxChunkSize).enumerated().makeIterator()
-                    guard let chunk = iterator.next() else {
-                        return nil
-                    }
-
-                    return (NIOLockedValueBox(BodyStreamIterator(iterator)), chunk)
-                }
-
-                guard let (iterator, chunk) = makeIteratorAndFirstChunk(bytes: bytes) else {
-                    return self.write(IOData.byteBuffer(.init()))
-                }
-
-                @Sendable  // can't use closure here as we recursively call ourselves which closures can't do
-                func writeNextChunk(_ chunk: Chunk, allDone: EventLoopPromise<Void>) {
-                    if let (index, element) = iterator.withLockedValue({ $0.next() }) {
-                        self.write(.byteBuffer(ByteBuffer(bytes: chunk.element))).map {
-                            if (index + 1) % 4 == 0 {
-                                // Let's not stack-overflow if the futures insta-complete which they at least in HTTP/2
-                                // mode.
-                                // Also, we must frequently return to the EventLoop because we may get the pause signal
-                                // from another thread. If we fail to do that promptly, we may balloon our body chunks
-                                // into memory.
-                                allDone.futureResult.eventLoop.execute {
-                                    writeNextChunk((offset: index, element: element), allDone: allDone)
-                                }
-                            } else {
-                                writeNextChunk((offset: index, element: element), allDone: allDone)
-                            }
-                        }.cascadeFailure(to: allDone)
-                    } else {
-                        self.write(.byteBuffer(ByteBuffer(bytes: chunk.element))).cascade(to: allDone)
-                    }
-                }
 
                 // HACK (again, we're not told the right EventLoop): Let's write 0 bytes to make the user tell us...
                 return self.write(.byteBuffer(ByteBuffer())).flatMapWithEventLoop { (_, loop) in
+                    func makeIteratorAndFirstChunk(
+                        bytes: Bytes
+                    ) -> (iterator: Iterator, chunk: Chunk)? {
+                        var iterator = bytes.chunks(ofCount: maxChunkSize).enumerated().makeIterator()
+                        guard let chunk = iterator.next() else {
+                            return nil
+                        }
+
+                        return (iterator, chunk)
+                    }
+
+                    guard let iteratorAndChunk = makeIteratorAndFirstChunk(bytes: bytes) else {
+                        return loop.makeSucceededVoidFuture()
+                    }
+
+                    var iterator = iteratorAndChunk.0
+                    let chunk = iteratorAndChunk.1
+
+                    // can't use closure here as we recursively call ourselves which closures can't do
+                    func writeNextChunk(_ chunk: Chunk, allDone: EventLoopPromise<Void>) {
+                        let loop = allDone.futureResult.eventLoop
+                        loop.assertInEventLoop()
+
+                        if let (index, element) = iterator.next() {
+                            self.write(.byteBuffer(ByteBuffer(bytes: chunk.element))).hop(to: loop).assumeIsolated().map {
+                                if (index + 1) % 4 == 0 {
+                                    // Let's not stack-overflow if the futures insta-complete which they at least in HTTP/2
+                                    // mode.
+                                    // Also, we must frequently return to the EventLoop because we may get the pause signal
+                                    // from another thread. If we fail to do that promptly, we may balloon our body chunks
+                                    // into memory.
+                                    allDone.futureResult.eventLoop.assumeIsolated().execute {
+                                        writeNextChunk((offset: index, element: element), allDone: allDone)
+                                    }
+                                } else {
+                                    writeNextChunk((offset: index, element: element), allDone: allDone)
+                                }
+                            }.nonisolated().cascadeFailure(to: allDone)
+                        } else {
+                            self.write(.byteBuffer(ByteBuffer(bytes: chunk.element))).cascade(to: allDone)
+                        }
+                    }
+
                     let allDone = loop.makePromise(of: Void.self)
                     writeNextChunk(chunk, allDone: allDone)
                     return allDone.futureResult
@@ -189,7 +191,7 @@ extension HTTPClient {
         @preconcurrency
         @inlinable
         public static func bytes<Bytes>(_ bytes: Bytes) -> Body
-        where Bytes: RandomAccessCollection, Bytes: Sendable, Bytes.SubSequence: Sendable, Bytes.Element == UInt8 {
+        where Bytes: RandomAccessCollection, Bytes: Sendable, Bytes.Element == UInt8 {
             Body(contentLength: Int64(bytes.count)) { writer in
                 if bytes.count <= bagOfBytesToByteBufferConversionChunkSize {
                     return writer.write(.byteBuffer(ByteBuffer(bytes: bytes)))
@@ -1079,28 +1081,5 @@ extension RequestBodyLength {
             return
         }
         self = .known(length)
-    }
-}
-
-@usableFromInline
-struct BodyStreamIterator<
-    Bytes: Collection
->: IteratorProtocol, @unchecked Sendable where Bytes.Element == UInt8, Bytes: Sendable {
-    // @unchecked: swift-algorithms hasn't adopted Sendable yet. By inspection, the iterator
-    // is safe to annotate as sendable.
-    @usableFromInline
-    typealias Element = (offset: Int, element: Bytes.SubSequence)
-
-    @usableFromInline
-    var _backing: EnumeratedSequence<ChunksOfCountCollection<Bytes>>.Iterator
-
-    @inlinable
-    init(_ backing: EnumeratedSequence<ChunksOfCountCollection<Bytes>>.Iterator) {
-        self._backing = backing
-    }
-
-    @inlinable
-    mutating func next() -> Element? {
-        self._backing.next()
     }
 }
