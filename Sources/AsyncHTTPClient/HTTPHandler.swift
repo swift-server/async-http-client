@@ -93,7 +93,8 @@ extension HTTPClient {
                         loop.assertInEventLoop()
 
                         if let (index, element) = iterator.next() {
-                            self.write(.byteBuffer(ByteBuffer(bytes: chunk.element))).hop(to: loop).assumeIsolated().map {
+                            self.write(.byteBuffer(ByteBuffer(bytes: chunk.element))).hop(to: loop).assumeIsolated().map
+                            {
                                 if (index + 1) % 4 == 0 {
                                     // Let's not stack-overflow if the futures insta-complete which they at least in HTTP/2
                                     // mode.
