@@ -766,8 +766,9 @@ extension Optional where Wrapped == HTTPClientRequest.Prepared.Body {
                 throw LengthMismatch(announcedLength: announcedLength, actualLength: Int64(buffer.readableBytes))
             }
             return buffer
-        case .asyncSequence(length: let announcedLength, let generate):
+        case .asyncSequence(length: let announcedLength, let makeAsyncIterator):
             var accumulatedBuffer = ByteBuffer()
+            let generate = makeAsyncIterator()
             while var buffer = try await generate(ByteBufferAllocator()) {
                 accumulatedBuffer.writeBuffer(&buffer)
             }

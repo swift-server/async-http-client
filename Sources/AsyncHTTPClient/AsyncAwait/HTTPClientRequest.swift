@@ -421,3 +421,9 @@ extension HTTPClientRequest.Body {
         }
     }
 }
+
+@available(*, unavailable)
+extension HTTPClientRequest.Body.AsyncIterator: Sendable {}
+
+@available(*, unavailable)
+extension HTTPClientRequest.Body.AsyncIterator.Storage: Sendable {}
