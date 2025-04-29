@@ -184,7 +184,7 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
     }
 }
 
-class NeverrespondServerHandler: ChannelInboundHandler {
+final class NeverrespondServerHandler: ChannelInboundHandler, Sendable {
     typealias InboundIn = NIOAny
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {

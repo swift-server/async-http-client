@@ -568,10 +568,11 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
         )
         try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).wait()
 
-        let request = MockHTTPExecutableRequest()
         // non empty body is important to trigger this bug as we otherwise finish the request in a single flush
-        request.requestFramingMetadata.body = .fixedSize(1)
-        request.raiseErrorIfUnimplementedMethodIsCalled = false
+        let request = MockHTTPExecutableRequest(
+            framingMetadata: RequestFramingMetadata(connectionClose: false, body: .fixedSize(1)),
+            raiseErrorIfUnimplementedMethodIsCalled: false
+        )
         channel.writeAndFlush(request, promise: nil)
         XCTAssertEqual(request.events.map(\.kind), [.willExecuteRequest, .requestHeadSent])
     }

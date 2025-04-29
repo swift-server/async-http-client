@@ -939,7 +939,7 @@ final class RequestBagTests: XCTestCase {
     }
 
     func testWeDontLeakTheRequestIfTheRequestWriterWasCapturedByAPromise() {
-        final class LeakDetector {}
+        final class LeakDetector: Sendable {}
 
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { XCTAssertNoThrow(try group.syncShutdownGracefully()) }
@@ -1000,70 +1000,90 @@ extension HTTPClient.Task {
     }
 }
 
-class UploadCountingDelegate: HTTPClientResponseDelegate {
+final class UploadCountingDelegate: HTTPClientResponseDelegate {
     typealias Response = Void
 
     let eventLoop: EventLoop
 
-    private(set) var hitDidSendRequestHead = 0
-    private(set) var hitDidSendRequestPart = 0
-    private(set) var hitDidSendRequest = 0
-    private(set) var hitDidReceiveResponse = 0
-    private(set) var hitDidReceiveBodyPart = 0
-    private(set) var hitDidReceiveError = 0
+    struct State: Sendable {
+        var hitDidSendRequestHead = 0
+        var hitDidSendRequestPart = 0
+        var hitDidSendRequest = 0
+        var hitDidReceiveResponse = 0
+        var hitDidReceiveBodyPart = 0
+        var hitDidReceiveError = 0
 
-    private(set) var history: [(request: HTTPClient.Request, response: HTTPResponseHead)] = []
-    private(set) var receivedHead: HTTPResponseHead?
-    private(set) var lastBodyPart: ByteBuffer?
-    private(set) var backpressurePromise: EventLoopPromise<Void>?
-    private(set) var lastError: Error?
+        var history: [(request: HTTPClient.Request, response: HTTPResponseHead)] = []
+        var receivedHead: HTTPResponseHead?
+        var lastBodyPart: ByteBuffer?
+        var backpressurePromise: EventLoopPromise<Void>?
+        var lastError: Error?
+    }
+
+    private let state: NIOLoopBoundBox<State>
+
+    var hitDidSendRequestHead: Int { self.state.value.hitDidSendRequestHead }
+    var hitDidSendRequestPart: Int { self.state.value.hitDidSendRequestPart }
+    var hitDidSendRequest: Int { self.state.value.hitDidSendRequest }
+    var hitDidReceiveResponse: Int { self.state.value.hitDidReceiveResponse }
+    var hitDidReceiveBodyPart: Int { self.state.value.hitDidReceiveBodyPart }
+    var hitDidReceiveError: Int { self.state.value.hitDidReceiveError }
+
+    var history: [(request: HTTPClient.Request, response: HTTPResponseHead)] {
+        self.state.value.history
+    }
+    var receivedHead: HTTPResponseHead? { self.state.value.receivedHead }
+    var lastBodyPart: ByteBuffer? { self.state.value.lastBodyPart }
+    var backpressurePromise: EventLoopPromise<Void>? { self.state.value.backpressurePromise }
+    var lastError: Error? { self.state.value.lastError }
 
     init(eventLoop: EventLoop) {
         self.eventLoop = eventLoop
+        self.state = .makeBoxSendingValue(State(), eventLoop: eventLoop)
     }
 
     func didSendRequestHead(task: HTTPClient.Task<Void>, _ head: HTTPRequestHead) {
-        self.hitDidSendRequestHead += 1
+        self.state.value.hitDidSendRequestHead += 1
     }
 
     func didSendRequestPart(task: HTTPClient.Task<Void>, _ part: IOData) {
-        self.hitDidSendRequestPart += 1
+        self.state.value.hitDidSendRequestPart += 1
     }
 
     func didSendRequest(task: HTTPClient.Task<Void>) {
-        self.hitDidSendRequest += 1
+        self.state.value.hitDidSendRequest += 1
     }
 
     func didVisitURL(task: HTTPClient.Task<Void>, _ request: HTTPClient.Request, _ head: HTTPResponseHead) {
-        self.history.append((request, head))
+        self.state.value.history.append((request, head))
     }
 
     func didReceiveHead(task: HTTPClient.Task<Void>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
-        self.receivedHead = head
+        self.state.value.receivedHead = head
         return self.createBackpressurePromise()
     }
 
     func didReceiveBodyPart(task: HTTPClient.Task<Void>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
-        assert(self.backpressurePromise == nil)
-        self.hitDidReceiveBodyPart += 1
-        self.lastBodyPart = buffer
+        assert(self.state.value.backpressurePromise == nil)
+        self.state.value.hitDidReceiveBodyPart += 1
+        self.state.value.lastBodyPart = buffer
         return self.createBackpressurePromise()
     }
 
     func didFinishRequest(task: HTTPClient.Task<Void>) throws {
-        self.hitDidReceiveResponse += 1
+        self.state.value.hitDidReceiveResponse += 1
     }
 
     func didReceiveError(task: HTTPClient.Task<Void>, _ error: Error) {
-        self.hitDidReceiveError += 1
-        self.lastError = error
+        self.state.value.hitDidReceiveError += 1
+        self.state.value.lastError = error
     }
 
     private func createBackpressurePromise() -> EventLoopFuture<Void> {
-        assert(self.backpressurePromise == nil)
-        self.backpressurePromise = self.eventLoop.makePromise(of: Void.self)
-        return self.backpressurePromise!.futureResult.always { _ in
-            self.backpressurePromise = nil
+        assert(self.state.value.backpressurePromise == nil)
+        self.state.value.backpressurePromise = self.eventLoop.makePromise(of: Void.self)
+        return self.state.value.backpressurePromise!.futureResult.always { _ in
+            self.state.value.backpressurePromise = nil
         }
     }
 }

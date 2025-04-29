@@ -526,6 +526,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
     }
 
     func testConnectTimeout() {
+        let serverGroup = self.serverGroup!
+        let clientGroup = self.clientGroup!
         XCTAsyncTest(timeout: 60) {
             #if os(Linux)
             // 198.51.100.254 is reserved for documentation only and therefore should not accept any TCP connection
@@ -542,7 +544,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 XCTAssertNoThrow(try group.syncShutdownGracefully())
             }
 
-            let serverChannel = try await ServerBootstrap(group: self.serverGroup)
+            let serverChannel = try await ServerBootstrap(group: serverGroup)
                 .serverChannelOption(ChannelOptions.backlog, value: 1)
                 .serverChannelOption(ChannelOptions.autoRead, value: false)
                 .bind(host: "127.0.0.1", port: 0)
@@ -551,7 +553,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 XCTAssertNoThrow(try serverChannel.close().wait())
             }
             let port = serverChannel.localAddress!.port!
-            let firstClientChannel = try await ClientBootstrap(group: self.serverGroup)
+            let firstClientChannel = try await ClientBootstrap(group: serverGroup)
                 .connect(host: "127.0.0.1", port: port)
                 .get()
             defer {
@@ -561,7 +563,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             #endif
 
             let httpClient = HTTPClient(
-                eventLoopGroupProvider: .shared(self.clientGroup),
+                eventLoopGroupProvider: .shared(clientGroup),
                 configuration: .init(timeout: .init(connect: .milliseconds(100), read: .milliseconds(150)))
             )
 

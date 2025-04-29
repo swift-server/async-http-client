@@ -38,7 +38,7 @@ class SOCKSEventsHandlerTests: XCTestCase {
         let embedded = EmbeddedChannel(handlers: [socksEventsHandler])
         XCTAssertNotNil(socksEventsHandler.socksEstablishedFuture)
 
-        XCTAssertNoThrow(try embedded.pipeline.removeHandler(socksEventsHandler).wait())
+        XCTAssertNoThrow(try embedded.pipeline.syncOperations.removeHandler(socksEventsHandler).wait())
         XCTAssertThrowsError(try XCTUnwrap(socksEventsHandler.socksEstablishedFuture).wait())
     }
 

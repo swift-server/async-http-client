@@ -25,7 +25,7 @@ final class MockRequestExecutor {
         case unexpectedByteBuffer
     }
 
-    enum RequestParts: Equatable {
+    enum RequestParts: Equatable, Sendable {
         case body(IOData)
         case endOfStream
 
@@ -58,10 +58,15 @@ final class MockRequestExecutor {
     private let responseBodyDemandLock = ConditionLock(value: false)
     private let cancellationLock = ConditionLock(value: false)
 
-    private var request: HTTPExecutableRequest?
-    private var _signaledDemandForRequestBody: Bool = false
+    private struct State: Sendable {
+        var request: HTTPExecutableRequest?
+        var _signaledDemandForRequestBody: Bool = false
+    }
+
+    private let state: NIOLockedValueBox<State>
 
     init(pauseRequestBodyPartStreamAfterASingleWrite: Bool = false, eventLoop: EventLoop) {
+        self.state = NIOLockedValueBox(State())
         self.pauseRequestBodyPartStreamAfterASingleWrite = pauseRequestBodyPartStreamAfterASingleWrite
         self.eventLoop = eventLoop
     }
@@ -77,8 +82,10 @@ final class MockRequestExecutor {
     }
 
     private func runRequest0(_ request: HTTPExecutableRequest) {
-        precondition(self.request == nil)
-        self.request = request
+        self.state.withLockedValue {
+            precondition($0.request == nil)
+            $0.request = request
+        }
         request.willExecuteRequest(self)
         request.requestHeadSent()
     }
@@ -127,10 +134,16 @@ final class MockRequestExecutor {
     }
 
     private func pauseRequestBodyStream0() {
-        if self._signaledDemandForRequestBody == true {
-            self._signaledDemandForRequestBody = false
-            self.request!.pauseRequestBodyStream()
+        let request = self.state.withLockedValue {
+            if $0._signaledDemandForRequestBody == true {
+                $0._signaledDemandForRequestBody = false
+                return $0.request
+            } else {
+                return nil
+            }
         }
+
+        request?.pauseRequestBodyStream()
     }
 
     func resumeRequestBodyStream() {
@@ -144,10 +157,16 @@ final class MockRequestExecutor {
     }
 
     private func resumeRequestBodyStream0() {
-        if self._signaledDemandForRequestBody == false {
-            self._signaledDemandForRequestBody = true
-            self.request!.resumeRequestBodyStream()
+        let request = self.state.withLockedValue {
+            if $0._signaledDemandForRequestBody == false {
+                $0._signaledDemandForRequestBody = true
+                return $0.request
+            } else {
+                return nil
+            }
         }
+
+        request?.resumeRequestBodyStream()
     }
 
     func resetResponseStreamDemandSignal() {
@@ -204,11 +223,13 @@ extension MockRequestExecutor: HTTPRequestExecutor {
             case none
         }
 
-        let stateChange = { () -> WriteAction in
+        let stateChange = { @Sendable () -> WriteAction in
             var pause = false
             if self.blockingQueue.isEmpty && self.pauseRequestBodyPartStreamAfterASingleWrite && part.isBody {
                 pause = true
-                self._signaledDemandForRequestBody = false
+                self.state.withLockedValue {
+                    $0._signaledDemandForRequestBody = false
+                }
             }
 
             self.blockingQueue.append(.success(part))
@@ -283,3 +304,5 @@ extension MockRequestExecutor {
         }
     }
 }
+
+extension MockRequestExecutor.BlockingQueue: @unchecked Sendable where Element: Sendable {}

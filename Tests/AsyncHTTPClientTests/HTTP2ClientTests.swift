@@ -14,6 +14,7 @@
 
 import AsyncHTTPClient  // NOT @testable - tests that really need @testable go into HTTP2ClientInternalTests.swift
 import Logging
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOFoundationCompat
 import NIOHTTP1
@@ -283,15 +284,16 @@ class HTTP2ClientTests: XCTestCase {
         XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://localhost:\(bin.port)"))
         guard let request = maybeRequest else { return }
 
-        var task: HTTPClient.Task<Void>!
+        let taskBox = NIOLockedValueBox<HTTPClient.Task<Void>?>(nil)
         let delegate = HeadReceivedCallback { _ in
             // request is definitely running because we just received a head from the server
-            task.cancel()
+            taskBox.withLockedValue { $0 }!.cancel()
         }
-        task = client.execute(
+        let task = client.execute(
             request: request,
             delegate: delegate
         )
+        taskBox.withLockedValue { $0 = task }
 
         XCTAssertThrowsError(try task.futureResult.timeout(after: .seconds(2)).wait()) {
             XCTAssertEqualTypeAndValue($0, HTTPClientError.cancelled)
@@ -360,18 +362,20 @@ class HTTP2ClientTests: XCTestCase {
         guard let request = maybeRequest else { return }
 
         let tasks = (0..<100).map { _ -> HTTPClient.Task<TestHTTPDelegate.Response> in
-            var task: HTTPClient.Task<Void>!
+            let taskBox = NIOLockedValueBox<HTTPClient.Task<Void>?>(nil)
+
             let delegate = HeadReceivedCallback { _ in
                 // request is definitely running because we just received a head from the server
                 cancelPool.next().execute {
                     // canceling from a different thread
-                    task.cancel()
+                    taskBox.withLockedValue { $0 }!.cancel()
                 }
             }
-            task = client.execute(
+            let task = client.execute(
                 request: request,
                 delegate: delegate
             )
+            taskBox.withLockedValue { $0 = task }
             return task
         }
 
@@ -547,8 +551,8 @@ class HTTP2ClientTests: XCTestCase {
 
 private final class HeadReceivedCallback: HTTPClientResponseDelegate {
     typealias Response = Void
-    private let didReceiveHeadCallback: (HTTPResponseHead) -> Void
-    init(didReceiveHead: @escaping (HTTPResponseHead) -> Void) {
+    private let didReceiveHeadCallback: @Sendable (HTTPResponseHead) -> Void
+    init(didReceiveHead: @escaping @Sendable (HTTPResponseHead) -> Void) {
         self.didReceiveHeadCallback = didReceiveHead
     }
 

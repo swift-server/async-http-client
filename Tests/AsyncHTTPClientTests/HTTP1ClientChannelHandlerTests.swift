@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Logging
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOEmbedded
 import NIOHTTP1
@@ -833,10 +834,11 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         )
         try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).wait()
 
-        let request = MockHTTPExecutableRequest()
         // non empty body is important to trigger this bug as we otherwise finish the request in a single flush
-        request.requestFramingMetadata.body = .fixedSize(1)
-        request.raiseErrorIfUnimplementedMethodIsCalled = false
+        let request = MockHTTPExecutableRequest(
+            framingMetadata: RequestFramingMetadata(connectionClose: false, body: .fixedSize(1)),
+            raiseErrorIfUnimplementedMethodIsCalled: false
+        )
         channel.writeAndFlush(request, promise: nil)
         XCTAssertEqual(request.events.map(\.kind), [.willExecuteRequest, .requestHeadSent])
     }
@@ -897,34 +899,43 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
     }
 }
 
-class TestBackpressureWriter {
+final class TestBackpressureWriter: Sendable {
     let eventLoop: EventLoop
 
     let parts: Int
 
     var finishFuture: EventLoopFuture<Void> { self.finishPromise.futureResult }
     private let finishPromise: EventLoopPromise<Void>
-    private(set) var written: Int = 0
 
-    private var channelIsWritable: Bool = false
+    private struct State {
+        var written = 0
+        var channelIsWritable = false
+    }
+
+    var written: Int {
+        self.state.value.written
+    }
+
+    private let state: NIOLoopBoundBox<State>
 
     init(eventLoop: EventLoop, parts: Int) {
         self.eventLoop = eventLoop
         self.parts = parts
-
+        self.state = .makeBoxSendingValue(State(), eventLoop: eventLoop)
         self.finishPromise = eventLoop.makePromise(of: Void.self)
     }
 
     func start(writer: HTTPClient.Body.StreamWriter, expectedErrors: [HTTPClientError] = []) -> EventLoopFuture<Void> {
+        @Sendable
         func recursive() {
             XCTAssert(self.eventLoop.inEventLoop)
-            XCTAssert(self.channelIsWritable)
-            if self.written == self.parts {
+            XCTAssert(self.state.value.channelIsWritable)
+            if self.state.value.written == self.parts {
                 self.finishPromise.succeed(())
             } else {
                 self.eventLoop.execute {
                     let future = writer.write(.byteBuffer(.init(bytes: [0, 1])))
-                    self.written += 1
+                    self.state.value.written += 1
                     future.whenComplete { result in
                         switch result {
                         case .success:
@@ -951,14 +962,14 @@ class TestBackpressureWriter {
     }
 
     func writabilityChanged(_ newValue: Bool) {
-        self.channelIsWritable = newValue
+        self.state.value.channelIsWritable = newValue
     }
 }
 
-class ResponseBackpressureDelegate: HTTPClientResponseDelegate {
+final class ResponseBackpressureDelegate: HTTPClientResponseDelegate {
     typealias Response = Void
 
-    enum State {
+    enum State: Sendable {
         case consuming(EventLoopPromise<Void>)
         case waitingForRemote(CircularBuffer<EventLoopPromise<ByteBuffer?>>)
         case buffering((ByteBuffer?, EventLoopPromise<Void>)?)
@@ -966,21 +977,20 @@ class ResponseBackpressureDelegate: HTTPClientResponseDelegate {
     }
 
     let eventLoop: EventLoop
-    private var state: State = .buffering(nil)
+    private let state: NIOLoopBoundBox<State>
 
     init(eventLoop: EventLoop) {
         self.eventLoop = eventLoop
-
-        self.state = .consuming(self.eventLoop.makePromise(of: Void.self))
+        self.state = .makeBoxSendingValue(.consuming(eventLoop.makePromise(of: Void.self)), eventLoop: eventLoop)
     }
 
     func next() -> EventLoopFuture<ByteBuffer?> {
-        switch self.state {
+        switch self.state.value {
         case .consuming(let backpressurePromise):
             var promiseBuffer = CircularBuffer<EventLoopPromise<ByteBuffer?>>()
             let newPromise = self.eventLoop.makePromise(of: ByteBuffer?.self)
             promiseBuffer.append(newPromise)
-            self.state = .waitingForRemote(promiseBuffer)
+            self.state.value = .waitingForRemote(promiseBuffer)
             backpressurePromise.succeed(())
             return newPromise.futureResult
 
@@ -991,18 +1001,18 @@ class ResponseBackpressureDelegate: HTTPClientResponseDelegate {
             )
             let promise = self.eventLoop.makePromise(of: ByteBuffer?.self)
             promiseBuffer.append(promise)
-            self.state = .waitingForRemote(promiseBuffer)
+            self.state.value = .waitingForRemote(promiseBuffer)
             return promise.futureResult
 
         case .buffering(.none):
             var promiseBuffer = CircularBuffer<EventLoopPromise<ByteBuffer?>>()
             let promise = self.eventLoop.makePromise(of: ByteBuffer?.self)
             promiseBuffer.append(promise)
-            self.state = .waitingForRemote(promiseBuffer)
+            self.state.value = .waitingForRemote(promiseBuffer)
             return promise.futureResult
 
         case .buffering(.some((let buffer, let promise))):
-            self.state = .buffering(nil)
+            self.state.value = .buffering(nil)
             promise.succeed(())
             return self.eventLoop.makeSucceededFuture(buffer)
 
@@ -1012,7 +1022,7 @@ class ResponseBackpressureDelegate: HTTPClientResponseDelegate {
     }
 
     func didReceiveHead(task: HTTPClient.Task<Void>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
-        switch self.state {
+        switch self.state.value {
         case .consuming(let backpressurePromise):
             return backpressurePromise.futureResult
 
@@ -1025,7 +1035,7 @@ class ResponseBackpressureDelegate: HTTPClientResponseDelegate {
     }
 
     func didReceiveBodyPart(task: HTTPClient.Task<Void>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
-        switch self.state {
+        switch self.state.value {
         case .waitingForRemote(var promiseBuffer):
             assert(
                 !promiseBuffer.isEmpty,
@@ -1034,18 +1044,18 @@ class ResponseBackpressureDelegate: HTTPClientResponseDelegate {
             let promise = promiseBuffer.removeFirst()
             if promiseBuffer.isEmpty {
                 let newBackpressurePromise = self.eventLoop.makePromise(of: Void.self)
-                self.state = .consuming(newBackpressurePromise)
+                self.state.value = .consuming(newBackpressurePromise)
                 promise.succeed(buffer)
                 return newBackpressurePromise.futureResult
             } else {
-                self.state = .waitingForRemote(promiseBuffer)
+                self.state.value = .waitingForRemote(promiseBuffer)
                 promise.succeed(buffer)
                 return self.eventLoop.makeSucceededVoidFuture()
             }
 
         case .buffering(.none):
             let promise = self.eventLoop.makePromise(of: Void.self)
-            self.state = .buffering((buffer, promise))
+            self.state.value = .buffering((buffer, promise))
             return promise.futureResult
 
         case .buffering(.some):
@@ -1059,15 +1069,15 @@ class ResponseBackpressureDelegate: HTTPClientResponseDelegate {
     }
 
     func didFinishRequest(task: HTTPClient.Task<Void>) throws {
-        switch self.state {
+        switch self.state.value {
         case .waitingForRemote(let promiseBuffer):
             for promise in promiseBuffer {
                 promise.succeed(.none)
             }
-            self.state = .done
+            self.state.value = .done
 
         case .buffering(.none):
-            self.state = .done
+            self.state.value = .done
 
         case .done, .consuming:
             preconditionFailure("Invalid state: \(self.state)")
@@ -1093,7 +1103,7 @@ class ReadEventHitHandler: ChannelOutboundHandler {
     }
 }
 
-final class FailEndHandler: ChannelOutboundHandler {
+final class FailEndHandler: ChannelOutboundHandler, Sendable {
     typealias OutboundIn = HTTPClientRequestPart
     typealias OutboundOut = HTTPClientRequestPart
 

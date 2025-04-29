@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Algorithms
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
 import XCTest
@@ -493,7 +494,7 @@ class HTTPClientRequestTests: XCTestCase {
             request.method = .POST
             let asyncSequence = ByteBuffer(string: "post body")
                 .readableBytesView
-                .chunks(ofCount: 2)
+                .uncheckedSendableChunks(ofCount: 2)
                 .async
                 .map { ByteBuffer($0) }
 
@@ -541,7 +542,7 @@ class HTTPClientRequestTests: XCTestCase {
             request.method = .POST
             let asyncSequence = ByteBuffer(string: "post body")
                 .readableBytesView
-                .chunks(ofCount: 2)
+                .uncheckedSendableChunks(ofCount: 2)
                 .async
                 .map { ByteBuffer($0) }
 
@@ -619,7 +620,7 @@ class HTTPClientRequestTests: XCTestCase {
     func testChunkingSequenceThatDoesNotImplementWithContiguousStorageIfAvailable() async throws {
         let bagOfBytesToByteBufferConversionChunkSize = 8
         let body = try await HTTPClientRequest.Body._bytes(
-            AnySequence(
+            AnySendableSequence(
                 Array(repeating: 0, count: bagOfBytesToByteBufferConversionChunkSize)
                     + Array(repeating: 1, count: bagOfBytesToByteBufferConversionChunkSize)
             ),
@@ -729,17 +730,17 @@ extension HTTPClient.Body {
     func collect() -> EventLoopFuture<[ByteBuffer]> {
         let eelg = EmbeddedEventLoopGroup(loops: 1)
         let el = eelg.next()
-        var body = [ByteBuffer]()
+        let body = NIOLockedValueBox<[ByteBuffer]>([])
         let writer = StreamWriter {
             switch $0 {
             case .byteBuffer(let byteBuffer):
-                body.append(byteBuffer)
+                body.withLockedValue { $0.append(byteBuffer) }
             case .fileRegion:
                 fatalError("file region not supported")
             }
             return el.makeSucceededVoidFuture()
         }
-        return self.stream(writer).map { _ in body }
+        return self.stream(writer).map { _ in body.withLockedValue { $0 } }
     }
 }
 
@@ -782,5 +783,37 @@ extension Optional where Wrapped == HTTPClientRequest.Prepared.Body {
             }
             return accumulatedBuffer
         }
+    }
+}
+
+// swift-algorithms hasn't adopted Sendable yet. By inspection ChunksOfCountCollection should be
+// Sendable assuming the underlying collection is. This wrapper allows us to avoid a blanket
+// preconcurrency import of the Algorithms module.
+struct UncheckedSendableChunksOfCountCollection<Base: Collection>: Collection, @unchecked Sendable
+where Base: Sendable {
+    typealias Element = Base.SubSequence
+    typealias Index = ChunksOfCountCollection<Base>.Index
+
+    private let underlying: ChunksOfCountCollection<Base>
+
+    init(_ underlying: ChunksOfCountCollection<Base>) {
+        self.underlying = underlying
+    }
+
+    var startIndex: Index { self.underlying.startIndex }
+    var endIndex: Index { self.underlying.endIndex }
+
+    subscript(position: Index) -> Base.SubSequence {
+        self.underlying[position]
+    }
+
+    func index(after i: Index) -> Index {
+        self.underlying.index(after: i)
+    }
+}
+
+extension Collection where Self: Sendable {
+    func uncheckedSendableChunks(ofCount count: Int) -> UncheckedSendableChunksOfCountCollection<Self> {
+        UncheckedSendableChunksOfCountCollection(self.chunks(ofCount: count))
     }
 }

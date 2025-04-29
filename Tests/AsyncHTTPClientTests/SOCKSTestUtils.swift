@@ -53,7 +53,9 @@ class MockSOCKSServer {
             bootstrap = ServerBootstrap(group: elg)
                 .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
                 .childChannelInitializer { channel in
-                    channel.pipeline.addHandler(TestSOCKSBadServerHandler())
+                    channel.eventLoop.makeCompletedFuture {
+                        try channel.pipeline.syncOperations.addHandler(TestSOCKSBadServerHandler())
+                    }
                 }
         } else {
             bootstrap = ServerBootstrap(group: elg)
