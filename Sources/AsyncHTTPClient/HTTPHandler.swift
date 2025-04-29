@@ -53,6 +53,7 @@ extension HTTPClient {
             }
 
             @inlinable
+            @preconcurrency
             func writeChunks<Bytes: Collection>(
                 of bytes: Bytes,
                 maxChunkSize: Int
