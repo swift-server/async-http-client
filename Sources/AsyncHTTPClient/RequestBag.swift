@@ -120,7 +120,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
             executor.cancelRequest(self)
         case .failTaskAndCancelExecutor(let error, let executor):
             self.delegate.didReceiveError(task: self.task, error)
-            self.task.fail(with: error, delegateType: Delegate.self)
+            self.task.failInternal(with: error)
             executor.cancelRequest(self)
         case .none:
             break
@@ -181,7 +181,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
         switch action {
         case .failTask(let error):
             self.delegate.didReceiveError(task: self.task, error)
-            self.task.fail(with: error, delegateType: Delegate.self)
+            self.task.failInternal(with: error)
             return self.task.eventLoop.makeFailedFuture(error)
 
         case .failFuture(let error):

@@ -795,7 +795,8 @@ public class HTTPClient {
 
             self.poolManager.executeRequest(requestBag)
         } catch {
-            task.fail(with: error, delegateType: Delegate.self)
+            delegate.didReceiveError(task: task, error)
+            task.failInternal(with: error)
         }
 
         return task
