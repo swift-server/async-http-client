@@ -1024,9 +1024,9 @@ extension HTTPClient {
             taskDelegate?.fail(error)
         }
 
-        func fail<Delegate: HTTPClientResponseDelegate>(
-            with error: Error,
-            delegateType: Delegate.Type
+        /// Called internally only, used to fail a task from within the state machine functionality.
+        func failInternal(
+            with error: Error
         ) {
             self.promise.fail(error)
         }

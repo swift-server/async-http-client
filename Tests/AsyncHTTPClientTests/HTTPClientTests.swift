@@ -3357,6 +3357,37 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         XCTAssertNoThrow(try future.wait())
     }
 
+    func testDelegateGetsErrorsFromCreatingRequestBag() throws {
+        // We want to test that we propagate errors to the delegate from failures to construct the
+        // request bag. Those errors only come from invalid headers.
+        final class TestDelegate: HTTPClientResponseDelegate, Sendable {
+            typealias Response = Void
+            let error: NIOLockedValueBox<Error?> = .init(nil)
+            func didFinishRequest(task: HTTPClient.Task<Void>) throws {}
+            func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
+                self.error.withLockedValue { $0 = error }
+            }
+        }
+
+        let httpClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup)
+        )
+
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown())
+        }
+
+        // 198.51.100.254 is reserved for documentation only
+        var request = try HTTPClient.Request(url: "http://198.51.100.254:65535/get")
+        request.headers.replaceOrAdd(name: "Not-ASCII", value: "not-fine\n")
+        let delegate = TestDelegate()
+
+        XCTAssertThrowsError(try httpClient.execute(request: request, delegate: delegate).wait()) {
+            XCTAssertEqualTypeAndValue($0, HTTPClientError.invalidHeaderFieldValues(["not-fine\n"]))
+            XCTAssertEqualTypeAndValue(delegate.error.withLockedValue { $0 }, HTTPClientError.invalidHeaderFieldValues(["not-fine\n"]))
+        }
+    }
+
     func testContentLengthTooLongFails() throws {
         let url = self.defaultHTTPBinURLPrefix + "post"
         XCTAssertThrowsError(
