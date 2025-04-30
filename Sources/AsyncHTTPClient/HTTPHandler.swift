@@ -596,7 +596,8 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
         if self.requestMethod != .HEAD,
             let contentLength = head.headers.first(name: "Content-Length"),
             let announcedBodySize = Int(contentLength),
-           announcedBodySize > self.maxBodySize {
+            announcedBodySize > self.maxBodySize
+        {
             responseTooBig = true
         } else {
             responseTooBig = false
