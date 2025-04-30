@@ -658,7 +658,7 @@ class HTTPClientInternalTests: XCTestCase {
             ).futureResult
         }
         _ = try EventLoopFuture.whenAllSucceed(resultFutures, on: self.clientGroup.next()).wait()
-        let threadPools = delegates.map { $0.fileIOThreadPool }
+        let threadPools = delegates.map { $0._fileIOThreadPool }
         let firstThreadPool = threadPools.first ?? nil
         XCTAssert(threadPools.dropFirst().allSatisfy { $0 === firstThreadPool })
     }
