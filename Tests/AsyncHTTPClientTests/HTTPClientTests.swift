@@ -3384,7 +3384,10 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         XCTAssertThrowsError(try httpClient.execute(request: request, delegate: delegate).wait()) {
             XCTAssertEqualTypeAndValue($0, HTTPClientError.invalidHeaderFieldValues(["not-fine\n"]))
-            XCTAssertEqualTypeAndValue(delegate.error.withLockedValue { $0 }, HTTPClientError.invalidHeaderFieldValues(["not-fine\n"]))
+            XCTAssertEqualTypeAndValue(
+                delegate.error.withLockedValue { $0 },
+                HTTPClientError.invalidHeaderFieldValues(["not-fine\n"])
+            )
         }
     }
 
