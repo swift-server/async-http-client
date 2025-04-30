@@ -77,9 +77,11 @@ final class Transaction:
 
     private func continueRequestBodyStream(
         _ allocator: ByteBufferAllocator,
-        next: @escaping ((ByteBufferAllocator) async throws -> ByteBuffer?)
+        makeAsyncIterator: @Sendable @escaping () -> ((ByteBufferAllocator) async throws -> ByteBuffer?)
     ) {
         Task {
+            let next = makeAsyncIterator()
+
             do {
                 while let part = try await next(allocator) {
                     do {
@@ -199,9 +201,9 @@ extension Transaction: HTTPExecutableRequest {
 
         case .startStream(let allocator):
             switch self.request.body {
-            case .asyncSequence(_, let next):
+            case .asyncSequence(_, let makeAsyncIterator):
                 // it is safe to call this async here. it dispatches...
-                self.continueRequestBodyStream(allocator, next: next)
+                self.continueRequestBodyStream(allocator, makeAsyncIterator: makeAsyncIterator)
 
             case .byteBuffer(let byteBuffer):
                 self.writeOnceAndOneTimeOnly(byteBuffer: byteBuffer)

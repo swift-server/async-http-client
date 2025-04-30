@@ -24,7 +24,7 @@ extension HTTPClientRequest {
         enum Body {
             case asyncSequence(
                 length: RequestBodyLength,
-                nextBodyPart: (ByteBufferAllocator) async throws -> ByteBuffer?
+                makeAsyncIterator: @Sendable () -> ((ByteBufferAllocator) async throws -> ByteBuffer?)
             )
             case sequence(
                 length: RequestBodyLength,
@@ -80,7 +80,7 @@ extension HTTPClientRequest.Prepared.Body {
     init(_ body: HTTPClientRequest.Body) {
         switch body.mode {
         case .asyncSequence(let length, let makeAsyncIterator):
-            self = .asyncSequence(length: length, nextBodyPart: makeAsyncIterator())
+            self = .asyncSequence(length: length, makeAsyncIterator: makeAsyncIterator)
         case .sequence(let length, let canBeConsumedMultipleTimes, let makeCompleteBody):
             self = .sequence(
                 length: length,
