@@ -591,15 +591,22 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
     }
 
     public func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
-        self.state.withLockedValue {
+        let responseTooBig: Bool
+
+        if self.requestMethod != .HEAD,
+            let contentLength = head.headers.first(name: "Content-Length"),
+            let announcedBodySize = Int(contentLength),
+           announcedBodySize > self.maxBodySize {
+            responseTooBig = true
+        } else {
+            responseTooBig = false
+        }
+
+        return self.state.withLockedValue {
             switch $0.state {
             case .idle:
-                if self.requestMethod != .HEAD,
-                    let contentLength = head.headers.first(name: "Content-Length"),
-                    let announcedBodySize = Int(contentLength),
-                    announcedBodySize > self.maxBodySize
-                {
-                    let error = ResponseTooBigError(maxBodySize: maxBodySize)
+                if responseTooBig {
+                    let error = ResponseTooBigError(maxBodySize: self.maxBodySize)
                     $0.state = .error(error)
                     return task.eventLoop.makeFailedFuture(error)
                 }
@@ -910,8 +917,7 @@ extension HTTPClient {
     ///
     /// Will be created by the library and could be used for obtaining
     /// `EventLoopFuture<Response>` of the execution or cancellation of the execution.
-    @preconcurrency
-    public final class Task<Response: Sendable> {
+    public final class Task<Response>: Sendable {
         /// The `EventLoop` the delegate will be executed on.
         public let eventLoop: EventLoop
         /// The `Logger` used by the `Task` for logging.
@@ -939,14 +945,14 @@ extension HTTPClient {
             }
         }
 
-        private let makeOrGetFileIOThreadPool: () -> NIOThreadPool
+        private let makeOrGetFileIOThreadPool: @Sendable () -> NIOThreadPool
 
         /// The shared thread pool of a ``HTTPClient`` used for file IO. It is lazily created on first access.
         internal var fileIOThreadPool: NIOThreadPool {
             self.makeOrGetFileIOThreadPool()
         }
 
-        init(eventLoop: EventLoop, logger: Logger, makeOrGetFileIOThreadPool: @escaping () -> NIOThreadPool) {
+        init(eventLoop: EventLoop, logger: Logger, makeOrGetFileIOThreadPool: @escaping @Sendable () -> NIOThreadPool) {
             self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.logger = logger
@@ -958,7 +964,7 @@ extension HTTPClient {
             eventLoop: EventLoop,
             error: Error,
             logger: Logger,
-            makeOrGetFileIOThreadPool: @escaping () -> NIOThreadPool
+            makeOrGetFileIOThreadPool: @escaping @Sendable () -> NIOThreadPool
         ) -> Task<Response> {
             let task = self.init(
                 eventLoop: eventLoop,
@@ -1017,15 +1023,6 @@ extension HTTPClient {
             taskDelegate?.fail(error)
         }
 
-        func succeed<Delegate: HTTPClientResponseDelegate>(
-            promise: EventLoopPromise<Response>?,
-            with value: Response,
-            delegateType: Delegate.Type,
-            closing: Bool
-        ) {
-            promise?.succeed(value)
-        }
-
         func fail<Delegate: HTTPClientResponseDelegate>(
             with error: Error,
             delegateType: Delegate.Type
@@ -1034,8 +1031,6 @@ extension HTTPClient {
         }
     }
 }
-
-extension HTTPClient.Task: @unchecked Sendable {}
 
 internal struct TaskCancelEvent {}
 
