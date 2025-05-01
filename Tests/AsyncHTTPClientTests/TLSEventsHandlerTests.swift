@@ -39,7 +39,7 @@ class TLSEventsHandlerTests: XCTestCase {
         let embedded = EmbeddedChannel(handlers: [tlsEventsHandler])
         XCTAssertNotNil(tlsEventsHandler.tlsEstablishedFuture)
 
-        XCTAssertNoThrow(try embedded.pipeline.removeHandler(tlsEventsHandler).wait())
+        XCTAssertNoThrow(try embedded.pipeline.syncOperations.removeHandler(tlsEventsHandler).wait())
         XCTAssertThrowsError(try XCTUnwrap(tlsEventsHandler.tlsEstablishedFuture).wait())
     }
 

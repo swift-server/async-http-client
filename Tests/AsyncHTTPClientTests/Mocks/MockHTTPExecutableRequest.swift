@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Logging
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
 import XCTest
@@ -20,7 +21,7 @@ import XCTest
 @testable import AsyncHTTPClient
 
 final class MockHTTPExecutableRequest: HTTPExecutableRequest {
-    enum Event {
+    enum Event: Sendable {
         /// ``Event`` without associated values
         enum Kind: Hashable {
             case willExecuteRequest
@@ -56,39 +57,49 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
         }
     }
 
-    var logger: Logging.Logger = Logger(label: "request")
-    var requestHead: NIOHTTP1.HTTPRequestHead
-    var requestFramingMetadata: RequestFramingMetadata
-    var requestOptions: RequestOptions = .forTests()
+    let logger: Logging.Logger = Logger(label: "request")
+    let requestHead: NIOHTTP1.HTTPRequestHead
+    let requestFramingMetadata: RequestFramingMetadata
+    let requestOptions: RequestOptions = .forTests()
 
     /// if true and ``HTTPExecutableRequest`` method is called without setting a corresponding callback on `self` e.g.
     /// If ``HTTPExecutableRequest\.willExecuteRequest(_:)`` is called but ``willExecuteRequestCallback`` is not set,
     /// ``XCTestFail(_:)`` will be called to fail the current test.
-    var raiseErrorIfUnimplementedMethodIsCalled: Bool = true
-    private var file: StaticString
-    private var line: UInt
+    let raiseErrorIfUnimplementedMethodIsCalled: Bool
+    private let file: StaticString
+    private let line: UInt
 
-    var willExecuteRequestCallback: ((HTTPRequestExecutor) -> Void)?
-    var requestHeadSentCallback: (() -> Void)?
-    var resumeRequestBodyStreamCallback: (() -> Void)?
-    var pauseRequestBodyStreamCallback: (() -> Void)?
-    var receiveResponseHeadCallback: ((HTTPResponseHead) -> Void)?
-    var receiveResponseBodyPartsCallback: ((CircularBuffer<ByteBuffer>) -> Void)?
-    var succeedRequestCallback: ((CircularBuffer<ByteBuffer>?) -> Void)?
-    var failCallback: ((Error) -> Void)?
+    let willExecuteRequestCallback: (@Sendable (HTTPRequestExecutor) -> Void)? = nil
+    let requestHeadSentCallback: (@Sendable () -> Void)? = nil
+    let resumeRequestBodyStreamCallback: (@Sendable () -> Void)? = nil
+    let pauseRequestBodyStreamCallback: (@Sendable () -> Void)? = nil
+    let receiveResponseHeadCallback: (@Sendable (HTTPResponseHead) -> Void)? = nil
+    let receiveResponseBodyPartsCallback: (@Sendable (CircularBuffer<ByteBuffer>) -> Void)? = nil
+    let succeedRequestCallback: (@Sendable (CircularBuffer<ByteBuffer>?) -> Void)? = nil
+    let failCallback: (@Sendable (Error) -> Void)? = nil
 
     /// captures all ``HTTPExecutableRequest`` method calls in the order of occurrence, including arguments.
     /// If you are not interested in the arguments you can use `events.map(\.kind)` to get all events without arguments.
-    private(set) var events: [Event] = []
+    private let _events = NIOLockedValueBox<[Event]>([])
+    private(set) var events: [Event] {
+        get {
+            self._events.withLockedValue { $0 }
+        }
+        set {
+            self._events.withLockedValue { $0 = newValue }
+        }
+    }
 
     init(
         head: NIOHTTP1.HTTPRequestHead = .init(version: .http1_1, method: .GET, uri: "http://localhost/"),
         framingMetadata: RequestFramingMetadata = .init(connectionClose: false, body: .fixedSize(0)),
+        raiseErrorIfUnimplementedMethodIsCalled: Bool = true,
         file: StaticString = #file,
         line: UInt = #line
     ) {
         self.requestHead = head
         self.requestFramingMetadata = framingMetadata
+        self.raiseErrorIfUnimplementedMethodIsCalled = raiseErrorIfUnimplementedMethodIsCalled
         self.file = file
         self.line = line
     }

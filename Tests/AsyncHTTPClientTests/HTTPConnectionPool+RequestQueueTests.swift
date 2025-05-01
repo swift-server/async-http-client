@@ -83,7 +83,7 @@ class HTTPConnectionPool_RequestQueueTests: XCTestCase {
     }
 }
 
-private class MockScheduledRequest: HTTPSchedulableRequest {
+final private class MockScheduledRequest: HTTPSchedulableRequest {
     let requiredEventLoop: EventLoop?
 
     init(requiredEventLoop: EventLoop?) {

@@ -17,7 +17,7 @@ import NIOCore
 
 /// ``AsyncSequenceWriter`` is `Sendable` because its state is protected by a Lock
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-final class AsyncSequenceWriter<Element>: AsyncSequence, @unchecked Sendable {
+final class AsyncSequenceWriter<Element: Sendable>: AsyncSequence, @unchecked Sendable {
     typealias AsyncIterator = Iterator
 
     struct Iterator: AsyncIteratorProtocol {

@@ -164,10 +164,10 @@ class HTTPClientInternalTests: XCTestCase {
     }
 
     func testChannelAndDelegateOnDifferentEventLoops() throws {
-        class Delegate: HTTPClientResponseDelegate {
+        final class Delegate: HTTPClientResponseDelegate {
             typealias Response = ([Message], [Message])
 
-            enum Message {
+            enum Message: Sendable {
                 case head(HTTPResponseHead)
                 case bodyPart(ByteBuffer)
                 case sentRequestHead(HTTPRequestHead)
@@ -176,33 +176,51 @@ class HTTPClientInternalTests: XCTestCase {
                 case error(Error)
             }
 
-            var receivedMessages: [Message] = []
-            var sentMessages: [Message] = []
+            private struct Messages: Sendable {
+                var received: [Message] = []
+                var sent: [Message] = []
+            }
+
+            private let messages: NIOLoopBoundBox<Messages>
+
+            var receivedMessages: [Message] {
+                get {
+                    self.messages.value.received
+                }
+                set {
+                    self.messages.value.received = newValue
+                }
+            }
+            var sentMessages: [Message] {
+                get {
+                    self.messages.value.sent
+                }
+                set {
+                    self.messages.value.sent = newValue
+                }
+            }
             private let eventLoop: EventLoop
             private let randoEL: EventLoop
 
             init(expectedEventLoop: EventLoop, randomOtherEventLoop: EventLoop) {
                 self.eventLoop = expectedEventLoop
                 self.randoEL = randomOtherEventLoop
+                self.messages = .makeBoxSendingValue(Messages(), eventLoop: expectedEventLoop)
             }
 
             func didSendRequestHead(task: HTTPClient.Task<Response>, _ head: HTTPRequestHead) {
-                self.eventLoop.assertInEventLoop()
                 self.sentMessages.append(.sentRequestHead(head))
             }
 
             func didSendRequestPart(task: HTTPClient.Task<Response>, _ part: IOData) {
-                self.eventLoop.assertInEventLoop()
                 self.sentMessages.append(.sentRequestPart(part))
             }
 
             func didSendRequest(task: HTTPClient.Task<Response>) {
-                self.eventLoop.assertInEventLoop()
                 self.sentMessages.append(.sentRequest)
             }
 
             func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
-                self.eventLoop.assertInEventLoop()
                 self.receivedMessages.append(.error(error))
             }
 
@@ -210,7 +228,6 @@ class HTTPClientInternalTests: XCTestCase {
                 task: HTTPClient.Task<Response>,
                 _ head: HTTPResponseHead
             ) -> EventLoopFuture<Void> {
-                self.eventLoop.assertInEventLoop()
                 self.receivedMessages.append(.head(head))
                 return self.randoEL.makeSucceededFuture(())
             }
@@ -219,14 +236,12 @@ class HTTPClientInternalTests: XCTestCase {
                 task: HTTPClient.Task<Response>,
                 _ buffer: ByteBuffer
             ) -> EventLoopFuture<Void> {
-                self.eventLoop.assertInEventLoop()
                 self.receivedMessages.append(.bodyPart(buffer))
                 return self.randoEL.makeSucceededFuture(())
             }
 
             func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
-                self.eventLoop.assertInEventLoop()
-                return (self.receivedMessages, self.sentMessages)
+                (self.receivedMessages, self.sentMessages)
             }
         }
 
@@ -460,11 +475,15 @@ class HTTPClientInternalTests: XCTestCase {
     }
 
     func testConnectErrorCalloutOnCorrectEL() throws {
-        class TestDelegate: HTTPClientResponseDelegate {
+        final class TestDelegate: HTTPClientResponseDelegate {
             typealias Response = Void
 
             let expectedEL: EventLoop
-            var receivedError: Bool = false
+            let _receivedError = NIOLockedValueBox(false)
+
+            var receivedError: Bool {
+                self._receivedError.withLockedValue { $0 }
+            }
 
             init(expectedEL: EventLoop) {
                 self.expectedEL = expectedEL
@@ -473,7 +492,7 @@ class HTTPClientInternalTests: XCTestCase {
             func didFinishRequest(task: HTTPClient.Task<Void>) throws {}
 
             func didReceiveError(task: HTTPClient.Task<Void>, _ error: Error) {
-                self.receivedError = true
+                self._receivedError.withLockedValue { $0 = true }
                 XCTAssertTrue(self.expectedEL.inEventLoop)
             }
         }
@@ -658,6 +677,7 @@ class HTTPClientInternalTests: XCTestCase {
             ).futureResult
         }
         _ = try EventLoopFuture.whenAllSucceed(resultFutures, on: self.clientGroup.next()).wait()
+
         let threadPools = delegates.map { $0._fileIOThreadPool }
         let firstThreadPool = threadPools.first ?? nil
         XCTAssert(threadPools.dropFirst().allSatisfy { $0 === firstThreadPool })

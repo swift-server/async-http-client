@@ -29,11 +29,9 @@ typealias PreparedRequest = HTTPClientRequest.Prepared
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 final class TransactionTests: XCTestCase {
     func testCancelAsyncRequest() {
-        // creating the `XCTestExpectation` off the main thread crashes on Linux with Swift 5.6
-        // therefore we create it here as a workaround which works fine
-        let scheduledRequestCanceled = self.expectation(description: "scheduled request canceled")
         XCTAsyncTest {
             let loop = NIOAsyncTestingEventLoop()
+            let scheduledRequestCanceled = loop.makePromise(of: Void.self)
             defer { XCTAssertNoThrow(try loop.syncShutdownGracefully()) }
 
             var request = HTTPClientRequest(url: "https://localhost/")
@@ -49,7 +47,7 @@ final class TransactionTests: XCTestCase {
             )
 
             let queuer = MockTaskQueuer { _ in
-                scheduledRequestCanceled.fulfill()
+                scheduledRequestCanceled.succeed()
             }
             transaction.requestWasQueued(queuer)
 
@@ -64,9 +62,7 @@ final class TransactionTests: XCTestCase {
             }
 
             // self.fulfillment(of:) is not available on Linux
-            _ = {
-                self.wait(for: [scheduledRequestCanceled], timeout: 1)
-            }()
+            try await scheduledRequestCanceled.futureResult.timeout(after: .seconds(1)).get()
         }
     }
 
@@ -590,22 +586,31 @@ final class TransactionTests: XCTestCase {
 // tasks. Since we want to wait for things to happen in tests, we need to `async let`, which creates
 // implicit tasks. Therefore we need to wrap our iterator struct.
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-actor SharedIterator<Wrapped: AsyncSequence> where Wrapped.Element: Sendable {
-    private var wrappedIterator: Wrapped.AsyncIterator
-    private var nextCallInProgress: Bool = false
+final class SharedIterator<Wrapped: AsyncSequence>: Sendable where Wrapped.Element: Sendable {
+    private struct State: @unchecked Sendable {
+        var wrappedIterator: Wrapped.AsyncIterator
+        var nextCallInProgress: Bool = false
+    }
+
+    private let state: NIOLockedValueBox<State>
 
     init(_ sequence: Wrapped) {
-        self.wrappedIterator = sequence.makeAsyncIterator()
+        self.state = NIOLockedValueBox(State(wrappedIterator: sequence.makeAsyncIterator()))
     }
 
     func next() async throws -> Wrapped.Element? {
-        precondition(self.nextCallInProgress == false)
-        self.nextCallInProgress = true
-        var iter = self.wrappedIterator
+        var iter = self.state.withLockedValue {
+            precondition($0.nextCallInProgress == false)
+            $0.nextCallInProgress = true
+            return $0.wrappedIterator
+        }
+
         defer {
-            precondition(self.nextCallInProgress == true)
-            self.nextCallInProgress = false
-            self.wrappedIterator = iter
+            self.state.withLockedValue {
+                precondition($0.nextCallInProgress == true)
+                $0.nextCallInProgress = false
+                $0.wrappedIterator = iter
+            }
         }
         return try await iter.next()
     }
@@ -613,7 +618,7 @@ actor SharedIterator<Wrapped: AsyncSequence> where Wrapped.Element: Sendable {
 
 /// non fail-able promise that only supports one observer
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-private actor Promise<Value> {
+private actor Promise<Value: Sendable> {
     private enum State {
         case initialised
         case fulfilled(Value)
@@ -652,8 +657,9 @@ private actor Promise<Value> {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension Transaction {
+    #if compiler(>=6.0)
     fileprivate static func makeWithResultTask(
-        request: PreparedRequest,
+        request: sending PreparedRequest,
         requestOptions: RequestOptions = .forTests(),
         logger: Logger = Logger(label: "test"),
         connectionDeadline: NIODeadline = .distantFuture,
@@ -679,4 +685,40 @@ extension Transaction {
 
         return (await transactionPromise.value, task)
     }
+    #else
+    fileprivate static func makeWithResultTask(
+        request: PreparedRequest,
+        requestOptions: RequestOptions = .forTests(),
+        logger: Logger = Logger(label: "test"),
+        connectionDeadline: NIODeadline = .distantFuture,
+        preferredEventLoop: EventLoop
+    ) async -> (Transaction, _Concurrency.Task<HTTPClientResponse, Error>) {
+        // It isn't sendable ... but on 6.0 and later we use 'sending'.
+        struct UnsafePrepareRequest: @unchecked Sendable {
+            var value: PreparedRequest
+        }
+
+        let transactionPromise = Promise<Transaction>()
+        let unsafe = UnsafePrepareRequest(value: request)
+        let task = Task {
+            try await withCheckedThrowingContinuation {
+                (continuation: CheckedContinuation<HTTPClientResponse, Error>) in
+                let request = unsafe.value
+                let transaction = Transaction(
+                    request: request,
+                    requestOptions: requestOptions,
+                    logger: logger,
+                    connectionDeadline: connectionDeadline,
+                    preferredEventLoop: preferredEventLoop,
+                    responseContinuation: continuation
+                )
+                Task {
+                    await transactionPromise.fulfil(transaction)
+                }
+            }
+        }
+
+        return (await transactionPromise.value, task)
+    }
+    #endif
 }
