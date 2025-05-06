@@ -338,6 +338,7 @@ public class HTTPClient {
         }
     }
 
+    @Sendable
     private func makeOrGetFileIOThreadPool() -> NIOThreadPool {
         self.fileIOThreadPoolLock.withLock {
             guard let fileIOThreadPool = self.fileIOThreadPool else {
