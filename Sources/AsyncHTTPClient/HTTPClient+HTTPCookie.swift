@@ -216,21 +216,12 @@ extension String.UTF8View.SubSequence {
     }
 }
 
-#if compiler(>=5.10)
 nonisolated(unsafe) private let posixLocale: UnsafeMutableRawPointer = {
     // All POSIX systems must provide a "POSIX" locale, and its date/time formats are US English.
     // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap07.html#tag_07_03_05
     let _posixLocale = newlocale(LC_TIME_MASK | LC_NUMERIC_MASK, "POSIX", nil)!
     return UnsafeMutableRawPointer(_posixLocale)
 }()
-#else
-private let posixLocale: UnsafeMutableRawPointer = {
-    // All POSIX systems must provide a "POSIX" locale, and its date/time formats are US English.
-    // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap07.html#tag_07_03_05
-    let _posixLocale = newlocale(LC_TIME_MASK | LC_NUMERIC_MASK, "POSIX", nil)!
-    return UnsafeMutableRawPointer(_posixLocale)
-}()
-#endif
 
 private func parseTimestamp(_ utf8: String.UTF8View.SubSequence, format: String) -> tm? {
     var timeComponents = tm()
