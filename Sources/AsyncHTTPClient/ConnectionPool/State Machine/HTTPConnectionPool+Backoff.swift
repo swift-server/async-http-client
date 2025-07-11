@@ -61,7 +61,7 @@ extension HTTPConnectionPool {
         // Calculate a 3% jitter range
         let jitterRange = (backoff.nanoseconds / 100) * 3
         // Pick a random element from the range +/- jitter range.
-        let jitter: TimeAmount = .nanoseconds((-jitterRange...jitterRange).randomElement()!)
+        let jitter: TimeAmount = .nanoseconds(Int64.random(in: -jitterRange...jitterRange))
         let jitteredBackoff = backoff + jitter
         return jitteredBackoff
     }
