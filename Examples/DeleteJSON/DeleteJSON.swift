@@ -4,7 +4,7 @@ import NIOCore
 import NIOFoundationCompat
 
 @main
-struct PostJSON {
+struct DeleteJSON {
     static func main() async throws {
         let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
 
