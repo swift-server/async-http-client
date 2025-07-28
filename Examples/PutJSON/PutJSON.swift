@@ -5,7 +5,8 @@ import NIOFoundationCompat
 
 struct Todo: Codable {
     var id: Int
-    var name: String
+    var userId: Int
+    var title: String
     var completed: Bool
 }
 
@@ -13,12 +14,12 @@ struct Todo: Codable {
 struct PostJSON {
     static func main() async throws {
         let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
-        let payload = Todo(id: 1, name: "Test Todo", completed: true)
+        let payload = Todo(id: 1, userId: 1, title: "Test Todo", completed: false)
 
         do {
             let jsonData = try JSONEncoder().encode(payload)
 
-            var request = HTTPClientRequest(url: "http://localhost:8080/todos/\(payload.id)")
+            var request = HTTPClientRequest(url: "https://jsonplaceholder.typicode.com/todos/\(payload.id)")
             request.method = .PUT
             request.headers.add(name: "Content-Type", value: "application/json")
             request.body = .bytes(jsonData)
