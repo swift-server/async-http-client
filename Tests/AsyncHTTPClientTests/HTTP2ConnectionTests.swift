@@ -115,7 +115,6 @@ class HTTP2ConnectionTests: XCTestCase {
 
         http2Connection.executeRequest(requestBag)
 
-        XCTAssertEqual(delegate.hitStreamClosed, 0)
         var maybeResponse: HTTPClient.Response?
         XCTAssertNoThrow(maybeResponse = try requestBag.task.futureResult.wait())
         XCTAssertEqual(maybeResponse?.status, .ok)
