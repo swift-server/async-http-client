@@ -60,13 +60,16 @@ extension TLSVersion {
 @available(macOS 10.14, iOS 12.0, tvOS 12.0, watchOS 5.0, *)
 extension TLSConfiguration {
     /// Dispatch queue used by Network framework TLS to control certificate verification
-    static var tlsDispatchQueue = DispatchQueue(label: "TLSDispatch")
+    static let tlsDispatchQueue = DispatchQueue(label: "TLSDispatch")
 
     /// create NWProtocolTLS.Options for use with NIOTransportServices from the NIOSSL TLSConfiguration
     ///
     /// - Parameter eventLoop: EventLoop to wait for creation of options on
     /// - Returns: Future holding NWProtocolTLS Options
-    func getNWProtocolTLSOptions(on eventLoop: EventLoop, serverNameIndicatorOverride: String?) -> EventLoopFuture<NWProtocolTLS.Options> {
+    func getNWProtocolTLSOptions(
+        on eventLoop: EventLoop,
+        serverNameIndicatorOverride: String?
+    ) -> EventLoopFuture<NWProtocolTLS.Options> {
         let promise = eventLoop.makePromise(of: NWProtocolTLS.Options.self)
         Self.tlsDispatchQueue.async {
             do {
@@ -86,11 +89,11 @@ extension TLSConfiguration {
         let options = NWProtocolTLS.Options()
 
         let useMTELGExplainer = """
-        You can still use this configuration option on macOS if you initialize HTTPClient \
-        with a MultiThreadedEventLoopGroup. Please note that using MultiThreadedEventLoopGroup \
-        will make AsyncHTTPClient use NIO on BSD Sockets and not Network.framework (which is the preferred \
-        platform networking stack).
-        """
+            You can still use this configuration option on macOS if you initialize HTTPClient \
+            with a MultiThreadedEventLoopGroup. Please note that using MultiThreadedEventLoopGroup \
+            will make AsyncHTTPClient use NIO on BSD Sockets and not Network.framework (which is the preferred \
+            platform networking stack).
+            """
 
         if let serverNameIndicatorOverride = serverNameIndicatorOverride {
             serverNameIndicatorOverride.withCString { serverNameIndicatorOverride in
@@ -100,15 +103,24 @@ extension TLSConfiguration {
 
         // minimum TLS protocol
         if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
-            sec_protocol_options_set_min_tls_protocol_version(options.securityProtocolOptions, self.minimumTLSVersion.nwTLSProtocolVersion)
+            sec_protocol_options_set_min_tls_protocol_version(
+                options.securityProtocolOptions,
+                self.minimumTLSVersion.nwTLSProtocolVersion
+            )
         } else {
-            sec_protocol_options_set_tls_min_version(options.securityProtocolOptions, self.minimumTLSVersion.sslProtocol)
+            sec_protocol_options_set_tls_min_version(
+                options.securityProtocolOptions,
+                self.minimumTLSVersion.sslProtocol
+            )
         }
 
         // maximum TLS protocol
         if let maximumTLSVersion = self.maximumTLSVersion {
             if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
-                sec_protocol_options_set_max_tls_protocol_version(options.securityProtocolOptions, maximumTLSVersion.nwTLSProtocolVersion)
+                sec_protocol_options_set_max_tls_protocol_version(
+                    options.securityProtocolOptions,
+                    maximumTLSVersion.nwTLSProtocolVersion
+                )
             } else {
                 sec_protocol_options_set_tls_max_version(options.securityProtocolOptions, maximumTLSVersion.sslProtocol)
             }
@@ -161,8 +173,10 @@ extension TLSConfiguration {
             break
         }
 
-        precondition(self.certificateVerification != .noHostnameVerification,
-                     "TLSConfiguration.certificateVerification = .noHostnameVerification is not supported. \(useMTELGExplainer)")
+        precondition(
+            self.certificateVerification != .noHostnameVerification,
+            "TLSConfiguration.certificateVerification = .noHostnameVerification is not supported. \(useMTELGExplainer)"
+        )
 
         if certificateVerification != .fullVerification || trustRoots != nil {
             // add verify block to control certificate verification
@@ -196,7 +210,8 @@ extension TLSConfiguration {
                             }
                         }
                     }
-                }, Self.tlsDispatchQueue
+                },
+                Self.tlsDispatchQueue
             )
         }
         return options

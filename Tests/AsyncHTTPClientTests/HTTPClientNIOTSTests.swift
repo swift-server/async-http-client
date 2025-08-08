@@ -12,16 +12,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
-#if canImport(Network)
-import Network
-#endif
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOPosix
 import NIOSSL
 import NIOTransportServices
 import XCTest
+
+@testable import AsyncHTTPClient
+
+#if canImport(Network)
+import Network
+#endif
 
 class HTTPClientNIOTSTests: XCTestCase {
     var clientGroup: EventLoopGroup!
@@ -55,11 +57,12 @@ class HTTPClientNIOTSTests: XCTestCase {
         guard isTestingNIOTS() else { return }
 
         let httpBin = HTTPBin(.http1_1(ssl: true))
-        var config = HTTPClient.Configuration()
-        config.networkFrameworkWaitForConnectivity = false
-        config.connectionPool.retryConnectionEstablishment = false
-        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                    configuration: config)
+        let config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+        let httpClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: config
+        )
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
             XCTAssertNoThrow(try httpBin.shutdown())
@@ -70,8 +73,10 @@ class HTTPClientNIOTSTests: XCTestCase {
             _ = try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait()
             XCTFail("This should have failed")
         } catch let error as HTTPClient.NWTLSError {
-            XCTAssert(error.status == errSSLHandshakeFail || error.status == errSSLBadCert,
-                      "unexpected NWTLSError with status \(error.status)")
+            XCTAssert(
+                error.status == errSSLHandshakeFail || error.status == errSSLBadCert,
+                "unexpected NWTLSError with status \(error.status)"
+            )
         } catch {
             XCTFail("Error should have been NWTLSError not \(type(of: error))")
         }
@@ -84,12 +89,13 @@ class HTTPClientNIOTSTests: XCTestCase {
         guard isTestingNIOTS() else { return }
         #if canImport(Network)
         let httpBin = HTTPBin(.http1_1(ssl: false))
-        var config = HTTPClient.Configuration()
-        config.networkFrameworkWaitForConnectivity = false
-        config.connectionPool.retryConnectionEstablishment = false
+        let config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
 
-        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                    configuration: config)
+        let httpClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: config
+        )
 
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
@@ -108,9 +114,15 @@ class HTTPClientNIOTSTests: XCTestCase {
         guard isTestingNIOTS() else { return }
         #if canImport(Network)
         let httpBin = HTTPBin(.http1_1(ssl: false))
-        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                    configuration: .init(timeout: .init(connect: .milliseconds(100),
-                                                                        read: .milliseconds(100))))
+        let httpClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: .init(
+                timeout: .init(
+                    connect: .milliseconds(100),
+                    read: .milliseconds(100)
+                )
+            )
+        )
 
         defer {
             XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
@@ -140,9 +152,8 @@ class HTTPClientNIOTSTests: XCTestCase {
         tlsConfig.minimumTLSVersion = .tlsv11
         tlsConfig.maximumTLSVersion = .tlsv1
 
-        var clientConfig = HTTPClient.Configuration(tlsConfiguration: tlsConfig)
-        clientConfig.networkFrameworkWaitForConnectivity = false
-        clientConfig.connectionPool.retryConnectionEstablishment = false
+        let clientConfig = HTTPClient.Configuration(tlsConfiguration: tlsConfig)
+            .enableFastFailureModeForTesting()
         let httpClient = HTTPClient(
             eventLoopGroupProvider: .shared(self.clientGroup),
             configuration: clientConfig

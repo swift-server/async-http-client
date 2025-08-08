@@ -13,7 +13,6 @@
 //===----------------------------------------------------------------------===//
 
 import Algorithms
-import Foundation
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -21,20 +20,27 @@ import NIOHTTP1
 import NIOPosix
 import NIOSSL
 
+#if compiler(>=6.0)
+import Foundation
+#else
+@preconcurrency import Foundation
+#endif
+
 extension HTTPClient {
     /// A request body.
-    public struct Body {
+    public struct Body: Sendable {
         /// A streaming uploader.
         ///
         /// ``StreamWriter`` abstracts
-        public struct StreamWriter {
-            let closure: (IOData) -> EventLoopFuture<Void>
+        public struct StreamWriter: Sendable {
+            let closure: @Sendable (IOData) -> EventLoopFuture<Void>
 
             /// Create new ``HTTPClient/Body/StreamWriter``
             ///
             /// - parameters:
             ///     - closure: function that will be called to write actual bytes to the channel.
-            public init(closure: @escaping (IOData) -> EventLoopFuture<Void>) {
+            @preconcurrency
+            public init(closure: @escaping @Sendable (IOData) -> EventLoopFuture<Void>) {
                 self.closure = closure
             }
 
@@ -43,34 +49,92 @@ extension HTTPClient {
             /// - parameters:
             ///     - data: `IOData` to write.
             public func write(_ data: IOData) -> EventLoopFuture<Void> {
-                return self.closure(data)
+                self.closure(data)
             }
 
             @inlinable
-            func writeChunks<Bytes: Collection>(of bytes: Bytes, maxChunkSize: Int) -> EventLoopFuture<Void> where Bytes.Element == UInt8 {
-                let iterator = UnsafeMutableTransferBox(bytes.chunks(ofCount: maxChunkSize).makeIterator())
-                guard let chunk = iterator.wrappedValue.next() else {
-                    return self.write(IOData.byteBuffer(.init()))
-                }
+            func writeChunks<Bytes: Collection>(
+                of bytes: Bytes,
+                maxChunkSize: Int
+            ) -> EventLoopFuture<Void> where Bytes.Element == UInt8, Bytes: Sendable {
+                // `StreamWriter` has design issues, for example
+                // - https://github.com/swift-server/async-http-client/issues/194
+                // - https://github.com/swift-server/async-http-client/issues/264
+                // - We're not told the EventLoop the task runs on and the user is free to return whatever EL they
+                //   want.
+                // One important consideration then is that we must lock around the iterator because we could be hopping
+                // between threads.
+                typealias Iterator = EnumeratedSequence<ChunksOfCountCollection<Bytes>>.Iterator
+                typealias Chunk = (offset: Int, element: ChunksOfCountCollection<Bytes>.Element)
 
-                @Sendable // can't use closure here as we recursively call ourselves which closures can't do
-                func writeNextChunk(_ chunk: Bytes.SubSequence) -> EventLoopFuture<Void> {
-                    if let nextChunk = iterator.wrappedValue.next() {
-                        return self.write(.byteBuffer(ByteBuffer(bytes: chunk))).flatMap {
-                            writeNextChunk(nextChunk)
+                // HACK (again, we're not told the right EventLoop): Let's write 0 bytes to make the user tell us...
+                return self.write(.byteBuffer(ByteBuffer())).flatMapWithEventLoop { (_, loop) in
+                    func makeIteratorAndFirstChunk(
+                        bytes: Bytes
+                    ) -> (iterator: Iterator, chunk: Chunk)? {
+                        var iterator = bytes.chunks(ofCount: maxChunkSize).enumerated().makeIterator()
+                        guard let chunk = iterator.next() else {
+                            return nil
                         }
-                    } else {
-                        return self.write(.byteBuffer(ByteBuffer(bytes: chunk)))
-                    }
-                }
 
-                return writeNextChunk(chunk)
+                        return (iterator, chunk)
+                    }
+
+                    guard let iteratorAndChunk = makeIteratorAndFirstChunk(bytes: bytes) else {
+                        return loop.makeSucceededVoidFuture()
+                    }
+
+                    var iterator = iteratorAndChunk.0
+                    let chunk = iteratorAndChunk.1
+
+                    // can't use closure here as we recursively call ourselves which closures can't do
+                    func writeNextChunk(_ chunk: Chunk, allDone: EventLoopPromise<Void>) {
+                        let loop = allDone.futureResult.eventLoop
+                        loop.assertInEventLoop()
+
+                        if let (index, element) = iterator.next() {
+                            self.write(.byteBuffer(ByteBuffer(bytes: chunk.element))).hop(to: loop).assumeIsolated().map
+                            {
+                                if (index + 1) % 4 == 0 {
+                                    // Let's not stack-overflow if the futures insta-complete which they at least in HTTP/2
+                                    // mode.
+                                    // Also, we must frequently return to the EventLoop because we may get the pause signal
+                                    // from another thread. If we fail to do that promptly, we may balloon our body chunks
+                                    // into memory.
+                                    allDone.futureResult.eventLoop.assumeIsolated().execute {
+                                        writeNextChunk((offset: index, element: element), allDone: allDone)
+                                    }
+                                } else {
+                                    writeNextChunk((offset: index, element: element), allDone: allDone)
+                                }
+                            }.nonisolated().cascadeFailure(to: allDone)
+                        } else {
+                            self.write(.byteBuffer(ByteBuffer(bytes: chunk.element))).cascade(to: allDone)
+                        }
+                    }
+
+                    let allDone = loop.makePromise(of: Void.self)
+                    writeNextChunk(chunk, allDone: allDone)
+                    return allDone.futureResult
+                }
             }
         }
 
         /// Body size. If nil,`Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
         /// header is set with the given `length`.
-        public var length: Int?
+        @available(*, deprecated, renamed: "contentLength")
+        public var length: Int? {
+            get {
+                self.contentLength.flatMap { Int($0) }
+            }
+            set {
+                self.contentLength = newValue.flatMap { Int64($0) }
+            }
+        }
+
+        /// Body size. If nil,`Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
+        /// header is set with the given `contentLength`.
+        public var contentLength: Int64?
 
         /// Body chunk provider.
         public var stream: @Sendable (StreamWriter) -> EventLoopFuture<Void>
@@ -78,8 +142,8 @@ extension HTTPClient {
         @usableFromInline typealias StreamCallback = @Sendable (StreamWriter) -> EventLoopFuture<Void>
 
         @inlinable
-        init(length: Int?, stream: @escaping StreamCallback) {
-            self.length = length
+        init(contentLength: Int64?, stream: @escaping StreamCallback) {
+            self.contentLength = contentLength.flatMap { $0 }
             self.stream = stream
         }
 
@@ -88,7 +152,7 @@ extension HTTPClient {
         /// - parameters:
         ///     - buffer: Body `ByteBuffer` representation.
         public static func byteBuffer(_ buffer: ByteBuffer) -> Body {
-            return Body(length: buffer.readableBytes) { writer in
+            Body(contentLength: Int64(buffer.readableBytes)) { writer in
                 writer.write(.byteBuffer(buffer))
             }
         }
@@ -99,19 +163,37 @@ extension HTTPClient {
         ///     - length: Body size. If nil, `Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
         /// header is set with the given `length`.
         ///     - stream: Body chunk provider.
+        @_disfavoredOverload
         @preconcurrency
-        public static func stream(length: Int? = nil, _ stream: @Sendable @escaping (StreamWriter) -> EventLoopFuture<Void>) -> Body {
-            return Body(length: length, stream: stream)
+        public static func stream(
+            length: Int? = nil,
+            _ stream: @Sendable @escaping (StreamWriter) -> EventLoopFuture<Void>
+        ) -> Body {
+            Body(contentLength: length.flatMap { Int64($0) }, stream: stream)
+        }
+
+        /// Create and stream body using ``StreamWriter``.
+        ///
+        /// - parameters:
+        ///     - contentLength: Body size. If nil, `Transfer-Encoding` will automatically be set to `chunked`. Otherwise a `Content-Length`
+        /// header is set with the given `contentLength`.
+        ///     - stream: Body chunk provider.
+        public static func stream(
+            contentLength: Int64? = nil,
+            _ stream: @Sendable @escaping (StreamWriter) -> EventLoopFuture<Void>
+        ) -> Body {
+            Body(contentLength: contentLength, stream: stream)
         }
 
         /// Create and stream body using a collection of bytes.
         ///
         /// - parameters:
-        ///     - data: Body binary representation.
+        ///     - bytes: Body binary representation.
         @preconcurrency
         @inlinable
-        public static func bytes<Bytes>(_ bytes: Bytes) -> Body where Bytes: RandomAccessCollection, Bytes: Sendable, Bytes.Element == UInt8 {
-            return Body(length: bytes.count) { writer in
+        public static func bytes<Bytes>(_ bytes: Bytes) -> Body
+        where Bytes: RandomAccessCollection, Bytes: Sendable, Bytes.Element == UInt8 {
+            Body(contentLength: Int64(bytes.count)) { writer in
                 if bytes.count <= bagOfBytesToByteBufferConversionChunkSize {
                     return writer.write(.byteBuffer(ByteBuffer(bytes: bytes)))
                 } else {
@@ -125,7 +207,7 @@ extension HTTPClient {
         /// - parameters:
         ///     - string: Body `String` representation.
         public static func string(_ string: String) -> Body {
-            return Body(length: string.utf8.count) { writer in
+            Body(contentLength: Int64(string.utf8.count)) { writer in
                 if string.utf8.count <= bagOfBytesToByteBufferConversionChunkSize {
                     return writer.write(.byteBuffer(ByteBuffer(string: string)))
                 } else {
@@ -136,7 +218,7 @@ extension HTTPClient {
     }
 
     /// Represents an HTTP request.
-    public struct Request {
+    public struct Request: Sendable {
         /// Request HTTP method, defaults to `GET`.
         public let method: HTTPMethod
         /// Remote URL.
@@ -161,7 +243,6 @@ extension HTTPClient {
         ///
         /// - parameters:
         ///     - url: Remote `URL`.
-        ///     - version: HTTP version.
         ///     - method: HTTP method.
         ///     - headers: Custom HTTP headers.
         ///     - body: Request body.
@@ -170,7 +251,12 @@ extension HTTPClient {
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
-        public init(url: String, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+        public init(
+            url: String,
+            method: HTTPMethod = .GET,
+            headers: HTTPHeaders = HTTPHeaders(),
+            body: Body? = nil
+        ) throws {
             try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: nil)
         }
 
@@ -178,7 +264,6 @@ extension HTTPClient {
         ///
         /// - parameters:
         ///     - url: Remote `URL`.
-        ///     - version: HTTP version.
         ///     - method: HTTP method.
         ///     - headers: Custom HTTP headers.
         ///     - body: Request body.
@@ -188,7 +273,13 @@ extension HTTPClient {
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
-        public init(url: String, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration?) throws {
+        public init(
+            url: String,
+            method: HTTPMethod = .GET,
+            headers: HTTPHeaders = HTTPHeaders(),
+            body: Body? = nil,
+            tlsConfiguration: TLSConfiguration?
+        ) throws {
             guard let url = URL(string: url) else {
                 throw HTTPClientError.invalidURL
             }
@@ -208,7 +299,8 @@ extension HTTPClient {
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
         ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
-        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws {
+        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws
+        {
             try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: nil)
         }
 
@@ -225,7 +317,13 @@ extension HTTPClient {
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
         ///     - `emptyHost` if URL does not contains a host.
         ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
-        public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil, tlsConfiguration: TLSConfiguration?) throws {
+        public init(
+            url: URL,
+            method: HTTPMethod = .GET,
+            headers: HTTPHeaders = HTTPHeaders(),
+            body: Body? = nil,
+            tlsConfiguration: TLSConfiguration?
+        ) throws {
             self.deconstructedURL = try DeconstructedURL(url: url)
 
             self.url = url
@@ -258,14 +356,26 @@ extension HTTPClient {
 
             head.headers.addHostIfNeeded(for: self.deconstructedURL)
 
-            let metadata = try head.headers.validateAndSetTransportFraming(method: self.method, bodyLength: .init(self.body))
+            let metadata = try head.headers.validateAndSetTransportFraming(
+                method: self.method,
+                bodyLength: .init(self.body)
+            )
 
             return (head, metadata)
+        }
+
+        /// Set basic auth for a request.
+        ///
+        /// - parameters:
+        ///     - username: the username to authenticate with
+        ///     - password: authentication password associated with the username
+        public mutating func setBasicAuth(username: String, password: String) {
+            self.headers.setBasicAuth(username: username, password: password)
         }
     }
 
     /// Represents an HTTP response.
-    public struct Response {
+    public struct Response: Sendable {
         /// Remote host of the request.
         public var host: String
         /// Response HTTP status.
@@ -276,6 +386,13 @@ extension HTTPClient {
         public var headers: HTTPHeaders
         /// Response body.
         public var body: ByteBuffer?
+        /// The history of all requests and responses in redirect order.
+        public var history: [RequestResponse]
+
+        /// The target URL (after redirects) of the response.
+        public var url: URL? {
+            self.history.last?.request.url
+        }
 
         /// Create HTTP `Response`.
         ///
@@ -291,6 +408,7 @@ extension HTTPClient {
             self.version = HTTPVersion(major: 1, minor: 1)
             self.headers = headers
             self.body = body
+            self.history = []
         }
 
         /// Create HTTP `Response`.
@@ -301,12 +419,44 @@ extension HTTPClient {
         ///     - version: Response HTTP version.
         ///     - headers: Reponse HTTP headers.
         ///     - body: Response body.
-        public init(host: String, status: HTTPResponseStatus, version: HTTPVersion, headers: HTTPHeaders, body: ByteBuffer?) {
+        public init(
+            host: String,
+            status: HTTPResponseStatus,
+            version: HTTPVersion,
+            headers: HTTPHeaders,
+            body: ByteBuffer?
+        ) {
             self.host = host
             self.status = status
             self.version = version
             self.headers = headers
             self.body = body
+            self.history = []
+        }
+
+        /// Create HTTP `Response`.
+        ///
+        /// - parameters:
+        ///     - host: Remote host of the request.
+        ///     - status: Response HTTP status.
+        ///     - version: Response HTTP version.
+        ///     - headers: Reponse HTTP headers.
+        ///     - body: Response body.
+        ///     - history: History of all requests and responses in redirect order.
+        public init(
+            host: String,
+            status: HTTPResponseStatus,
+            version: HTTPVersion,
+            headers: HTTPHeaders,
+            body: ByteBuffer?,
+            history: [RequestResponse]
+        ) {
+            self.host = host
+            self.status = status
+            self.version = version
+            self.headers = headers
+            self.body = body
+            self.history = history
         }
     }
 
@@ -325,19 +475,19 @@ extension HTTPClient {
 
         /// HTTP basic auth.
         public static func basic(username: String, password: String) -> HTTPClient.Authorization {
-            return .basic(credentials: Base64.encode(bytes: "\(username):\(password)".utf8))
+            .basic(credentials: Base64.encode(bytes: "\(username):\(password)".utf8))
         }
 
         /// HTTP basic auth.
         ///
         /// This version uses the raw string directly.
         public static func basic(credentials: String) -> HTTPClient.Authorization {
-            return .init(scheme: .Basic(credentials))
+            .init(scheme: .Basic(credentials))
         }
 
         /// HTTP bearer auth
         public static func bearer(tokens: String) -> HTTPClient.Authorization {
-            return .init(scheme: .Bearer(tokens))
+            .init(scheme: .Bearer(tokens))
         }
 
         /// The header string for this auth field.
@@ -348,6 +498,16 @@ extension HTTPClient {
             case .Bearer(let tokens):
                 return "Bearer \(tokens)"
             }
+        }
+    }
+
+    public struct RequestResponse: Sendable {
+        public var request: Request
+        public var responseHead: HTTPResponseHead
+
+        public init(request: Request, responseHead: HTTPResponseHead) {
+            self.request = request
+            self.responseHead = responseHead
         }
     }
 }
@@ -374,11 +534,16 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
         }
 
         public var description: String {
-            return "ResponseTooBigError: received response body exceeds maximum accepted size of \(self.maxBodySize) bytes"
+            "ResponseTooBigError: received response body exceeds maximum accepted size of \(self.maxBodySize) bytes"
         }
     }
 
-    var state = State.idle
+    private struct MutableState: Sendable {
+        var history = [HTTPClient.RequestResponse]()
+        var state = State.idle
+    }
+
+    private let state: NIOLockedValueBox<MutableState>
     let requestMethod: HTTPMethod
     let requestHost: String
 
@@ -412,84 +577,126 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
         self.requestMethod = request.method
         self.requestHost = request.host
         self.maxBodySize = maxBodySize
+        self.state = NIOLockedValueBox(MutableState())
+    }
+
+    public func didVisitURL(
+        task: HTTPClient.Task<HTTPClient.Response>,
+        _ request: HTTPClient.Request,
+        _ head: HTTPResponseHead
+    ) {
+        self.state.withLockedValue {
+            $0.history.append(.init(request: request, responseHead: head))
+        }
     }
 
     public func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
-        switch self.state {
-        case .idle:
-            if self.requestMethod != .HEAD,
-               let contentLength = head.headers.first(name: "Content-Length"),
-               let announcedBodySize = Int(contentLength),
-               announcedBodySize > self.maxBodySize {
-                let error = ResponseTooBigError(maxBodySize: maxBodySize)
-                self.state = .error(error)
-                return task.eventLoop.makeFailedFuture(error)
-            }
+        let responseTooBig: Bool
 
-            self.state = .head(head)
-        case .head:
-            preconditionFailure("head already set")
-        case .body:
-            preconditionFailure("no head received before body")
-        case .end:
-            preconditionFailure("request already processed")
-        case .error:
-            break
+        if self.requestMethod != .HEAD,
+            let contentLength = head.headers.first(name: "Content-Length"),
+            let announcedBodySize = Int(contentLength),
+            announcedBodySize > self.maxBodySize
+        {
+            responseTooBig = true
+        } else {
+            responseTooBig = false
         }
-        return task.eventLoop.makeSucceededFuture(())
+
+        return self.state.withLockedValue {
+            switch $0.state {
+            case .idle:
+                if responseTooBig {
+                    let error = ResponseTooBigError(maxBodySize: self.maxBodySize)
+                    $0.state = .error(error)
+                    return task.eventLoop.makeFailedFuture(error)
+                }
+
+                $0.state = .head(head)
+            case .head:
+                preconditionFailure("head already set")
+            case .body:
+                preconditionFailure("no head received before body")
+            case .end:
+                preconditionFailure("request already processed")
+            case .error:
+                break
+            }
+            return task.eventLoop.makeSucceededFuture(())
+        }
     }
 
     public func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void> {
-        switch self.state {
-        case .idle:
-            preconditionFailure("no head received before body")
-        case .head(let head):
-            guard part.readableBytes <= self.maxBodySize else {
-                let error = ResponseTooBigError(maxBodySize: self.maxBodySize)
-                self.state = .error(error)
-                return task.eventLoop.makeFailedFuture(error)
-            }
-            self.state = .body(head, part)
-        case .body(let head, var body):
-            let newBufferSize = body.writerIndex + part.readableBytes
-            guard newBufferSize <= self.maxBodySize else {
-                let error = ResponseTooBigError(maxBodySize: self.maxBodySize)
-                self.state = .error(error)
-                return task.eventLoop.makeFailedFuture(error)
-            }
+        self.state.withLockedValue {
+            switch $0.state {
+            case .idle:
+                preconditionFailure("no head received before body")
+            case .head(let head):
+                guard part.readableBytes <= self.maxBodySize else {
+                    let error = ResponseTooBigError(maxBodySize: self.maxBodySize)
+                    $0.state = .error(error)
+                    return task.eventLoop.makeFailedFuture(error)
+                }
+                $0.state = .body(head, part)
+            case .body(let head, var body):
+                let newBufferSize = body.writerIndex + part.readableBytes
+                guard newBufferSize <= self.maxBodySize else {
+                    let error = ResponseTooBigError(maxBodySize: self.maxBodySize)
+                    $0.state = .error(error)
+                    return task.eventLoop.makeFailedFuture(error)
+                }
 
-            // The compiler can't prove that `self.state` is dead here (and it kinda isn't, there's
-            // a cross-module call in the way) so we need to drop the original reference to `body` in
-            // `self.state` or we'll get a CoW. To fix that we temporarily set the state to `.end` (which
-            // has no associated data). We'll fix it at the bottom of this block.
-            self.state = .end
-            var part = part
-            body.writeBuffer(&part)
-            self.state = .body(head, body)
-        case .end:
-            preconditionFailure("request already processed")
-        case .error:
-            break
+                // The compiler can't prove that `self.state` is dead here (and it kinda isn't, there's
+                // a cross-module call in the way) so we need to drop the original reference to `body` in
+                // `self.state` or we'll get a CoW. To fix that we temporarily set the state to `.end` (which
+                // has no associated data). We'll fix it at the bottom of this block.
+                $0.state = .end
+                var part = part
+                body.writeBuffer(&part)
+                $0.state = .body(head, body)
+            case .end:
+                preconditionFailure("request already processed")
+            case .error:
+                break
+            }
+            return task.eventLoop.makeSucceededFuture(())
         }
-        return task.eventLoop.makeSucceededFuture(())
     }
 
     public func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
-        self.state = .error(error)
+        self.state.withLockedValue {
+            $0.state = .error(error)
+        }
     }
 
     public func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
-        switch self.state {
-        case .idle:
-            preconditionFailure("no head received before end")
-        case .head(let head):
-            return Response(host: self.requestHost, status: head.status, version: head.version, headers: head.headers, body: nil)
-        case .body(let head, let body):
-            return Response(host: self.requestHost, status: head.status, version: head.version, headers: head.headers, body: body)
-        case .end:
-            preconditionFailure("request already processed")
-        case .error(let error):
-            throw error
+        try self.state.withLockedValue {
+            switch $0.state {
+            case .idle:
+                preconditionFailure("no head received before end")
+            case .head(let head):
+                return Response(
+                    host: self.requestHost,
+                    status: head.status,
+                    version: head.version,
+                    headers: head.headers,
+                    body: nil,
+                    history: $0.history
+                )
+            case .body(let head, let body):
+                return Response(
+                    host: self.requestHost,
+                    status: head.status,
+                    version: head.version,
+                    headers: head.headers,
+                    body: body,
+                    history: $0.history
+                )
+            case .end:
+                preconditionFailure("request already processed")
+            case .error(let error):
+                throw error
+            }
         }
     }
 }
@@ -525,8 +732,9 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
 ///          released together with the `HTTPTaskHandler` when channel is closed.
 ///          Users of the library are not required to keep a reference to the
 ///          object that implements this protocol, but may do so if needed.
-public protocol HTTPClientResponseDelegate: AnyObject {
-    associatedtype Response
+@preconcurrency
+public protocol HTTPClientResponseDelegate: AnyObject, Sendable {
+    associatedtype Response: Sendable
 
     /// Called when the request head is sent. Will be called once.
     ///
@@ -548,7 +756,16 @@ public protocol HTTPClientResponseDelegate: AnyObject {
     ///     - task: Current request context.
     func didSendRequest(task: HTTPClient.Task<Response>)
 
-    /// Called when response head is received. Will be called once.
+    /// Called each time a response head is received (including redirects), and always called before ``HTTPClientResponseDelegate/didReceiveHead(task:_:)-9r4xd``.
+    /// You can use this method to keep an entire history of the request/response chain.
+    ///
+    /// - parameters:
+    ///     - task: Current request context.
+    ///     - request: The request that was sent.
+    ///     - head: Received response head.
+    func didVisitURL(task: HTTPClient.Task<Response>, _ request: HTTPClient.Request, _ head: HTTPResponseHead)
+
+    /// Called when the final response head is received (after redirects).
     /// You must return an `EventLoopFuture<Void>` that you complete when you have finished processing the body part.
     /// You can create an already succeeded future by calling `task.eventLoop.makeSucceededFuture(())`.
     ///
@@ -614,18 +831,23 @@ extension HTTPClientResponseDelegate {
     /// By default, this does nothing.
     public func didSendRequest(task: HTTPClient.Task<Response>) {}
 
+    /// Default implementation of ``HTTPClientResponseDelegate/didVisitURL(task:_:_:)-2el9y``.
+    ///
+    /// By default, this does nothing.
+    public func didVisitURL(task: HTTPClient.Task<Response>, _: HTTPClient.Request, _: HTTPResponseHead) {}
+
     /// Default implementation of ``HTTPClientResponseDelegate/didReceiveHead(task:_:)-9r4xd``.
     ///
     /// By default, this does nothing.
     public func didReceiveHead(task: HTTPClient.Task<Response>, _: HTTPResponseHead) -> EventLoopFuture<Void> {
-        return task.eventLoop.makeSucceededVoidFuture()
+        task.eventLoop.makeSucceededVoidFuture()
     }
 
     /// Default implementation of ``HTTPClientResponseDelegate/didReceiveBodyPart(task:_:)-4fd4v``.
     ///
     /// By default, this does nothing.
     public func didReceiveBodyPart(task: HTTPClient.Task<Response>, _: ByteBuffer) -> EventLoopFuture<Void> {
-        return task.eventLoop.makeSucceededVoidFuture()
+        task.eventLoop.makeSucceededVoidFuture()
     }
 
     /// Default implementation of ``HTTPClientResponseDelegate/didReceiveError(task:_:)-fhsg``.
@@ -639,7 +861,7 @@ extension URL {
         if self.path.isEmpty {
             return "/"
         }
-        return URLComponents(url: self, resolvingAgainstBaseURL: false)?.percentEncodedPath ?? self.path
+        return URLComponents(url: self, resolvingAgainstBaseURL: true)?.percentEncodedPath ?? self.path
     }
 
     var uri: String {
@@ -653,7 +875,7 @@ extension URL {
     }
 
     func hasTheSameOrigin(as other: URL) -> Bool {
-        return self.host == other.host && self.scheme == other.scheme && self.port == other.port
+        self.host == other.host && self.scheme == other.scheme && self.port == other.port
     }
 
     /// Initializes a newly created HTTP URL connecting to a unix domain socket path. The socket path is encoded as the URL's host, replacing percent encoding invalid path characters, and will use the "http+unix" scheme.
@@ -687,7 +909,7 @@ extension URL {
     }
 }
 
-protocol HTTPClientTaskDelegate {
+protocol HTTPClientTaskDelegate: Sendable {
     func fail(_ error: Error)
 }
 
@@ -696,58 +918,67 @@ extension HTTPClient {
     ///
     /// Will be created by the library and could be used for obtaining
     /// `EventLoopFuture<Response>` of the execution or cancellation of the execution.
-    public final class Task<Response> {
+    public final class Task<Response>: Sendable {
         /// The `EventLoop` the delegate will be executed on.
         public let eventLoop: EventLoop
         /// The `Logger` used by the `Task` for logging.
-        public let logger: Logger // We are okay to store the logger here because a Task is for only one request.
+        public let logger: Logger  // We are okay to store the logger here because a Task is for only one request.
 
         let promise: EventLoopPromise<Response>
 
+        struct State: Sendable {
+            var isCancelled: Bool
+            var taskDelegate: HTTPClientTaskDelegate?
+        }
+
+        private let state: NIOLockedValueBox<State>
+
         var isCancelled: Bool {
-            self.lock.withLock { self._isCancelled }
+            self.state.withLockedValue { $0.isCancelled }
         }
 
         var taskDelegate: HTTPClientTaskDelegate? {
             get {
-                self.lock.withLock { self._taskDelegate }
+                self.state.withLockedValue { $0.taskDelegate }
             }
             set {
-                self.lock.withLock { self._taskDelegate = newValue }
+                self.state.withLockedValue { $0.taskDelegate = newValue }
             }
         }
 
-        private var _isCancelled: Bool = false
-        private var _taskDelegate: HTTPClientTaskDelegate?
-        private let lock = NIOLock()
-        private let makeOrGetFileIOThreadPool: () -> NIOThreadPool
+        private let makeOrGetFileIOThreadPool: @Sendable () -> NIOThreadPool
 
         /// The shared thread pool of a ``HTTPClient`` used for file IO. It is lazily created on first access.
         internal var fileIOThreadPool: NIOThreadPool {
             self.makeOrGetFileIOThreadPool()
         }
 
-        init(eventLoop: EventLoop, logger: Logger, makeOrGetFileIOThreadPool: @escaping () -> NIOThreadPool) {
+        init(eventLoop: EventLoop, logger: Logger, makeOrGetFileIOThreadPool: @escaping @Sendable () -> NIOThreadPool) {
             self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.logger = logger
             self.makeOrGetFileIOThreadPool = makeOrGetFileIOThreadPool
+            self.state = NIOLockedValueBox(State(isCancelled: false, taskDelegate: nil))
         }
 
         static func failedTask(
             eventLoop: EventLoop,
             error: Error,
             logger: Logger,
-            makeOrGetFileIOThreadPool: @escaping () -> NIOThreadPool
+            makeOrGetFileIOThreadPool: @escaping @Sendable () -> NIOThreadPool
         ) -> Task<Response> {
-            let task = self.init(eventLoop: eventLoop, logger: logger, makeOrGetFileIOThreadPool: makeOrGetFileIOThreadPool)
+            let task = self.init(
+                eventLoop: eventLoop,
+                logger: logger,
+                makeOrGetFileIOThreadPool: makeOrGetFileIOThreadPool
+            )
             task.promise.fail(error)
             return task
         }
 
         /// `EventLoopFuture` for the response returned by this request.
         public var futureResult: EventLoopFuture<Response> {
-            return self.promise.futureResult
+            self.promise.futureResult
         }
 
         /// Waits for execution of this request to complete.
@@ -755,56 +986,58 @@ extension HTTPClient {
         /// - returns: The value of  ``futureResult`` when it completes.
         /// - throws: The error value of ``futureResult`` if it errors.
         @available(*, noasync, message: "wait() can block indefinitely, prefer get()", renamed: "get()")
-        public func wait() throws -> Response {
-            return try self.promise.futureResult.wait()
+        @preconcurrency
+        public func wait() throws -> Response where Response: Sendable {
+            try self.promise.futureResult.wait()
         }
 
         /// Provides the result of this request.
         ///
+        /// - warning: This method may violates Structured Concurrency because doesn't respect cancellation.
+        ///
         /// - returns: The value of ``futureResult`` when it completes.
         /// - throws: The error value of ``futureResult`` if it errors.
         @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-        public func get() async throws -> Response {
-            return try await self.promise.futureResult.get()
+        @preconcurrency
+        public func get() async throws -> Response where Response: Sendable {
+            try await self.promise.futureResult.get()
         }
 
-        /// Cancels the request execution.
+        /// Initiate cancellation of a HTTP request.
+        ///
+        /// This method will return immeidately and doesn't wait for the cancellation to complete.
         public func cancel() {
             self.fail(reason: HTTPClientError.cancelled)
         }
 
-        /// Cancels the request execution with a custom `Error`.
-        /// - Parameter reason: the error that is used to fail the promise
+        /// Initiate cancellation of a HTTP request with an `error`.
+        ///
+        /// This method will return immeidately and doesn't wait for the cancellation to complete.
+        ///
+        /// - Parameter error: the error that is used to fail the promise
         public func fail(reason error: Error) {
-            let taskDelegate = self.lock.withLock { () -> HTTPClientTaskDelegate? in
-                self._isCancelled = true
-                return self._taskDelegate
+            let taskDelegate = self.state.withLockedValue { state in
+                state.isCancelled = true
+                return state.taskDelegate
             }
 
             taskDelegate?.fail(error)
         }
 
-        func succeed<Delegate: HTTPClientResponseDelegate>(promise: EventLoopPromise<Response>?,
-                                                           with value: Response,
-                                                           delegateType: Delegate.Type,
-                                                           closing: Bool) {
-            promise?.succeed(value)
-        }
-
-        func fail<Delegate: HTTPClientResponseDelegate>(with error: Error,
-                                                        delegateType: Delegate.Type) {
+        /// Called internally only, used to fail a task from within the state machine functionality.
+        func failInternal(
+            with error: Error
+        ) {
             self.promise.fail(error)
         }
     }
 }
 
-extension HTTPClient.Task: @unchecked Sendable {}
-
 internal struct TaskCancelEvent {}
 
 // MARK: - RedirectHandler
 
-internal struct RedirectHandler<ResponseType> {
+internal struct RedirectHandler<ResponseType: Sendable> {
     let request: HTTPClient.Request
     let redirectState: RedirectState
     let execute: (HTTPClient.Request, RedirectState) -> HTTPClient.Task<ResponseType>
@@ -821,7 +1054,7 @@ internal struct RedirectHandler<ResponseType> {
         status: HTTPResponseStatus,
         to redirectURL: URL,
         promise: EventLoopPromise<ResponseType>
-    ) {
+    ) -> HTTPClient.Task<ResponseType>? {
         do {
             var redirectState = self.redirectState
             try redirectState.redirect(to: redirectURL.absoluteString)
@@ -841,13 +1074,19 @@ internal struct RedirectHandler<ResponseType> {
                 headers: headers,
                 body: body
             )
-            self.execute(newRequest, redirectState).futureResult.whenComplete { result in
+
+            let newTask = self.execute(newRequest, redirectState)
+
+            newTask.futureResult.whenComplete { result in
                 promise.futureResult.eventLoop.execute {
                     promise.completeWith(result)
                 }
             }
+
+            return newTask
         } catch {
             promise.fail(error)
+            return nil
         }
     }
 }
@@ -858,7 +1097,7 @@ extension RequestBodyLength {
             self = .known(0)
             return
         }
-        guard let length = body.length else {
+        guard let length = body.contentLength else {
             self = .unknown
             return
         }

@@ -42,7 +42,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
 
     private var proxyEstablishedPromise: EventLoopPromise<Void>?
     var proxyEstablishedFuture: EventLoopFuture<Void>? {
-        return self.proxyEstablishedPromise?.futureResult
+        self.proxyEstablishedPromise?.futureResult
     }
 
     convenience init(
@@ -53,10 +53,10 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
         let targetHost: String
         let targetPort: Int
         switch target {
-        case .ipAddress(serialization: let serialization, address: let address):
+        case .ipAddress(let serialization, let address):
             targetHost = serialization
             targetPort = address.port!
-        case .domain(name: let domain, port: let port):
+        case .domain(name: let domain, let port):
             targetHost = domain
             targetPort = port
         case .unixSocket:
@@ -70,10 +70,12 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
         )
     }
 
-    init(targetHost: String,
-         targetPort: Int,
-         proxyAuthorization: HTTPClient.Authorization?,
-         deadline: NIODeadline) {
+    init(
+        targetHost: String,
+        targetPort: Int,
+        proxyAuthorization: HTTPClient.Authorization?,
+        deadline: NIODeadline
+    ) {
         self.targetHost = targetHost
         self.targetPort = targetPort
         self.proxyAuthorization = proxyAuthorization
@@ -135,7 +137,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
             return
         }
 
-        let timeout = context.eventLoop.scheduleTask(deadline: self.deadline) {
+        let timeout = context.eventLoop.assumeIsolated().scheduleTask(deadline: self.deadline) {
             switch self.state {
             case .initialized:
                 preconditionFailure("How can we have a scheduled timeout, if the connection is not even up?")

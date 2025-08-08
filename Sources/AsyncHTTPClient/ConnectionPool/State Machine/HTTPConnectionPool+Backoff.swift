@@ -13,10 +13,13 @@
 //===----------------------------------------------------------------------===//
 
 import NIOCore
+
 #if canImport(Darwin)
 import func Darwin.pow
 #elseif canImport(Musl)
 import func Musl.pow
+#elseif canImport(Android)
+import func Android.pow
 #else
 import func Glibc.pow
 #endif
@@ -58,7 +61,7 @@ extension HTTPConnectionPool {
         // Calculate a 3% jitter range
         let jitterRange = (backoff.nanoseconds / 100) * 3
         // Pick a random element from the range +/- jitter range.
-        let jitter: TimeAmount = .nanoseconds((-jitterRange...jitterRange).randomElement()!)
+        let jitter: TimeAmount = .nanoseconds(Int64.random(in: -jitterRange...jitterRange))
         let jitteredBackoff = backoff + jitter
         return jitteredBackoff
     }

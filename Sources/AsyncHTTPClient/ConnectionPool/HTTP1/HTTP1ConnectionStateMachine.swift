@@ -140,7 +140,7 @@ struct HTTP1ConnectionStateMachine {
             self.state = .closed
             return .fireChannelError(error, closeConnection: false)
 
-        case .inRequest(var requestStateMachine, close: let close):
+        case .inRequest(var requestStateMachine, let close):
             return self.avoidingStateMachineCoW { state -> Action in
                 let action = requestStateMachine.errorHappened(error)
                 state = .inRequest(requestStateMachine, close: close)
@@ -239,7 +239,9 @@ struct HTTP1ConnectionStateMachine {
     mutating func requestCancelled(closeConnection: Bool) -> Action {
         switch self.state {
         case .initialized:
-            fatalError("This event must only happen, if the connection is leased. During startup this is impossible. Invalid state: \(self.state)")
+            fatalError(
+                "This event must only happen, if the connection is leased. During startup this is impossible. Invalid state: \(self.state)"
+            )
 
         case .idle:
             if closeConnection {
@@ -249,7 +251,7 @@ struct HTTP1ConnectionStateMachine {
                 return .wait
             }
 
-        case .inRequest(var requestStateMachine, close: let close):
+        case .inRequest(var requestStateMachine, let close):
             return self.avoidingStateMachineCoW { state -> Action in
                 let action = requestStateMachine.requestCancelled()
                 state = .inRequest(requestStateMachine, close: close || closeConnection)
@@ -357,7 +359,7 @@ struct HTTP1ConnectionStateMachine {
 
     mutating func idleWriteTimeoutTriggered() -> Action {
         guard case .inRequest(var requestStateMachine, let close) = self.state else {
-            preconditionFailure("Invalid state: \(self.state)")
+            return .wait
         }
 
         return self.avoidingStateMachineCoW { state -> Action in
@@ -415,12 +417,16 @@ extension HTTP1ConnectionStateMachine {
 }
 
 extension HTTP1ConnectionStateMachine.State {
-    fileprivate mutating func modify(with action: HTTPRequestStateMachine.Action) -> HTTP1ConnectionStateMachine.Action {
+    fileprivate mutating func modify(with action: HTTPRequestStateMachine.Action) -> HTTP1ConnectionStateMachine.Action
+    {
         switch action {
         case .sendRequestHead(let head, let sendEnd):
             return .sendRequestHead(head, sendEnd: sendEnd)
         case .notifyRequestHeadSendSuccessfully(let resumeRequestBodyStream, let startIdleTimer):
-            return .notifyRequestHeadSendSuccessfully(resumeRequestBodyStream: resumeRequestBodyStream, startIdleTimer: startIdleTimer)
+            return .notifyRequestHeadSendSuccessfully(
+                resumeRequestBodyStream: resumeRequestBodyStream,
+                startIdleTimer: startIdleTimer
+            )
         case .pauseRequestBodyStream:
             return .pauseRequestBodyStream
         case .resumeRequestBodyStream:
@@ -458,7 +464,7 @@ extension HTTP1ConnectionStateMachine.State {
                 fatalError("Invalid state: \(self)")
             case .idle:
                 fatalError("How can we fail a task, if we are idle")
-            case .inRequest(_, close: let close):
+            case .inRequest(_, let close):
                 if case .close(let promise) = finalAction {
                     self = .closing
                     return .failRequest(error, .close(promise))
@@ -502,7 +508,7 @@ extension HTTP1ConnectionStateMachine: CustomStringConvertible {
             return ".initialized"
         case .idle:
             return ".idle"
-        case .inRequest(let request, close: let close):
+        case .inRequest(let request, let close):
             return ".inRequest(\(request), closeAfterRequest: \(close))"
         case .closing:
             return ".closing"

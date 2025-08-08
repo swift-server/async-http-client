@@ -14,9 +14,6 @@
 
 import AsyncHTTPClient
 import Atomics
-#if canImport(Network)
-import Network
-#endif
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -29,6 +26,10 @@ import NIOTestUtils
 import NIOTransportServices
 import XCTest
 
+#if canImport(Network)
+import Network
+#endif
+
 final class NoBytesSentOverBodyLimitTests: XCTestCaseHTTPClientTestsBaseClass {
     func testNoBytesSentOverBodyLimit() throws {
         let server = NIOHTTP1TestServer(group: self.serverGroup)
@@ -40,7 +41,7 @@ final class NoBytesSentOverBodyLimitTests: XCTestCaseHTTPClientTestsBaseClass {
 
         let request = try Request(
             url: "http://localhost:\(server.serverPort)",
-            body: .stream(length: 1) { streamWriter in
+            body: .stream(contentLength: 1) { streamWriter in
                 streamWriter.write(.byteBuffer(ByteBuffer(string: tooLong)))
             }
         )

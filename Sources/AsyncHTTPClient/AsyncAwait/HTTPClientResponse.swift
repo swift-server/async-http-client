@@ -15,6 +15,8 @@
 import NIOCore
 import NIOHTTP1
 
+import struct Foundation.URL
+
 /// A representation of an HTTP response for the Swift Concurrency HTTPClient API.
 ///
 /// This object is similar to ``HTTPClient/Response``, but used for the Swift Concurrency API.
@@ -32,6 +34,18 @@ public struct HTTPClientResponse: Sendable {
     /// The body of this HTTP response.
     public var body: Body
 
+    /// The history of all requests and responses in redirect order.
+    public var history: [HTTPClientRequestResponse]
+
+    /// The target URL (after redirects) of the response.
+    public var url: URL? {
+        guard let lastRequestURL = self.history.last?.request.url else {
+            return nil
+        }
+
+        return URL(string: lastRequestURL)
+    }
+
     @inlinable public init(
         version: HTTPVersion = .http1_1,
         status: HTTPResponseStatus = .ok,
@@ -42,6 +56,21 @@ public struct HTTPClientResponse: Sendable {
         self.status = status
         self.headers = headers
         self.body = body
+        self.history = []
+    }
+
+    @inlinable public init(
+        version: HTTPVersion = .http1_1,
+        status: HTTPResponseStatus = .ok,
+        headers: HTTPHeaders = [:],
+        body: Body = Body(),
+        history: [HTTPClientRequestResponse] = []
+    ) {
+        self.version = version
+        self.status = status
+        self.headers = headers
+        self.body = body
+        self.history = history
     }
 
     init(
@@ -49,21 +78,36 @@ public struct HTTPClientResponse: Sendable {
         version: HTTPVersion,
         status: HTTPResponseStatus,
         headers: HTTPHeaders,
-        body: TransactionBody
+        body: TransactionBody,
+        history: [HTTPClientRequestResponse]
     ) {
         self.init(
             version: version,
             status: status,
             headers: headers,
-            body: .init(.transaction(
-                body,
-                expectedContentLength: HTTPClientResponse.expectedContentLength(
-                    requestMethod: requestMethod,
-                    headers: headers,
-                    status: status
+            body: .init(
+                .transaction(
+                    body,
+                    expectedContentLength: HTTPClientResponse.expectedContentLength(
+                        requestMethod: requestMethod,
+                        headers: headers,
+                        status: status
+                    )
                 )
-            ))
+            ),
+            history: history
         )
+    }
+}
+
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+public struct HTTPClientRequestResponse: Sendable {
+    public var request: HTTPClientRequest
+    public var responseHead: HTTPResponseHead
+
+    public init(request: HTTPClientRequest, responseHead: HTTPResponseHead) {
+        self.request = request
+        self.responseHead = responseHead
     }
 }
 
@@ -108,7 +152,7 @@ extension HTTPClientResponse {
             case .transaction(_, let expectedContentLength):
                 if let contentLength = expectedContentLength {
                     if contentLength > maxBytes {
-                        throw NIOTooManyBytesError()
+                        throw NIOTooManyBytesError(maxBytes: maxBytes)
                     }
                 }
             case .anyAsyncSequence:
@@ -116,7 +160,8 @@ extension HTTPClientResponse {
             }
 
             /// calling collect function within here in order to ensure the correct nested type
-            func collect<Body: AsyncSequence>(_ body: Body, maxBytes: Int) async throws -> ByteBuffer where Body.Element == ByteBuffer {
+            func collect<Body: AsyncSequence>(_ body: Body, maxBytes: Int) async throws -> ByteBuffer
+            where Body.Element == ByteBuffer {
                 try await body.collect(upTo: maxBytes)
             }
             return try await collect(self, maxBytes: maxBytes)
@@ -126,7 +171,11 @@ extension HTTPClientResponse {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse {
-    static func expectedContentLength(requestMethod: HTTPMethod, headers: HTTPHeaders, status: HTTPResponseStatus) -> Int? {
+    static func expectedContentLength(
+        requestMethod: HTTPMethod,
+        headers: HTTPHeaders,
+        status: HTTPResponseStatus
+    ) -> Int? {
         if status == .notModified {
             return 0
         } else if requestMethod == .HEAD {
@@ -221,3 +270,9 @@ extension HTTPClientResponse.Body {
         .stream(CollectionOfOne(byteBuffer).async)
     }
 }
+
+@available(*, unavailable)
+extension HTTPClientResponse.Body.AsyncIterator: Sendable {}
+
+@available(*, unavailable)
+extension HTTPClientResponse.Body.Storage.AsyncIterator: Sendable {}

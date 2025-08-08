@@ -12,13 +12,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import Logging
 import NIOCore
 import NIOEmbedded
 import NIOHTTP1
 import NIOSSL
 import XCTest
+
+@testable import AsyncHTTPClient
 
 class HTTPConnectionPool_RequestQueueTests: XCTestCase {
     func testCountAndIsEmptyWorks() {
@@ -82,7 +83,7 @@ class HTTPConnectionPool_RequestQueueTests: XCTestCase {
     }
 }
 
-private class MockScheduledRequest: HTTPSchedulableRequest {
+final private class MockScheduledRequest: HTTPSchedulableRequest {
     let requiredEventLoop: EventLoop?
 
     init(requiredEventLoop: EventLoop?) {

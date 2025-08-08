@@ -1,4 +1,4 @@
-// swift-tools-version:5.8
+// swift-tools-version:5.10
 //===----------------------------------------------------------------------===//
 //
 // This source file is part of the AsyncHTTPClient open source project
@@ -15,27 +15,44 @@
 
 import PackageDescription
 
+let strictConcurrencyDevelopment = false
+
+let strictConcurrencySettings: [SwiftSetting] = {
+    var initialSettings: [SwiftSetting] = []
+    initialSettings.append(contentsOf: [
+        .enableUpcomingFeature("StrictConcurrency"),
+        .enableUpcomingFeature("InferSendableFromCaptures"),
+    ])
+
+    if strictConcurrencyDevelopment {
+        // -warnings-as-errors here is a workaround so that IDE-based development can
+        // get tripped up on -require-explicit-sendable.
+        initialSettings.append(.unsafeFlags(["-Xfrontend", "-require-explicit-sendable", "-warnings-as-errors"]))
+    }
+
+    return initialSettings
+}()
+
 let package = Package(
     name: "async-http-client",
     products: [
-        .library(name: "AsyncHTTPClient", targets: ["AsyncHTTPClient"]),
+        .library(name: "AsyncHTTPClient", targets: ["AsyncHTTPClient"])
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.62.0"),
-        .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.22.0"),
-        .package(url: "https://github.com/apple/swift-nio-http2.git", from: "1.19.0"),
-        .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.13.0"),
-        .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.19.0"),
-        .package(url: "https://github.com/apple/swift-log.git", from: "1.4.4"),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.81.0"),
+        .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.30.0"),
+        .package(url: "https://github.com/apple/swift-nio-http2.git", from: "1.36.0"),
+        .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.26.0"),
+        .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.24.0"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.6.0"),
         .package(url: "https://github.com/apple/swift-atomics.git", from: "1.0.2"),
-        .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.0.0"),
-        .package(url: "https://github.com/apple/swift-algorithms", from: "1.0.0"),
+        .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.0.0"),
     ],
     targets: [
         .target(
             name: "CAsyncHTTPClient",
             cSettings: [
-                .define("_GNU_SOURCE"),
+                .define("_GNU_SOURCE")
             ]
         ),
         .target(
@@ -56,7 +73,8 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Atomics", package: "swift-atomics"),
                 .product(name: "Algorithms", package: "swift-algorithms"),
-            ]
+            ],
+            swiftSettings: strictConcurrencySettings
         ),
         .testTarget(
             name: "AsyncHTTPClientTests",
@@ -80,7 +98,24 @@ let package = Package(
                 .copy("Resources/self_signed_key.pem"),
                 .copy("Resources/example.com.cert.pem"),
                 .copy("Resources/example.com.private-key.pem"),
-            ]
+            ],
+            swiftSettings: strictConcurrencySettings
         ),
     ]
 )
+
+// ---    STANDARD CROSS-REPO SETTINGS DO NOT EDIT   --- //
+for target in package.targets {
+    switch target.type {
+    case .regular, .test, .executable:
+        var settings = target.swiftSettings ?? []
+        // https://github.com/swiftlang/swift-evolution/blob/main/proposals/0444-member-import-visibility.md
+        settings.append(.enableUpcomingFeature("MemberImportVisibility"))
+        target.swiftSettings = settings
+    case .macro, .plugin, .system, .binary:
+        ()  // not applicable
+    @unknown default:
+        ()  // we don't know what to do here, do nothing
+    }
+}
+// --- END: STANDARD CROSS-REPO SETTINGS DO NOT EDIT --- //

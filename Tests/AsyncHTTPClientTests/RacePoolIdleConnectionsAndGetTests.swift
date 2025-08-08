@@ -14,9 +14,6 @@
 
 import AsyncHTTPClient
 import Atomics
-#if canImport(Network)
-import Network
-#endif
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -29,10 +26,16 @@ import NIOTestUtils
 import NIOTransportServices
 import XCTest
 
+#if canImport(Network)
+import Network
+#endif
+
 final class RacePoolIdleConnectionsAndGetTests: XCTestCaseHTTPClientTestsBaseClass {
     func testRacePoolIdleConnectionsAndGet() {
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(connectionPool: .init(idleTimeout: .milliseconds(10))))
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: .init(connectionPool: .init(idleTimeout: .milliseconds(10)))
+        )
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
         }

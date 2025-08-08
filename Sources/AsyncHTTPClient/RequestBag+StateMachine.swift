@@ -12,9 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-import struct Foundation.URL
 import NIOCore
 import NIOHTTP1
+
+import struct Foundation.URL
 
 extension HTTPClient {
     /// The maximum body size allowed, before a redirect response is cancelled. 3KB.
@@ -302,10 +303,12 @@ extension RequestBag.StateMachine {
                 preconditionFailure("If we receive a response, we must not have received something else before")
             }
 
-            if let redirectHandler = redirectHandler, let redirectURL = redirectHandler.redirectTarget(
-                status: head.status,
-                responseHeaders: head.headers
-            ) {
+            if let redirectHandler = redirectHandler,
+                let redirectURL = redirectHandler.redirectTarget(
+                    status: head.status,
+                    responseHeaders: head.headers
+                )
+            {
                 // If we will redirect, we need to consume the response's body ASAP, to be able to
                 // reuse the existing connection. We will consume a response body, if the body is
                 // smaller than 3kb.
@@ -348,7 +351,9 @@ extension RequestBag.StateMachine {
 
         case .executing(let executor, let requestState, .buffering(var currentBuffer, next: let next)):
             guard case .askExecutorForMore = next else {
-                preconditionFailure("If we have received an error or eof before, why did we get another body part? Next: \(next)")
+                preconditionFailure(
+                    "If we have received an error or eof before, why did we get another body part? Next: \(next)"
+                )
             }
 
             self.state = .modifying
@@ -405,7 +410,9 @@ extension RequestBag.StateMachine {
 
         case .executing(let executor, let requestState, .buffering(var buffer, next: let next)):
             guard case .askExecutorForMore = next else {
-                preconditionFailure("If we have received an error or eof before, why did we get another body part? Next: \(next)")
+                preconditionFailure(
+                    "If we have received an error or eof before, why did we get another body part? Next: \(next)"
+                )
             }
 
             if buffer.isEmpty, let newChunks = newChunks, !newChunks.isEmpty {
@@ -463,7 +470,9 @@ extension RequestBag.StateMachine {
         case .initialized, .queued, .deadlineExceededWhileQueued:
             preconditionFailure("Invalid state: \(self.state)")
         case .executing(_, _, .initialized):
-            preconditionFailure("Invalid state: Must have received response head, before this method is called for the first time")
+            preconditionFailure(
+                "Invalid state: Must have received response head, before this method is called for the first time"
+            )
 
         case .executing(_, _, .buffering(_, next: .error(let connectionError))):
             // if an error was received from the connection, we fail the task with the one
@@ -476,17 +485,23 @@ extension RequestBag.StateMachine {
             return .failTask(error, executorToCancel: executor)
 
         case .executing(_, _, .waitingForRemote):
-            preconditionFailure("Invalid state... We just returned from a consumption function. We can't already be waiting")
+            preconditionFailure(
+                "Invalid state... We just returned from a consumption function. We can't already be waiting"
+            )
 
         case .redirected:
-            preconditionFailure("Invalid state... Redirect don't call out to delegate functions. Thus we should never land here.")
+            preconditionFailure(
+                "Invalid state... Redirect don't call out to delegate functions. Thus we should never land here."
+            )
 
         case .finished(error: .some):
             // don't overwrite existing errors
             return .doNothing
 
         case .finished(error: .none):
-            preconditionFailure("Invalid state... If no error occured, this must not be called, after the request was finished")
+            preconditionFailure(
+                "Invalid state... If no error occured, this must not be called, after the request was finished"
+            )
 
         case .modifying:
             preconditionFailure()
@@ -499,7 +514,9 @@ extension RequestBag.StateMachine {
             preconditionFailure("Invalid state: \(self.state)")
 
         case .executing(_, _, .initialized):
-            preconditionFailure("Invalid state: Must have received response head, before this method is called for the first time")
+            preconditionFailure(
+                "Invalid state: Must have received response head, before this method is called for the first time"
+            )
 
         case .executing(let executor, let requestState, .buffering(var buffer, next: .askExecutorForMore)):
             self.state = .modifying
@@ -529,7 +546,9 @@ extension RequestBag.StateMachine {
             return .failTask(error, executorToCancel: nil)
 
         case .executing(_, _, .waitingForRemote):
-            preconditionFailure("Invalid state... We just returned from a consumption function. We can't already be waiting")
+            preconditionFailure(
+                "Invalid state... We just returned from a consumption function. We can't already be waiting"
+            )
 
         case .redirected:
             return .doNothing
@@ -538,7 +557,9 @@ extension RequestBag.StateMachine {
             return .doNothing
 
         case .finished(error: .none):
-            preconditionFailure("Invalid state... If no error occurred, this must not be called, after the request was finished")
+            preconditionFailure(
+                "Invalid state... If no error occurred, this must not be called, after the request was finished"
+            )
 
         case .modifying:
             preconditionFailure()
@@ -559,11 +580,11 @@ extension RequestBag.StateMachine {
             return .cancelScheduler(queuer)
 
         case .initialized,
-             .deadlineExceededWhileQueued,
-             .executing,
-             .finished,
-             .redirected,
-             .modifying:
+            .deadlineExceededWhileQueued,
+            .executing,
+            .finished,
+            .redirected,
+            .modifying:
             /// if we are not in the queued state, we can fail early by just calling down to `self.fail(_:)`
             /// which does the appropriate state transition for us.
             return .fail(self.fail(HTTPClientError.deadlineExceeded))

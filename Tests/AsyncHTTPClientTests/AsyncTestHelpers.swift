@@ -17,7 +17,7 @@ import NIOCore
 
 /// ``AsyncSequenceWriter`` is `Sendable` because its state is protected by a Lock
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-final class AsyncSequenceWriter<Element>: AsyncSequence, @unchecked Sendable {
+final class AsyncSequenceWriter<Element: Sendable>: AsyncSequence, @unchecked Sendable {
     typealias AsyncIterator = Iterator
 
     struct Iterator: AsyncIteratorProtocol {
@@ -33,7 +33,7 @@ final class AsyncSequenceWriter<Element>: AsyncSequence, @unchecked Sendable {
     }
 
     func makeAsyncIterator() -> Iterator {
-        return Iterator(self)
+        Iterator(self)
     }
 
     private enum State {
@@ -117,7 +117,9 @@ final class AsyncSequenceWriter<Element>: AsyncSequence, @unchecked Sendable {
         case .waiting:
             let state = self._state
             self.lock.unlock()
-            preconditionFailure("Expected that there is always only one concurrent call to next. Invalid state: \(state)")
+            preconditionFailure(
+                "Expected that there is always only one concurrent call to next. Invalid state: \(state)"
+            )
         }
     }
 

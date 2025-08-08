@@ -21,7 +21,10 @@ protocol HTTPConnectionPoolDelegate {
     func connectionPoolDidShutdown(_ pool: HTTPConnectionPool, unclean: Bool)
 }
 
-final class HTTPConnectionPool {
+final class HTTPConnectionPool:
+    // TODO: Refactor to use `NIOLockedValueBox` which will allow this to be checked
+    @unchecked Sendable
+{
     private let stateLock = NIOLock()
     private var _state: StateMachine
     /// The connection idle timeout timers. Protected by the stateLock
@@ -44,14 +47,16 @@ final class HTTPConnectionPool {
 
     let delegate: HTTPConnectionPoolDelegate
 
-    init(eventLoopGroup: EventLoopGroup,
-         sslContextCache: SSLContextCache,
-         tlsConfiguration: TLSConfiguration?,
-         clientConfiguration: HTTPClient.Configuration,
-         key: ConnectionPool.Key,
-         delegate: HTTPConnectionPoolDelegate,
-         idGenerator: Connection.ID.Generator,
-         backgroundActivityLogger logger: Logger) {
+    init(
+        eventLoopGroup: EventLoopGroup,
+        sslContextCache: SSLContextCache,
+        tlsConfiguration: TLSConfiguration?,
+        clientConfiguration: HTTPClient.Configuration,
+        key: ConnectionPool.Key,
+        delegate: HTTPConnectionPoolDelegate,
+        idGenerator: Connection.ID.Generator,
+        backgroundActivityLogger logger: Logger
+    ) {
         self.eventLoopGroup = eventLoopGroup
         self.connectionFactory = ConnectionFactory(
             key: key,
@@ -70,8 +75,10 @@ final class HTTPConnectionPool {
 
         self._state = StateMachine(
             idGenerator: idGenerator,
-            maximumConcurrentHTTP1Connections: clientConfiguration.connectionPool.concurrentHTTP1ConnectionsPerHostSoftLimit,
+            maximumConcurrentHTTP1Connections: clientConfiguration.connectionPool
+                .concurrentHTTP1ConnectionsPerHostSoftLimit,
             retryConnectionEstablishment: clientConfiguration.connectionPool.retryConnectionEstablishment,
+            preferHTTP1: clientConfiguration.httpVersion == .http1Only,
             maximumConnectionUses: clientConfiguration.maximumUsesPerConnection
         )
     }
@@ -149,7 +156,7 @@ final class HTTPConnectionPool {
             self.unlocked = Unlocked(connection: .none, request: .none)
 
             switch stateMachineAction.request {
-            case .executeRequest(let request, let connection, cancelTimeout: let cancelTimeout):
+            case .executeRequest(let request, let connection, let cancelTimeout):
                 if cancelTimeout {
                     self.locked.request = .cancelRequestTimeout(request.id)
                 }
@@ -157,7 +164,7 @@ final class HTTPConnectionPool {
             case .executeRequestsAndCancelTimeouts(let requests, let connection):
                 self.locked.request = .cancelRequestTimeouts(requests)
                 self.unlocked.request = .executeRequests(requests, connection)
-            case .failRequest(let request, let error, cancelTimeout: let cancelTimeout):
+            case .failRequest(let request, let error, let cancelTimeout):
                 if cancelTimeout {
                     self.locked.request = .cancelRequestTimeout(request.id)
                 }
@@ -174,15 +181,15 @@ final class HTTPConnectionPool {
             switch stateMachineAction.connection {
             case .createConnection(let connectionID, on: let eventLoop):
                 self.unlocked.connection = .createConnection(connectionID, on: eventLoop)
-            case .scheduleBackoffTimer(let connectionID, backoff: let backoff, on: let eventLoop):
+            case .scheduleBackoffTimer(let connectionID, let backoff, on: let eventLoop):
                 self.locked.connection = .scheduleBackoffTimer(connectionID, backoff: backoff, on: eventLoop)
             case .scheduleTimeoutTimer(let connectionID, on: let eventLoop):
                 self.locked.connection = .scheduleTimeoutTimer(connectionID, on: eventLoop)
             case .cancelTimeoutTimer(let connectionID):
                 self.locked.connection = .cancelTimeoutTimer(connectionID)
-            case .closeConnection(let connection, isShutdown: let isShutdown):
+            case .closeConnection(let connection, let isShutdown):
                 self.unlocked.connection = .closeConnection(connection, isShutdown: isShutdown)
-            case .cleanupConnections(var cleanupContext, isShutdown: let isShutdown):
+            case .cleanupConnections(var cleanupContext, let isShutdown):
                 //
                 self.locked.connection = .cancelBackoffTimers(cleanupContext.connectBackoff)
                 cleanupContext.connectBackoff = []
@@ -220,7 +227,7 @@ final class HTTPConnectionPool {
 
     private func runLockedConnectionAction(_ action: Actions.ConnectionAction.Locked) {
         switch action {
-        case .scheduleBackoffTimer(let connectionID, backoff: let backoff, on: let eventLoop):
+        case .scheduleBackoffTimer(let connectionID, let backoff, on: let eventLoop):
             self.scheduleConnectionStartBackoffTimer(connectionID, backoff, on: eventLoop)
 
         case .scheduleTimeoutTimer(let connectionID, on: let eventLoop):
@@ -248,7 +255,7 @@ final class HTTPConnectionPool {
             self.cancelRequestTimeout(requestID)
 
         case .cancelRequestTimeouts(let requests):
-            requests.forEach { self.cancelRequestTimeout($0.id) }
+            for request in requests { self.cancelRequestTimeout(request.id) }
 
         case .none:
             break
@@ -265,10 +272,13 @@ final class HTTPConnectionPool {
         case .createConnection(let connectionID, let eventLoop):
             self.createConnection(connectionID, on: eventLoop)
 
-        case .closeConnection(let connection, isShutdown: let isShutdown):
-            self.logger.trace("close connection", metadata: [
-                "ahc-connection-id": "\(connection.id)",
-            ])
+        case .closeConnection(let connection, let isShutdown):
+            self.logger.trace(
+                "close connection",
+                metadata: [
+                    "ahc-connection-id": "\(connection.id)"
+                ]
+            )
 
             // we are not interested in the close promise...
             connection.close(promise: nil)
@@ -277,7 +287,7 @@ final class HTTPConnectionPool {
                 self.delegate.connectionPoolDidShutdown(self, unclean: unclean)
             }
 
-        case .cleanupConnections(let cleanupContext, isShutdown: let isShutdown):
+        case .cleanupConnections(let cleanupContext, let isShutdown):
             for connection in cleanupContext.close {
                 connection.close(promise: nil)
             }
@@ -314,13 +324,15 @@ final class HTTPConnectionPool {
             connection.executeRequest(request.req)
 
         case .executeRequests(let requests, let connection):
-            requests.forEach { connection.executeRequest($0.req) }
+            for request in requests {
+                connection.executeRequest(request.req)
+            }
 
         case .failRequest(let request, let error):
             request.req.fail(error)
 
         case .failRequests(let requests, let error):
-            requests.forEach { $0.req.fail(error) }
+            for request in requests { request.req.fail(error) }
 
         case .none:
             break
@@ -328,9 +340,12 @@ final class HTTPConnectionPool {
     }
 
     private func createConnection(_ connectionID: Connection.ID, on eventLoop: EventLoop) {
-        self.logger.trace("Opening fresh connection", metadata: [
-            "ahc-connection-id": "\(connectionID)",
-        ])
+        self.logger.trace(
+            "Opening fresh connection",
+            metadata: [
+                "ahc-connection-id": "\(connectionID)"
+            ]
+        )
         // Even though this function is called make it actually creates/establishes a connection.
         // TBD: Should we rename it? To what?
         self.connectionFactory.makeConnection(
@@ -373,9 +388,12 @@ final class HTTPConnectionPool {
     }
 
     private func scheduleIdleTimerForConnection(_ connectionID: Connection.ID, on eventLoop: EventLoop) {
-        self.logger.trace("Schedule idle connection timeout timer", metadata: [
-            "ahc-connection-id": "\(connectionID)",
-        ])
+        self.logger.trace(
+            "Schedule idle connection timeout timer",
+            metadata: [
+                "ahc-connection-id": "\(connectionID)"
+            ]
+        )
         let scheduled = eventLoop.scheduleTask(in: self.idleConnectionTimeout) {
             // there might be a race between a cancelTimer call and the triggering
             // of this scheduled task. both want to acquire the lock
@@ -393,9 +411,12 @@ final class HTTPConnectionPool {
     }
 
     private func cancelIdleTimerForConnection(_ connectionID: Connection.ID) {
-        self.logger.trace("Cancel idle connection timeout timer", metadata: [
-            "ahc-connection-id": "\(connectionID)",
-        ])
+        self.logger.trace(
+            "Cancel idle connection timeout timer",
+            metadata: [
+                "ahc-connection-id": "\(connectionID)"
+            ]
+        )
         guard let cancelTimer = self._idleTimer.removeValue(forKey: connectionID) else {
             preconditionFailure("Expected to have an idle timer for connection \(connectionID) at this point.")
         }
@@ -407,9 +428,12 @@ final class HTTPConnectionPool {
         _ timeAmount: TimeAmount,
         on eventLoop: EventLoop
     ) {
-        self.logger.trace("Schedule connection creation backoff timer", metadata: [
-            "ahc-connection-id": "\(connectionID)",
-        ])
+        self.logger.trace(
+            "Schedule connection creation backoff timer",
+            metadata: [
+                "ahc-connection-id": "\(connectionID)"
+            ]
+        )
 
         let scheduled = eventLoop.scheduleTask(in: timeAmount) {
             // there might be a race between a backoffTimer and the pool shutting down.
@@ -437,42 +461,54 @@ final class HTTPConnectionPool {
 // MARK: - Protocol methods -
 
 extension HTTPConnectionPool: HTTPConnectionRequester {
-    func http1ConnectionCreated(_ connection: HTTP1Connection) {
-        self.logger.trace("successfully created connection", metadata: [
-            "ahc-connection-id": "\(connection.id)",
-            "ahc-http-version": "http/1.1",
-        ])
+    func http1ConnectionCreated(_ connection: HTTP1Connection.SendableView) {
+        self.logger.trace(
+            "successfully created connection",
+            metadata: [
+                "ahc-connection-id": "\(connection.id)",
+                "ahc-http-version": "http/1.1",
+            ]
+        )
         self.modifyStateAndRunActions {
             $0.newHTTP1ConnectionCreated(.http1_1(connection))
         }
     }
 
-    func http2ConnectionCreated(_ connection: HTTP2Connection, maximumStreams: Int) {
-        self.logger.trace("successfully created connection", metadata: [
-            "ahc-connection-id": "\(connection.id)",
-            "ahc-http-version": "http/2",
-            "ahc-max-streams": "\(maximumStreams)",
-        ])
+    func http2ConnectionCreated(_ connection: HTTP2Connection.SendableView, maximumStreams: Int) {
+        self.logger.trace(
+            "successfully created connection",
+            metadata: [
+                "ahc-connection-id": "\(connection.id)",
+                "ahc-http-version": "http/2",
+                "ahc-max-streams": "\(maximumStreams)",
+            ]
+        )
         self.modifyStateAndRunActions {
             $0.newHTTP2ConnectionCreated(.http2(connection), maxConcurrentStreams: maximumStreams)
         }
     }
 
     func failedToCreateHTTPConnection(_ connectionID: HTTPConnectionPool.Connection.ID, error: Error) {
-        self.logger.debug("connection attempt failed", metadata: [
-            "ahc-error": "\(error)",
-            "ahc-connection-id": "\(connectionID)",
-        ])
+        self.logger.debug(
+            "connection attempt failed",
+            metadata: [
+                "ahc-error": "\(error)",
+                "ahc-connection-id": "\(connectionID)",
+            ]
+        )
         self.modifyStateAndRunActions {
             $0.failedToCreateNewConnection(error, connectionID: connectionID)
         }
     }
 
     func waitingForConnectivity(_ connectionID: HTTPConnectionPool.Connection.ID, error: Error) {
-        self.logger.debug("waiting for connectivity", metadata: [
-            "ahc-error": "\(error)",
-            "ahc-connection-id": "\(connectionID)",
-        ])
+        self.logger.debug(
+            "waiting for connectivity",
+            metadata: [
+                "ahc-error": "\(error)",
+                "ahc-connection-id": "\(connectionID)",
+            ]
+        )
         self.modifyStateAndRunActions {
             $0.waitingForConnectivity(error, connectionID: connectionID)
         }
@@ -480,66 +516,84 @@ extension HTTPConnectionPool: HTTPConnectionRequester {
 }
 
 extension HTTPConnectionPool: HTTP1ConnectionDelegate {
-    func http1ConnectionClosed(_ connection: HTTP1Connection) {
-        self.logger.debug("connection closed", metadata: [
-            "ahc-connection-id": "\(connection.id)",
-            "ahc-http-version": "http/1.1",
-        ])
+    func http1ConnectionClosed(_ id: HTTPConnectionPool.Connection.ID) {
+        self.logger.debug(
+            "connection closed",
+            metadata: [
+                "ahc-connection-id": "\(id)",
+                "ahc-http-version": "http/1.1",
+            ]
+        )
         self.modifyStateAndRunActions {
-            $0.http1ConnectionClosed(connection.id)
+            $0.http1ConnectionClosed(id)
         }
     }
 
-    func http1ConnectionReleased(_ connection: HTTP1Connection) {
-        self.logger.trace("releasing connection", metadata: [
-            "ahc-connection-id": "\(connection.id)",
-            "ahc-http-version": "http/1.1",
-        ])
+    func http1ConnectionReleased(_ id: HTTPConnectionPool.Connection.ID) {
+        self.logger.trace(
+            "releasing connection",
+            metadata: [
+                "ahc-connection-id": "\(id)",
+                "ahc-http-version": "http/1.1",
+            ]
+        )
         self.modifyStateAndRunActions {
-            $0.http1ConnectionReleased(connection.id)
+            $0.http1ConnectionReleased(id)
         }
     }
 }
 
 extension HTTPConnectionPool: HTTP2ConnectionDelegate {
-    func http2Connection(_ connection: HTTP2Connection, newMaxStreamSetting: Int) {
-        self.logger.debug("new max stream setting", metadata: [
-            "ahc-connection-id": "\(connection.id)",
-            "ahc-http-version": "http/2",
-            "ahc-max-streams": "\(newMaxStreamSetting)",
-        ])
+    func http2Connection(_ id: HTTPConnectionPool.Connection.ID, newMaxStreamSetting: Int) {
+        self.logger.debug(
+            "new max stream setting",
+            metadata: [
+                "ahc-connection-id": "\(id)",
+                "ahc-http-version": "http/2",
+                "ahc-max-streams": "\(newMaxStreamSetting)",
+            ]
+        )
         self.modifyStateAndRunActions {
-            $0.newHTTP2MaxConcurrentStreamsReceived(connection.id, newMaxStreams: newMaxStreamSetting)
+            $0.newHTTP2MaxConcurrentStreamsReceived(id, newMaxStreams: newMaxStreamSetting)
         }
     }
 
-    func http2ConnectionGoAwayReceived(_ connection: HTTP2Connection) {
-        self.logger.debug("connection go away received", metadata: [
-            "ahc-connection-id": "\(connection.id)",
-            "ahc-http-version": "http/2",
-        ])
+    func http2ConnectionGoAwayReceived(_ id: HTTPConnectionPool.Connection.ID) {
+        self.logger.debug(
+            "connection go away received",
+            metadata: [
+                "ahc-connection-id": "\(id)",
+                "ahc-http-version": "http/2",
+            ]
+        )
         self.modifyStateAndRunActions {
-            $0.http2ConnectionGoAwayReceived(connection.id)
+            $0.http2ConnectionGoAwayReceived(id)
         }
     }
 
-    func http2ConnectionClosed(_ connection: HTTP2Connection) {
-        self.logger.debug("connection closed", metadata: [
-            "ahc-connection-id": "\(connection.id)",
-            "ahc-http-version": "http/2",
-        ])
+    func http2ConnectionClosed(_ id: HTTPConnectionPool.Connection.ID) {
+        self.logger.debug(
+            "connection closed",
+            metadata: [
+                "ahc-connection-id": "\(id)",
+                "ahc-http-version": "http/2",
+            ]
+        )
         self.modifyStateAndRunActions {
-            $0.http2ConnectionClosed(connection.id)
+            $0.http2ConnectionClosed(id)
         }
     }
 
-    func http2ConnectionStreamClosed(_ connection: HTTP2Connection, availableStreams: Int) {
-        self.logger.trace("stream closed", metadata: [
-            "ahc-connection-id": "\(connection.id)",
-            "ahc-http-version": "http/2",
-        ])
+    func http2ConnectionStreamClosed(_ id: HTTPConnectionPool.Connection.ID, availableStreams: Int) {
+        self.logger.trace(
+            "stream closed",
+            metadata: [
+                "ahc-connection-id": "\(id)",
+                "ahc-http-version": "http/2",
+            ]
+        )
         self.modifyStateAndRunActions {
-            $0.http2ConnectionStreamClosed(connection.id)
+            $0.http2ConnectionStreamClosed(id)
         }
     }
 }
@@ -558,18 +612,18 @@ extension HTTPConnectionPool {
         typealias ID = Int
 
         private enum Reference {
-            case http1_1(HTTP1Connection)
-            case http2(HTTP2Connection)
+            case http1_1(HTTP1Connection.SendableView)
+            case http2(HTTP2Connection.SendableView)
             case __testOnly_connection(ID, EventLoop)
         }
 
         private let _ref: Reference
 
-        fileprivate static func http1_1(_ conn: HTTP1Connection) -> Self {
+        fileprivate static func http1_1(_ conn: HTTP1Connection.SendableView) -> Self {
             Connection(_ref: .http1_1(conn))
         }
 
-        fileprivate static func http2(_ conn: HTTP2Connection) -> Self {
+        fileprivate static func http2(_ conn: HTTP2Connection.SendableView) -> Self {
             Connection(_ref: .http2(conn))
         }
 
@@ -641,7 +695,9 @@ extension HTTPConnectionPool {
                 return lhsConn.id == rhsConn.id
             case (.http2(let lhsConn), .http2(let rhsConn)):
                 return lhsConn.id == rhsConn.id
-            case (.__testOnly_connection(let lhsID, let lhsEventLoop), .__testOnly_connection(let rhsID, let rhsEventLoop)):
+            case (
+                .__testOnly_connection(let lhsID, let lhsEventLoop), .__testOnly_connection(let rhsID, let rhsEventLoop)
+            ):
                 return lhsID == rhsID && lhsEventLoop === rhsEventLoop
             default:
                 return false
@@ -722,7 +778,7 @@ struct EventLoopID: Hashable {
     }
 
     static func __testOnly_fakeID(_ id: Int) -> EventLoopID {
-        return EventLoopID(.__testOnly_fakeID(id))
+        EventLoopID(.__testOnly_fakeID(id))
     }
 }
 

@@ -12,10 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-import struct Foundation.URL
 import NIOCore
 import NIOHTTP1
 import NIOSSL
+
+import struct Foundation.URL
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest {
@@ -23,7 +24,7 @@ extension HTTPClientRequest {
         enum Body {
             case asyncSequence(
                 length: RequestBodyLength,
-                nextBodyPart: (ByteBufferAllocator) async throws -> ByteBuffer?
+                makeAsyncIterator: @Sendable () -> ((ByteBufferAllocator) async throws -> ByteBuffer?)
             )
             case sequence(
                 length: RequestBodyLength,
@@ -45,7 +46,7 @@ extension HTTPClientRequest {
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest.Prepared {
     init(_ request: HTTPClientRequest, dnsOverride: [String: String] = [:]) throws {
-        guard let url = URL(string: request.url) else {
+        guard !request.url.isEmpty, let url = URL(string: request.url) else {
             throw HTTPClientError.invalidURL
         }
 
@@ -79,9 +80,13 @@ extension HTTPClientRequest.Prepared.Body {
     init(_ body: HTTPClientRequest.Body) {
         switch body.mode {
         case .asyncSequence(let length, let makeAsyncIterator):
-            self = .asyncSequence(length: length, nextBodyPart: makeAsyncIterator())
+            self = .asyncSequence(length: length, makeAsyncIterator: makeAsyncIterator)
         case .sequence(let length, let canBeConsumedMultipleTimes, let makeCompleteBody):
-            self = .sequence(length: length, canBeConsumedMultipleTimes: canBeConsumedMultipleTimes, makeCompleteBody: makeCompleteBody)
+            self = .sequence(
+                length: length,
+                canBeConsumedMultipleTimes: canBeConsumedMultipleTimes,
+                makeCompleteBody: makeCompleteBody
+            )
         case .byteBuffer(let byteBuffer):
             self = .byteBuffer(byteBuffer)
         }
@@ -95,7 +100,7 @@ extension RequestBodyLength {
         case .none:
             self = .known(0)
         case .byteBuffer(let buffer):
-            self = .known(buffer.readableBytes)
+            self = .known(Int64(buffer.readableBytes))
         case .sequence(let length, _, _), .asyncSequence(let length, _):
             self = length
         }

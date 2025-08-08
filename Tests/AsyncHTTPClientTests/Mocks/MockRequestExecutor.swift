@@ -12,9 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import NIOConcurrencyHelpers
 import NIOCore
+
+@testable import AsyncHTTPClient
 
 // This is a MockRequestExecutor, that is synchronized on its EventLoop.
 final class MockRequestExecutor {
@@ -24,7 +25,7 @@ final class MockRequestExecutor {
         case unexpectedByteBuffer
     }
 
-    enum RequestParts: Equatable {
+    enum RequestParts: Equatable, Sendable {
         case body(IOData)
         case endOfStream
 
@@ -47,7 +48,7 @@ final class MockRequestExecutor {
     }
 
     var requestBodyPartsCount: Int {
-        return self.blockingQueue.count
+        self.blockingQueue.count
     }
 
     let eventLoop: EventLoop
@@ -57,10 +58,15 @@ final class MockRequestExecutor {
     private let responseBodyDemandLock = ConditionLock(value: false)
     private let cancellationLock = ConditionLock(value: false)
 
-    private var request: HTTPExecutableRequest?
-    private var _signaledDemandForRequestBody: Bool = false
+    private struct State: Sendable {
+        var request: HTTPExecutableRequest?
+        var _signaledDemandForRequestBody: Bool = false
+    }
+
+    private let state: NIOLockedValueBox<State>
 
     init(pauseRequestBodyPartStreamAfterASingleWrite: Bool = false, eventLoop: EventLoop) {
+        self.state = NIOLockedValueBox(State())
         self.pauseRequestBodyPartStreamAfterASingleWrite = pauseRequestBodyPartStreamAfterASingleWrite
         self.eventLoop = eventLoop
     }
@@ -76,13 +82,16 @@ final class MockRequestExecutor {
     }
 
     private func runRequest0(_ request: HTTPExecutableRequest) {
-        precondition(self.request == nil)
-        self.request = request
+        self.state.withLockedValue {
+            precondition($0.request == nil)
+            $0.request = request
+        }
         request.willExecuteRequest(self)
         request.requestHeadSent()
     }
 
-    func receiveRequestBody(deadline: NIODeadline = .now() + .seconds(5), _ verify: (ByteBuffer) throws -> Void) throws {
+    func receiveRequestBody(deadline: NIODeadline = .now() + .seconds(5), _ verify: (ByteBuffer) throws -> Void) throws
+    {
         enum ReceiveAction {
             case value(RequestParts)
             case future(EventLoopFuture<RequestParts>)
@@ -125,10 +134,16 @@ final class MockRequestExecutor {
     }
 
     private func pauseRequestBodyStream0() {
-        if self._signaledDemandForRequestBody == true {
-            self._signaledDemandForRequestBody = false
-            self.request!.pauseRequestBodyStream()
+        let request = self.state.withLockedValue {
+            if $0._signaledDemandForRequestBody == true {
+                $0._signaledDemandForRequestBody = false
+                return $0.request
+            } else {
+                return nil
+            }
         }
+
+        request?.pauseRequestBodyStream()
     }
 
     func resumeRequestBodyStream() {
@@ -142,10 +157,16 @@ final class MockRequestExecutor {
     }
 
     private func resumeRequestBodyStream0() {
-        if self._signaledDemandForRequestBody == false {
-            self._signaledDemandForRequestBody = true
-            self.request!.resumeRequestBodyStream()
+        let request = self.state.withLockedValue {
+            if $0._signaledDemandForRequestBody == false {
+                $0._signaledDemandForRequestBody = true
+                return $0.request
+            } else {
+                return nil
+            }
         }
+
+        request?.resumeRequestBodyStream()
     }
 
     func resetResponseStreamDemandSignal() {
@@ -155,10 +176,11 @@ final class MockRequestExecutor {
 
     func receiveResponseDemand(deadline: NIODeadline = .now() + .seconds(5)) throws {
         let secondsUntilDeath = deadline - NIODeadline.now()
-        guard self.responseBodyDemandLock.lock(
-            whenValue: true,
-            timeoutSeconds: .init(secondsUntilDeath.nanoseconds / 1_000_000_000)
-        )
+        guard
+            self.responseBodyDemandLock.lock(
+                whenValue: true,
+                timeoutSeconds: .init(secondsUntilDeath.nanoseconds / 1_000_000_000)
+            )
         else {
             throw TimeoutError()
         }
@@ -168,10 +190,11 @@ final class MockRequestExecutor {
 
     func receiveCancellation(deadline: NIODeadline = .now() + .seconds(5)) throws {
         let secondsUntilDeath = deadline - NIODeadline.now()
-        guard self.cancellationLock.lock(
-            whenValue: true,
-            timeoutSeconds: .init(secondsUntilDeath.nanoseconds / 1_000_000_000)
-        )
+        guard
+            self.cancellationLock.lock(
+                whenValue: true,
+                timeoutSeconds: .init(secondsUntilDeath.nanoseconds / 1_000_000_000)
+            )
         else {
             throw TimeoutError()
         }
@@ -200,11 +223,13 @@ extension MockRequestExecutor: HTTPRequestExecutor {
             case none
         }
 
-        let stateChange = { () -> WriteAction in
+        let stateChange = { @Sendable () -> WriteAction in
             var pause = false
             if self.blockingQueue.isEmpty && self.pauseRequestBodyPartStreamAfterASingleWrite && part.isBody {
                 pause = true
-                self._signaledDemandForRequestBody = false
+                self.state.withLockedValue {
+                    $0._signaledDemandForRequestBody = false
+                }
             }
 
             self.blockingQueue.append(.success(part))
@@ -265,8 +290,12 @@ extension MockRequestExecutor {
 
         internal func popFirst(deadline: NIODeadline) throws -> Element {
             let secondsUntilDeath = deadline - NIODeadline.now()
-            guard self.condition.lock(whenValue: true,
-                                      timeoutSeconds: .init(secondsUntilDeath.nanoseconds / 1_000_000_000)) else {
+            guard
+                self.condition.lock(
+                    whenValue: true,
+                    timeoutSeconds: .init(secondsUntilDeath.nanoseconds / 1_000_000_000)
+                )
+            else {
                 throw TimeoutError()
             }
             let first = self.buffer.removeFirst()
@@ -275,3 +304,5 @@ extension MockRequestExecutor {
         }
     }
 }
+
+extension MockRequestExecutor.BlockingQueue: @unchecked Sendable where Element: Sendable {}

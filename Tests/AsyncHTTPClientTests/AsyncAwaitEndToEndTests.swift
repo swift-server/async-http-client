@@ -12,12 +12,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import Logging
 import NIOCore
+import NIOFoundationCompat
+import NIOHTTP1
 import NIOPosix
 import NIOSSL
 import XCTest
+
+@testable import AsyncHTTPClient
 
 private func makeDefaultHTTPClient(
     eventLoopGroupProvider: HTTPClient.EventLoopGroupProvider = .singleton
@@ -65,12 +68,16 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
             let request = HTTPClientRequest(url: "https://localhost:\(bin.port)/get")
 
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
-            ) else {
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else {
                 return
             }
 
+            XCTAssertEqual(response.url?.absoluteString, request.url)
+            XCTAssertEqual(response.history.map(\.request.url), [request.url])
             XCTAssertEqual(response.status, .ok)
             XCTAssertEqual(response.version, .http2)
         }
@@ -85,12 +92,16 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
             let request = HTTPClientRequest(url: "https://localhost:\(bin.port)/get")
 
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
-            ) else {
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else {
                 return
             }
 
+            XCTAssertEqual(response.url?.absoluteString, request.url)
+            XCTAssertEqual(response.history.map(\.request.url), [request.url])
             XCTAssertEqual(response.status, .ok)
             XCTAssertEqual(response.version, .http2)
         }
@@ -107,13 +118,17 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             request.method = .POST
             request.body = .bytes(ByteBuffer(string: "1234"))
 
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
-            ) else { return }
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else { return }
             XCTAssertEqual(response.headers["content-length"], ["4"])
-            guard let body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(upTo: 1024)
-            ) else { return }
+            guard
+                let body = await XCTAssertNoThrowWithResult(
+                    try await response.body.collect(upTo: 1024)
+                )
+            else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
         }
     }
@@ -129,13 +144,17 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             request.method = .POST
             request.body = .bytes(AnySendableSequence("1234".utf8), length: .unknown)
 
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
-            ) else { return }
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else { return }
             XCTAssertEqual(response.headers["content-length"], [])
-            guard let body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(upTo: 1024)
-            ) else { return }
+            guard
+                let body = await XCTAssertNoThrowWithResult(
+                    try await response.body.collect(upTo: 1024)
+                )
+            else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
         }
     }
@@ -151,13 +170,17 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             request.method = .POST
             request.body = .bytes(AnySendableCollection("1234".utf8), length: .unknown)
 
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
-            ) else { return }
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else { return }
             XCTAssertEqual(response.headers["content-length"], [])
-            guard let body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(upTo: 1024)
-            ) else { return }
+            guard
+                let body = await XCTAssertNoThrowWithResult(
+                    try await response.body.collect(upTo: 1024)
+                )
+            else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
         }
     }
@@ -173,15 +196,79 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             request.method = .POST
             request.body = .bytes(ByteBuffer(string: "1234").readableBytesView)
 
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
-            ) else { return }
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else { return }
             XCTAssertEqual(response.headers["content-length"], ["4"])
-            guard let body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(upTo: 1024)
-            ) else { return }
+            guard
+                let body = await XCTAssertNoThrowWithResult(
+                    try await response.body.collect(upTo: 1024)
+                )
+            else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
         }
+    }
+
+    struct AsyncSequenceByteBufferGenerator: AsyncSequence, Sendable, AsyncIteratorProtocol {
+        typealias Element = ByteBuffer
+
+        let chunkSize: Int
+        let totalChunks: Int
+        let buffer: ByteBuffer
+        var chunksGenerated: Int = 0
+
+        init(chunkSize: Int, totalChunks: Int) {
+            self.chunkSize = chunkSize
+            self.totalChunks = totalChunks
+            self.buffer = ByteBuffer(repeating: 1, count: self.chunkSize)
+        }
+
+        mutating func next() async throws -> ByteBuffer? {
+            guard self.chunksGenerated < self.totalChunks else { return nil }
+
+            self.chunksGenerated += 1
+            return self.buffer
+        }
+
+        func makeAsyncIterator() -> AsyncSequenceByteBufferGenerator {
+            self
+        }
+    }
+
+    func testEchoStreamThatHas3GBInTotal() async throws {
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully()) }
+        let bin = HTTPBin(.http1_1()) { _ in HTTPEchoHandler() }
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        let client: HTTPClient = makeDefaultHTTPClient(eventLoopGroupProvider: .shared(eventLoopGroup))
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+
+        var request = HTTPClientRequest(url: "http://localhost:\(bin.port)/")
+        request.method = .POST
+
+        let sequence = AsyncSequenceByteBufferGenerator(
+            chunkSize: 4_194_304,  // 4MB chunk
+            totalChunks: 768  // Total = 3GB
+        )
+        request.body = .stream(sequence, length: .unknown)
+
+        let response: HTTPClientResponse = try await client.execute(
+            request,
+            deadline: .now() + .seconds(30),
+            logger: logger
+        )
+        XCTAssertEqual(response.headers["content-length"], [])
+
+        var receivedBytes: Int64 = 0
+        for try await part in response.body {
+            receivedBytes += Int64(part.readableBytes)
+        }
+        XCTAssertEqual(receivedBytes, 3_221_225_472)  // 3GB
     }
 
     func testPostWithAsyncSequenceOfByteBuffers() {
@@ -193,19 +280,26 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
             var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/")
             request.method = .POST
-            request.body = .stream([
-                ByteBuffer(string: "1"),
-                ByteBuffer(string: "2"),
-                ByteBuffer(string: "34"),
-            ].async, length: .unknown)
+            request.body = .stream(
+                [
+                    ByteBuffer(string: "1"),
+                    ByteBuffer(string: "2"),
+                    ByteBuffer(string: "34"),
+                ].async,
+                length: .unknown
+            )
 
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
-            ) else { return }
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else { return }
             XCTAssertEqual(response.headers["content-length"], [])
-            guard let body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(upTo: 1024)
-            ) else { return }
+            guard
+                let body = await XCTAssertNoThrowWithResult(
+                    try await response.body.collect(upTo: 1024)
+                )
+            else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
         }
     }
@@ -221,13 +315,17 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             request.method = .POST
             request.body = .stream("1234".utf8.async, length: .unknown)
 
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
-            ) else { return }
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else { return }
             XCTAssertEqual(response.headers["content-length"], [])
-            guard let body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(upTo: 1024)
-            ) else { return }
+            guard
+                let body = await XCTAssertNoThrowWithResult(
+                    try await response.body.collect(upTo: 1024)
+                )
+            else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
         }
     }
@@ -244,9 +342,11 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let streamWriter = AsyncSequenceWriter<ByteBuffer>()
             request.body = .stream(streamWriter, length: .unknown)
 
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
-            ) else { return }
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else { return }
             XCTAssertEqual(response.headers["content-length"], [])
 
             let fragments = [
@@ -257,16 +357,20 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             var bodyIterator = response.body.makeAsyncIterator()
             for expectedFragment in fragments {
                 streamWriter.write(expectedFragment)
-                guard let actualFragment = await XCTAssertNoThrowWithResult(
-                    try await bodyIterator.next()
-                ) else { return }
+                guard
+                    let actualFragment = await XCTAssertNoThrowWithResult(
+                        try await bodyIterator.next()
+                    )
+                else { return }
                 XCTAssertEqual(expectedFragment, actualFragment)
             }
 
             streamWriter.end()
-            guard let lastResult = await XCTAssertNoThrowWithResult(
-                try await bodyIterator.next()
-            ) else { return }
+            guard
+                let lastResult = await XCTAssertNoThrowWithResult(
+                    try await bodyIterator.next()
+                )
+            else { return }
             XCTAssertEqual(lastResult, nil)
         }
     }
@@ -283,9 +387,11 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let streamWriter = AsyncSequenceWriter<ByteBuffer>()
             request.body = .stream(streamWriter, length: .unknown)
 
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
-            ) else { return }
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else { return }
             XCTAssertEqual(response.headers["content-length"], [])
 
             let fragments = [
@@ -297,16 +403,20 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             var bodyIterator = response.body.makeAsyncIterator()
             for expectedFragment in fragments {
                 streamWriter.write(expectedFragment)
-                guard let actualFragment = await XCTAssertNoThrowWithResult(
-                    try await bodyIterator.next()
-                ) else { return }
+                guard
+                    let actualFragment = await XCTAssertNoThrowWithResult(
+                        try await bodyIterator.next()
+                    )
+                else { return }
                 XCTAssertEqual(expectedFragment, actualFragment)
             }
 
             streamWriter.end()
-            guard let lastResult = await XCTAssertNoThrowWithResult(
-                try await bodyIterator.next()
-            ) else { return }
+            guard
+                let lastResult = await XCTAssertNoThrowWithResult(
+                    try await bodyIterator.next()
+                )
+            else { return }
             XCTAssertEqual(lastResult, nil)
         }
     }
@@ -380,7 +490,10 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 // a race between deadline and connect timer can result in either error.
                 // If closing happens really fast we might shutdown the pipeline before we fail the request.
                 // If the pipeline is closed we may receive a  `.remoteConnectionClosed`.
-                XCTAssertTrue([.deadlineExceeded, .connectTimeout, .remoteConnectionClosed].contains(error), "unexpected error \(error)")
+                XCTAssertTrue(
+                    [.deadlineExceeded, .connectTimeout, .remoteConnectionClosed].contains(error),
+                    "unexpected error \(error)"
+                )
             }
         }
     }
@@ -404,12 +517,17 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 // a race between deadline and connect timer can result in either error.
                 // If closing happens really fast we might shutdown the pipeline before we fail the request.
                 // If the pipeline is closed we may receive a  `.remoteConnectionClosed`.
-                XCTAssertTrue([.deadlineExceeded, .connectTimeout, .remoteConnectionClosed].contains(error), "unexpected error \(error)")
+                XCTAssertTrue(
+                    [.deadlineExceeded, .connectTimeout, .remoteConnectionClosed].contains(error),
+                    "unexpected error \(error)"
+                )
             }
         }
     }
 
     func testConnectTimeout() {
+        let serverGroup = self.serverGroup!
+        let clientGroup = self.clientGroup!
         XCTAsyncTest(timeout: 60) {
             #if os(Linux)
             // 198.51.100.254 is reserved for documentation only and therefore should not accept any TCP connection
@@ -426,7 +544,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 XCTAssertNoThrow(try group.syncShutdownGracefully())
             }
 
-            let serverChannel = try await ServerBootstrap(group: self.serverGroup)
+            let serverChannel = try await ServerBootstrap(group: serverGroup)
                 .serverChannelOption(ChannelOptions.backlog, value: 1)
                 .serverChannelOption(ChannelOptions.autoRead, value: false)
                 .bind(host: "127.0.0.1", port: 0)
@@ -435,7 +553,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 XCTAssertNoThrow(try serverChannel.close().wait())
             }
             let port = serverChannel.localAddress!.port!
-            let firstClientChannel = try await ClientBootstrap(group: self.serverGroup)
+            let firstClientChannel = try await ClientBootstrap(group: serverGroup)
                 .connect(host: "127.0.0.1", port: port)
                 .get()
             defer {
@@ -444,8 +562,10 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let url = "http://localhost:\(port)/get"
             #endif
 
-            let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                        configuration: .init(timeout: .init(connect: .milliseconds(100), read: .milliseconds(150))))
+            let httpClient = HTTPClient(
+                eventLoopGroupProvider: .shared(clientGroup),
+                configuration: .init(timeout: .init(connect: .milliseconds(100), read: .milliseconds(150)))
+            )
 
             defer {
                 XCTAssertNoThrow(try httpClient.syncShutdown())
@@ -471,16 +591,19 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             /// openssl req -x509 -newkey rsa:4096 -keyout self_signed_key.pem -out self_signed_cert.pem -sha256 -days 99999 -nodes -subj '/CN=localhost'
             let certPath = Bundle.module.path(forResource: "self_signed_cert", ofType: "pem")!
             let keyPath = Bundle.module.path(forResource: "self_signed_key", ofType: "pem")!
+            let key = try NIOSSLPrivateKey(file: keyPath, format: .pem)
             let configuration = TLSConfiguration.makeServerConfiguration(
                 certificateChain: try NIOSSLCertificate.fromPEMFile(certPath).map { .certificate($0) },
-                privateKey: .file(keyPath)
+                privateKey: .privateKey(key)
             )
             let sslContext = try NIOSSLContext(configuration: configuration)
             let serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
             defer { XCTAssertNoThrow(try serverGroup.syncShutdownGracefully()) }
             let server = ServerBootstrap(group: serverGroup)
                 .childChannelInitializer { channel in
-                    channel.pipeline.addHandler(NIOSSLServerHandler(context: sslContext))
+                    channel.eventLoop.makeCompletedFuture {
+                        try channel.pipeline.syncOperations.addHandler(NIOSSLServerHandler(context: sslContext))
+                    }
                 }
             let serverChannel = try await server.bind(host: "localhost", port: 0).get()
             defer { XCTAssertNoThrow(try serverChannel.close().wait()) }
@@ -492,7 +615,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let localClient = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
             defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
             let request = HTTPClientRequest(url: "https://localhost:\(port)")
-            await XCTAssertThrowsError(try await localClient.execute(request, deadline: .now() + .seconds(2))) { error in
+            await XCTAssertThrowsError(try await localClient.execute(request, deadline: .now() + .seconds(2))) {
+                error in
                 #if canImport(Network)
                 guard let nwTLSError = error as? HTTPClient.NWTLSError else {
                     XCTFail("could not cast \(error) of type \(type(of: error)) to \(HTTPClient.NWTLSError.self)")
@@ -501,7 +625,8 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 XCTAssertEqual(nwTLSError.status, errSSLBadCert, "unexpected tls error: \(nwTLSError)")
                 #else
                 guard let sslError = error as? NIOSSLError,
-                      case .handshakeFailed(.sslError) = sslError else {
+                    case .handshakeFailed(.sslError) = sslError
+                else {
                     XCTFail("unexpected error \(error)")
                     return
                 }
@@ -512,39 +637,40 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
     func testDnsOverride() {
         XCTAsyncTest(timeout: 5) {
-            /// key + cert was created with the following code (depends on swift-certificates)
-            /// ```
-            /// import X509
-            /// import CryptoKit
-            /// import Foundation
-            ///
-            /// let privateKey = P384.Signing.PrivateKey()
-            /// let name = try DistinguishedName {
-            ///     OrganizationName("Self Signed")
-            ///     CommonName("localhost")
-            /// }
-            /// let certificate = try Certificate(
-            ///     version: .v3,
-            ///     serialNumber: .init(),
-            ///     publicKey: .init(privateKey.publicKey),
-            ///     notValidBefore: Date(),
-            ///     notValidAfter: Date().advanced(by: 365 * 24 * 3600),
-            ///     issuer: name,
-            ///     subject: name,
-            ///     signatureAlgorithm: .ecdsaWithSHA384,
-            ///     extensions: try .init {
-            ///         SubjectAlternativeNames([.dnsName("example.com")])
-            ///         try ExtendedKeyUsage([.serverAuth])
-            ///     },
-            ///     issuerPrivateKey: .init(privateKey)
-            /// )
-            /// ```
+            // key + cert was created with the following code (depends on swift-certificates)
+            // ```
+            // import X509
+            // import CryptoKit
+            // import Foundation
+            //
+            // let privateKey = P384.Signing.PrivateKey()
+            // let name = try DistinguishedName {
+            //     OrganizationName("Self Signed")
+            //     CommonName("localhost")
+            // }
+            // let certificate = try Certificate(
+            //     version: .v3,
+            //     serialNumber: .init(),
+            //     publicKey: .init(privateKey.publicKey),
+            //     notValidBefore: Date(),
+            //     notValidAfter: Date().advanced(by: 365 * 24 * 3600),
+            //     issuer: name,
+            //     subject: name,
+            //     signatureAlgorithm: .ecdsaWithSHA384,
+            //     extensions: try .init {
+            //         SubjectAlternativeNames([.dnsName("example.com")])
+            //         try ExtendedKeyUsage([.serverAuth])
+            //     },
+            //     issuerPrivateKey: .init(privateKey)
+            // )
+            // ```
             let certPath = Bundle.module.path(forResource: "example.com.cert", ofType: "pem")!
             let keyPath = Bundle.module.path(forResource: "example.com.private-key", ofType: "pem")!
+            let key = try NIOSSLPrivateKey(file: keyPath, format: .pem)
             let localhostCert = try NIOSSLCertificate.fromPEMFile(certPath)
             let configuration = TLSConfiguration.makeServerConfiguration(
                 certificateChain: localhostCert.map { .certificate($0) },
-                privateKey: .file(keyPath)
+                privateKey: .privateKey(key)
             )
             let bin = HTTPBin(.http2(tlsConfiguration: configuration))
             defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -561,7 +687,9 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let localClient = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
             defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
             let request = HTTPClientRequest(url: "https://example.com:\(bin.port)/echohostheader")
-            let response = await XCTAssertNoThrowWithResult(try await localClient.execute(request, deadline: .now() + .seconds(2)))
+            let response = await XCTAssertNoThrowWithResult(
+                try await localClient.execute(request, deadline: .now() + .seconds(2))
+            )
             XCTAssertEqual(response?.status, .ok)
             XCTAssertEqual(response?.version, .http2)
             var body = try await response?.body.collect(upTo: 1024)
@@ -576,12 +704,32 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let client = makeDefaultHTTPClient()
             defer { XCTAssertNoThrow(try client.syncShutdown()) }
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
-            let request = HTTPClientRequest(url: "") // invalid URL
+            let request = HTTPClientRequest(url: "")  // invalid URL
 
-            await XCTAssertThrowsError(try await client.execute(request, deadline: .now() + .seconds(2), logger: logger)) {
+            await XCTAssertThrowsError(
+                try await client.execute(request, deadline: .now() + .seconds(2), logger: logger)
+            ) {
                 XCTAssertEqual($0 as? HTTPClientError, .invalidURL)
             }
         }
+    }
+
+    func testInsanelyHighConcurrentHTTP1ConnectionLimitDoesNotCrash() async throws {
+        let bin = HTTPBin(.http1_1(compress: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        var httpClientConfig = HTTPClient.Configuration()
+        httpClientConfig.connectionPool = .init(
+            idleTimeout: .hours(1),
+            concurrentHTTP1ConnectionsPerHostSoftLimit: Int.max
+        )
+        httpClientConfig.timeout = .init(connect: .seconds(10), read: .seconds(100), write: .seconds(100))
+
+        let httpClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup), configuration: httpClientConfig)
+        defer { XCTAssertNoThrow(try httpClient.syncShutdown()) }
+
+        let request = HTTPClientRequest(url: "http://localhost:\(bin.port)")
+        _ = try await httpClient.execute(request, deadline: .now() + .seconds(2))
     }
 
     func testRedirectChangesHostHeader() {
@@ -592,18 +740,28 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             defer { XCTAssertNoThrow(try client.syncShutdown()) }
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
             var request = HTTPClientRequest(url: "https://127.0.0.1:\(bin.port)/redirect/target")
-            request.headers.replaceOrAdd(name: "X-Target-Redirect-URL", value: "https://localhost:\(bin.port)/echohostheader")
+            let redirectURL = "https://localhost:\(bin.port)/echohostheader"
+            request.headers.replaceOrAdd(
+                name: "X-Target-Redirect-URL",
+                value: redirectURL
+            )
 
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
-            ) else {
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else {
                 return
             }
-            guard let body = await XCTAssertNoThrowWithResult(try await response.body.collect(upTo: 1024)) else { return }
+            guard let body = await XCTAssertNoThrowWithResult(try await response.body.collect(upTo: 1024)) else {
+                return
+            }
             var maybeRequestInfo: RequestInfo?
             XCTAssertNoThrow(maybeRequestInfo = try JSONDecoder().decode(RequestInfo.self, from: body))
             guard let requestInfo = maybeRequestInfo else { return }
 
+            XCTAssertEqual(response.url?.absoluteString, redirectURL)
+            XCTAssertEqual(response.history.map(\.request.url), [request.url, redirectURL])
             XCTAssertEqual(response.status, .ok)
             XCTAssertEqual(response.version, .http2)
             XCTAssertEqual(requestInfo.data, "localhost:\(bin.port)")
@@ -646,28 +804,39 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
             var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/")
             request.method = .POST
-            request.body = .stream([
-                ByteBuffer(string: "1"),
-                ByteBuffer(string: "2"),
-                ByteBuffer(string: "34"),
-            ].async, length: .unknown)
+            request.body = .stream(
+                [
+                    ByteBuffer(string: "1"),
+                    ByteBuffer(string: "2"),
+                    ByteBuffer(string: "34"),
+                ].async,
+                length: .unknown
+            )
 
-            guard let response1 = await XCTAssertNoThrowWithResult(
-                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
-            ) else { return }
+            guard
+                let response1 = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else { return }
             XCTAssertEqual(response1.headers["content-length"], [])
-            guard let body = await XCTAssertNoThrowWithResult(
-                try await response1.body.collect(upTo: 1024)
-            ) else { return }
+            guard
+                let body = await XCTAssertNoThrowWithResult(
+                    try await response1.body.collect(upTo: 1024)
+                )
+            else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
 
-            guard let response2 = await XCTAssertNoThrowWithResult(
-                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
-            ) else { return }
+            guard
+                let response2 = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else { return }
             XCTAssertEqual(response2.headers["content-length"], [])
-            guard let body = await XCTAssertNoThrowWithResult(
-                try await response2.body.collect(upTo: 1024)
-            ) else { return }
+            guard
+                let body = await XCTAssertNoThrowWithResult(
+                    try await response2.body.collect(upTo: 1024)
+                )
+            else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
         }
     }
@@ -706,9 +875,11 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             request.headers.add(name: weirdAllowedFieldName, value: "present")
 
             // This should work fine.
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
-            ) else {
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else {
                 return
             }
 
@@ -725,7 +896,9 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/get")
                 request.headers.add(name: forbiddenFieldName, value: "present")
 
-                await XCTAssertThrowsError(try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)) { error in
+                await XCTAssertThrowsError(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                ) { error in
                     XCTAssertEqual(error as? HTTPClientError, .invalidHeaderFieldNames([forbiddenFieldName]))
                 }
             }
@@ -749,15 +922,18 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
 
             // We reject all ASCII control characters except HTAB and tolerate everything else.
-            let weirdAllowedFieldValue = "!\" \t#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+            let weirdAllowedFieldValue =
+                "!\" \t#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
 
             var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/get")
             request.headers.add(name: "Weird-Value", value: weirdAllowedFieldValue)
 
             // This should work fine.
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
-            ) else {
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else {
                 return
             }
 
@@ -774,7 +950,9 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/get")
                 request.headers.add(name: "Weird-Value", value: forbiddenFieldValue)
 
-                await XCTAssertThrowsError(try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)) { error in
+                await XCTAssertThrowsError(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                ) { error in
                     XCTAssertEqual(error as? HTTPClientError, .invalidHeaderFieldValues([forbiddenFieldValue]))
                 }
             }
@@ -787,9 +965,11 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                 request.headers.add(name: "Weird-Value", value: evenWeirderAllowedValue)
 
                 // This should work fine.
-                guard let response = await XCTAssertNoThrowWithResult(
-                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
-                ) else {
+                guard
+                    let response = await XCTAssertNoThrowWithResult(
+                        try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                    )
+                else {
                     return
                 }
 
@@ -806,9 +986,11 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             defer { XCTAssertNoThrow(try client.syncShutdown()) }
             let request = try HTTPClient.Request(url: "https://localhost:\(bin.port)/get")
 
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await client.execute(request: request).get()
-            ) else {
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request: request).get()
+                )
+            else {
                 return
             }
 
@@ -825,13 +1007,15 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             defer { XCTAssertNoThrow(try client.syncShutdown()) }
             let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
             let request = HTTPClientRequest(url: "https://localhost:\(bin.port)/content-length-without-body")
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
-            ) else { return }
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else { return }
             await XCTAssertThrowsError(
                 try await response.body.collect(upTo: 3)
             ) {
-                XCTAssertEqualTypeAndValue($0, NIOTooManyBytesError())
+                XCTAssertEqualTypeAndValue($0, NIOTooManyBytesError(maxBytes: 3))
             }
         }
     }

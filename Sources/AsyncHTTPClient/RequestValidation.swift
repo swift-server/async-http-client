@@ -50,23 +50,23 @@ extension HTTPHeaders {
             let satisfy = name.utf8.allSatisfy { char -> Bool in
                 switch char {
                 case UInt8(ascii: "a")...UInt8(ascii: "z"),
-                     UInt8(ascii: "A")...UInt8(ascii: "Z"),
-                     UInt8(ascii: "0")...UInt8(ascii: "9"),
-                     UInt8(ascii: "!"),
-                     UInt8(ascii: "#"),
-                     UInt8(ascii: "$"),
-                     UInt8(ascii: "%"),
-                     UInt8(ascii: "&"),
-                     UInt8(ascii: "'"),
-                     UInt8(ascii: "*"),
-                     UInt8(ascii: "+"),
-                     UInt8(ascii: "-"),
-                     UInt8(ascii: "."),
-                     UInt8(ascii: "^"),
-                     UInt8(ascii: "_"),
-                     UInt8(ascii: "`"),
-                     UInt8(ascii: "|"),
-                     UInt8(ascii: "~"):
+                    UInt8(ascii: "A")...UInt8(ascii: "Z"),
+                    UInt8(ascii: "0")...UInt8(ascii: "9"),
+                    UInt8(ascii: "!"),
+                    UInt8(ascii: "#"),
+                    UInt8(ascii: "$"),
+                    UInt8(ascii: "%"),
+                    UInt8(ascii: "&"),
+                    UInt8(ascii: "'"),
+                    UInt8(ascii: "*"),
+                    UInt8(ascii: "+"),
+                    UInt8(ascii: "-"),
+                    UInt8(ascii: "."),
+                    UInt8(ascii: "^"),
+                    UInt8(ascii: "_"),
+                    UInt8(ascii: "`"),
+                    UInt8(ascii: "|"),
+                    UInt8(ascii: "~"):
                     return true
                 default:
                     return false
@@ -166,13 +166,14 @@ extension HTTPHeaders {
     mutating func addHostIfNeeded(for url: DeconstructedURL) {
         // if no host header was set, let's use the url host
         guard !self.contains(name: "host"),
-              var host = url.connectionTarget.host
+            var host = url.connectionTarget.host
         else {
             return
         }
         // if the request uses a non-default port, we need to add it after the host
         if let port = url.connectionTarget.port,
-           port != url.scheme.defaultPort {
+            port != url.scheme.defaultPort
+        {
             host += ":\(port)"
         }
         self.add(name: "host", value: host)

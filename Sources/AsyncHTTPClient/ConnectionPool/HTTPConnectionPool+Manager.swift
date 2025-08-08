@@ -39,9 +39,11 @@ extension HTTPConnectionPool {
 
         private let sslContextCache = SSLContextCache()
 
-        init(eventLoopGroup: EventLoopGroup,
-             configuration: HTTPClient.Configuration,
-             backgroundActivityLogger logger: Logger) {
+        init(
+            eventLoopGroup: EventLoopGroup,
+            configuration: HTTPClient.Configuration,
+            backgroundActivityLogger logger: Logger
+        ) {
             self.eventLoopGroup = eventLoopGroup
             self.configuration = configuration
             self.logger = logger
@@ -118,7 +120,7 @@ extension HTTPConnectionPool {
                 promise?.succeed(false)
 
             case .shutdown(let pools):
-                pools.values.forEach { pool in
+                for pool in pools.values {
                     pool.shutdown()
                 }
             }
@@ -140,7 +142,9 @@ extension HTTPConnectionPool.Manager: HTTPConnectionPoolDelegate {
 
             case .shuttingDown(let promise, let soFarUnclean):
                 guard self._pools.removeValue(forKey: pool.key) === pool else {
-                    preconditionFailure("Expected that the pool was created by this manager and is known for this reason.")
+                    preconditionFailure(
+                        "Expected that the pool was created by this manager and is known for this reason."
+                    )
                 }
 
                 if self._pools.isEmpty {
@@ -154,7 +158,7 @@ extension HTTPConnectionPool.Manager: HTTPConnectionPoolDelegate {
         }
 
         switch closeAction {
-        case .close(let promise, unclean: let unclean):
+        case .close(let promise, let unclean):
             promise?.succeed(unclean)
         case .wait:
             break
@@ -173,7 +177,7 @@ extension HTTPConnectionPool.Connection.ID {
         }
 
         func next() -> Int {
-            return self.atomic.loadThenWrappingIncrement(ordering: .relaxed)
+            self.atomic.loadThenWrappingIncrement(ordering: .relaxed)
         }
     }
 }

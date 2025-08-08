@@ -12,16 +12,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-/* NOT @testable */ import AsyncHTTPClient // Tests that really need @testable go into HTTP2ClientInternalTests.swift
-#if canImport(Network)
-import Network
-#endif
+import AsyncHTTPClient  // NOT @testable - tests that really need @testable go into HTTP2ClientInternalTests.swift
 import Logging
+import NIOConcurrencyHelpers
 import NIOCore
+import NIOFoundationCompat
 import NIOHTTP1
+import NIOHTTP2
 import NIOPosix
 import NIOSSL
 import XCTest
+
+#if canImport(Network)
+import Network
+#endif
 
 class HTTP2ClientTests: XCTestCase {
     func makeDefaultHTTPClient(
@@ -68,7 +72,7 @@ class HTTP2ClientTests: XCTestCase {
         let client = self.makeDefaultHTTPClient()
         defer { XCTAssertNoThrow(try client.syncShutdown()) }
         var response: HTTPClient.Response?
-        let body = HTTPClient.Body.stream(length: nil) { writer in
+        let body = HTTPClient.Body.stream(contentLength: nil) { writer in
             writer.write(.byteBuffer(ByteBuffer(integer: UInt64(0)))).flatMap {
                 writer.write(.byteBuffer(ByteBuffer(integer: UInt64(0))))
             }
@@ -84,7 +88,7 @@ class HTTP2ClientTests: XCTestCase {
         defer { XCTAssertNoThrow(try bin.shutdown()) }
         let client = self.makeDefaultHTTPClient()
         defer { XCTAssertNoThrow(try client.syncShutdown()) }
-        let body = HTTPClient.Body.stream(length: 12) { writer in
+        let body = HTTPClient.Body.stream(contentLength: 12) { writer in
             writer.write(.byteBuffer(ByteBuffer(integer: UInt64(0)))).flatMap {
                 writer.write(.byteBuffer(ByteBuffer(integer: UInt64(0))))
             }
@@ -132,8 +136,8 @@ class HTTP2ClientTests: XCTestCase {
             let q = DispatchQueue(label: "worker \(w)")
             q.async(group: allDone) {
                 func go() {
-                    allWorkersReady.signal() // tell the driver we're ready
-                    allWorkersGo.wait() // wait for the driver to let us go
+                    allWorkersReady.signal()  // tell the driver we're ready
+                    allWorkersGo.wait()  // wait for the driver to let us go
 
                     for _ in 0..<numberOfRequestsPerWorkers {
                         var response: HTTPClient.Response?
@@ -195,13 +199,14 @@ class HTTP2ClientTests: XCTestCase {
             let el = elg.next()
             q.async(group: allDone) {
                 func go() {
-                    allWorkersReady.signal() // tell the driver we're ready
-                    allWorkersGo.wait() // wait for the driver to let us go
+                    allWorkersReady.signal()  // tell the driver we're ready
+                    allWorkersGo.wait()  // wait for the driver to let us go
 
                     for _ in 0..<numberOfRequestsPerWorkers {
                         var response: HTTPClient.Response?
                         let request = try! HTTPClient.Request(url: url)
-                        let requestPromise = localClient
+                        let requestPromise =
+                            localClient
                             .execute(
                                 request: request,
                                 eventLoop: .delegateAndChannel(on: el)
@@ -251,10 +256,13 @@ class HTTP2ClientTests: XCTestCase {
         XCTAssertNoThrow(try client.syncShutdown())
 
         var results: [Result<HTTPClient.Response, Error>] = []
-        XCTAssertNoThrow(results = try EventLoopFuture
-            .whenAllComplete(responses, on: clientGroup.next())
-            .timeout(after: .seconds(2))
-            .wait())
+        XCTAssertNoThrow(
+            results =
+                try EventLoopFuture
+                .whenAllComplete(responses, on: clientGroup.next())
+                .timeout(after: .seconds(2))
+                .wait()
+        )
 
         for result in results {
             switch result {
@@ -276,15 +284,16 @@ class HTTP2ClientTests: XCTestCase {
         XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://localhost:\(bin.port)"))
         guard let request = maybeRequest else { return }
 
-        var task: HTTPClient.Task<Void>!
+        let taskBox = NIOLockedValueBox<HTTPClient.Task<Void>?>(nil)
         let delegate = HeadReceivedCallback { _ in
             // request is definitely running because we just received a head from the server
-            task.cancel()
+            taskBox.withLockedValue { $0 }!.cancel()
         }
-        task = client.execute(
+        let task = client.execute(
             request: request,
             delegate: delegate
         )
+        taskBox.withLockedValue { $0 = task }
 
         XCTAssertThrowsError(try task.futureResult.timeout(after: .seconds(2)).wait()) {
             XCTAssertEqualTypeAndValue($0, HTTPClientError.cancelled)
@@ -353,18 +362,20 @@ class HTTP2ClientTests: XCTestCase {
         guard let request = maybeRequest else { return }
 
         let tasks = (0..<100).map { _ -> HTTPClient.Task<TestHTTPDelegate.Response> in
-            var task: HTTPClient.Task<Void>!
+            let taskBox = NIOLockedValueBox<HTTPClient.Task<Void>?>(nil)
+
             let delegate = HeadReceivedCallback { _ in
                 // request is definitely running because we just received a head from the server
                 cancelPool.next().execute {
                     // canceling from a different thread
-                    task.cancel()
+                    taskBox.withLockedValue { $0 }!.cancel()
                 }
             }
-            task = client.execute(
+            let task = client.execute(
                 request: request,
                 delegate: delegate
             )
+            taskBox.withLockedValue { $0 = task }
             return task
         }
 
@@ -397,7 +408,11 @@ class HTTP2ClientTests: XCTestCase {
         XCTAssertNoThrow(maybeRequest1 = try HTTPClient.Request(url: "https://localhost:\(bin.port)/get"))
         guard let request1 = maybeRequest1 else { return }
 
-        let task1 = client.execute(request: request1, delegate: ResponseAccumulator(request: request1), eventLoop: .delegateAndChannel(on: el1))
+        let task1 = client.execute(
+            request: request1,
+            delegate: ResponseAccumulator(request: request1),
+            eventLoop: .delegateAndChannel(on: el1)
+        )
         var response1: ResponseAccumulator.Response?
         XCTAssertNoThrow(response1 = try task1.wait())
 
@@ -408,15 +423,17 @@ class HTTP2ClientTests: XCTestCase {
         let serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { XCTAssertNoThrow(try serverGroup.syncShutdownGracefully()) }
         var maybeServer: Channel?
-        XCTAssertNoThrow(maybeServer = try ServerBootstrap(group: serverGroup)
-            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-            .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
-            .childChannelInitializer { channel in
-                channel.close()
-            }
-            .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-            .bind(host: "127.0.0.1", port: serverPort)
-            .wait())
+        XCTAssertNoThrow(
+            maybeServer = try ServerBootstrap(group: serverGroup)
+                .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+                .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
+                .childChannelInitializer { channel in
+                    channel.close()
+                }
+                .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+                .bind(host: "127.0.0.1", port: serverPort)
+                .wait()
+        )
         // shutting down the old server closes all connections immediately
         XCTAssertNoThrow(try bin.shutdown())
         // client is now in HTTP/2 state and the HTTPBin is closed
@@ -427,7 +444,11 @@ class HTTP2ClientTests: XCTestCase {
         XCTAssertNoThrow(maybeRequest2 = try HTTPClient.Request(url: "https://localhost:\(serverPort)/"))
         guard let request2 = maybeRequest2 else { return }
 
-        let task2 = client.execute(request: request2, delegate: ResponseAccumulator(request: request2), eventLoop: .delegateAndChannel(on: el2))
+        let task2 = client.execute(
+            request: request2,
+            delegate: ResponseAccumulator(request: request2),
+            eventLoop: .delegateAndChannel(on: el2)
+        )
         XCTAssertThrowsError(try task2.wait()) { error in
             XCTAssertNil(
                 error as? HTTPClientError,
@@ -448,12 +469,90 @@ class HTTP2ClientTests: XCTestCase {
         XCTAssertEqual(response?.version, .http2)
         XCTAssertEqual(response?.body?.readableBytes, 10_000)
     }
+
+    func testSimplePost() {
+        let bin = HTTPBin(.http2(compress: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+        let client = self.makeDefaultHTTPClient()
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+        var response: HTTPClient.Response?
+        XCTAssertNoThrow(
+            response = try client.post(
+                url: "https://localhost:\(bin.port)/post",
+                body: .byteBuffer(ByteBuffer(repeating: 0, count: 12345))
+            ).wait()
+        )
+        XCTAssertEqual(.ok, response?.status)
+        XCTAssertEqual(response?.version, .http2)
+        XCTAssertEqual(
+            String(buffer: ByteBuffer(repeating: 0, count: 12345)),
+            try response?.body.map { body in
+                try JSONDecoder().decode(RequestInfo.self, from: body)
+            }?.data
+        )
+    }
+
+    func testHugePost() {
+        // Regression test for https://github.com/swift-server/async-http-client/issues/784
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 2)  // This needs to be more than 1!
+        defer {
+            XCTAssertNoThrow(try group.syncShutdownGracefully())
+        }
+        var serverH2Settings: HTTP2Settings = HTTP2Settings()
+        serverH2Settings.append(HTTP2Setting(parameter: .maxFrameSize, value: 16 * 1024 * 1024 - 1))
+        serverH2Settings.append(HTTP2Setting(parameter: .initialWindowSize, value: Int(Int32.max)))
+        let bin = HTTPBin(
+            .http2(compress: false, settings: serverH2Settings)
+        )
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+        var clientConfig = HTTPClient.Configuration()
+        clientConfig.tlsConfiguration = .clientDefault
+        clientConfig.tlsConfiguration?.certificateVerification = .none
+        clientConfig.httpVersion = .automatic
+        let client = HTTPClient(
+            eventLoopGroupProvider: .shared(group),
+            configuration: clientConfig,
+            backgroundActivityLogger: Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+        )
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        let loop1 = group.next()
+        let loop2 = group.next()
+        precondition(loop1 !== loop2, "bug in test setup, need two distinct loops")
+
+        XCTAssertNoThrow(
+            try client.execute(
+                request: .init(url: "https://localhost:\(bin.port)/get"),
+                eventLoop: .delegateAndChannel(on: loop1)  // This will force the channel to live on `loop1`.
+            ).wait()
+        )
+        var response: HTTPClient.Response?
+        let byteCount = 1024 * 1024 * 1024  // 1 GiB (unfortunately it has to be that big to trigger the bug)
+        XCTAssertNoThrow(
+            response = try client.execute(
+                request: HTTPClient.Request(
+                    url: "https://localhost:\(bin.port)/post-respond-with-byte-count",
+                    method: .POST,
+                    body: .data(Data(repeating: 0, count: byteCount))
+                ),
+                eventLoop: .delegate(on: loop2)
+            ).wait()
+        )
+        XCTAssertEqual(.ok, response?.status)
+        XCTAssertEqual(response?.version, .http2)
+        XCTAssertEqual(
+            "\(byteCount)",
+            try response?.body.map { body in
+                try JSONDecoder().decode(RequestInfo.self, from: body)
+            }?.data
+        )
+    }
 }
 
 private final class HeadReceivedCallback: HTTPClientResponseDelegate {
     typealias Response = Void
-    private let didReceiveHeadCallback: (HTTPResponseHead) -> Void
-    init(didReceiveHead: @escaping (HTTPResponseHead) -> Void) {
+    private let didReceiveHeadCallback: @Sendable (HTTPResponseHead) -> Void
+    init(didReceiveHead: @escaping @Sendable (HTTPResponseHead) -> Void) {
         self.didReceiveHeadCallback = didReceiveHead
     }
 
@@ -474,11 +573,17 @@ private final class SendHeaderAndWaitChannelHandler: ChannelInboundHandler {
         let requestPart = self.unwrapInboundIn(data)
         switch requestPart {
         case .head:
-            context.writeAndFlush(self.wrapOutboundOut(.head(HTTPResponseHead(
-                version: HTTPVersion(major: 1, minor: 1),
-                status: .ok
-            ))
-            ), promise: nil)
+            context.writeAndFlush(
+                self.wrapOutboundOut(
+                    .head(
+                        HTTPResponseHead(
+                            version: HTTPVersion(major: 1, minor: 1),
+                            status: .ok
+                        )
+                    )
+                ),
+                promise: nil
+            )
         case .body, .end:
             return
         }

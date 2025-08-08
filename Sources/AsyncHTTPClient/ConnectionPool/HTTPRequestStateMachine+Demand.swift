@@ -104,8 +104,8 @@ extension HTTPRequestStateMachine {
             // forwarded to the user.
 
             case .waitingForRead,
-                 .waitingForDemand,
-                 .waitingForReadOrDemand:
+                .waitingForDemand,
+                .waitingForReadOrDemand:
                 return nil
 
             case .modifying:
@@ -174,8 +174,8 @@ extension HTTPRequestStateMachine {
                 return (buffer, .none)
 
             case .waitingForReadOrDemand(let buffer),
-                 .waitingForRead(let buffer),
-                 .waitingForDemand(let buffer):
+                .waitingForRead(let buffer),
+                .waitingForDemand(let buffer):
                 // Normally this code path should never be hit. However there is one way to trigger
                 // this:
                 //

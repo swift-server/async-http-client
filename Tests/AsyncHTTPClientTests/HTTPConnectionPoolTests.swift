@@ -12,12 +12,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import Logging
 import NIOCore
 import NIOHTTP1
 import NIOPosix
 import XCTest
+
+@testable import AsyncHTTPClient
 
 class HTTPConnectionPoolTests: XCTestCase {
     func testOnlyOneConnectionIsUsedForSubSequentRequests() {
@@ -53,15 +54,17 @@ class HTTPConnectionPoolTests: XCTestCase {
             var maybeRequest: HTTPClient.Request?
             var maybeRequestBag: RequestBag<ResponseAccumulator>?
             XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://localhost:\(httpBin.port)"))
-            XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-                request: XCTUnwrap(maybeRequest),
-                eventLoopPreference: .indifferent,
-                task: .init(eventLoop: eventLoop, logger: .init(label: "test")),
-                redirectHandler: nil,
-                connectionDeadline: .distantFuture,
-                requestOptions: .forTests(),
-                delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
-            ))
+            XCTAssertNoThrow(
+                maybeRequestBag = try RequestBag(
+                    request: XCTUnwrap(maybeRequest),
+                    eventLoopPreference: .indifferent,
+                    task: .init(eventLoop: eventLoop, logger: .init(label: "test")),
+                    redirectHandler: nil,
+                    connectionDeadline: .distantFuture,
+                    requestOptions: .forTests(),
+                    delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
+                )
+            )
 
             guard let requestBag = maybeRequestBag else { return XCTFail("Expected to get a request") }
 
@@ -82,12 +85,79 @@ class HTTPConnectionPoolTests: XCTestCase {
 
         let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)")
         let poolDelegate = TestDelegate(eventLoop: eventLoop)
-
         let pool = HTTPConnectionPool(
             eventLoopGroup: eventLoopGroup,
             sslContextCache: .init(),
             tlsConfiguration: .none,
             clientConfiguration: .init(),
+            key: .init(request),
+            delegate: poolDelegate,
+            idGenerator: .init(),
+            backgroundActivityLogger: .init(label: "test")
+        )
+        defer {
+            pool.shutdown()
+            XCTAssertNoThrow(try poolDelegate.future.wait())
+            XCTAssertNoThrow(try eventLoop.scheduleTask(in: .milliseconds(100)) {}.futureResult.wait())
+            XCTAssertEqual(httpBin.activeConnections, 0)
+            // Since we would migrate from h2 -> h1, which creates a general purpose connection
+            // for every connection in .starting state, after the first request which will
+            // be serviced by an overflow connection, the rest of requests will use the general
+            // purpose connection since they are all on the same event loop.
+            // Hence we will only create 1 overflow connection and 1 general purpose connection.
+            XCTAssertEqual(httpBin.createdConnections, 2)
+        }
+
+        XCTAssertEqual(httpBin.createdConnections, 0)
+
+        for _ in 0..<10 {
+            var maybeRequest: HTTPClient.Request?
+            var maybeRequestBag: RequestBag<ResponseAccumulator>?
+            XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://localhost:\(httpBin.port)"))
+            XCTAssertNoThrow(
+                maybeRequestBag = try RequestBag(
+                    request: XCTUnwrap(maybeRequest),
+                    eventLoopPreference: .init(
+                        .testOnly_exact(channelOn: eventLoopGroup.next(), delegateOn: eventLoopGroup.next())
+                    ),
+                    task: .init(eventLoop: eventLoop, logger: .init(label: "test")),
+                    redirectHandler: nil,
+                    connectionDeadline: .distantFuture,
+                    requestOptions: .forTests(),
+                    delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
+                )
+            )
+
+            guard let requestBag = maybeRequestBag else { return XCTFail("Expected to get a request") }
+
+            pool.executeRequest(requestBag)
+            XCTAssertNoThrow(try requestBag.task.futureResult.wait())
+
+            // Flakiness Alert: We check <= and >= instead of ==
+            // While migration from h2 -> h1, one general purpose and one over flow connection
+            // will be created, there's no guarantee as to whether the request is executed
+            // after both are created.
+            XCTAssertGreaterThanOrEqual(httpBin.createdConnections, 1)
+            XCTAssertLessThanOrEqual(httpBin.createdConnections, 2)
+        }
+    }
+
+    func testConnectionsForEventLoopRequirementsAreClosedH1Only() {
+        let httpBin = HTTPBin()
+        defer { XCTAssertNoThrow(try httpBin.shutdown()) }
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 2)
+        let eventLoop = eventLoopGroup.next()
+        defer { XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully()) }
+
+        let request = try! HTTPClient.Request(url: "http://localhost:\(httpBin.port)")
+        let poolDelegate = TestDelegate(eventLoop: eventLoop)
+        var configuration = HTTPClient.Configuration()
+        configuration.httpVersion = .http1Only
+        let pool = HTTPConnectionPool(
+            eventLoopGroup: eventLoopGroup,
+            sslContextCache: .init(),
+            tlsConfiguration: .none,
+            clientConfiguration: configuration,
             key: .init(request),
             delegate: poolDelegate,
             idGenerator: .init(),
@@ -107,15 +177,19 @@ class HTTPConnectionPoolTests: XCTestCase {
             var maybeRequest: HTTPClient.Request?
             var maybeRequestBag: RequestBag<ResponseAccumulator>?
             XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://localhost:\(httpBin.port)"))
-            XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-                request: XCTUnwrap(maybeRequest),
-                eventLoopPreference: .init(.testOnly_exact(channelOn: eventLoopGroup.next(), delegateOn: eventLoopGroup.next())),
-                task: .init(eventLoop: eventLoop, logger: .init(label: "test")),
-                redirectHandler: nil,
-                connectionDeadline: .distantFuture,
-                requestOptions: .forTests(),
-                delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
-            ))
+            XCTAssertNoThrow(
+                maybeRequestBag = try RequestBag(
+                    request: XCTUnwrap(maybeRequest),
+                    eventLoopPreference: .init(
+                        .testOnly_exact(channelOn: eventLoopGroup.next(), delegateOn: eventLoopGroup.next())
+                    ),
+                    task: .init(eventLoop: eventLoop, logger: .init(label: "test")),
+                    redirectHandler: nil,
+                    connectionDeadline: .distantFuture,
+                    requestOptions: .forTests(),
+                    delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
+                )
+            )
 
             guard let requestBag = maybeRequestBag else { return XCTFail("Expected to get a request") }
 
@@ -162,15 +236,17 @@ class HTTPConnectionPoolTests: XCTestCase {
             var maybeRequest: HTTPClient.Request?
             var maybeRequestBag: RequestBag<ResponseAccumulator>?
             XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://localhost:\(httpBin.port)"))
-            XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-                request: XCTUnwrap(maybeRequest),
-                eventLoopPreference: .indifferent,
-                task: .init(eventLoop: eventLoopGroup.next(), logger: .init(label: "test")),
-                redirectHandler: nil,
-                connectionDeadline: .distantFuture,
-                requestOptions: .forTests(),
-                delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
-            ))
+            XCTAssertNoThrow(
+                maybeRequestBag = try RequestBag(
+                    request: XCTUnwrap(maybeRequest),
+                    eventLoopPreference: .indifferent,
+                    task: .init(eventLoop: eventLoopGroup.next(), logger: .init(label: "test")),
+                    redirectHandler: nil,
+                    connectionDeadline: .distantFuture,
+                    requestOptions: .forTests(),
+                    delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
+                )
+            )
 
             guard let requestBag = maybeRequestBag else { return XCTFail("Expected to get a request") }
 
@@ -216,15 +292,17 @@ class HTTPConnectionPoolTests: XCTestCase {
         var maybeRequest: HTTPClient.Request?
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
         XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://localhost:\(httpBin.port)"))
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: XCTUnwrap(maybeRequest),
-            eventLoopPreference: .indifferent,
-            task: .init(eventLoop: eventLoopGroup.next(), logger: .init(label: "test")),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(5),
-            requestOptions: .forTests(),
-            delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: XCTUnwrap(maybeRequest),
+                eventLoopPreference: .indifferent,
+                task: .init(eventLoop: eventLoopGroup.next(), logger: .init(label: "test")),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(5),
+                requestOptions: .forTests(),
+                delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
+            )
+        )
 
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to get a request") }
 
@@ -264,15 +342,17 @@ class HTTPConnectionPoolTests: XCTestCase {
         var maybeRequest: HTTPClient.Request?
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
         XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://localhost:\(httpBin.port)"))
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: XCTUnwrap(maybeRequest),
-            eventLoopPreference: .indifferent,
-            task: .init(eventLoop: eventLoopGroup.next(), logger: .init(label: "test")),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(5),
-            requestOptions: .forTests(),
-            delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: XCTUnwrap(maybeRequest),
+                eventLoopPreference: .indifferent,
+                task: .init(eventLoop: eventLoopGroup.next(), logger: .init(label: "test")),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(5),
+                requestOptions: .forTests(),
+                delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
+            )
+        )
 
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to get a request") }
 
@@ -320,15 +400,17 @@ class HTTPConnectionPoolTests: XCTestCase {
         var maybeRequest: HTTPClient.Request?
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
         XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)"))
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: XCTUnwrap(maybeRequest),
-            eventLoopPreference: .indifferent,
-            task: .init(eventLoop: eventLoopGroup.next(), logger: .init(label: "test")),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(5),
-            requestOptions: .forTests(),
-            delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: XCTUnwrap(maybeRequest),
+                eventLoopPreference: .indifferent,
+                task: .init(eventLoop: eventLoopGroup.next(), logger: .init(label: "test")),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(5),
+                requestOptions: .forTests(),
+                delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
+            )
+        )
 
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to get a request") }
 
@@ -366,15 +448,17 @@ class HTTPConnectionPoolTests: XCTestCase {
         var maybeRequest: HTTPClient.Request?
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
         XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "http://localhost:\(httpBin.port)/wait"))
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: XCTUnwrap(maybeRequest),
-            eventLoopPreference: .indifferent,
-            task: .init(eventLoop: eventLoopGroup.next(), logger: .init(label: "test")),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(5),
-            requestOptions: .forTests(),
-            delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: XCTUnwrap(maybeRequest),
+                eventLoopPreference: .indifferent,
+                task: .init(eventLoop: eventLoopGroup.next(), logger: .init(label: "test")),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(5),
+                requestOptions: .forTests(),
+                delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
+            )
+        )
 
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to get a request") }
 
@@ -426,15 +510,17 @@ class HTTPConnectionPoolTests: XCTestCase {
                     var maybeRequestBag: RequestBag<ResponseAccumulator>?
 
                     XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: url))
-                    XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-                        request: XCTUnwrap(maybeRequest),
-                        eventLoopPreference: .indifferent,
-                        task: .init(eventLoop: eventLoopGroup.next(), logger: logger),
-                        redirectHandler: nil,
-                        connectionDeadline: .now() + .seconds(5),
-                        requestOptions: .forTests(),
-                        delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
-                    ))
+                    XCTAssertNoThrow(
+                        maybeRequestBag = try RequestBag(
+                            request: XCTUnwrap(maybeRequest),
+                            eventLoopPreference: .indifferent,
+                            task: .init(eventLoop: eventLoopGroup.next(), logger: logger),
+                            redirectHandler: nil,
+                            connectionDeadline: .now() + .seconds(5),
+                            requestOptions: .forTests(),
+                            delegate: ResponseAccumulator(request: XCTUnwrap(maybeRequest))
+                        )
+                    )
 
                     guard let requestBag = maybeRequestBag else { return XCTFail("Expected to get a request") }
                     pool.executeRequest(requestBag)
@@ -458,7 +544,10 @@ class HTTPConnectionPoolTests: XCTestCase {
         var backoff = HTTPConnectionPool.calculateBackoff(failedAttempt: 1)
 
         // The value should be 100ms±3ms
-        XCTAssertLessThanOrEqual((backoff - .milliseconds(100)).nanoseconds.magnitude, TimeAmount.milliseconds(3).nanoseconds.magnitude)
+        XCTAssertLessThanOrEqual(
+            (backoff - .milliseconds(100)).nanoseconds.magnitude,
+            TimeAmount.milliseconds(3).nanoseconds.magnitude
+        )
 
         // Should always increase
         // We stop when we get within the jitter of 60s, which is 1.8s
@@ -474,7 +563,8 @@ class HTTPConnectionPoolTests: XCTestCase {
         // Ok, now we should be able to do a hundred increments, and always hit 60s, plus or minus 1.8s of jitter.
         for offset in 0..<100 {
             XCTAssertLessThanOrEqual(
-                (HTTPConnectionPool.calculateBackoff(failedAttempt: attempt + offset) - .seconds(60)).nanoseconds.magnitude,
+                (HTTPConnectionPool.calculateBackoff(failedAttempt: attempt + offset) - .seconds(60)).nanoseconds
+                    .magnitude,
                 TimeAmount.milliseconds(1800).nanoseconds.magnitude
             )
         }

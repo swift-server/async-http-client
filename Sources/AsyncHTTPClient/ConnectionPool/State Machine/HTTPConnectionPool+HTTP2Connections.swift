@@ -117,7 +117,13 @@ extension HTTPConnectionPool {
                 preconditionFailure("Invalid state: \(self.state)")
 
             case .starting(let maxUses):
-                self.state = .active(conn, maxStreams: maxStreams, usedStreams: 0, lastIdle: .now(), remainingUses: maxUses)
+                self.state = .active(
+                    conn,
+                    maxStreams: maxStreams,
+                    usedStreams: 0,
+                    lastIdle: .now(),
+                    remainingUses: maxUses
+                )
                 if let maxUses = maxUses {
                     return min(maxStreams, maxUses)
                 } else {
@@ -136,7 +142,13 @@ extension HTTPConnectionPool {
                 preconditionFailure("Invalid state for updating max concurrent streams: \(self.state)")
 
             case .active(let conn, _, let usedStreams, let lastIdle, let remainingUses):
-                self.state = .active(conn, maxStreams: maxStreams, usedStreams: usedStreams, lastIdle: lastIdle, remainingUses: remainingUses)
+                self.state = .active(
+                    conn,
+                    maxStreams: maxStreams,
+                    usedStreams: usedStreams,
+                    lastIdle: lastIdle,
+                    remainingUses: remainingUses
+                )
                 let availableStreams = max(maxStreams - usedStreams, 0)
                 if let remainingUses = remainingUses {
                     return min(remainingUses, availableStreams)
@@ -192,8 +204,17 @@ extension HTTPConnectionPool {
             case .active(let conn, let maxStreams, var usedStreams, let lastIdle, let remainingUses):
                 usedStreams += count
                 precondition(usedStreams <= maxStreams, "tried to lease a connection which is not available")
-                precondition(remainingUses.map { $0 >= count } ?? true, "tried to lease streams from a connection which does not have enough remaining streams")
-                self.state = .active(conn, maxStreams: maxStreams, usedStreams: usedStreams, lastIdle: lastIdle, remainingUses: remainingUses.map { $0 - count })
+                precondition(
+                    remainingUses.map { $0 >= count } ?? true,
+                    "tried to lease streams from a connection which does not have enough remaining streams"
+                )
+                self.state = .active(
+                    conn,
+                    maxStreams: maxStreams,
+                    usedStreams: usedStreams,
+                    lastIdle: lastIdle,
+                    remainingUses: remainingUses.map { $0 - count }
+                )
                 return conn
             }
         }
@@ -212,7 +233,13 @@ extension HTTPConnectionPool {
                     lastIdle = .now()
                 }
 
-                self.state = .active(conn, maxStreams: maxStreams, usedStreams: usedStreams, lastIdle: lastIdle, remainingUses: remainingUses)
+                self.state = .active(
+                    conn,
+                    maxStreams: maxStreams,
+                    usedStreams: usedStreams,
+                    lastIdle: lastIdle,
+                    remainingUses: remainingUses
+                )
                 let availableStreams = max(maxStreams &- usedStreams, 0)
                 if let remainingUses = remainingUses {
                     return min(availableStreams, remainingUses)
@@ -282,7 +309,9 @@ extension HTTPConnectionPool {
                 return .keepConnection
 
             case .closed:
-                preconditionFailure("Unexpected state for cleanup: Did not expect to have closed connections in the state machine.")
+                preconditionFailure(
+                    "Unexpected state for cleanup: Did not expect to have closed connections in the state machine."
+                )
             }
         }
 
@@ -341,7 +370,9 @@ extension HTTPConnectionPool {
                 return .removeConnection
 
             case .closed:
-                preconditionFailure("Unexpected state: Did not expect to have connections with this state in the state machine: \(self.state)")
+                preconditionFailure(
+                    "Unexpected state: Did not expect to have connections with this state in the state machine: \(self.state)"
+                )
             }
         }
 
@@ -388,16 +419,20 @@ extension HTTPConnectionPool {
             backingOff: [(Connection.ID, EventLoop)]
         ) {
             for (connectionID, eventLoop) in starting {
-                let newConnection = HTTP2ConnectionState(connectionID: connectionID,
-                                                         eventLoop: eventLoop,
-                                                         maximumUses: self.maximumConnectionUses)
+                let newConnection = HTTP2ConnectionState(
+                    connectionID: connectionID,
+                    eventLoop: eventLoop,
+                    maximumUses: self.maximumConnectionUses
+                )
                 self.connections.append(newConnection)
             }
 
             for (connectionID, eventLoop) in backingOff {
-                var backingOffConnection = HTTP2ConnectionState(connectionID: connectionID,
-                                                                eventLoop: eventLoop,
-                                                                maximumUses: self.maximumConnectionUses)
+                var backingOffConnection = HTTP2ConnectionState(
+                    connectionID: connectionID,
+                    eventLoop: eventLoop,
+                    maximumUses: self.maximumConnectionUses
+                )
                 // TODO: Maybe we want to add a static init for backing off connections to HTTP2ConnectionState
                 backingOffConnection.failedToConnect()
                 self.connections.append(backingOffConnection)
@@ -503,9 +538,11 @@ extension HTTPConnectionPool {
                 "we should not create more than one connection per event loop"
             )
 
-            let connection = HTTP2ConnectionState(connectionID: self.generator.next(),
-                                                  eventLoop: eventLoop,
-                                                  maximumUses: self.maximumConnectionUses)
+            let connection = HTTP2ConnectionState(
+                connectionID: self.generator.next(),
+                eventLoop: eventLoop,
+                maximumUses: self.maximumConnectionUses
+            )
             self.connections.append(connection)
             return connection.connectionID
         }
@@ -518,11 +555,17 @@ extension HTTPConnectionPool {
         /// - Returns: An index and an ``EstablishedConnectionContext`` to determine the next action for the now idle connection.
         ///            Call ``leaseStreams(at:count:)`` or ``closeConnection(at:)`` with the supplied index after
         ///            this.
-        mutating func newHTTP2ConnectionEstablished(_ connection: Connection, maxConcurrentStreams: Int) -> (Int, EstablishedConnectionContext) {
+        mutating func newHTTP2ConnectionEstablished(
+            _ connection: Connection,
+            maxConcurrentStreams: Int
+        ) -> (Int, EstablishedConnectionContext) {
             guard let index = self.connections.firstIndex(where: { $0.connectionID == connection.id }) else {
                 preconditionFailure("There is a new connection that we didn't request!")
             }
-            precondition(connection.eventLoop === self.connections[index].eventLoop, "Expected the new connection to be on EL")
+            precondition(
+                connection.eventLoop === self.connections[index].eventLoop,
+                "Expected the new connection to be on EL"
+            )
             let availableStreams = self.connections[index].connected(connection, maxStreams: maxConcurrentStreams)
             let context = EstablishedConnectionContext(
                 availableStreams: availableStreams,

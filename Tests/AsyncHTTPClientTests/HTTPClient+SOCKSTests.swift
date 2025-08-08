@@ -12,9 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-/* NOT @testable */ import AsyncHTTPClient // Tests that need @testable go into HTTPClientInternalTests.swift
+import AsyncHTTPClient  // NOT @testable - tests that need @testable go into HTTPClientInternalTests.swift
 import Logging
 import NIOCore
+import NIOHTTP1
 import NIOPosix
 import NIOSOCKS
 import XCTest
@@ -29,7 +30,7 @@ class HTTPClientSOCKSTests: XCTestCase {
     var backgroundLogStore: CollectEverythingLogHandler.LogStore!
 
     var defaultHTTPBinURLPrefix: String {
-        return "http://localhost:\(self.defaultHTTPBin.port)/"
+        "http://localhost:\(self.defaultHTTPBin.port)/"
     }
 
     override func setUp() {
@@ -43,12 +44,17 @@ class HTTPClientSOCKSTests: XCTestCase {
         self.serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         self.defaultHTTPBin = HTTPBin()
         self.backgroundLogStore = CollectEverythingLogHandler.LogStore()
-        var backgroundLogger = Logger(label: "\(#function)", factory: { _ in
-            CollectEverythingLogHandler(logStore: self.backgroundLogStore!)
-        })
+        var backgroundLogger = Logger(
+            label: "\(#function)",
+            factory: { _ in
+                CollectEverythingLogHandler(logStore: self.backgroundLogStore!)
+            }
+        )
         backgroundLogger.logLevel = .trace
-        self.defaultClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                        backgroundActivityLogger: backgroundLogger)
+        self.defaultClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            backgroundActivityLogger: backgroundLogger
+        )
     }
 
     override func tearDown() {
@@ -75,10 +81,12 @@ class HTTPClientSOCKSTests: XCTestCase {
 
     func testProxySOCKS() throws {
         let socksBin = try MockSOCKSServer(expectedURL: "/socks/test", expectedResponse: "it works!")
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: .init(
-                                         proxy: .socksServer(host: "localhost", port: socksBin.port)
-                                     ).enableFastFailureModeForTesting())
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: .init(
+                proxy: .socksServer(host: "localhost", port: socksBin.port)
+            ).enableFastFailureModeForTesting()
+        )
 
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
@@ -94,8 +102,10 @@ class HTTPClientSOCKSTests: XCTestCase {
     func testProxySOCKSBogusAddress() throws {
         let config = HTTPClient.Configuration(proxy: .socksServer(host: "127.0.."))
             .enableFastFailureModeForTesting()
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: config)
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: config
+        )
 
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
@@ -109,8 +119,10 @@ class HTTPClientSOCKSTests: XCTestCase {
         let config = HTTPClient.Configuration(proxy: .socksServer(host: "localhost", port: localHTTPBin.port))
             .enableFastFailureModeForTesting()
 
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: config)
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: config
+        )
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
             XCTAssertNoThrow(try localHTTPBin.shutdown())
@@ -123,8 +135,10 @@ class HTTPClientSOCKSTests: XCTestCase {
         let config = HTTPClient.Configuration(proxy: .socksServer(host: "localhost"))
             .enableFastFailureModeForTesting()
 
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: config)
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: config
+        )
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
         }
@@ -137,8 +151,10 @@ class HTTPClientSOCKSTests: XCTestCase {
         let config = HTTPClient.Configuration(proxy: .socksServer(host: "localhost", port: socksBin.port))
             .enableFastFailureModeForTesting()
 
-        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                     configuration: config)
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: config
+        )
 
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())

@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -23,6 +22,8 @@ import NIOPosix
 import NIOTestUtils
 import XCTest
 
+@testable import AsyncHTTPClient
+
 class HTTP1ConnectionTests: XCTestCase {
     func testCreateNewConnectionWithDecompression() {
         let embedded = EmbeddedChannel()
@@ -31,19 +32,23 @@ class HTTP1ConnectionTests: XCTestCase {
         XCTAssertNoThrow(try embedded.connect(to: SocketAddress(ipAddress: "127.0.0.1", port: 3000)).wait())
 
         var connection: HTTP1Connection?
-        XCTAssertNoThrow(connection = try HTTP1Connection.start(
-            channel: embedded,
-            connectionID: 0,
-            delegate: MockHTTP1ConnectionDelegate(),
-            decompression: .enabled(limit: .ratio(4)),
-            logger: logger
-        ))
+        XCTAssertNoThrow(
+            connection = try HTTP1Connection.start(
+                channel: embedded,
+                connectionID: 0,
+                delegate: MockHTTP1ConnectionDelegate(),
+                decompression: .enabled(limit: .ratio(4)),
+                logger: logger
+            )
+        )
 
         XCTAssertNotNil(try embedded.pipeline.syncOperations.handler(type: HTTPRequestEncoder.self))
-        XCTAssertNotNil(try embedded.pipeline.syncOperations.handler(type: ByteToMessageHandler<HTTPResponseDecoder>.self))
+        XCTAssertNotNil(
+            try embedded.pipeline.syncOperations.handler(type: ByteToMessageHandler<HTTPResponseDecoder>.self)
+        )
         XCTAssertNotNil(try embedded.pipeline.syncOperations.handler(type: NIOHTTPResponseDecompressor.self))
 
-        XCTAssertNoThrow(try connection?.close().wait())
+        XCTAssertNoThrow(try connection?.sendableView.close().wait())
         embedded.embeddedEventLoop.run()
         XCTAssert(!embedded.isActive)
     }
@@ -54,17 +59,22 @@ class HTTP1ConnectionTests: XCTestCase {
 
         XCTAssertNoThrow(try embedded.connect(to: SocketAddress(ipAddress: "127.0.0.1", port: 3000)).wait())
 
-        XCTAssertNoThrow(try HTTP1Connection.start(
-            channel: embedded,
-            connectionID: 0,
-            delegate: MockHTTP1ConnectionDelegate(),
-            decompression: .disabled,
-            logger: logger
-        ))
+        XCTAssertNoThrow(
+            try HTTP1Connection.start(
+                channel: embedded,
+                connectionID: 0,
+                delegate: MockHTTP1ConnectionDelegate(),
+                decompression: .disabled,
+                logger: logger
+            )
+        )
 
         XCTAssertNotNil(try embedded.pipeline.syncOperations.handler(type: HTTPRequestEncoder.self))
-        XCTAssertNotNil(try embedded.pipeline.syncOperations.handler(type: ByteToMessageHandler<HTTPResponseDecoder>.self))
-        XCTAssertThrowsError(try embedded.pipeline.syncOperations.handler(type: NIOHTTPResponseDecompressor.self)) { error in
+        XCTAssertNotNil(
+            try embedded.pipeline.syncOperations.handler(type: ByteToMessageHandler<HTTPResponseDecoder>.self)
+        )
+        XCTAssertThrowsError(try embedded.pipeline.syncOperations.handler(type: NIOHTTPResponseDecompressor.self)) {
+            error in
             XCTAssertEqual(error as? ChannelPipelineError, .notFound)
         }
     }
@@ -78,13 +88,15 @@ class HTTP1ConnectionTests: XCTestCase {
         embedded.embeddedEventLoop.run()
         let logger = Logger(label: "test.http1.connection")
 
-        XCTAssertThrowsError(try HTTP1Connection.start(
-            channel: embedded,
-            connectionID: 0,
-            delegate: MockHTTP1ConnectionDelegate(),
-            decompression: .disabled,
-            logger: logger
-        ))
+        XCTAssertThrowsError(
+            try HTTP1Connection.start(
+                channel: embedded,
+                connectionID: 0,
+                delegate: MockHTTP1ConnectionDelegate(),
+                decompression: .disabled,
+                logger: logger
+            )
+        )
     }
 
     func testGETRequest() {
@@ -96,8 +108,7 @@ class HTTP1ConnectionTests: XCTestCase {
         defer { XCTAssertNoThrow(try server.stop()) }
 
         let logger = Logger(label: "test")
-        let delegate = MockHTTP1ConnectionDelegate()
-        delegate.closePromise = clientEL.makePromise(of: Void.self)
+        let delegate = MockHTTP1ConnectionDelegate(closePromise: clientEL.makePromise())
 
         let connection = try! ClientBootstrap(group: clientEL)
             .connect(to: .init(ipAddress: "127.0.0.1", port: server.serverPort))
@@ -108,35 +119,37 @@ class HTTP1ConnectionTests: XCTestCase {
                     delegate: delegate,
                     decompression: .disabled,
                     logger: logger
-                )
+                ).sendableView
             }
             .wait()
 
         var maybeRequest: HTTPClient.Request?
-        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(
-            url: "http://localhost/hello/swift",
-            method: .POST,
-            body: .stream(length: 4) { writer -> EventLoopFuture<Void> in
-                func recursive(count: UInt8, promise: EventLoopPromise<Void>) {
-                    guard count < 4 else {
-                        return promise.succeed(())
-                    }
+        XCTAssertNoThrow(
+            maybeRequest = try HTTPClient.Request(
+                url: "http://localhost/hello/swift",
+                method: .POST,
+                body: .stream(contentLength: 4) { writer -> EventLoopFuture<Void> in
+                    @Sendable func recursive(count: UInt8, promise: EventLoopPromise<Void>) {
+                        guard count < 4 else {
+                            return promise.succeed(())
+                        }
 
-                    writer.write(.byteBuffer(ByteBuffer(bytes: [count]))).whenComplete { result in
-                        switch result {
-                        case .failure(let error):
-                            XCTFail("Unexpected error: \(error)")
-                        case .success:
-                            recursive(count: count + 1, promise: promise)
+                        writer.write(.byteBuffer(ByteBuffer(bytes: [count]))).whenComplete { result in
+                            switch result {
+                            case .failure(let error):
+                                XCTFail("Unexpected error: \(error)")
+                            case .success:
+                                recursive(count: count + 1, promise: promise)
+                            }
                         }
                     }
-                }
 
-                let promise = clientEL.makePromise(of: Void.self)
-                recursive(count: 0, promise: promise)
-                return promise.futureResult
-            }
-        ))
+                    let promise = clientEL.makePromise(of: Void.self)
+                    recursive(count: 0, promise: promise)
+                    return promise.futureResult
+                }
+            )
+        )
 
         guard let request = maybeRequest else {
             return XCTFail("Expected to have a connection and a request")
@@ -145,33 +158,39 @@ class HTTP1ConnectionTests: XCTestCase {
         let task = HTTPClient.Task<HTTPClient.Response>(eventLoop: clientEL, logger: logger)
 
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: request,
-            eventLoopPreference: .delegate(on: clientEL),
-            task: task,
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(60),
-            requestOptions: .forTests(),
-            delegate: ResponseAccumulator(request: request)
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: clientEL),
+                task: task,
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(60),
+                requestOptions: .forTests(),
+                delegate: ResponseAccumulator(request: request)
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
         connection.executeRequest(requestBag)
 
-        XCTAssertNoThrow(try server.receiveHeadAndVerify { head in
-            XCTAssertEqual(head.method, .POST)
-            XCTAssertEqual(head.uri, "/hello/swift")
-            XCTAssertEqual(head.headers["content-length"].first, "4")
-        })
+        XCTAssertNoThrow(
+            try server.receiveHeadAndVerify { head in
+                XCTAssertEqual(head.method, .POST)
+                XCTAssertEqual(head.uri, "/hello/swift")
+                XCTAssertEqual(head.headers["content-length"].first, "4")
+            }
+        )
 
         var received: UInt8 = 0
         while received < 4 {
-            XCTAssertNoThrow(try server.receiveBodyAndVerify { body in
-                var body = body
-                while let read = body.readInteger(as: UInt8.self) {
-                    XCTAssertEqual(received, read)
-                    received += 1
+            XCTAssertNoThrow(
+                try server.receiveBodyAndVerify { body in
+                    var body = body
+                    while let read = body.readInteger(as: UInt8.self) {
+                        XCTAssertEqual(received, read)
+                        received += 1
+                    }
                 }
-            })
+            )
         }
         XCTAssertEqual(received, 4)
         XCTAssertNoThrow(try server.receiveEnd())
@@ -198,17 +217,23 @@ class HTTP1ConnectionTests: XCTestCase {
 
         var maybeChannel: Channel?
 
-        XCTAssertNoThrow(maybeChannel = try ClientBootstrap(group: eventLoop).connect(host: "localhost", port: httpBin.port).wait())
+        XCTAssertNoThrow(
+            maybeChannel = try ClientBootstrap(group: eventLoop).connect(host: "localhost", port: httpBin.port).wait()
+        )
         let connectionDelegate = MockConnectionDelegate()
         let logger = Logger(label: "test")
-        var maybeConnection: HTTP1Connection?
-        XCTAssertNoThrow(maybeConnection = try eventLoop.submit { try HTTP1Connection.start(
-            channel: XCTUnwrap(maybeChannel),
-            connectionID: 0,
-            delegate: connectionDelegate,
-            decompression: .disabled,
-            logger: logger
-        ) }.wait())
+        var maybeConnection: HTTP1Connection.SendableView?
+        XCTAssertNoThrow(
+            maybeConnection = try eventLoop.submit { [maybeChannel] in
+                try HTTP1Connection.start(
+                    channel: XCTUnwrap(maybeChannel),
+                    connectionID: 0,
+                    delegate: connectionDelegate,
+                    decompression: .disabled,
+                    logger: logger
+                ).sendableView
+            }.wait()
+        )
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection here") }
 
         var maybeRequest: HTTPClient.Request?
@@ -217,15 +242,17 @@ class HTTP1ConnectionTests: XCTestCase {
 
         let delegate = ResponseAccumulator(request: request)
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: request,
-            eventLoopPreference: .delegate(on: eventLoopGroup.next()),
-            task: .init(eventLoop: eventLoopGroup.next(), logger: logger),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(30),
-            requestOptions: .forTests(),
-            delegate: delegate
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: eventLoopGroup.next()),
+                task: .init(eventLoop: eventLoopGroup.next(), logger: logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(),
+                delegate: delegate
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
         connection.executeRequest(requestBag)
@@ -248,21 +275,29 @@ class HTTP1ConnectionTests: XCTestCase {
         defer { XCTAssertNoThrow(try eventLoopGroup.syncShutdownGracefully()) }
 
         let closeOnRequest = (30...100).randomElement()!
-        let httpBin = HTTPBin(handlerFactory: { _ in SuddenlySendsCloseHeaderChannelHandler(closeOnRequest: closeOnRequest) })
+        let httpBin = HTTPBin(handlerFactory: { _ in
+            SuddenlySendsCloseHeaderChannelHandler(closeOnRequest: closeOnRequest)
+        })
 
         var maybeChannel: Channel?
 
-        XCTAssertNoThrow(maybeChannel = try ClientBootstrap(group: eventLoop).connect(host: "localhost", port: httpBin.port).wait())
+        XCTAssertNoThrow(
+            maybeChannel = try ClientBootstrap(group: eventLoop).connect(host: "localhost", port: httpBin.port).wait()
+        )
         let connectionDelegate = MockConnectionDelegate()
         let logger = Logger(label: "test")
-        var maybeConnection: HTTP1Connection?
-        XCTAssertNoThrow(maybeConnection = try eventLoop.submit { try HTTP1Connection.start(
-            channel: XCTUnwrap(maybeChannel),
-            connectionID: 0,
-            delegate: connectionDelegate,
-            decompression: .disabled,
-            logger: logger
-        ) }.wait())
+        var maybeConnection: HTTP1Connection.SendableView?
+        XCTAssertNoThrow(
+            maybeConnection = try eventLoop.submit { [maybeChannel] in
+                try HTTP1Connection.start(
+                    channel: XCTUnwrap(maybeChannel),
+                    connectionID: 0,
+                    delegate: connectionDelegate,
+                    decompression: .disabled,
+                    logger: logger
+                ).sendableView
+            }.wait()
+        )
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection here") }
 
         var counter = 0
@@ -275,16 +310,20 @@ class HTTP1ConnectionTests: XCTestCase {
 
             let delegate = ResponseAccumulator(request: request)
             var maybeRequestBag: RequestBag<ResponseAccumulator>?
-            XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-                request: request,
-                eventLoopPreference: .delegate(on: eventLoopGroup.next()),
-                task: .init(eventLoop: eventLoopGroup.next(), logger: logger),
-                redirectHandler: nil,
-                connectionDeadline: .now() + .seconds(30),
-                requestOptions: .forTests(),
-                delegate: delegate
-            ))
-            guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
+            XCTAssertNoThrow(
+                maybeRequestBag = try RequestBag(
+                    request: request,
+                    eventLoopPreference: .delegate(on: eventLoopGroup.next()),
+                    task: .init(eventLoop: eventLoopGroup.next(), logger: logger),
+                    redirectHandler: nil,
+                    connectionDeadline: .now() + .seconds(30),
+                    requestOptions: .forTests(),
+                    delegate: delegate
+                )
+            )
+            guard let requestBag = maybeRequestBag else {
+                return XCTFail("Expected to be able to create a request bag")
+            }
 
             connection.executeRequest(requestBag)
 
@@ -293,7 +332,7 @@ class HTTP1ConnectionTests: XCTestCase {
             XCTAssertEqual(response?.status, .ok)
 
             if response?.headers.first(name: "connection") == "close" {
-                break // the loop
+                break  // the loop
             } else {
                 XCTAssertEqual(httpBin.activeConnections, 1)
                 XCTAssertEqual(connectionDelegate.hitConnectionReleased, counter)
@@ -306,8 +345,11 @@ class HTTP1ConnectionTests: XCTestCase {
 
         XCTAssertEqual(counter, closeOnRequest)
         XCTAssertEqual(connectionDelegate.hitConnectionClosed, 1)
-        XCTAssertEqual(connectionDelegate.hitConnectionReleased, counter - 1,
-                       "If a close header is received connection release is not triggered.")
+        XCTAssertEqual(
+            connectionDelegate.hitConnectionReleased,
+            counter - 1,
+            "If a close header is received connection release is not triggered."
+        )
 
         // we need to wait a small amount of time to see the connection close on the server
         try! eventLoop.scheduleTask(in: .milliseconds(200)) {}.futureResult.wait()
@@ -324,17 +366,23 @@ class HTTP1ConnectionTests: XCTestCase {
 
         var maybeChannel: Channel?
 
-        XCTAssertNoThrow(maybeChannel = try ClientBootstrap(group: eventLoop).connect(host: "localhost", port: httpBin.port).wait())
+        XCTAssertNoThrow(
+            maybeChannel = try ClientBootstrap(group: eventLoop).connect(host: "localhost", port: httpBin.port).wait()
+        )
         let connectionDelegate = MockConnectionDelegate()
         let logger = Logger(label: "test")
-        var maybeConnection: HTTP1Connection?
-        XCTAssertNoThrow(maybeConnection = try eventLoop.submit { try HTTP1Connection.start(
-            channel: XCTUnwrap(maybeChannel),
-            connectionID: 0,
-            delegate: connectionDelegate,
-            decompression: .disabled,
-            logger: logger
-        ) }.wait())
+        var maybeConnection: HTTP1Connection.SendableView?
+        XCTAssertNoThrow(
+            maybeConnection = try eventLoop.submit { [maybeChannel] in
+                try HTTP1Connection.start(
+                    channel: XCTUnwrap(maybeChannel),
+                    connectionID: 0,
+                    delegate: connectionDelegate,
+                    decompression: .disabled,
+                    logger: logger
+                ).sendableView
+            }.wait()
+        )
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection here") }
 
         var maybeRequest: HTTPClient.Request?
@@ -343,15 +391,17 @@ class HTTP1ConnectionTests: XCTestCase {
 
         let delegate = ResponseAccumulator(request: request)
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: request,
-            eventLoopPreference: .delegate(on: eventLoopGroup.next()),
-            task: .init(eventLoop: eventLoopGroup.next(), logger: logger),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(30),
-            requestOptions: .forTests(),
-            delegate: delegate
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: eventLoopGroup.next()),
+                task: .init(eventLoop: eventLoopGroup.next(), logger: logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(),
+                delegate: delegate
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
         connection.executeRequest(requestBag)
@@ -373,13 +423,15 @@ class HTTP1ConnectionTests: XCTestCase {
 
         var maybeConnection: HTTP1Connection?
         let connectionDelegate = MockConnectionDelegate()
-        XCTAssertNoThrow(maybeConnection = try HTTP1Connection.start(
-            channel: embedded,
-            connectionID: 0,
-            delegate: connectionDelegate,
-            decompression: .enabled(limit: .ratio(4)),
-            logger: logger
-        ))
+        XCTAssertNoThrow(
+            maybeConnection = try HTTP1Connection.start(
+                channel: embedded,
+                connectionID: 0,
+                delegate: connectionDelegate,
+                decompression: .enabled(limit: .ratio(4)),
+                logger: logger
+            )
+        )
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection at this point.") }
 
         var maybeRequest: HTTPClient.Request?
@@ -388,38 +440,40 @@ class HTTP1ConnectionTests: XCTestCase {
 
         let delegate = ResponseAccumulator(request: request)
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: request,
-            eventLoopPreference: .delegate(on: embedded.eventLoop),
-            task: .init(eventLoop: embedded.eventLoop, logger: logger),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(30),
-            requestOptions: .forTests(),
-            delegate: delegate
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embedded.eventLoop),
+                task: .init(eventLoop: embedded.eventLoop, logger: logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(),
+                delegate: delegate
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
-        connection.executeRequest(requestBag)
+        connection.sendableView.executeRequest(requestBag)
 
-        XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self)) // head
-        XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self)) // end
+        XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self))  // head
+        XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self))  // end
 
         let responseString = """
-        HTTP/1.1 101 Switching Protocols\r\n\
-        Upgrade: websocket\r\n\
-        Sec-WebSocket-Accept: xAMUK7/Il9bLRFJrikq6mm8CNZI=\r\n\
-        Connection: upgrade\r\n\
-        date: Mon, 27 Sep 2021 17:53:14 GMT\r\n\
-        \r\n\
-        \r\nfoo bar baz
-        """
+            HTTP/1.1 101 Switching Protocols\r\n\
+            Upgrade: websocket\r\n\
+            Sec-WebSocket-Accept: xAMUK7/Il9bLRFJrikq6mm8CNZI=\r\n\
+            Connection: upgrade\r\n\
+            date: Mon, 27 Sep 2021 17:53:14 GMT\r\n\
+            \r\n\
+            \r\nfoo bar baz
+            """
 
         XCTAssertTrue(embedded.isActive)
         XCTAssertEqual(connectionDelegate.hitConnectionClosed, 0)
         XCTAssertEqual(connectionDelegate.hitConnectionReleased, 0)
         XCTAssertNoThrow(try embedded.writeInbound(ByteBuffer(string: responseString)))
         XCTAssertFalse(embedded.isActive)
-        (embedded.eventLoop as! EmbeddedEventLoop).run() // tick once to run futures.
+        (embedded.eventLoop as! EmbeddedEventLoop).run()  // tick once to run futures.
         XCTAssertEqual(connectionDelegate.hitConnectionClosed, 1)
         XCTAssertEqual(connectionDelegate.hitConnectionReleased, 0)
 
@@ -438,13 +492,15 @@ class HTTP1ConnectionTests: XCTestCase {
 
         var maybeConnection: HTTP1Connection?
         let connectionDelegate = MockConnectionDelegate()
-        XCTAssertNoThrow(maybeConnection = try HTTP1Connection.start(
-            channel: embedded,
-            connectionID: 0,
-            delegate: connectionDelegate,
-            decompression: .enabled(limit: .ratio(4)),
-            logger: logger
-        ))
+        XCTAssertNoThrow(
+            maybeConnection = try HTTP1Connection.start(
+                channel: embedded,
+                connectionID: 0,
+                delegate: connectionDelegate,
+                decompression: .enabled(limit: .ratio(4)),
+                logger: logger
+            )
+        )
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection at this point.") }
 
         var maybeRequest: HTTPClient.Request?
@@ -453,28 +509,30 @@ class HTTP1ConnectionTests: XCTestCase {
 
         let delegate = ResponseAccumulator(request: request)
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: request,
-            eventLoopPreference: .delegate(on: embedded.eventLoop),
-            task: .init(eventLoop: embedded.eventLoop, logger: logger),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(30),
-            requestOptions: .forTests(),
-            delegate: delegate
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embedded.eventLoop),
+                task: .init(eventLoop: embedded.eventLoop, logger: logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(),
+                delegate: delegate
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
-        connection.executeRequest(requestBag)
+        connection.sendableView.executeRequest(requestBag)
 
-        XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self)) // head
-        XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self)) // end
+        XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self))  // head
+        XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self))  // end
 
         let responseString = """
-        HTTP/1.1 103 Early Hints\r\n\
-        date: Mon, 27 Sep 2021 17:53:14 GMT\r\n\
-        \r\n\
-        \r\n
-        """
+            HTTP/1.1 103 Early Hints\r\n\
+            date: Mon, 27 Sep 2021 17:53:14 GMT\r\n\
+            \r\n\
+            \r\n
+            """
 
         XCTAssertTrue(embedded.isActive)
         XCTAssertEqual(connectionDelegate.hitConnectionClosed, 0)
@@ -484,7 +542,7 @@ class HTTP1ConnectionTests: XCTestCase {
         XCTAssertTrue(embedded.isActive, "The connection remains active after the informational response head")
         XCTAssertNoThrow(try embedded.close().wait(), "the connection was closed")
 
-        embedded.embeddedEventLoop.run() // tick once to run futures.
+        embedded.embeddedEventLoop.run()  // tick once to run futures.
         XCTAssertEqual(connectionDelegate.hitConnectionClosed, 1)
         XCTAssertEqual(connectionDelegate.hitConnectionReleased, 0)
 
@@ -500,20 +558,22 @@ class HTTP1ConnectionTests: XCTestCase {
         XCTAssertNoThrow(try embedded.connect(to: SocketAddress(ipAddress: "127.0.0.1", port: 0)).wait())
 
         let connectionDelegate = MockConnectionDelegate()
-        XCTAssertNoThrow(try HTTP1Connection.start(
-            channel: embedded,
-            connectionID: 0,
-            delegate: connectionDelegate,
-            decompression: .enabled(limit: .ratio(4)),
-            logger: logger
-        ))
+        XCTAssertNoThrow(
+            try HTTP1Connection.start(
+                channel: embedded,
+                connectionID: 0,
+                delegate: connectionDelegate,
+                decompression: .enabled(limit: .ratio(4)),
+                logger: logger
+            )
+        )
 
         let responseString = """
-        HTTP/1.1 200 OK\r\n\
-        date: Mon, 27 Sep 2021 17:53:14 GMT\r\n\
-        \r\n\
-        \r\n
-        """
+            HTTP/1.1 200 OK\r\n\
+            date: Mon, 27 Sep 2021 17:53:14 GMT\r\n\
+            \r\n\
+            \r\n
+            """
 
         XCTAssertEqual(connectionDelegate.hitConnectionClosed, 0)
         XCTAssertEqual(connectionDelegate.hitConnectionReleased, 0)
@@ -522,7 +582,7 @@ class HTTP1ConnectionTests: XCTestCase {
             XCTAssertEqual($0 as? NIOHTTPDecoderError, .unsolicitedResponse)
         }
         XCTAssertFalse(embedded.isActive)
-        (embedded.eventLoop as! EmbeddedEventLoop).run() // tick once to run futures.
+        (embedded.eventLoop as! EmbeddedEventLoop).run()  // tick once to run futures.
         XCTAssertEqual(connectionDelegate.hitConnectionClosed, 1)
         XCTAssertEqual(connectionDelegate.hitConnectionReleased, 0)
     }
@@ -535,13 +595,15 @@ class HTTP1ConnectionTests: XCTestCase {
 
         var maybeConnection: HTTP1Connection?
         let connectionDelegate = MockConnectionDelegate()
-        XCTAssertNoThrow(maybeConnection = try HTTP1Connection.start(
-            channel: embedded,
-            connectionID: 0,
-            delegate: connectionDelegate,
-            decompression: .enabled(limit: .ratio(4)),
-            logger: logger
-        ))
+        XCTAssertNoThrow(
+            maybeConnection = try HTTP1Connection.start(
+                channel: embedded,
+                connectionID: 0,
+                delegate: connectionDelegate,
+                decompression: .enabled(limit: .ratio(4)),
+                logger: logger
+            )
+        )
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection at this point.") }
 
         var maybeRequest: HTTPClient.Request?
@@ -550,32 +612,34 @@ class HTTP1ConnectionTests: XCTestCase {
 
         let delegate = ResponseAccumulator(request: request)
         var maybeRequestBag: RequestBag<ResponseAccumulator>?
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: request,
-            eventLoopPreference: .delegate(on: embedded.eventLoop),
-            task: .init(eventLoop: embedded.eventLoop, logger: logger),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(30),
-            requestOptions: .forTests(),
-            delegate: delegate
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embedded.eventLoop),
+                task: .init(eventLoop: embedded.eventLoop, logger: logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(),
+                delegate: delegate
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
 
-        connection.executeRequest(requestBag)
+        connection.sendableView.executeRequest(requestBag)
 
         let responseString = """
-        HTTP/1.0 200 OK\r\n\
-        HTTP/1.0 200 OK\r\n\r\n
-        """
+            HTTP/1.0 200 OK\r\n\
+            HTTP/1.0 200 OK\r\n\r\n
+            """
 
-        XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self)) // head
-        XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self)) // end
+        XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self))  // head
+        XCTAssertNoThrow(try embedded.readOutbound(as: ByteBuffer.self))  // end
 
         XCTAssertEqual(connectionDelegate.hitConnectionClosed, 0)
         XCTAssertEqual(connectionDelegate.hitConnectionReleased, 0)
         XCTAssertNoThrow(try embedded.writeInbound(ByteBuffer(string: responseString)))
         XCTAssertFalse(embedded.isActive)
-        (embedded.eventLoop as! EmbeddedEventLoop).run() // tick once to run futures.
+        (embedded.eventLoop as! EmbeddedEventLoop).run()  // tick once to run futures.
         XCTAssertEqual(connectionDelegate.hitConnectionClosed, 1)
         XCTAssertEqual(connectionDelegate.hitConnectionReleased, 0)
     }
@@ -589,42 +653,42 @@ class HTTP1ConnectionTests: XCTestCase {
     // bytes a ready to be read as well. This will allow us to test if subsequent reads
     // are waiting for backpressure promise.
     func testDownloadStreamingBackpressure() {
-        class BackpressureTestDelegate: HTTPClientResponseDelegate {
+        final class BackpressureTestDelegate: HTTPClientResponseDelegate {
             typealias Response = Void
 
-            var _reads = 0
-            var _channel: Channel?
+            private struct State: Sendable {
+                var reads = 0
+                var channel: Channel?
+            }
 
-            let lock: NIOLock
+            private let state = NIOLockedValueBox(State())
+
+            var reads: Int {
+                self.state.withLockedValue { $0.reads }
+            }
+
             let backpressurePromise: EventLoopPromise<Void>
             let messageReceived: EventLoopPromise<Void>
 
             init(eventLoop: EventLoop) {
-                self.lock = NIOLock()
                 self.backpressurePromise = eventLoop.makePromise()
                 self.messageReceived = eventLoop.makePromise()
             }
 
-            var reads: Int {
-                return self.lock.withLock {
-                    self._reads
-                }
-            }
-
             func willExecuteOnChannel(_ channel: Channel) {
-                self.lock.withLock {
-                    self._channel = channel
+                self.state.withLockedValue {
+                    $0.channel = channel
                 }
             }
 
             func didReceiveHead(task: HTTPClient.Task<Void>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
-                return task.futureResult.eventLoop.makeSucceededVoidFuture()
+                task.futureResult.eventLoop.makeSucceededVoidFuture()
             }
 
             func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
                 // We count a number of reads received.
-                self.lock.withLock {
-                    self._reads += 1
+                self.state.withLockedValue {
+                    $0.reads += 1
                 }
                 // We need to notify the test when first byte of the message is arrived.
                 self.messageReceived.succeed(())
@@ -656,8 +720,8 @@ class HTTP1ConnectionTests: XCTestCase {
                     let buffer = context.channel.allocator.buffer(string: "1234")
                     context.writeAndFlush(self.wrapOutboundOut(.body(.byteBuffer(buffer))), promise: nil)
 
-                    self.endFuture.hop(to: context.eventLoop).whenSuccess {
-                        context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+                    self.endFuture.hop(to: context.eventLoop).assumeIsolated().whenSuccess {
+                        context.writeAndFlush(Self.wrapOutboundOut(.end(nil)), promise: nil)
                     }
                 }
             }
@@ -679,34 +743,42 @@ class HTTP1ConnectionTests: XCTestCase {
         defer { XCTAssertNoThrow(try httpBin.shutdown()) }
 
         var maybeChannel: Channel?
-        XCTAssertNoThrow(maybeChannel = try ClientBootstrap(group: eventLoopGroup)
-            .channelOption(ChannelOptions.maxMessagesPerRead, value: 1)
-            .channelOption(ChannelOptions.recvAllocator, value: FixedSizeRecvByteBufferAllocator(capacity: 1))
-            .connect(host: "localhost", port: httpBin.port)
-            .wait())
+        XCTAssertNoThrow(
+            maybeChannel = try ClientBootstrap(group: eventLoopGroup)
+                .channelOption(ChannelOptions.maxMessagesPerRead, value: 1)
+                .channelOption(ChannelOptions.recvAllocator, value: FixedSizeRecvByteBufferAllocator(capacity: 1))
+                .connect(host: "localhost", port: httpBin.port)
+                .wait()
+        )
         guard let channel = maybeChannel else { return XCTFail("Expected to have a channel at this point") }
         let connectionDelegate = MockConnectionDelegate()
-        var maybeConnection: HTTP1Connection?
-        XCTAssertNoThrow(maybeConnection = try channel.eventLoop.submit { try HTTP1Connection.start(
-            channel: channel,
-            connectionID: 0,
-            delegate: connectionDelegate,
-            decompression: .disabled,
-            logger: logger
-        ) }.wait())
+        var maybeConnection: HTTP1Connection.SendableView?
+        XCTAssertNoThrow(
+            maybeConnection = try channel.eventLoop.submit {
+                try HTTP1Connection.start(
+                    channel: channel,
+                    connectionID: 0,
+                    delegate: connectionDelegate,
+                    decompression: .disabled,
+                    logger: logger
+                ).sendableView
+            }.wait()
+        )
         guard let connection = maybeConnection else { return XCTFail("Expected to have a connection at this point") }
 
         var maybeRequestBag: RequestBag<BackpressureTestDelegate>?
 
-        XCTAssertNoThrow(maybeRequestBag = try RequestBag(
-            request: HTTPClient.Request(url: "http://localhost:\(httpBin.port)/custom"),
-            eventLoopPreference: .delegate(on: requestEventLoop),
-            task: .init(eventLoop: requestEventLoop, logger: logger),
-            redirectHandler: nil,
-            connectionDeadline: .now() + .seconds(30),
-            requestOptions: .forTests(),
-            delegate: backpressureDelegate
-        ))
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: HTTPClient.Request(url: "http://localhost:\(httpBin.port)/custom"),
+                eventLoopPreference: .delegate(on: requestEventLoop),
+                task: .init(eventLoop: requestEventLoop, logger: logger),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(),
+                delegate: backpressureDelegate
+            )
+        )
         guard let requestBag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag") }
         backpressureDelegate.willExecuteOnChannel(connection.channel)
 
@@ -729,15 +801,20 @@ class HTTP1ConnectionTests: XCTestCase {
     }
 }
 
-class MockHTTP1ConnectionDelegate: HTTP1ConnectionDelegate {
-    var releasePromise: EventLoopPromise<Void>?
-    var closePromise: EventLoopPromise<Void>?
+final class MockHTTP1ConnectionDelegate: HTTP1ConnectionDelegate {
+    let releasePromise: EventLoopPromise<Void>?
+    let closePromise: EventLoopPromise<Void>?
 
-    func http1ConnectionReleased(_: HTTP1Connection) {
+    init(releasePromise: EventLoopPromise<Void>? = nil, closePromise: EventLoopPromise<Void>? = nil) {
+        self.releasePromise = releasePromise
+        self.closePromise = closePromise
+    }
+
+    func http1ConnectionReleased(_: HTTPConnectionPool.Connection.ID) {
         self.releasePromise?.succeed(())
     }
 
-    func http1ConnectionClosed(_: HTTP1Connection) {
+    func http1ConnectionClosed(_: HTTPConnectionPool.Connection.ID) {
         self.closePromise?.succeed(())
     }
 }
@@ -764,7 +841,12 @@ class SuddenlySendsCloseHeaderChannelHandler: ChannelInboundHandler {
             break
         case .end:
             if self.closeOnRequest == self.counter {
-                context.write(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok, headers: ["connection": "close"]))), promise: nil)
+                context.write(
+                    self.wrapOutboundOut(
+                        .head(.init(version: .http1_1, status: .ok, headers: ["connection": "close"]))
+                    ),
+                    promise: nil
+                )
                 context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
                 context.flush()
                 self.counter += 1
@@ -797,38 +879,40 @@ class AfterRequestCloseConnectionChannelHandler: ChannelInboundHandler {
             context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
             context.flush()
 
-            context.eventLoop.scheduleTask(in: .milliseconds(20)) {
+            context.eventLoop.assumeIsolated().scheduleTask(in: .milliseconds(20)) {
                 context.close(promise: nil)
             }
         }
     }
 }
 
-class MockConnectionDelegate: HTTP1ConnectionDelegate {
-    private var lock = NIOLock()
+final class MockConnectionDelegate: HTTP1ConnectionDelegate {
+    private let counts = NIOLockedValueBox<Counts>(Counts())
 
-    private var _hitConnectionReleased = 0
-    private var _hitConnectionClosed = 0
+    private struct Counts: Sendable {
+        var hitConnectionReleased = 0
+        var hitConnectionClosed = 0
+    }
 
     var hitConnectionReleased: Int {
-        self.lock.withLock { self._hitConnectionReleased }
+        self.counts.withLockedValue { $0.hitConnectionReleased }
     }
 
     var hitConnectionClosed: Int {
-        self.lock.withLock { self._hitConnectionClosed }
+        self.counts.withLockedValue { $0.hitConnectionClosed }
     }
 
     init() {}
 
-    func http1ConnectionReleased(_: HTTP1Connection) {
-        self.lock.withLock {
-            self._hitConnectionReleased += 1
+    func http1ConnectionReleased(_: HTTPConnectionPool.Connection.ID) {
+        self.counts.withLockedValue {
+            $0.hitConnectionReleased += 1
         }
     }
 
-    func http1ConnectionClosed(_: HTTP1Connection) {
-        self.lock.withLock {
-            self._hitConnectionClosed += 1
+    func http1ConnectionClosed(_: HTTPConnectionPool.Connection.ID) {
+        self.counts.withLockedValue {
+            $0.hitConnectionClosed += 1
         }
     }
 }

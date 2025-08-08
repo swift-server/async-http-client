@@ -12,13 +12,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-import AsyncHTTPClient
 import Atomics
 import Foundation
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOEmbedded
+import NIOFoundationCompat
 import NIOHPACK
 import NIOHTTP1
 import NIOHTTP2
@@ -28,10 +28,19 @@ import NIOSSL
 import NIOTLS
 import NIOTransportServices
 import XCTest
-#if canImport(Darwin)
+
+@testable import AsyncHTTPClient
+
+#if canImport(xlocale)
+import xlocale
+#elseif canImport(locale_h)
+import locale_h
+#elseif canImport(Darwin)
 import Darwin
 #elseif canImport(Musl)
 import Musl
+#elseif canImport(Android)
+import Android
 #elseif canImport(Glibc)
 import Glibc
 #endif
@@ -48,7 +57,8 @@ func isTestingNIOTS() -> Bool {
 func getDefaultEventLoopGroup(numberOfThreads: Int) -> EventLoopGroup {
     #if canImport(Network)
     if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *),
-       isTestingNIOTS() {
+        isTestingNIOTS()
+    {
         return NIOTSEventLoopGroup(loopCount: numberOfThreads, defaultQoS: .default)
     }
     #endif
@@ -85,14 +95,12 @@ func withCLocaleSetToGerman(_ body: () throws -> Void) throws {
     try body()
 }
 
-class TestHTTPDelegate: HTTPClientResponseDelegate {
+final class TestHTTPDelegate: HTTPClientResponseDelegate {
     typealias Response = Void
 
     init(backpressureEventLoop: EventLoop? = nil) {
-        self.backpressureEventLoop = backpressureEventLoop
+        self.state = NIOLockedValueBox(MutableState(backpressureEventLoop: backpressureEventLoop))
     }
-
-    var backpressureEventLoop: EventLoop?
 
     enum State {
         case idle
@@ -102,77 +110,96 @@ class TestHTTPDelegate: HTTPClientResponseDelegate {
         case error(Error)
     }
 
-    var state = State.idle
+    struct MutableState: Sendable {
+        var state: State = .idle
+        var backpressureEventLoop: EventLoop?
+    }
+
+    let state: NIOLockedValueBox<MutableState>
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
-        self.state = .head(head)
-        return (self.backpressureEventLoop ?? task.eventLoop).makeSucceededFuture(())
+        let eventLoop = self.state.withLockedValue {
+            $0.state = .head(head)
+            return ($0.backpressureEventLoop ?? task.eventLoop)
+        }
+
+        return eventLoop.makeSucceededVoidFuture()
     }
 
     func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
-        switch self.state {
-        case .head(let head):
-            self.state = .body(head, buffer)
-        case .body(let head, var body):
-            var buffer = buffer
-            body.writeBuffer(&buffer)
-            self.state = .body(head, body)
-        default:
-            preconditionFailure("expecting head or body")
+        let eventLoop = self.state.withLockedValue {
+            switch $0.state {
+            case .head(let head):
+                $0.state = .body(head, buffer)
+            case .body(let head, var body):
+                var buffer = buffer
+                body.writeBuffer(&buffer)
+                $0.state = .body(head, body)
+            default:
+                preconditionFailure("expecting head or body")
+            }
+            return ($0.backpressureEventLoop ?? task.eventLoop)
         }
-        return (self.backpressureEventLoop ?? task.eventLoop).makeSucceededFuture(())
+
+        return eventLoop.makeSucceededVoidFuture()
     }
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws {}
 }
 
-class CountingDelegate: HTTPClientResponseDelegate {
+final class CountingDelegate: HTTPClientResponseDelegate {
     typealias Response = Int
 
-    var count = 0
+    private let _count = NIOLockedValueBox(0)
 
     func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         let str = buffer.getString(at: 0, length: buffer.readableBytes)
         if str?.starts(with: "id:") ?? false {
-            self.count += 1
+            self._count.withLockedValue { $0 += 1 }
         }
         return task.eventLoop.makeSucceededFuture(())
     }
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Int {
-        return self.count
+        self._count.withLockedValue { $0 }
     }
 }
 
-class DelayOnHeadDelegate: HTTPClientResponseDelegate {
+final class DelayOnHeadDelegate: HTTPClientResponseDelegate {
     typealias Response = ByteBuffer
 
     let eventLoop: EventLoop
-    let didReceiveHead: (HTTPResponseHead, EventLoopPromise<Void>) -> Void
+    let didReceiveHead: @Sendable (HTTPResponseHead, EventLoopPromise<Void>) -> Void
 
-    private var data: ByteBuffer
+    struct State: Sendable {
+        var data: ByteBuffer
+        var mayReceiveData = false
+        var expectError = false
+    }
 
-    private var mayReceiveData = false
+    private let state: NIOLockedValueBox<State>
 
-    private var expectError = false
-
-    init(eventLoop: EventLoop, didReceiveHead: @escaping (HTTPResponseHead, EventLoopPromise<Void>) -> Void) {
+    init(eventLoop: EventLoop, didReceiveHead: @escaping @Sendable (HTTPResponseHead, EventLoopPromise<Void>) -> Void) {
         self.eventLoop = eventLoop
         self.didReceiveHead = didReceiveHead
-        self.data = ByteBuffer()
+        self.state = NIOLockedValueBox(State(data: ByteBuffer()))
     }
 
     func didReceiveHead(task: HTTPClient.Task<Response>, _ head: HTTPResponseHead) -> EventLoopFuture<Void> {
-        XCTAssertFalse(self.mayReceiveData)
-        XCTAssertFalse(self.expectError)
+        self.state.withLockedValue {
+            XCTAssertFalse($0.mayReceiveData)
+            XCTAssertFalse($0.expectError)
+        }
 
         let promise = self.eventLoop.makePromise(of: Void.self)
-        promise.futureResult.whenComplete {
-            switch $0 {
-            case .success:
-                self.mayReceiveData = true
-            case .failure:
-                self.expectError = true
+        promise.futureResult.whenComplete { result in
+            self.state.withLockedValue { state in
+                switch result {
+                case .success:
+                    state.mayReceiveData = true
+                case .failure:
+                    state.expectError = true
+                }
             }
         }
 
@@ -181,20 +208,26 @@ class DelayOnHeadDelegate: HTTPClientResponseDelegate {
     }
 
     func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
-        XCTAssertTrue(self.mayReceiveData)
-        XCTAssertFalse(self.expectError)
-        self.data.writeImmutableBuffer(buffer)
+        self.state.withLockedValue {
+            XCTAssertTrue($0.mayReceiveData)
+            XCTAssertFalse($0.expectError)
+            $0.data.writeImmutableBuffer(buffer)
+        }
         return self.eventLoop.makeSucceededFuture(())
     }
 
     func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
-        XCTAssertTrue(self.mayReceiveData)
-        XCTAssertFalse(self.expectError)
-        return self.data
+        self.state.withLockedValue {
+            XCTAssertTrue($0.mayReceiveData)
+            XCTAssertFalse($0.expectError)
+            return $0.data
+        }
     }
 
     func didReceiveError(task: HTTPClient.Task<ByteBuffer>, _ error: Error) {
-        XCTAssertTrue(self.expectError)
+        self.state.withLockedValue {
+            XCTAssertTrue($0.expectError)
+        }
     }
 }
 
@@ -215,8 +248,8 @@ enum TemporaryFileHelpers {
         } else {
             return "/tmp"
         }
-        #endif // os
-        #endif // targetEnvironment
+        #endif  // os
+        #endif  // targetEnvironment
     }
 
     private static func openTemporaryFile() -> (CInt, String) {
@@ -236,8 +269,10 @@ enum TemporaryFileHelpers {
     ///
     /// If the temporary directory is too long to store a UNIX domain socket path, it will `chdir` into the temporary
     /// directory and return a short-enough path. The iOS simulator is known to have too long paths.
-    internal static func withTemporaryUnixDomainSocketPathName<T>(directory: String = temporaryDirectory,
-                                                                  _ body: (String) throws -> T) throws -> T {
+    internal static func withTemporaryUnixDomainSocketPathName<T>(
+        directory: String = temporaryDirectory,
+        _ body: (String) throws -> T
+    ) throws -> T {
         // this is racy but we're trying to create the shortest possible path so we can't add a directory...
         let (fd, path) = self.openTemporaryFile()
         close(fd)
@@ -252,17 +287,21 @@ enum TemporaryFileHelpers {
             shortEnoughPath = path
             restoreSavedCWD = false
         } catch SocketAddressError.unixDomainSocketPathTooLong {
-            FileManager.default.changeCurrentDirectoryPath(URL(fileURLWithPath: path).deletingLastPathComponent().absoluteString)
+            _ = FileManager.default.changeCurrentDirectoryPath(
+                URL(fileURLWithPath: path).deletingLastPathComponent().absoluteString
+            )
             shortEnoughPath = URL(fileURLWithPath: path).lastPathComponent
             restoreSavedCWD = true
-            print("WARNING: Path '\(path)' could not be used as UNIX domain socket path, using chdir & '\(shortEnoughPath)'")
+            print(
+                "WARNING: Path '\(path)' could not be used as UNIX domain socket path, using chdir & '\(shortEnoughPath)'"
+            )
         }
         defer {
             if FileManager.default.fileExists(atPath: path) {
                 try? FileManager.default.removeItem(atPath: path)
             }
             if restoreSavedCWD {
-                FileManager.default.changeCurrentDirectoryPath(saveCurrentDirectory)
+                _ = FileManager.default.changeCurrentDirectoryPath(saveCurrentDirectory)
             }
         }
         return try body(shortEnoughPath)
@@ -303,11 +342,11 @@ enum TemporaryFileHelpers {
     }
 
     internal static func fileSize(path: String) throws -> Int? {
-        return try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int
+        try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int
     }
 
     internal static func fileExists(path: String) -> Bool {
-        return FileManager.default.fileExists(atPath: path)
+        FileManager.default.fileExists(atPath: path)
     }
 }
 
@@ -320,9 +359,11 @@ enum TestTLS {
     )
 }
 
-internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
+internal final class HTTPBin<RequestHandler: ChannelInboundHandler>: Sendable
+where
     RequestHandler.InboundIn == HTTPServerRequestPart,
-    RequestHandler.OutboundOut == HTTPServerResponsePart {
+    RequestHandler.OutboundOut == HTTPServerResponsePart
+{
     enum BindTarget {
         case unixDomainSocket(String)
         case localhostIPv4RandomPort
@@ -361,10 +402,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
         var httpSettings: HTTP2Settings {
             switch self {
             case .http1_1, .http2(_, _, nil), .refuse:
-                return [
-                    HTTP2Setting(parameter: .maxConcurrentStreams, value: 10),
-                    HTTP2Setting(parameter: .maxHeaderListSize, value: HPACKDecoder.defaultMaxHeaderListSize),
-                ]
+                return HTTP2Connection.defaultSettings
             case .http2(_, _, .some(let customSettings)):
                 return customSettings
             }
@@ -392,19 +430,23 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
 
     private let activeConnCounterHandler: ConnectionsCountHandler
     var activeConnections: Int {
-        return self.activeConnCounterHandler.currentlyActiveConnections
+        self.activeConnCounterHandler.currentlyActiveConnections
     }
 
     var createdConnections: Int {
-        return self.activeConnCounterHandler.createdConnections
+        self.activeConnCounterHandler.createdConnections
     }
 
     var port: Int {
-        return Int(self.serverChannel.localAddress!.port!)
+        self.serverChannel.withLockedValue {
+            Int($0!.localAddress!.port!)
+        }
     }
 
     var socketAddress: SocketAddress {
-        return self.serverChannel.localAddress!
+        self.serverChannel.withLockedValue {
+            $0!.localAddress!
+        }
     }
 
     var baseURL: String {
@@ -432,16 +474,17 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
 
     private let mode: Mode
     private let sslContext: NIOSSLContext?
-    private var serverChannel: Channel!
+    private let serverChannel = NIOLockedValueBox<Channel?>(nil)
     private let isShutdown = ManagedAtomic(false)
-    private let handlerFactory: (Int) -> (RequestHandler)
+    private let handlerFactory: @Sendable (Int) -> (RequestHandler)
 
     init(
         _ mode: Mode = .http1_1(ssl: false, compress: false),
         proxy: Proxy = .none,
         bindTarget: BindTarget = .localhostIPv4RandomPort,
         reusePort: Bool = false,
-        handlerFactory: @escaping (Int) -> (RequestHandler)
+        trafficShapingTargetBytesPerSecond: Int? = nil,
+        handlerFactory: @escaping @Sendable (Int) -> (RequestHandler)
     ) {
         self.mode = mode
         self.sslContext = HTTPBin.sslContext(for: mode)
@@ -461,12 +504,22 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
 
         let connectionIDAtomic = ManagedAtomic(0)
 
-        self.serverChannel = try! ServerBootstrap(group: self.group)
+        let serverChannel = try! ServerBootstrap(group: self.group)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
-            .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: reusePort ? 1 : 0)
-            .serverChannelInitializer { channel in
-                channel.pipeline.addHandler(self.activeConnCounterHandler)
+            .serverChannelOption(
+                ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT),
+                value: reusePort ? 1 : 0
+            )
+            .serverChannelInitializer { [activeConnCounterHandler] channel in
+                channel.pipeline.addHandler(activeConnCounterHandler)
             }.childChannelInitializer { channel in
+                if let trafficShapingTargetBytesPerSecond = trafficShapingTargetBytesPerSecond {
+                    try! channel.pipeline.syncOperations.addHandler(
+                        BasicInboundTrafficShapingHandler(
+                            targetBytesPerSecond: trafficShapingTargetBytesPerSecond
+                        )
+                    )
+                }
                 do {
                     let connectionID = connectionIDAtomic.loadThenWrappingIncrement(ordering: .relaxed)
 
@@ -502,6 +555,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
                     return channel.eventLoop.makeFailedFuture(error)
                 }
             }.bind(to: socketAddress).wait()
+        self.serverChannel.withLockedValue { $0 = serverChannel }
     }
 
     private func syncAddHTTPProxyHandlers(
@@ -520,12 +574,12 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
         try sync.addHandler(requestDecoder)
         try sync.addHandler(proxySimulator)
 
-        promise.futureResult.flatMap { _ in
-            channel.pipeline.removeHandler(proxySimulator)
+        promise.futureResult.assumeIsolated().flatMap { _ in
+            channel.pipeline.syncOperations.removeHandler(proxySimulator)
         }.flatMap { _ in
-            channel.pipeline.removeHandler(responseEncoder)
+            channel.pipeline.syncOperations.removeHandler(responseEncoder)
         }.flatMap { _ in
-            channel.pipeline.removeHandler(requestDecoder)
+            channel.pipeline.syncOperations.removeHandler(requestDecoder)
         }.whenComplete { result in
             switch result {
             case .failure:
@@ -591,6 +645,7 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
                     let multiplexer = HTTP2StreamMultiplexer(
                         mode: .server,
                         channel: channel,
+                        targetWindowSize: 16 * 1024 * 1024,  // 16 MiB
                         inboundStreamInitializer: { channel in
                             do {
                                 let sync = channel.pipeline.syncOperations
@@ -628,8 +683,8 @@ internal final class HTTPBin<RequestHandler: ChannelInboundHandler> where
             }
         }
 
+        try channel.pipeline.syncOperations.addHandler(sslHandler)
         try channel.pipeline.syncOperations.addHandler(alpnHandler)
-        try channel.pipeline.syncOperations.addHandler(sslHandler, position: .before(alpnHandler))
     }
 
     func shutdown() throws {
@@ -647,9 +702,16 @@ extension HTTPBin where RequestHandler == HTTPBinHandler {
         _ mode: Mode = .http1_1(ssl: false, compress: false),
         proxy: Proxy = .none,
         bindTarget: BindTarget = .localhostIPv4RandomPort,
-        reusePort: Bool = false
+        reusePort: Bool = false,
+        trafficShapingTargetBytesPerSecond: Int? = nil
     ) {
-        self.init(mode, proxy: proxy, bindTarget: bindTarget, reusePort: reusePort) { HTTPBinHandler(connectionID: $0) }
+        self.init(
+            mode,
+            proxy: proxy,
+            bindTarget: bindTarget,
+            reusePort: reusePort,
+            trafficShapingTargetBytesPerSecond: trafficShapingTargetBytesPerSecond
+        ) { HTTPBinHandler(connectionID: $0) }
     }
 }
 
@@ -672,7 +734,11 @@ final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
     init(promise: EventLoopPromise<Void>, expectedAuthorization: String?) {
         self.promise = promise
         self.expectedAuthorization = expectedAuthorization
-        self.head = HTTPResponseHead(version: .init(major: 1, minor: 1), status: .ok, headers: .init([("Content-Length", "0")]))
+        self.head = HTTPResponseHead(
+            version: .init(major: 1, minor: 1),
+            status: .ok,
+            headers: .init([("Content-Length", "0")])
+        )
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -686,7 +752,8 @@ final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
 
             if let expectedAuthorization = self.expectedAuthorization {
                 guard let authorization = head.headers["proxy-authorization"].first,
-                      expectedAuthorization == authorization else {
+                    expectedAuthorization == authorization
+                else {
                     self.head.status = .proxyAuthenticationRequired
                     return
                 }
@@ -710,12 +777,31 @@ final class HTTPProxySimulator: ChannelInboundHandler, RemovableChannelHandler {
 internal struct HTTPResponseBuilder {
     var head: HTTPResponseHead
     var body: ByteBuffer?
+    var requestBodyByteCount: Int
+    let responseBodyIsRequestBodyByteCount: Bool
 
-    init(_ version: HTTPVersion = HTTPVersion(major: 1, minor: 1), status: HTTPResponseStatus, headers: HTTPHeaders = HTTPHeaders()) {
+    init(
+        _ version: HTTPVersion = HTTPVersion(major: 1, minor: 1),
+        status: HTTPResponseStatus,
+        headers: HTTPHeaders = HTTPHeaders(),
+        responseBodyIsRequestBodyByteCount: Bool = false
+    ) {
         self.head = HTTPResponseHead(version: version, status: status, headers: headers)
+        self.requestBodyByteCount = 0
+        self.responseBodyIsRequestBodyByteCount = responseBodyIsRequestBodyByteCount
     }
 
     mutating func add(_ part: ByteBuffer) {
+        self.requestBodyByteCount += part.readableBytes
+        guard !self.responseBodyIsRequestBodyByteCount else {
+            if self.body == nil {
+                self.body = ByteBuffer()
+                self.body!.reserveCapacity(100)
+            }
+            self.body!.clear()
+            self.body!.writeString("\(self.requestBodyByteCount)")
+            return
+        }
         if var body = body {
             var part = part
             body.writeBuffer(&part)
@@ -763,8 +849,10 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
         for header in head.headers {
             let needle = "x-send-back-header-"
             if header.name.lowercased().starts(with: needle) {
-                self.responseHeaders.add(name: String(header.name.dropFirst(needle.count)),
-                                         value: header.value)
+                self.responseHeaders.add(
+                    name: String(header.name.dropFirst(needle.count)),
+                    value: header.value
+                )
             }
         }
     }
@@ -777,7 +865,12 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
             headers = HTTPHeaders()
         }
 
-        context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))), promise: nil)
+        context.write(
+            wrapOutboundOut(
+                .head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))
+            ),
+            promise: nil
+        )
         for i in 0..<10 {
             let msg = "id: \(i)"
             var buf = context.channel.allocator.buffer(capacity: msg.count)
@@ -792,7 +885,12 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
         // This tests receiving chunks very fast: please do not insert delays here!
         let headers = HTTPHeaders([("Transfer-Encoding", "chunked")])
 
-        context.write(self.wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))), promise: nil)
+        context.write(
+            self.wrapOutboundOut(
+                .head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))
+            ),
+            promise: nil
+        )
         for i in 0..<10 {
             let msg = "id: \(i)"
             var buf = context.channel.allocator.buffer(capacity: msg.count)
@@ -807,7 +905,12 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
         // This tests receiving a lot of tiny chunks: they must all be sent in a single flush or the test doesn't work.
         let headers = HTTPHeaders([("Transfer-Encoding", "chunked")])
 
-        context.write(self.wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))), promise: nil)
+        context.write(
+            self.wrapOutboundOut(
+                .head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))
+            ),
+            promise: nil
+        )
         let message = ByteBuffer(integer: UInt8(ascii: "a"))
 
         // This number (10k) is load-bearing and a bit magic: it has been experimentally verified as being sufficient to blow the stack
@@ -866,6 +969,13 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                     return
                 }
                 self.resps.append(HTTPResponseBuilder(status: .ok))
+                return
+            case "/post-respond-with-byte-count":
+                if req.method != .POST {
+                    self.resps.append(HTTPResponseBuilder(status: .methodNotAllowed))
+                    return
+                }
+                self.resps.append(HTTPResponseBuilder(status: .ok, responseBodyIsRequestBodyByteCount: true))
                 return
             case "/redirect/302":
                 var headers = self.responseHeaders
@@ -927,9 +1037,12 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                 context.close(promise: nil)
                 return
             case "/custom":
-                context.writeAndFlush(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))), promise: nil)
+                context.writeAndFlush(
+                    wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok))),
+                    promise: nil
+                )
                 return
-            case "/events/10/1": // TODO: parse path
+            case "/events/10/1":  // TODO: parse path
                 self.writeEvents(context: context)
                 return
             case "/events/10/content-length":
@@ -953,10 +1066,20 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
             case "/content-length-without-body":
                 var headers = self.responseHeaders
                 headers.replaceOrAdd(name: "content-length", value: "1234")
-                context.writeAndFlush(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))), promise: nil)
+                context.writeAndFlush(
+                    wrapOutboundOut(
+                        .head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .ok, headers: headers))
+                    ),
+                    promise: nil
+                )
                 return
             default:
-                context.write(wrapOutboundOut(.head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .notFound))), promise: nil)
+                context.write(
+                    wrapOutboundOut(
+                        .head(HTTPResponseHead(version: HTTPVersion(major: 1, minor: 1), status: .notFound))
+                    ),
+                    promise: nil
+                )
                 context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
                 return
             }
@@ -975,32 +1098,41 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
             response.head.headers.add(contentsOf: self.responseHeaders)
             context.write(wrapOutboundOut(.head(response.head)), promise: nil)
             if let body = response.body {
-                let requestInfo = RequestInfo(data: String(buffer: body),
-                                              requestNumber: self.requestId,
-                                              connectionNumber: self.connectionID)
-                let responseBody = try! JSONEncoder().encodeAsByteBuffer(requestInfo,
-                                                                         allocator: context.channel.allocator)
+                let requestInfo = RequestInfo(
+                    data: String(buffer: body),
+                    requestNumber: self.requestId,
+                    connectionNumber: self.connectionID
+                )
+                let responseBody = try! JSONEncoder().encodeAsByteBuffer(
+                    requestInfo,
+                    allocator: context.channel.allocator
+                )
                 context.write(wrapOutboundOut(.body(.byteBuffer(responseBody))), promise: nil)
             } else {
-                let requestInfo = RequestInfo(data: "",
-                                              requestNumber: self.requestId,
-                                              connectionNumber: self.connectionID)
-                let responseBody = try! JSONEncoder().encodeAsByteBuffer(requestInfo,
-                                                                         allocator: context.channel.allocator)
+                let requestInfo = RequestInfo(
+                    data: "",
+                    requestNumber: self.requestId,
+                    connectionNumber: self.connectionID
+                )
+                let responseBody = try! JSONEncoder().encodeAsByteBuffer(
+                    requestInfo,
+                    allocator: context.channel.allocator
+                )
                 context.write(wrapOutboundOut(.body(.byteBuffer(responseBody))), promise: nil)
             }
-            context.eventLoop.scheduleTask(in: self.delay) {
+            context.eventLoop.assumeIsolated().scheduleTask(in: self.delay) {
                 guard context.channel.isActive else {
                     context.close(promise: nil)
                     return
                 }
 
-                context.writeAndFlush(self.wrapOutboundOut(.end(nil))).whenComplete { result in
+                context.writeAndFlush(self.wrapOutboundOut(.end(nil))).assumeIsolated().whenComplete { result in
                     self.isServingRequest = false
                     switch result {
                     case .success:
-                        if self.responseHeaders[canonicalForm: "X-Close-Connection"].contains("true") ||
-                            self.shouldClose {
+                        if self.responseHeaders[canonicalForm: "X-Close-Connection"].contains("true")
+                            || self.shouldClose
+                        {
                             context.close(promise: nil)
                         }
                     case .failure(let error):
@@ -1029,7 +1161,7 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
     }
 }
 
-final class ConnectionsCountHandler: ChannelInboundHandler {
+final class ConnectionsCountHandler: ChannelInboundHandler, Sendable {
     typealias InboundIn = Channel
 
     private let activeConns = ManagedAtomic(0)
@@ -1048,8 +1180,8 @@ final class ConnectionsCountHandler: ChannelInboundHandler {
 
         _ = self.activeConns.loadThenWrappingIncrement(ordering: .relaxed)
         _ = self.createdConns.loadThenWrappingIncrement(ordering: .relaxed)
-        channel.closeFuture.whenComplete { _ in
-            _ = self.activeConns.loadThenWrappingDecrement(ordering: .relaxed)
+        channel.closeFuture.whenComplete { [activeConns] _ in
+            _ = activeConns.loadThenWrappingDecrement(ordering: .relaxed)
         }
 
         context.fireChannelRead(data)
@@ -1069,7 +1201,7 @@ internal final class CloseWithoutClosingServerHandler: ChannelInboundHandler {
 
     func handlerAdded(context: ChannelHandlerContext) {
         self.onClosePromise = context.eventLoop.makePromise()
-        self.onClosePromise!.futureResult.whenSuccess(self.callback!)
+        self.onClosePromise!.futureResult.assumeIsolated().whenSuccess(self.callback!)
         self.callback = nil
     }
 
@@ -1131,7 +1263,7 @@ final class ExpectClosureServerHandler: ChannelInboundHandler {
 
 struct EventLoopFutureTimeoutError: Error {}
 
-extension EventLoopFuture {
+extension EventLoopFuture where Value: Sendable {
     func timeout(after failDelay: TimeAmount) -> EventLoopFuture<Value> {
         let promise = self.eventLoop.makePromise(of: Value.self)
 
@@ -1157,30 +1289,33 @@ struct CollectEverythingLogHandler: LogHandler {
     var logLevel: Logger.Level = .info
     let logStore: LogStore
 
-    class LogStore {
+    final class LogStore: Sendable {
         struct Entry {
             var level: Logger.Level
             var message: String
             var metadata: [String: String]
         }
 
-        var lock = NIOLock()
-        var logs: [Entry] = []
+        private let logs = NIOLockedValueBox<[Entry]>([])
 
         var allEntries: [Entry] {
             get {
-                return self.lock.withLock { self.logs }
+                self.logs.withLockedValue { $0 }
             }
             set {
-                self.lock.withLock { self.logs = newValue }
+                self.logs.withLockedValue { $0 = newValue }
             }
         }
 
         func append(level: Logger.Level, message: Logger.Message, metadata: Logger.Metadata?) {
-            self.lock.withLock {
-                self.logs.append(Entry(level: level,
-                                       message: message.description,
-                                       metadata: metadata?.mapValues { $0.description } ?? [:]))
+            self.logs.withLockedValue {
+                $0.append(
+                    Entry(
+                        level: level,
+                        message: message.description,
+                        metadata: metadata?.mapValues { $0.description } ?? [:]
+                    )
+                )
             }
         }
     }
@@ -1189,16 +1324,21 @@ struct CollectEverythingLogHandler: LogHandler {
         self.logStore = logStore
     }
 
-    func log(level: Logger.Level,
-             message: Logger.Message,
-             metadata: Logger.Metadata?,
-             file: String, function: String, line: UInt) {
+    func log(
+        level: Logger.Level,
+        message: Logger.Message,
+        metadata: Logger.Metadata?,
+        source: String,
+        file: String,
+        function: String,
+        line: UInt
+    ) {
         self.logStore.append(level: level, message: message, metadata: self.metadata.merging(metadata ?? [:]) { $1 })
     }
 
     subscript(metadataKey key: String) -> Logger.Metadata.Value? {
         get {
-            return self.metadata[key]
+            self.metadata[key]
         }
         set {
             self.metadata[key] = newValue
@@ -1210,10 +1350,10 @@ struct CollectEverythingLogHandler: LogHandler {
 /// consume the bytes by calling ``next()`` on the delegate.
 ///
 /// The sole purpose of this class is to enable straight-line stream tests.
-class ResponseStreamDelegate: HTTPClientResponseDelegate {
+final class ResponseStreamDelegate: HTTPClientResponseDelegate {
     typealias Response = Void
 
-    enum State {
+    enum State: Sendable {
         /// The delegate is in the idle state. There are no http response parts to be buffered
         /// and the consumer did not signal a demand. Transitions to all other states are allowed.
         case idle
@@ -1231,10 +1371,11 @@ class ResponseStreamDelegate: HTTPClientResponseDelegate {
     }
 
     let eventLoop: EventLoop
-    private var state: State = .idle
+    private let state: NIOLoopBoundBox<State>
 
     init(eventLoop: EventLoop) {
         self.eventLoop = eventLoop
+        self.state = .makeBoxSendingValue(.idle, eventLoop: eventLoop)
     }
 
     func next() -> EventLoopFuture<ByteBuffer?> {
@@ -1248,25 +1389,25 @@ class ResponseStreamDelegate: HTTPClientResponseDelegate {
     }
 
     private func next0() -> EventLoopFuture<ByteBuffer?> {
-        switch self.state {
+        switch self.state.value {
         case .idle:
             let promise = self.eventLoop.makePromise(of: ByteBuffer?.self)
-            self.state = .waitingForBytes(promise)
+            self.state.value = .waitingForBytes(promise)
             return promise.futureResult
 
         case .buffering(let byteBuffer, done: false):
-            self.state = .idle
+            self.state.value = .idle
             return self.eventLoop.makeSucceededFuture(byteBuffer)
 
         case .buffering(let byteBuffer, done: true):
-            self.state = .finished
+            self.state.value = .finished
             return self.eventLoop.makeSucceededFuture(byteBuffer)
 
         case .waitingForBytes:
             preconditionFailure("Don't call `.next` twice")
 
         case .failed(let error):
-            self.state = .finished
+            self.state.value = .finished
             return self.eventLoop.makeFailedFuture(error)
 
         case .finished:
@@ -1296,16 +1437,16 @@ class ResponseStreamDelegate: HTTPClientResponseDelegate {
     func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         self.eventLoop.preconditionInEventLoop()
 
-        switch self.state {
+        switch self.state.value {
         case .idle:
-            self.state = .buffering(buffer, done: false)
+            self.state.value = .buffering(buffer, done: false)
         case .waitingForBytes(let promise):
-            self.state = .idle
+            self.state.value = .idle
             promise.succeed(buffer)
         case .buffering(var byteBuffer, done: false):
             var buffer = buffer
             byteBuffer.writeBuffer(&buffer)
-            self.state = .buffering(byteBuffer, done: false)
+            self.state.value = .buffering(byteBuffer, done: false)
         case .buffering(_, done: true), .finished, .failed:
             preconditionFailure("Invalid state: \(self.state)")
         }
@@ -1316,14 +1457,14 @@ class ResponseStreamDelegate: HTTPClientResponseDelegate {
     func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error) {
         self.eventLoop.preconditionInEventLoop()
 
-        switch self.state {
+        switch self.state.value {
         case .idle:
-            self.state = .failed(error)
+            self.state.value = .failed(error)
         case .waitingForBytes(let promise):
-            self.state = .finished
+            self.state.value = .finished
             promise.fail(error)
         case .buffering(_, done: false):
-            self.state = .failed(error)
+            self.state.value = .failed(error)
         case .buffering(_, done: true), .finished, .failed:
             preconditionFailure("Invalid state: \(self.state)")
         }
@@ -1332,14 +1473,14 @@ class ResponseStreamDelegate: HTTPClientResponseDelegate {
     func didFinishRequest(task: HTTPClient.Task<Response>) throws {
         self.eventLoop.preconditionInEventLoop()
 
-        switch self.state {
+        switch self.state.value {
         case .idle:
-            self.state = .finished
+            self.state.value = .finished
         case .waitingForBytes(let promise):
-            self.state = .finished
+            self.state.value = .finished
             promise.succeed(nil)
         case .buffering(let byteBuffer, done: false):
-            self.state = .buffering(byteBuffer, done: true)
+            self.state.value = .buffering(byteBuffer, done: true)
         case .buffering(_, done: true), .finished, .failed:
             preconditionFailure("Invalid state: \(self.state)")
         }
@@ -1354,11 +1495,14 @@ class HTTPEchoHandler: ChannelInboundHandler {
         let request = self.unwrapInboundIn(data)
         switch request {
         case .head(let requestHead):
-            context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok, headers: requestHead.headers))), promise: nil)
+            context.writeAndFlush(
+                self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok, headers: requestHead.headers))),
+                promise: nil
+            )
         case .body(let bytes):
             context.writeAndFlush(self.wrapOutboundOut(.body(.byteBuffer(bytes))), promise: nil)
         case .end:
-            context.writeAndFlush(self.wrapOutboundOut(.end(nil))).whenSuccess {
+            context.writeAndFlush(self.wrapOutboundOut(.end(nil))).assumeIsolated().whenSuccess {
                 context.close(promise: nil)
             }
         }
@@ -1373,11 +1517,14 @@ final class HTTPEchoHeaders: ChannelInboundHandler {
         let request = self.unwrapInboundIn(data)
         switch request {
         case .head(let requestHead):
-            context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok, headers: requestHead.headers))), promise: nil)
+            context.writeAndFlush(
+                self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok, headers: requestHead.headers))),
+                promise: nil
+            )
         case .body:
             break
         case .end:
-            context.writeAndFlush(self.wrapOutboundOut(.end(nil))).whenSuccess {
+            context.writeAndFlush(self.wrapOutboundOut(.end(nil))).assumeIsolated().whenSuccess {
                 context.close(promise: nil)
             }
         }
@@ -1409,7 +1556,10 @@ final class HTTP200DelayedHandler: ChannelInboundHandler {
                     self.pendingBodyParts = pendingBodyParts - 1
                 } else {
                     self.pendingBodyParts = nil
-                    context.writeAndFlush(self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok))), promise: nil)
+                    context.writeAndFlush(
+                        self.wrapOutboundOut(.head(.init(version: .http1_1, status: .ok))),
+                        promise: nil
+                    )
                     context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
                 }
             }
@@ -1420,51 +1570,136 @@ final class HTTP200DelayedHandler: ChannelInboundHandler {
 }
 
 private let cert = """
------BEGIN CERTIFICATE-----
-MIICmDCCAYACCQCPC8JDqMh1zzANBgkqhkiG9w0BAQsFADANMQswCQYDVQQGEwJ1
-czAgFw0xODEwMzExNTU1MjJaGA8yMTE4MTAwNzE1NTUyMlowDTELMAkGA1UEBhMC
-dXMwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDiC+TGmbSP/nWWN1tj
-yNfnWCU5ATjtIOfdtP6ycx8JSeqkvyNXG21kNUn14jTTU8BglGL2hfVpCbMisUdb
-d3LpP8unSsvlOWwORFOViSy4YljSNM/FNoMtavuITA/sEELYgjWkz2o/uHPZHud9
-+JQwGJgqIlMa3mr2IaaUZlWN3D1u88bzJYhpt3YyxRy9+OEoOKy36KdWwhKzV3S8
-kXb0Y1GbAo68jJ9RfzeLy290mIs9qG2y1CNXWO6sxf6B//LaalizZiCfzYAVKcNR
-9oNYsEJc5KB/+DsAGTzR7mL+oiU4h/vwVb2GTDat5C+PFGi6j1ujxYTRPO538ljg
-dslnAgMBAAEwDQYJKoZIhvcNAQELBQADggEBAFYhA7sw8odOsRO8/DUklBOjPnmn
-a078oSumgPXXw6AgcoAJv/Qthjo6CCEtrjYfcA9jaBw9/Tii7mDmqDRS5c9ZPL8+
-NEPdHjFCFBOEvlL6uHOgw0Z9Wz+5yCXnJ8oNUEgc3H2NbbzJF6sMBXSPtFS2NOK8
-OsAI9OodMrDd6+lwljrmFoCCkJHDEfE637IcsbgFKkzhO/oNCRK6OrudG4teDahz
-Au4LoEYwT730QKC/VQxxEVZobjn9/sTrq9CZlbPYHxX4fz6e00sX7H9i49vk9zQ5
-5qCm9ljhrQPSa42Q62PPE2BEEGSP2KBm0J+H3vlvCD6+SNc/nMZjrRmgjrI=
------END CERTIFICATE-----
-"""
+    -----BEGIN CERTIFICATE-----
+    MIICmDCCAYACCQCPC8JDqMh1zzANBgkqhkiG9w0BAQsFADANMQswCQYDVQQGEwJ1
+    czAgFw0xODEwMzExNTU1MjJaGA8yMTE4MTAwNzE1NTUyMlowDTELMAkGA1UEBhMC
+    dXMwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDiC+TGmbSP/nWWN1tj
+    yNfnWCU5ATjtIOfdtP6ycx8JSeqkvyNXG21kNUn14jTTU8BglGL2hfVpCbMisUdb
+    d3LpP8unSsvlOWwORFOViSy4YljSNM/FNoMtavuITA/sEELYgjWkz2o/uHPZHud9
+    +JQwGJgqIlMa3mr2IaaUZlWN3D1u88bzJYhpt3YyxRy9+OEoOKy36KdWwhKzV3S8
+    kXb0Y1GbAo68jJ9RfzeLy290mIs9qG2y1CNXWO6sxf6B//LaalizZiCfzYAVKcNR
+    9oNYsEJc5KB/+DsAGTzR7mL+oiU4h/vwVb2GTDat5C+PFGi6j1ujxYTRPO538ljg
+    dslnAgMBAAEwDQYJKoZIhvcNAQELBQADggEBAFYhA7sw8odOsRO8/DUklBOjPnmn
+    a078oSumgPXXw6AgcoAJv/Qthjo6CCEtrjYfcA9jaBw9/Tii7mDmqDRS5c9ZPL8+
+    NEPdHjFCFBOEvlL6uHOgw0Z9Wz+5yCXnJ8oNUEgc3H2NbbzJF6sMBXSPtFS2NOK8
+    OsAI9OodMrDd6+lwljrmFoCCkJHDEfE637IcsbgFKkzhO/oNCRK6OrudG4teDahz
+    Au4LoEYwT730QKC/VQxxEVZobjn9/sTrq9CZlbPYHxX4fz6e00sX7H9i49vk9zQ5
+    5qCm9ljhrQPSa42Q62PPE2BEEGSP2KBm0J+H3vlvCD6+SNc/nMZjrRmgjrI=
+    -----END CERTIFICATE-----
+    """
 
 private let key = """
------BEGIN PRIVATE KEY-----
-MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDiC+TGmbSP/nWW
-N1tjyNfnWCU5ATjtIOfdtP6ycx8JSeqkvyNXG21kNUn14jTTU8BglGL2hfVpCbMi
-sUdbd3LpP8unSsvlOWwORFOViSy4YljSNM/FNoMtavuITA/sEELYgjWkz2o/uHPZ
-Hud9+JQwGJgqIlMa3mr2IaaUZlWN3D1u88bzJYhpt3YyxRy9+OEoOKy36KdWwhKz
-V3S8kXb0Y1GbAo68jJ9RfzeLy290mIs9qG2y1CNXWO6sxf6B//LaalizZiCfzYAV
-KcNR9oNYsEJc5KB/+DsAGTzR7mL+oiU4h/vwVb2GTDat5C+PFGi6j1ujxYTRPO53
-8ljgdslnAgMBAAECggEBANZNWFNAnYJ2R5xmVuo/GxFk68Ujd4i4TZpPYbhkk+QG
-g8I0w5htlEQQkVHfZx2CpTvq8feuAH/YhlA5qeD5WaPwq26q5qsmyV6tQGDgb9lO
-w85l6ySZDbwdVOJe2il/MSB6MclSKvTGNm59chJnfHYsmvY3HHq4qsc2F+tRKYMW
-pY75LgEbaTUV69J3cbC1wAeVjv0q/krND+YkhYpTxNZhbazK/FHOCvY+zFu9fg0L
-zpwbn5fb6wIvqG7tXp7koa3QMn64AXmO/fb5mBd8G2vBGYnxwb7Egwdg/3Dw+BXu
-ynQLP7ixWsE2KNfR9Ce1i3YvEo6QDTv2340I3dntxkECgYEA9vdaL4PGyvEbpim4
-kqz1vuug8Iq0nTVDo6jmgH1o+XdcIbW3imXtgi5zUJpj4oDD7/4aufiJZjG64i/v
-phe11xeUvh5QNNOzeMymVDoJut97F97KKKTv7bG8Rpon/WzH2I0SoAkECCwmdWAJ
-H3nvOCnXEkpbCqmIUvHVURPRDn8CgYEA6lCk3EzFQlbXs3Sj5op61R3Mscx7/35A
-eGv5axzbENHt1so+s3Zvyyi1bo4VBcwnKVCvQjmTuLiqrc9VfX8XdbiTUNnEr2u3
-992Ja6DEJTZ9gy5WiviwYnwU2HpjwOVNBb17T0NLoRHkDZ6iXj7NZgwizOki5p3j
-/hS0pObSIRkCgYEAiEdOGNIarHoHy9VR6H5QzR2xHYssx2NRA8p8B4MsnhxjVqaz
-tUcxnJiNQXkwjRiJBrGthdnD2ASxH4dcMsb6rMpyZcbMc5ouewZS8j9khx4zCqUB
-4RPC4eMmBb+jOZEBZlnSYUUYWHokbrij0B61BsTvzUQCoQuUElEoaSkKP3kCgYEA
-mwdqXHvK076jjo9w1drvtEu4IDc8H2oH++TsrEr2QiWzaDZ9z71f8BnqGNCW5jQS
-AQrqOjXgIArGmqMgXB0Xh4LsrUS4Fpx9ptiD0JsYy8pGtuGUzvQFt9OC80ve7kSI
-dnDMwj+zLUmqCrzXjuWcfpUu/UaPGeiDbZuDfcteYhkCgYBLyL5JY7Qd4gVQIhFX
-7Sv3sNJN3KZCQHEzut7IwojaxgpuxiFvgsoXXuYolVCQp32oWbYcE2Yke+hOKsTE
-sCMAWZiSGN2Nrfea730IYAXkUm8bpEd3VxDXEEv13nxVeQof+JGMdlkldFGaBRDU
-oYQsPj00S3/GA9WDapwe81Wl2A==
------END PRIVATE KEY-----
-"""
+    -----BEGIN PRIVATE KEY-----
+    MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDiC+TGmbSP/nWW
+    N1tjyNfnWCU5ATjtIOfdtP6ycx8JSeqkvyNXG21kNUn14jTTU8BglGL2hfVpCbMi
+    sUdbd3LpP8unSsvlOWwORFOViSy4YljSNM/FNoMtavuITA/sEELYgjWkz2o/uHPZ
+    Hud9+JQwGJgqIlMa3mr2IaaUZlWN3D1u88bzJYhpt3YyxRy9+OEoOKy36KdWwhKz
+    V3S8kXb0Y1GbAo68jJ9RfzeLy290mIs9qG2y1CNXWO6sxf6B//LaalizZiCfzYAV
+    KcNR9oNYsEJc5KB/+DsAGTzR7mL+oiU4h/vwVb2GTDat5C+PFGi6j1ujxYTRPO53
+    8ljgdslnAgMBAAECggEBANZNWFNAnYJ2R5xmVuo/GxFk68Ujd4i4TZpPYbhkk+QG
+    g8I0w5htlEQQkVHfZx2CpTvq8feuAH/YhlA5qeD5WaPwq26q5qsmyV6tQGDgb9lO
+    w85l6ySZDbwdVOJe2il/MSB6MclSKvTGNm59chJnfHYsmvY3HHq4qsc2F+tRKYMW
+    pY75LgEbaTUV69J3cbC1wAeVjv0q/krND+YkhYpTxNZhbazK/FHOCvY+zFu9fg0L
+    zpwbn5fb6wIvqG7tXp7koa3QMn64AXmO/fb5mBd8G2vBGYnxwb7Egwdg/3Dw+BXu
+    ynQLP7ixWsE2KNfR9Ce1i3YvEo6QDTv2340I3dntxkECgYEA9vdaL4PGyvEbpim4
+    kqz1vuug8Iq0nTVDo6jmgH1o+XdcIbW3imXtgi5zUJpj4oDD7/4aufiJZjG64i/v
+    phe11xeUvh5QNNOzeMymVDoJut97F97KKKTv7bG8Rpon/WzH2I0SoAkECCwmdWAJ
+    H3nvOCnXEkpbCqmIUvHVURPRDn8CgYEA6lCk3EzFQlbXs3Sj5op61R3Mscx7/35A
+    eGv5axzbENHt1so+s3Zvyyi1bo4VBcwnKVCvQjmTuLiqrc9VfX8XdbiTUNnEr2u3
+    992Ja6DEJTZ9gy5WiviwYnwU2HpjwOVNBb17T0NLoRHkDZ6iXj7NZgwizOki5p3j
+    /hS0pObSIRkCgYEAiEdOGNIarHoHy9VR6H5QzR2xHYssx2NRA8p8B4MsnhxjVqaz
+    tUcxnJiNQXkwjRiJBrGthdnD2ASxH4dcMsb6rMpyZcbMc5ouewZS8j9khx4zCqUB
+    4RPC4eMmBb+jOZEBZlnSYUUYWHokbrij0B61BsTvzUQCoQuUElEoaSkKP3kCgYEA
+    mwdqXHvK076jjo9w1drvtEu4IDc8H2oH++TsrEr2QiWzaDZ9z71f8BnqGNCW5jQS
+    AQrqOjXgIArGmqMgXB0Xh4LsrUS4Fpx9ptiD0JsYy8pGtuGUzvQFt9OC80ve7kSI
+    dnDMwj+zLUmqCrzXjuWcfpUu/UaPGeiDbZuDfcteYhkCgYBLyL5JY7Qd4gVQIhFX
+    7Sv3sNJN3KZCQHEzut7IwojaxgpuxiFvgsoXXuYolVCQp32oWbYcE2Yke+hOKsTE
+    sCMAWZiSGN2Nrfea730IYAXkUm8bpEd3VxDXEEv13nxVeQof+JGMdlkldFGaBRDU
+    oYQsPj00S3/GA9WDapwe81Wl2A==
+    -----END PRIVATE KEY-----
+    """
+
+final class BasicInboundTrafficShapingHandler: ChannelDuplexHandler {
+    typealias OutboundIn = ByteBuffer
+    typealias InboundIn = ByteBuffer
+    typealias OutboundOut = ByteBuffer
+
+    enum ReadState {
+        case flowingFreely
+        case pausing
+        case paused
+
+        mutating func pause() {
+            switch self {
+            case .flowingFreely:
+                self = .pausing
+            case .pausing, .paused:
+                ()  // nothing to do
+            }
+        }
+
+        mutating func unpause() -> Bool {
+            switch self {
+            case .flowingFreely:
+                return false  // no extra `read` needed
+            case .pausing:
+                self = .flowingFreely
+                return false  // no extra `read` needed
+            case .paused:
+                self = .flowingFreely
+                return true  // yes, we need an extra read
+            }
+        }
+
+        mutating func shouldRead() -> Bool {
+            switch self {
+            case .flowingFreely:
+                return true
+            case .pausing:
+                self = .paused
+                return false
+            case .paused:
+                return false
+            }
+        }
+    }
+
+    private let targetBytesPerSecond: Int
+    private var currentSecondBytesSeen: Int = 0
+    private var readState: ReadState = .flowingFreely
+
+    init(targetBytesPerSecond: Int) {
+        self.targetBytesPerSecond = targetBytesPerSecond
+    }
+
+    func evaluatePause(context: ChannelHandlerContext) {
+        if self.currentSecondBytesSeen >= self.targetBytesPerSecond {
+            self.readState.pause()
+        } else if self.currentSecondBytesSeen < self.targetBytesPerSecond {
+            if self.readState.unpause() {
+                context.read()
+            }
+        }
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        let loopBoundContext = NIOLoopBound(context, eventLoop: context.eventLoop)
+        defer {
+            context.fireChannelRead(data)
+        }
+        let buffer = Self.unwrapInboundIn(data)
+        let byteCount = buffer.readableBytes
+        self.currentSecondBytesSeen += byteCount
+        context.eventLoop.assumeIsolated().scheduleTask(in: .seconds(1)) {
+            self.currentSecondBytesSeen -= byteCount
+            self.evaluatePause(context: loopBoundContext.value)
+        }
+        self.evaluatePause(context: context)
+    }
+
+    func read(context: ChannelHandlerContext) {
+        if self.readState.shouldRead() {
+            context.read()
+        }
+    }
+}

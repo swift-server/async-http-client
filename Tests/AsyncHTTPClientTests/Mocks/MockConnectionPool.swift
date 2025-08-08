@@ -12,11 +12,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import Logging
 import NIOCore
 import NIOHTTP1
 import NIOSSL
+
+@testable import AsyncHTTPClient
 
 /// A mock connection pool (not creating any actual connections) that is used to validate
 /// connection actions returned by the `HTTPConnectionPool.StateMachine`.
@@ -543,6 +544,7 @@ extension MockConnectionPool {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: maxNumberOfConnections,
             retryConnectionEstablishment: true,
+            preferHTTP1: true,
             maximumConnectionUses: nil
         )
         var connections = MockConnectionPool()
@@ -553,7 +555,9 @@ extension MockConnectionPool {
             let request = HTTPConnectionPool.Request(mockRequest)
             let action = state.executeRequest(request)
 
-            guard case .scheduleRequestTimeout(request, on: let waitEL) = action.request, mockRequest.eventLoop === waitEL else {
+            guard case .scheduleRequestTimeout(request, on: let waitEL) = action.request,
+                mockRequest.eventLoop === waitEL
+            else {
                 throw SetupError.expectedRequestToBeAddedToQueue
             }
 
@@ -608,6 +612,7 @@ extension MockConnectionPool {
             idGenerator: .init(),
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
+            preferHTTP1: false,
             maximumConnectionUses: nil
         )
         var connections = MockConnectionPool()
@@ -619,7 +624,9 @@ extension MockConnectionPool {
         let request = HTTPConnectionPool.Request(mockRequest)
         let executeAction = state.executeRequest(request)
 
-        guard case .scheduleRequestTimeout(request, on: let waitEL) = executeAction.request, mockRequest.eventLoop === waitEL else {
+        guard case .scheduleRequestTimeout(request, on: let waitEL) = executeAction.request,
+            mockRequest.eventLoop === waitEL
+        else {
             throw SetupError.expectedRequestToBeAddedToQueue
         }
 
@@ -632,15 +639,14 @@ extension MockConnectionPool {
 
         // 2. the connection becomes available
 
-        let newConnection = try connections.succeedConnectionCreationHTTP2(connectionID, maxConcurrentStreams: maxConcurrentStreams)
+        let newConnection = try connections.succeedConnectionCreationHTTP2(
+            connectionID,
+            maxConcurrentStreams: maxConcurrentStreams
+        )
         let action = state.newHTTP2ConnectionCreated(newConnection, maxConcurrentStreams: maxConcurrentStreams)
 
         guard case .executeRequestsAndCancelTimeouts([request], newConnection) = action.request else {
             throw SetupError.expectedPreviouslyQueuedRequestToBeRunNow
-        }
-
-        guard case .migration(createConnections: let create, closeConnections: [], scheduleTimeout: nil) = action.connection, create.isEmpty else {
-            throw SetupError.expectedNoConnectionAction
         }
 
         guard try queuer.get(request.id, request: request.__testOnly_wrapped_request()) === mockRequest else {
@@ -676,10 +682,12 @@ final class MockHTTPScheduableRequest: HTTPSchedulableRequest {
     let preferredEventLoop: EventLoop
     let requiredEventLoop: EventLoop?
 
-    init(eventLoop: EventLoop,
-         logger: Logger = Logger(label: "mock"),
-         connectionTimeout: TimeAmount = .seconds(60),
-         requiresEventLoopForChannel: Bool = false) {
+    init(
+        eventLoop: EventLoop,
+        logger: Logger = Logger(label: "mock"),
+        connectionTimeout: TimeAmount = .seconds(60),
+        requiresEventLoopForChannel: Bool = false
+    ) {
         self.logger = logger
 
         self.connectionDeadline = .now() + connectionTimeout
@@ -694,7 +702,7 @@ final class MockHTTPScheduableRequest: HTTPSchedulableRequest {
     }
 
     var eventLoop: EventLoop {
-        return self.preferredEventLoop
+        self.preferredEventLoop
     }
 
     // MARK: HTTPSchedulableRequest

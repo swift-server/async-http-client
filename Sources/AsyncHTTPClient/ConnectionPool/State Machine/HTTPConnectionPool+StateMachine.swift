@@ -26,7 +26,9 @@ extension HTTPConnectionPool {
                 self.connection = connection
             }
 
-            static let none = Action(request: .none, connection: .none)
+            static var none: Action {
+                Action(request: .none, connection: .none)
+            }
         }
 
         enum ConnectionAction {
@@ -105,28 +107,43 @@ extension HTTPConnectionPool {
             idGenerator: Connection.ID.Generator,
             maximumConcurrentHTTP1Connections: Int,
             retryConnectionEstablishment: Bool,
+            preferHTTP1: Bool,
             maximumConnectionUses: Int?
         ) {
             self.maximumConcurrentHTTP1Connections = maximumConcurrentHTTP1Connections
             self.retryConnectionEstablishment = retryConnectionEstablishment
             self.idGenerator = idGenerator
             self.maximumConnectionUses = maximumConnectionUses
-            let http1State = HTTP1StateMachine(
-                idGenerator: idGenerator,
-                maximumConcurrentConnections: maximumConcurrentHTTP1Connections,
-                retryConnectionEstablishment: retryConnectionEstablishment,
-                maximumConnectionUses: maximumConnectionUses,
-                lifecycleState: .running
-            )
-            self.state = .http1(http1State)
+
+            if preferHTTP1 {
+                let http1State = HTTP1StateMachine(
+                    idGenerator: idGenerator,
+                    maximumConcurrentConnections: maximumConcurrentHTTP1Connections,
+                    retryConnectionEstablishment: retryConnectionEstablishment,
+                    maximumConnectionUses: maximumConnectionUses,
+                    lifecycleState: .running
+                )
+                self.state = .http1(http1State)
+            } else {
+                let http2State = HTTP2StateMachine(
+                    idGenerator: idGenerator,
+                    retryConnectionEstablishment: retryConnectionEstablishment,
+                    lifecycleState: .running,
+                    maximumConnectionUses: maximumConnectionUses
+                )
+                self.state = .http2(http2State)
+            }
         }
 
         mutating func executeRequest(_ request: Request) -> Action {
-            self.state.modify(http1: { http1 in
-                http1.executeRequest(request)
-            }, http2: { http2 in
-                http2.executeRequest(request)
-            })
+            self.state.modify(
+                http1: { http1 in
+                    http1.executeRequest(request)
+                },
+                http2: { http2 in
+                    http2.executeRequest(request)
+                }
+            )
         }
 
         mutating func newHTTP1ConnectionCreated(_ connection: Connection) -> Action {
@@ -187,60 +204,82 @@ extension HTTPConnectionPool {
             }
         }
 
-        mutating func newHTTP2MaxConcurrentStreamsReceived(_ connectionID: Connection.ID, newMaxStreams: Int) -> Action {
-            self.state.modify(http1: { http1 in
-                http1.newHTTP2MaxConcurrentStreamsReceived(connectionID, newMaxStreams: newMaxStreams)
-            }, http2: { http2 in
-                http2.newHTTP2MaxConcurrentStreamsReceived(connectionID, newMaxStreams: newMaxStreams)
-            })
+        mutating func newHTTP2MaxConcurrentStreamsReceived(_ connectionID: Connection.ID, newMaxStreams: Int) -> Action
+        {
+            self.state.modify(
+                http1: { http1 in
+                    http1.newHTTP2MaxConcurrentStreamsReceived(connectionID, newMaxStreams: newMaxStreams)
+                },
+                http2: { http2 in
+                    http2.newHTTP2MaxConcurrentStreamsReceived(connectionID, newMaxStreams: newMaxStreams)
+                }
+            )
         }
 
         mutating func http2ConnectionGoAwayReceived(_ connectionID: Connection.ID) -> Action {
-            self.state.modify(http1: { http1 in
-                http1.http2ConnectionGoAwayReceived(connectionID)
-            }, http2: { http2 in
-                http2.http2ConnectionGoAwayReceived(connectionID)
-            })
+            self.state.modify(
+                http1: { http1 in
+                    http1.http2ConnectionGoAwayReceived(connectionID)
+                },
+                http2: { http2 in
+                    http2.http2ConnectionGoAwayReceived(connectionID)
+                }
+            )
         }
 
         mutating func http2ConnectionClosed(_ connectionID: Connection.ID) -> Action {
-            self.state.modify(http1: { http1 in
-                http1.http2ConnectionClosed(connectionID)
-            }, http2: { http2 in
-                http2.http2ConnectionClosed(connectionID)
-            })
+            self.state.modify(
+                http1: { http1 in
+                    http1.http2ConnectionClosed(connectionID)
+                },
+                http2: { http2 in
+                    http2.http2ConnectionClosed(connectionID)
+                }
+            )
         }
 
         mutating func http2ConnectionStreamClosed(_ connectionID: Connection.ID) -> Action {
-            self.state.modify(http1: { http1 in
-                http1.http2ConnectionStreamClosed(connectionID)
-            }, http2: { http2 in
-                http2.http2ConnectionStreamClosed(connectionID)
-            })
+            self.state.modify(
+                http1: { http1 in
+                    http1.http2ConnectionStreamClosed(connectionID)
+                },
+                http2: { http2 in
+                    http2.http2ConnectionStreamClosed(connectionID)
+                }
+            )
         }
 
         mutating func failedToCreateNewConnection(_ error: Error, connectionID: Connection.ID) -> Action {
-            self.state.modify(http1: { http1 in
-                http1.failedToCreateNewConnection(error, connectionID: connectionID)
-            }, http2: { http2 in
-                http2.failedToCreateNewConnection(error, connectionID: connectionID)
-            })
+            self.state.modify(
+                http1: { http1 in
+                    http1.failedToCreateNewConnection(error, connectionID: connectionID)
+                },
+                http2: { http2 in
+                    http2.failedToCreateNewConnection(error, connectionID: connectionID)
+                }
+            )
         }
 
         mutating func waitingForConnectivity(_ error: Error, connectionID: Connection.ID) -> Action {
-            self.state.modify(http1: { http1 in
-                http1.waitingForConnectivity(error, connectionID: connectionID)
-            }, http2: { http2 in
-                http2.waitingForConnectivity(error, connectionID: connectionID)
-            })
+            self.state.modify(
+                http1: { http1 in
+                    http1.waitingForConnectivity(error, connectionID: connectionID)
+                },
+                http2: { http2 in
+                    http2.waitingForConnectivity(error, connectionID: connectionID)
+                }
+            )
         }
 
         mutating func connectionCreationBackoffDone(_ connectionID: Connection.ID) -> Action {
-            self.state.modify(http1: { http1 in
-                http1.connectionCreationBackoffDone(connectionID)
-            }, http2: { http2 in
-                http2.connectionCreationBackoffDone(connectionID)
-            })
+            self.state.modify(
+                http1: { http1 in
+                    http1.connectionCreationBackoffDone(connectionID)
+                },
+                http2: { http2 in
+                    http2.connectionCreationBackoffDone(connectionID)
+                }
+            )
         }
 
         /// A request has timed out.
@@ -249,11 +288,14 @@ extension HTTPConnectionPool {
         /// request, but don't need to cancel the timer (it already triggered). If a request is cancelled
         /// we don't need to fail it but we need to cancel its timeout timer.
         mutating func timeoutRequest(_ requestID: Request.ID) -> Action {
-            self.state.modify(http1: { http1 in
-                http1.timeoutRequest(requestID)
-            }, http2: { http2 in
-                http2.timeoutRequest(requestID)
-            })
+            self.state.modify(
+                http1: { http1 in
+                    http1.timeoutRequest(requestID)
+                },
+                http2: { http2 in
+                    http2.timeoutRequest(requestID)
+                }
+            )
         }
 
         /// A request was cancelled.
@@ -262,44 +304,59 @@ extension HTTPConnectionPool {
         /// need to cancel its timeout timer. If a request times out, we need to fail the request, but don't
         /// need to cancel the timer (it already triggered).
         mutating func cancelRequest(_ requestID: Request.ID) -> Action {
-            self.state.modify(http1: { http1 in
-                http1.cancelRequest(requestID)
-            }, http2: { http2 in
-                http2.cancelRequest(requestID)
-            })
+            self.state.modify(
+                http1: { http1 in
+                    http1.cancelRequest(requestID)
+                },
+                http2: { http2 in
+                    http2.cancelRequest(requestID)
+                }
+            )
         }
 
         mutating func connectionIdleTimeout(_ connectionID: Connection.ID) -> Action {
-            self.state.modify(http1: { http1 in
-                http1.connectionIdleTimeout(connectionID)
-            }, http2: { http2 in
-                http2.connectionIdleTimeout(connectionID)
-            })
+            self.state.modify(
+                http1: { http1 in
+                    http1.connectionIdleTimeout(connectionID)
+                },
+                http2: { http2 in
+                    http2.connectionIdleTimeout(connectionID)
+                }
+            )
         }
 
         /// A connection has been closed
         mutating func http1ConnectionClosed(_ connectionID: Connection.ID) -> Action {
-            self.state.modify(http1: { http1 in
-                http1.http1ConnectionClosed(connectionID)
-            }, http2: { http2 in
-                http2.http1ConnectionClosed(connectionID)
-            })
+            self.state.modify(
+                http1: { http1 in
+                    http1.http1ConnectionClosed(connectionID)
+                },
+                http2: { http2 in
+                    http2.http1ConnectionClosed(connectionID)
+                }
+            )
         }
 
         mutating func http1ConnectionReleased(_ connectionID: Connection.ID) -> Action {
-            self.state.modify(http1: { http1 in
-                http1.http1ConnectionReleased(connectionID)
-            }, http2: { http2 in
-                http2.http1ConnectionReleased(connectionID)
-            })
+            self.state.modify(
+                http1: { http1 in
+                    http1.http1ConnectionReleased(connectionID)
+                },
+                http2: { http2 in
+                    http2.http1ConnectionReleased(connectionID)
+                }
+            )
         }
 
         mutating func shutdown() -> Action {
-            return self.state.modify(http1: { http1 in
-                http1.shutdown()
-            }, http2: { http2 in
-                http2.shutdown()
-            })
+            self.state.modify(
+                http1: { http1 in
+                    http1.shutdown()
+                },
+                http2: { http2 in
+                    http2.shutdown()
+                }
+            )
         }
     }
 }
@@ -342,7 +399,9 @@ extension HTTPConnectionPool.StateMachine {
     }
 
     struct EstablishedAction {
-        static let none: Self = .init(request: .none, connection: .none)
+        static var none: Self {
+            Self(request: .none, connection: .none)
+        }
         let request: HTTPConnectionPool.StateMachine.RequestAction
         let connection: EstablishedConnectionAction
     }
@@ -350,7 +409,10 @@ extension HTTPConnectionPool.StateMachine {
     enum EstablishedConnectionAction {
         case none
         case scheduleTimeoutTimer(HTTPConnectionPool.Connection.ID, on: EventLoop)
-        case closeConnection(HTTPConnectionPool.Connection, isShutdown: HTTPConnectionPool.StateMachine.ConnectionAction.IsShutdown)
+        case closeConnection(
+            HTTPConnectionPool.Connection,
+            isShutdown: HTTPConnectionPool.StateMachine.ConnectionAction.IsShutdown
+        )
     }
 }
 
@@ -391,8 +453,7 @@ extension HTTPConnectionPool.StateMachine.ConnectionAction {
         case .closeConnection(let connection, let isShutdown):
             guard isShutdown == .no else {
                 precondition(
-                    migrationAction.closeConnections.isEmpty &&
-                        migrationAction.createConnections.isEmpty,
+                    migrationAction.closeConnections.isEmpty && migrationAction.createConnections.isEmpty,
                     "migration actions are not supported during shutdown"
                 )
                 return .closeConnection(connection, isShutdown: isShutdown)

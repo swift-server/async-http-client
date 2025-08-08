@@ -14,6 +14,6 @@
 
 extension HTTPClient.EventLoopPreference: CustomStringConvertible {
     public var description: String {
-        return "\(self.preference)"
+        "\(self.preference)"
     }
 }

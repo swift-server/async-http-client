@@ -14,9 +14,6 @@
 
 import AsyncHTTPClient
 import Atomics
-#if canImport(Network)
-import Network
-#endif
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -28,6 +25,10 @@ import NIOSSL
 import NIOTestUtils
 import NIOTransportServices
 import XCTest
+
+#if canImport(Network)
+import Network
+#endif
 
 class XCTestCaseHTTPClientTestsBaseClass: XCTestCase {
     typealias Request = HTTPClient.Request
@@ -53,13 +54,18 @@ class XCTestCaseHTTPClientTestsBaseClass: XCTestCase {
         self.serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         self.defaultHTTPBin = HTTPBin()
         self.backgroundLogStore = CollectEverythingLogHandler.LogStore()
-        var backgroundLogger = Logger(label: "\(#function)", factory: { _ in
-            CollectEverythingLogHandler(logStore: self.backgroundLogStore!)
-        })
+        var backgroundLogger = Logger(
+            label: "\(#function)",
+            factory: { _ in
+                CollectEverythingLogHandler(logStore: self.backgroundLogStore!)
+            }
+        )
         backgroundLogger.logLevel = .trace
-        self.defaultClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup),
-                                        configuration: HTTPClient.Configuration().enableFastFailureModeForTesting(),
-                                        backgroundActivityLogger: backgroundLogger)
+        self.defaultClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: HTTPClient.Configuration().enableFastFailureModeForTesting(),
+            backgroundActivityLogger: backgroundLogger
+        )
     }
 
     override func tearDown() {

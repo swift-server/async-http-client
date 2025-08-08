@@ -155,7 +155,8 @@ final class HTTPClientUncleanSSLConnectionShutdownTests: XCTestCase {
         )
         defer { XCTAssertNoThrow(try client.syncShutdown()) }
 
-        XCTAssertThrowsError(try client.get(url: "https://localhost:\(httpBin.port)/transferencodingtruncated").wait()) {
+        XCTAssertThrowsError(try client.get(url: "https://localhost:\(httpBin.port)/transferencodingtruncated").wait())
+        {
             XCTAssertEqual($0 as? HTTPParserError, .invalidEOFState)
         }
     }
@@ -184,7 +185,7 @@ final class HTTPBinForSSLUncleanShutdown {
     let serverChannel: Channel
 
     var port: Int {
-        return Int(self.serverChannel.localAddress!.port!)
+        Int(self.serverChannel.localAddress!.port!)
     }
 
     init() {
@@ -231,61 +232,61 @@ private final class HTTPBinForSSLUncleanShutdownHandler: ChannelInboundHandler {
             switch req.uri {
             case "/nocontentlength":
                 response = """
-                HTTP/1.1 200 OK\r\n\
-                Connection: close\r\n\
-                \r\n\
-                foo
-                """
+                    HTTP/1.1 200 OK\r\n\
+                    Connection: close\r\n\
+                    \r\n\
+                    foo
+                    """
 
             case "/nocontent":
                 response = """
-                HTTP/1.1 204 OK\r\n\
-                Connection: close\r\n\
-                \r\n
-                """
+                    HTTP/1.1 204 OK\r\n\
+                    Connection: close\r\n\
+                    \r\n
+                    """
 
             case "/noresponse":
                 response = nil
 
             case "/wrongcontentlength":
                 response = """
-                HTTP/1.1 200 OK\r\n\
-                Connection: close\r\n\
-                Content-Length: 6\r\n\
-                \r\n\
-                foo
-                """
+                    HTTP/1.1 200 OK\r\n\
+                    Connection: close\r\n\
+                    Content-Length: 6\r\n\
+                    \r\n\
+                    foo
+                    """
 
             case "/transferencoding":
                 response = """
-                HTTP/1.1 200 OK\r\n\
-                Connection: close\r\n\
-                Transfer-Encoding: chunked\r\n\
-                \r\n\
-                3\r\n\
-                foo\r\n\
-                0\r\n\
-                \r\n
-                """
+                    HTTP/1.1 200 OK\r\n\
+                    Connection: close\r\n\
+                    Transfer-Encoding: chunked\r\n\
+                    \r\n\
+                    3\r\n\
+                    foo\r\n\
+                    0\r\n\
+                    \r\n
+                    """
 
             case "/transferencodingtruncated":
                 response = """
-                HTTP/1.1 200 OK\r\n\
-                Connection: close\r\n\
-                Transfer-Encoding: chunked\r\n\
-                \r\n\
-                12\r\n\
-                foo
-                """
+                    HTTP/1.1 200 OK\r\n\
+                    Connection: close\r\n\
+                    Transfer-Encoding: chunked\r\n\
+                    \r\n\
+                    12\r\n\
+                    foo
+                    """
 
             default:
                 response = """
-                HTTP/1.1 404 OK\r\n\
-                Connection: close\r\n\
-                Content-Length: 9\r\n\
-                \r\n\
-                Not Found
-                """
+                    HTTP/1.1 404 OK\r\n\
+                    Connection: close\r\n\
+                    Content-Length: 9\r\n\
+                    \r\n\
+                    Not Found
+                    """
             }
 
             if let response = response {

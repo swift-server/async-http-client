@@ -12,11 +12,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import AsyncHTTPClient
 import NIOCore
 import NIOEmbedded
 import NIOHTTP1
 import XCTest
+
+@testable import AsyncHTTPClient
 
 struct NoOpAsyncSequenceProducerDelegate: NIOAsyncSequenceProducerDelegate {
     func produceMore() {}
@@ -37,7 +38,10 @@ final class Transaction_StateMachineTests: XCTestCase {
                 state.requestWasQueued(queuer)
 
                 let failAction = state.fail(HTTPClientError.cancelled)
-                guard case .failResponseHead(_, let error, let scheduler, let rexecutor, let bodyStreamContinuation) = failAction else {
+                guard
+                    case .failResponseHead(_, let error, let scheduler, let rexecutor, let bodyStreamContinuation) =
+                        failAction
+                else {
                     return XCTFail("Unexpected fail action: \(failAction)")
                 }
                 XCTAssertEqual(error as? HTTPClientError, .cancelled)
@@ -88,7 +92,10 @@ final class Transaction_StateMachineTests: XCTestCase {
                 XCTAssertIdentical(scheduler as? MockTaskQueuer, queuer)
 
                 let failAction = state.fail(MyError())
-                guard case .failResponseHead(let continuation, let error, nil, nil, bodyStreamContinuation: nil) = failAction else {
+                guard
+                    case .failResponseHead(let continuation, let error, nil, nil, bodyStreamContinuation: nil) =
+                        failAction
+                else {
                     return XCTFail("Unexpected fail action: \(failAction)")
                 }
                 XCTAssertIdentical(scheduler as? MockTaskQueuer, queuer)
@@ -118,7 +125,10 @@ final class Transaction_StateMachineTests: XCTestCase {
                 XCTAssertIdentical(scheduler as? MockTaskQueuer, queuer)
 
                 let failAction = state.fail(MyError())
-                guard case .failResponseHead(let continuation, let error, nil, nil, bodyStreamContinuation: nil) = failAction else {
+                guard
+                    case .failResponseHead(let continuation, let error, nil, nil, bodyStreamContinuation: nil) =
+                        failAction
+                else {
                     return XCTFail("Unexpected fail action: \(failAction)")
                 }
                 XCTAssertIdentical(scheduler as? MockTaskQueuer, queuer)
@@ -203,7 +213,10 @@ final class Transaction_StateMachineTests: XCTestCase {
                 XCTAssertEqual(state.willExecuteRequest(executor), .none)
                 state.requestWasQueued(queuer)
                 let head = HTTPResponseHead(version: .http1_1, status: .ok)
-                let receiveResponseHeadAction = state.receiveResponseHead(head, delegate: NoOpAsyncSequenceProducerDelegate())
+                let receiveResponseHeadAction = state.receiveResponseHead(
+                    head,
+                    delegate: NoOpAsyncSequenceProducerDelegate()
+                )
                 guard case .succeedResponseHead(_, let continuation) = receiveResponseHeadAction else {
                     return XCTFail("Unexpected action: \(receiveResponseHeadAction)")
                 }
@@ -258,7 +271,7 @@ extension Transaction.StateMachine.NextWriteAction: Equatable {
     public static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
         case (.writeAndWait(let lhsEx), .writeAndWait(let rhsEx)),
-             (.writeAndContinue(let lhsEx), .writeAndContinue(let rhsEx)):
+            (.writeAndContinue(let lhsEx), .writeAndContinue(let rhsEx)):
             if let lhsMock = lhsEx as? MockRequestExecutor, let rhsMock = rhsEx as? MockRequestExecutor {
                 return lhsMock === rhsMock
             }

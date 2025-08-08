@@ -125,7 +125,7 @@ extension HTTPClientRequest.Body {
     public static func bytes<Bytes: RandomAccessCollection & Sendable>(
         _ bytes: Bytes
     ) -> Self where Bytes.Element == UInt8 {
-        self.bytes(bytes, length: .known(bytes.count))
+        self.bytes(bytes, length: .known(Int64(bytes.count)))
     }
 
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `Sequence` of bytes.
@@ -140,7 +140,7 @@ extension HTTPClientRequest.Body {
     ///
     /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
     /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
-    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)`` will use `Content-Length`.
+    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)-9q0ge`` will use `Content-Length`.
     ///
     /// - parameters:
     ///     - bytes: The bytes of the request body.
@@ -176,23 +176,29 @@ extension HTTPClientRequest.Body {
             // the maximum size of a ByteBuffer.
             if bufferPointer.count <= byteBufferMaxSize {
                 let buffer = ByteBuffer(bytes: bufferPointer)
-                return Self(.sequence(
-                    length: length.storage,
-                    canBeConsumedMultipleTimes: true,
-                    makeCompleteBody: { _ in buffer }
-                ))
+                return Self(
+                    .sequence(
+                        length: length.storage,
+                        canBeConsumedMultipleTimes: true,
+                        makeCompleteBody: { _ in buffer }
+                    )
+                )
             } else {
                 // we need to copy `bufferPointer` eagerly as the pointer is only valid during the call to `withContiguousStorageIfAvailable`
-                let buffers: Array<ByteBuffer> = bufferPointer.chunks(ofCount: byteBufferMaxSize).map { ByteBuffer(bytes: $0) }
-                return Self(.asyncSequence(
-                    length: length.storage,
-                    makeAsyncIterator: {
-                        var iterator = buffers.makeIterator()
-                        return { _ in
-                            iterator.next()
+                let buffers: [ByteBuffer] = bufferPointer.chunks(ofCount: byteBufferMaxSize).map {
+                    ByteBuffer(bytes: $0)
+                }
+                return Self(
+                    .asyncSequence(
+                        length: length.storage,
+                        makeAsyncIterator: {
+                            var iterator = buffers.makeIterator()
+                            return { _ in
+                                iterator.next()
+                            }
                         }
-                    }
-                ))
+                    )
+                )
             }
         }
         if let body = body {
@@ -200,21 +206,23 @@ extension HTTPClientRequest.Body {
         }
 
         // slow path
-        return Self(.asyncSequence(
-            length: length.storage
-        ) {
-            var iterator = bytes.makeIterator()
-            return { allocator in
-                var buffer = allocator.buffer(capacity: bagOfBytesToByteBufferConversionChunkSize)
-                while buffer.writableBytes > 0, let byte = iterator.next() {
-                    buffer.writeInteger(byte)
+        return Self(
+            .asyncSequence(
+                length: length.storage
+            ) {
+                var iterator = bytes.makeIterator()
+                return { allocator in
+                    var buffer = allocator.buffer(capacity: bagOfBytesToByteBufferConversionChunkSize)
+                    while buffer.writableBytes > 0, let byte = iterator.next() {
+                        buffer.writeInteger(byte)
+                    }
+                    if buffer.readableBytes > 0 {
+                        return buffer
+                    }
+                    return nil
                 }
-                if buffer.readableBytes > 0 {
-                    return buffer
-                }
-                return nil
             }
-        })
+        )
     }
 
     /// Create an ``HTTPClientRequest/Body-swift.struct`` from a `Collection` of bytes.
@@ -225,7 +233,7 @@ extension HTTPClientRequest.Body {
     ///
     /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
     /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
-    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)`` will use `Content-Length`.
+    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)-9q0ge`` will use `Content-Length`.
     ///
     /// - parameters:
     ///     - bytes: The bytes of the request body.
@@ -237,25 +245,29 @@ extension HTTPClientRequest.Body {
         length: Length
     ) -> Self where Bytes.Element == UInt8 {
         if bytes.count <= bagOfBytesToByteBufferConversionChunkSize {
-            return self.init(.sequence(
-                length: length.storage,
-                canBeConsumedMultipleTimes: true
-            ) { allocator in
-                allocator.buffer(bytes: bytes)
-            })
-        } else {
-            return self.init(.asyncSequence(
-                length: length.storage,
-                makeAsyncIterator: {
-                    var iterator = bytes.chunks(ofCount: bagOfBytesToByteBufferConversionChunkSize).makeIterator()
-                    return { allocator in
-                        guard let chunk = iterator.next() else {
-                            return nil
-                        }
-                        return allocator.buffer(bytes: chunk)
-                    }
+            return self.init(
+                .sequence(
+                    length: length.storage,
+                    canBeConsumedMultipleTimes: true
+                ) { allocator in
+                    allocator.buffer(bytes: bytes)
                 }
-            ))
+            )
+        } else {
+            return self.init(
+                .asyncSequence(
+                    length: length.storage,
+                    makeAsyncIterator: {
+                        var iterator = bytes.chunks(ofCount: bagOfBytesToByteBufferConversionChunkSize).makeIterator()
+                        return { allocator in
+                            guard let chunk = iterator.next() else {
+                                return nil
+                            }
+                            return allocator.buffer(bytes: chunk)
+                        }
+                    }
+                )
+            )
         }
     }
 
@@ -265,7 +277,7 @@ extension HTTPClientRequest.Body {
     ///
     /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
     /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
-    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)`` will use `Content-Length`.
+    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)-9q0ge`` will use `Content-Length`.
     ///
     /// - parameters:
     ///     - sequenceOfBytes: The bytes of the request body.
@@ -276,12 +288,14 @@ extension HTTPClientRequest.Body {
         _ sequenceOfBytes: SequenceOfBytes,
         length: Length
     ) -> Self where SequenceOfBytes.Element == ByteBuffer {
-        let body = self.init(.asyncSequence(length: length.storage) {
-            var iterator = sequenceOfBytes.makeAsyncIterator()
-            return { _ -> ByteBuffer? in
-                try await iterator.next()
+        let body = self.init(
+            .asyncSequence(length: length.storage) {
+                var iterator = sequenceOfBytes.makeAsyncIterator()
+                return { _ -> ByteBuffer? in
+                    try await iterator.next()
+                }
             }
-        })
+        )
         return body
     }
 
@@ -293,7 +307,7 @@ extension HTTPClientRequest.Body {
     ///
     /// Caution should be taken with this method to ensure that the `length` is correct. Incorrect lengths
     /// will cause unnecessary runtime failures. Setting `length` to ``Length/unknown`` will trigger the upload
-    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)`` will use `Content-Length`.
+    /// to use `chunked` `Transfer-Encoding`, while using ``Length/known(_:)-9q0ge`` will use `Content-Length`.
     ///
     /// - parameters:
     ///     - bytes: The bytes of the request body.
@@ -304,19 +318,21 @@ extension HTTPClientRequest.Body {
         _ bytes: Bytes,
         length: Length
     ) -> Self where Bytes.Element == UInt8 {
-        let body = self.init(.asyncSequence(length: length.storage) {
-            var iterator = bytes.makeAsyncIterator()
-            return { allocator -> ByteBuffer? in
-                var buffer = allocator.buffer(capacity: bagOfBytesToByteBufferConversionChunkSize)
-                while buffer.writableBytes > 0, let byte = try await iterator.next() {
-                    buffer.writeInteger(byte)
+        let body = self.init(
+            .asyncSequence(length: length.storage) {
+                var iterator = bytes.makeAsyncIterator()
+                return { allocator -> ByteBuffer? in
+                    var buffer = allocator.buffer(capacity: bagOfBytesToByteBufferConversionChunkSize)
+                    while buffer.writableBytes > 0, let byte = try await iterator.next() {
+                        buffer.writeInteger(byte)
+                    }
+                    if buffer.readableBytes > 0 {
+                        return buffer
+                    }
+                    return nil
                 }
-                if buffer.readableBytes > 0 {
-                    return buffer
-                }
-                return nil
             }
-        })
+        )
         return body
     }
 }
@@ -341,7 +357,13 @@ extension HTTPClientRequest.Body {
         public static let unknown: Self = .init(storage: .unknown)
 
         /// The size of the request body is known and exactly `count` bytes
+        @available(*, deprecated, message: "Use `known(_ count: Int64)` with an explicit Int64 argument instead")
         public static func known(_ count: Int) -> Self {
+            .init(storage: .known(Int64(count)))
+        }
+
+        /// The size of the request body is known and exactly `count` bytes
+        public static func known(_ count: Int64) -> Self {
             .init(storage: .known(count))
         }
 
@@ -399,3 +421,9 @@ extension HTTPClientRequest.Body {
         }
     }
 }
+
+@available(*, unavailable)
+extension HTTPClientRequest.Body.AsyncIterator: Sendable {}
+
+@available(*, unavailable)
+extension HTTPClientRequest.Body.AsyncIterator.Storage: Sendable {}

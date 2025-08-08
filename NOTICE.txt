@@ -50,13 +50,13 @@ This product contains a derivation of the Tony Stone's 'process_test_files.rb'.
     * https://www.apache.org/licenses/LICENSE-2.0
   * HOMEPAGE:
     * https://github.com/tonystone/build-tools/commit/6c417b7569df24597a48a9aa7b505b636e8f73a1
-    * https://github.com/tonystone/build-tools/blob/master/source/xctest_tool.rb
+    * https://github.com/tonystone/build-tools/blob/cf3440f43bde2053430285b4ed0709c865892eb5/source/xctest_tool.rb
 
 ---
 
 This product contains a derivation of Fabian Fett's 'Base64.swift'.
 
   * LICENSE (Apache License 2.0):
-    * https://github.com/fabianfett/swift-base64-kit/blob/master/LICENSE
+    * https://github.com/swift-extras/swift-extras-base64/blob/b8af49699d59ad065b801715a5009619100245ca/LICENSE
   * HOMEPAGE:
     * https://github.com/fabianfett/swift-base64-kit
