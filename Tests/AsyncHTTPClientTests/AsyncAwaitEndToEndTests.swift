@@ -1036,7 +1036,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             ) else { return }
             XCTAssertEqual(response.headers["content-length"], ["4"])
             guard let body = await XCTAssertNoThrowWithResult(
-                try await response.bytes(upTo: 3)
+                try await response.bytes(upTo: 5)
             ) else { return }
             XCTAssertEqual(body, ByteBuffer(string: "1234"))
 

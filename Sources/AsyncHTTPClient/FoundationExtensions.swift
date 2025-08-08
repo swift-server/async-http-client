@@ -73,14 +73,3 @@ extension HTTPClient.Body {
         self.bytes(data)
     }
 }
-
-@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-extension HTTPClientResponse {
-    /// Response body as `Data`.
-    /// - Parameter maxBytes: The maximum number of bytes this method is allowed to accumulate.
-    /// - Returns: Bytes collected over time
-    public func data(upTo maxBytes: Int) async throws -> Data? {
-        var bytes = try await self.bytes(upTo: maxBytes)
-        return bytes.readData(length: bytes.readableBytes)
-    }
-}

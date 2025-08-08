@@ -188,17 +188,6 @@ extension HTTPClientResponse {
 }
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-extension HTTPClientResponse {
-    /// Response body as `ByteBuffer`.
-    /// - Parameter maxBytes: The maximum number of bytes this method is allowed to accumulate. 
-    /// - Returns: Bytes collected over time
-    public func bytes(upTo maxBytes: Int) async throws -> ByteBuffer {
-        let expectedBytes = self.headers.first(name: "content-length").flatMap(Int.init) ?? maxBytes
-        return try await self.body.collect(upTo: expectedBytes)
-    }
-}
-
-@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 @usableFromInline
 typealias TransactionBody = NIOThrowingAsyncSequenceProducer<
     ByteBuffer,
