@@ -19,13 +19,18 @@ import NIOCore
 import NIOHTTP1
 
 extension HTTPConnectionPool {
-    final class Manager {
+    final class Manager: Sendable {
         private typealias Key = ConnectionPool.Key
 
-        private enum State {
+        private enum RunState: Sendable {
             case active
             case shuttingDown(promise: EventLoopPromise<Bool>?, unclean: Bool)
             case shutDown
+        }
+
+        private struct State: Sendable {
+            var runState: RunState = .active
+            var pools: [Key: HTTPConnectionPool] = [:]
         }
 
         private let eventLoopGroup: EventLoopGroup
@@ -33,10 +38,7 @@ extension HTTPConnectionPool {
         private let connectionIDGenerator = Connection.ID.globalGenerator
         private let logger: Logger
 
-        private var state: State = .active
-        private var _pools: [Key: HTTPConnectionPool] = [:]
-        private let lock = NIOLock()
-
+        private let state: NIOLockedValueBox<State> = NIOLockedValueBox(State())
         private let sslContextCache = SSLContextCache()
 
         init(
@@ -51,10 +53,10 @@ extension HTTPConnectionPool {
 
         func executeRequest(_ request: HTTPSchedulableRequest) {
             let poolKey = request.poolKey
-            let poolResult = self.lock.withLock { () -> Result<HTTPConnectionPool, HTTPClientError> in
-                switch self.state {
+            let poolResult = self.state.withLockedValue { state -> Result<HTTPConnectionPool, HTTPClientError> in
+                switch state.runState {
                 case .active:
-                    if let pool = self._pools[poolKey] {
+                    if let pool = state.pools[poolKey] {
                         return .success(pool)
                     }
 
@@ -68,7 +70,7 @@ extension HTTPConnectionPool {
                         idGenerator: self.connectionIDGenerator,
                         backgroundActivityLogger: self.logger
                     )
-                    self._pools[poolKey] = pool
+                    state.pools[poolKey] = pool
                     return .success(pool)
 
                 case .shuttingDown, .shutDown:
@@ -95,17 +97,17 @@ extension HTTPConnectionPool {
                 case shutdown([Key: HTTPConnectionPool])
             }
 
-            let action = self.lock.withLock { () -> ShutdownAction in
-                switch self.state {
+            let action = self.state.withLockedValue { state -> ShutdownAction in
+                switch state.runState {
                 case .active:
                     // If there aren't any pools, we can mark the pool as shut down right away.
-                    if self._pools.isEmpty {
-                        self.state = .shutDown
+                    if state.pools.isEmpty {
+                        state.runState = .shutDown
                         return .done(promise)
                     } else {
                         // this promise will be succeeded once all connection pools are shutdown
-                        self.state = .shuttingDown(promise: promise, unclean: false)
-                        return .shutdown(self._pools)
+                        state.runState = .shuttingDown(promise: promise, unclean: false)
+                        return .shutdown(state.pools)
                     }
 
                 case .shuttingDown, .shutDown:
@@ -135,23 +137,23 @@ extension HTTPConnectionPool.Manager: HTTPConnectionPoolDelegate {
             case wait
         }
 
-        let closeAction = self.lock.withLock { () -> CloseAction in
-            switch self.state {
+        let closeAction = self.state.withLockedValue { state -> CloseAction in
+            switch state.runState {
             case .active, .shutDown:
                 preconditionFailure("Why are pools shutting down, if the manager did not give a signal")
 
             case .shuttingDown(let promise, let soFarUnclean):
-                guard self._pools.removeValue(forKey: pool.key) === pool else {
+                guard state.pools.removeValue(forKey: pool.key) === pool else {
                     preconditionFailure(
                         "Expected that the pool was created by this manager and is known for this reason."
                     )
                 }
 
-                if self._pools.isEmpty {
-                    self.state = .shutDown
+                if state.pools.isEmpty {
+                    state.runState = .shutDown
                     return .close(promise, unclean: soFarUnclean || unclean)
                 } else {
-                    self.state = .shuttingDown(promise: promise, unclean: soFarUnclean || unclean)
+                    state.runState = .shuttingDown(promise: promise, unclean: soFarUnclean || unclean)
                     return .wait
                 }
             }
