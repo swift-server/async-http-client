@@ -57,7 +57,7 @@ let globalRequestID = ManagedAtomic(0)
 ///         }
 ///     }
 /// ```
-public class HTTPClient {
+public final class HTTPClient: Sendable {
     /// The `EventLoopGroup` in use by this ``HTTPClient``.
     ///
     /// All HTTP transactions will occur on loops owned by this group.
@@ -66,11 +66,9 @@ public class HTTPClient {
     let poolManager: HTTPConnectionPool.Manager
 
     /// Shared thread pool used for file IO. It is lazily created on first access of ``Task/fileIOThreadPool``.
-    private var fileIOThreadPool: NIOThreadPool?
-    private let fileIOThreadPoolLock = NIOLock()
+    private let fileIOThreadPool: NIOLockedValueBox<NIOThreadPool?>
 
-    private var state: State
-    private let stateLock = NIOLock()
+    private let state: NIOLockedValueBox<State>
     private let canBeShutDown: Bool
 
     static let loggingDisabled = Logger(label: "AHC-do-not-log", factory: { _ in SwiftLogNoOpLogHandler() })
@@ -167,29 +165,32 @@ public class HTTPClient {
             configuration: self.configuration,
             backgroundActivityLogger: backgroundActivityLogger
         )
-        self.state = .upAndRunning
+        self.state = NIOLockedValueBox(.upAndRunning)
+        self.fileIOThreadPool = NIOLockedValueBox(nil)
     }
 
     deinit {
         debugOnly {
             // We want to crash only in debug mode.
-            switch self.state {
-            case .shutDown:
-                break
-            case .shuttingDown:
-                preconditionFailure(
-                    """
-                    This state should be totally unreachable. While the HTTPClient is shutting down a \
-                    reference cycle should exist, that prevents it from deinit.
-                    """
-                )
-            case .upAndRunning:
-                preconditionFailure(
-                    """
-                    Client not shut down before the deinit. Please call client.shutdown() when no \
-                    longer needed. Otherwise memory will leak.
-                    """
-                )
+            self.state.withLockedValue { state in
+                switch state {
+                case .shutDown:
+                    break
+                case .shuttingDown:
+                    preconditionFailure(
+                        """
+                        This state should be totally unreachable. While the HTTPClient is shutting down a \
+                        reference cycle should exist, that prevents it from deinit.
+                        """
+                    )
+                case .upAndRunning:
+                    preconditionFailure(
+                        """
+                        Client not shut down before the deinit. Please call client.shutdown() when no \
+                        longer needed. Otherwise memory will leak.
+                        """
+                    )
+                }
             }
         }
     }
@@ -302,11 +303,11 @@ public class HTTPClient {
             return
         }
         do {
-            try self.stateLock.withLock {
-                guard case .upAndRunning = self.state else {
+            try self.state.withLockedValue { state in
+                guard case .upAndRunning = state else {
                     throw HTTPClientError.alreadyShutdown
                 }
-                self.state = .shuttingDown(requiresCleanClose: requiresCleanClose, callback: callback)
+                state = .shuttingDown(requiresCleanClose: requiresCleanClose, callback: callback)
             }
         } catch {
             callback(error)
@@ -320,16 +321,15 @@ public class HTTPClient {
             case .failure:
                 preconditionFailure("Shutting down the connection pool must not fail, ever.")
             case .success(let unclean):
-                let (callback, uncleanError) = self.stateLock.withLock { () -> (ShutdownCallback, Error?) in
-                    guard case .shuttingDown(let requiresClean, callback: let callback) = self.state else {
+                let (callback, uncleanError) = self.state.withLockedValue {
+                    (state: inout HTTPClient.State) -> (ShutdownCallback, Error?) in
+                    guard case .shuttingDown(let requiresClean, callback: let callback) = state else {
                         preconditionFailure("Why did the pool manager shut down, if it was not instructed to")
                     }
 
                     let error: Error? = (requiresClean && unclean) ? HTTPClientError.uncleanShutdown : nil
+                    state = .shutDown
                     return (callback, error)
-                }
-                self.stateLock.withLock {
-                    self.state = .shutDown
                 }
                 queue.async {
                     callback(uncleanError)
@@ -340,11 +340,11 @@ public class HTTPClient {
 
     @Sendable
     private func makeOrGetFileIOThreadPool() -> NIOThreadPool {
-        self.fileIOThreadPoolLock.withLock {
-            guard let fileIOThreadPool = self.fileIOThreadPool else {
+        self.fileIOThreadPool.withLockedValue { pool in
+            guard let pool else {
                 return NIOThreadPool.singleton
             }
-            return fileIOThreadPool
+            return pool
         }
     }
 
@@ -734,8 +734,8 @@ public class HTTPClient {
             ]
         )
 
-        let failedTask: Task<Delegate.Response>? = self.stateLock.withLock {
-            switch self.state {
+        let failedTask: Task<Delegate.Response>? = self.state.withLockedValue { state in
+            switch state {
             case .upAndRunning:
                 return nil
             case .shuttingDown, .shutDown:
@@ -1112,9 +1112,6 @@ extension HTTPClient.Configuration: Sendable {}
 
 extension HTTPClient.EventLoopGroupProvider: Sendable {}
 extension HTTPClient.EventLoopPreference: Sendable {}
-
-// HTTPClient is thread-safe because its shared mutable state is protected through a lock
-extension HTTPClient: @unchecked Sendable {}
 
 extension HTTPClient.Configuration {
     /// Timeout configuration.
