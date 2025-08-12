@@ -1211,6 +1211,17 @@ extension HTTPClient.Configuration {
         /// ``HTTPClient`` will automatically mitigate these kind of issues if this flag is turned on.
         public var retryConnectionEstablishment: Bool = true
 
+        /// The number of pre-warmed HTTP/1 connections to maintain.
+        /// 
+        /// When set to a number greater than zero, any HTTP/1 connection pool created will attempt to maintain
+        /// at least this number of "extra" idle connections, above the connections currently in use, up to the
+        /// limit of ``concurrentHTTP1ConnectionsPerHostSoftLimit``.
+        /// 
+        /// These connections will not be made while the pool is idle: only once the first connection is made
+        /// to a host will the others be opened. In addition, to manage the connection creation rate and
+        /// avoid flooding servers, prewarmed connection creation will be done one-at-a-time.
+        public var preWarmedHTTP1ConnectionCount: Int = 0
+
         public init() {}
 
         public init(idleTimeout: TimeAmount) {

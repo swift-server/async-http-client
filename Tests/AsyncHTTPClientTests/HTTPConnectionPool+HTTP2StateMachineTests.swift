@@ -393,6 +393,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             maximumConcurrentConnections: 8,
             retryConnectionEstablishment: true,
             maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0,
             lifecycleState: .running
         )
 
@@ -475,7 +476,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         var http1Conns = HTTPConnectionPool.HTTP1Connections(
             maximumConcurrentConnections: 8,
             generator: idGenerator,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
         let conn1ID = http1Conns.createNewConnection(on: el1)
         var state = HTTPConnectionPool.HTTP2StateMachine(
@@ -537,7 +539,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         var http1Conns = HTTPConnectionPool.HTTP1Connections(
             maximumConcurrentConnections: 8,
             generator: idGenerator,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
         let conn1ID = http1Conns.createNewConnection(on: el1)
         var state = HTTPConnectionPool.HTTP2StateMachine(
@@ -582,7 +585,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         var http1Conns = HTTPConnectionPool.HTTP1Connections(
             maximumConcurrentConnections: 8,
             generator: idGenerator,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
         let conn1ID = http1Conns.createNewConnection(on: el1)
         var state = HTTPConnectionPool.HTTP2StateMachine(
@@ -634,7 +638,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         var http1Conns = HTTPConnectionPool.HTTP1Connections(
             maximumConcurrentConnections: 8,
             generator: idGenerator,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
         let conn1ID = http1Conns.createNewConnection(on: el1)
         var state = HTTPConnectionPool.HTTP2StateMachine(
@@ -676,7 +681,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         var http1Conns = HTTPConnectionPool.HTTP1Connections(
             maximumConcurrentConnections: 8,
             generator: idGenerator,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
         let conn1ID = http1Conns.createNewConnection(on: el1)
         var state = HTTPConnectionPool.HTTP2StateMachine(
@@ -729,7 +735,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         var http1Conns = HTTPConnectionPool.HTTP1Connections(
             maximumConcurrentConnections: 8,
             generator: idGenerator,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
         let conn1ID = http1Conns.createNewConnection(on: el1)
         var state = HTTPConnectionPool.HTTP2StateMachine(
@@ -805,7 +812,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
             preferHTTP1: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
 
         /// first 8 request should create a new connection
@@ -900,7 +908,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
             preferHTTP1: false,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
 
         /// create a new connection
@@ -948,7 +957,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
             preferHTTP1: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
 
         /// first 8 request should create a new connection
@@ -1092,7 +1102,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
             preferHTTP1: false,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
 
         // create http2 connection
@@ -1173,7 +1184,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
             preferHTTP1: false,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
 
         // create http2 connection
@@ -1260,7 +1272,8 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
             preferHTTP1: false,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
 
         var connectionIDs: [HTTPConnectionPool.Connection.ID] = []
@@ -1505,7 +1518,7 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
         let connection = connections.randomParkedConnection()!
         XCTAssertNoThrow(try connections.closeConnection(connection))
 
-        let idleTimeoutAction = state.connectionIdleTimeout(connection.id)
+        let idleTimeoutAction = state.connectionIdleTimeout(connection.id, on: connection.eventLoop)
         XCTAssertEqual(idleTimeoutAction.connection, .closeConnection(connection, isShutdown: .no))
         XCTAssertEqual(idleTimeoutAction.request, .none)
 

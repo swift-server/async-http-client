@@ -545,7 +545,8 @@ extension MockConnectionPool {
             maximumConcurrentHTTP1Connections: maxNumberOfConnections,
             retryConnectionEstablishment: true,
             preferHTTP1: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
         var connections = MockConnectionPool()
         var queuer = MockRequestQueuer()
@@ -613,7 +614,8 @@ extension MockConnectionPool {
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
             preferHTTP1: false,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
         var connections = MockConnectionPool()
         var queuer = MockRequestQueuer()

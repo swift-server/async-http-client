@@ -79,7 +79,8 @@ final class HTTPConnectionPool:
                 .concurrentHTTP1ConnectionsPerHostSoftLimit,
             retryConnectionEstablishment: clientConfiguration.connectionPool.retryConnectionEstablishment,
             preferHTTP1: clientConfiguration.httpVersion == .http1Only,
-            maximumConnectionUses: clientConfiguration.maximumUsesPerConnection
+            maximumConnectionUses: clientConfiguration.maximumUsesPerConnection,
+            preWarmedHTTP1ConnectionCount: clientConfiguration.connectionPool.preWarmedHTTP1ConnectionCount
         )
     }
 
@@ -104,6 +105,7 @@ final class HTTPConnectionPool:
             enum Unlocked {
                 case createConnection(Connection.ID, on: EventLoop)
                 case closeConnection(Connection, isShutdown: StateMachine.ConnectionAction.IsShutdown)
+                case closeConnectionAndCreateConnection(close: Connection, newConnectionID: Connection.ID, on: EventLoop, isShutdown: StateMachine.ConnectionAction.IsShutdown)
                 case cleanupConnections(CleanupContext, isShutdown: StateMachine.ConnectionAction.IsShutdown)
                 case migration(
                     createConnections: [(Connection.ID, EventLoop)],
@@ -185,12 +187,19 @@ final class HTTPConnectionPool:
                 self.locked.connection = .scheduleBackoffTimer(connectionID, backoff: backoff, on: eventLoop)
             case .scheduleTimeoutTimer(let connectionID, on: let eventLoop):
                 self.locked.connection = .scheduleTimeoutTimer(connectionID, on: eventLoop)
+            case .scheduleTimeoutTimerAndCreateConnection(let timeoutID, let newConnectionID, let eventLoop):
+                self.locked.connection = .scheduleTimeoutTimer(timeoutID, on: eventLoop)
+                self.unlocked.connection = .createConnection(newConnectionID, on: eventLoop)
             case .cancelTimeoutTimer(let connectionID):
                 self.locked.connection = .cancelTimeoutTimer(connectionID)
+            case .createConnectionAndCancelTimeoutTimer(createdID: let createdID, on: let eventLoop, cancelTimerID: let cancelID):
+                self.unlocked.connection = .createConnection(createdID, on: eventLoop)
+                self.locked.connection = .cancelTimeoutTimer(cancelID)
             case .closeConnection(let connection, let isShutdown):
                 self.unlocked.connection = .closeConnection(connection, isShutdown: isShutdown)
+            case .closeConnectionAndCreateConnection(let closeConnection, let isShutdown, let newConnectionID, let eventLoop):
+                self.unlocked.connection = .closeConnectionAndCreateConnection(close: closeConnection, newConnectionID: newConnectionID, on: eventLoop, isShutdown: isShutdown)
             case .cleanupConnections(var cleanupContext, let isShutdown):
-                //
                 self.locked.connection = .cancelBackoffTimers(cleanupContext.connectBackoff)
                 cleanupContext.connectBackoff = []
                 self.unlocked.connection = .cleanupConnections(cleanupContext, isShutdown: isShutdown)
@@ -283,6 +292,27 @@ final class HTTPConnectionPool:
             // we are not interested in the close promise...
             connection.close(promise: nil)
 
+            if case .yes(let unclean) = isShutdown {
+                self.delegate.connectionPoolDidShutdown(self, unclean: unclean)
+            }
+
+        case .closeConnectionAndCreateConnection(let connectionToClose, let newConnectionID, let eventLoop, let isShutdown):
+            self.logger.trace(
+                "closing and creating connection",
+                metadata: [
+                    "ahc-connection-id": "\(connectionToClose.id)"
+                ]
+            )
+
+            // If the pool is shutdown, let's just not create this new connection.
+            if case .no = isShutdown {
+                self.createConnection(newConnectionID, on: eventLoop)
+            }
+
+            // we are not interested in the close promise...
+            connectionToClose.close(promise: nil)
+
+            // This isn't really reachable.
             if case .yes(let unclean) = isShutdown {
                 self.delegate.connectionPoolDidShutdown(self, unclean: unclean)
             }
@@ -400,7 +430,7 @@ final class HTTPConnectionPool:
             self.modifyStateAndRunActions { stateMachine in
                 if self._idleTimer.removeValue(forKey: connectionID) != nil {
                     // The timer still exists. State Machines assumes it is alive
-                    return stateMachine.connectionIdleTimeout(connectionID)
+                    return stateMachine.connectionIdleTimeout(connectionID, on: eventLoop)
                 }
                 return .none
             }
