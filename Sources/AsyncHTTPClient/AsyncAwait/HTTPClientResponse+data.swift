@@ -13,7 +13,6 @@
 //===----------------------------------------------------------------------===//
 
 import NIOCore
-import NIOHTTP1
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #else
@@ -27,8 +26,7 @@ extension HTTPClientResponse {
     /// - Parameter maxBytes: The maximum number of bytes this method is allowed to accumulate.
     /// - Returns: Bytes collected over time
     public func bytes(upTo maxBytes: Int) async throws -> ByteBuffer {
-        let expectedBytes = self.headers.first(name: "content-length").flatMap(Int.init) ?? maxBytes
-        return try await self.body.collect(upTo: min(expectedBytes, maxBytes))
+        return try await self.body.collect(upTo: maxBytes)
     }
 }
 
