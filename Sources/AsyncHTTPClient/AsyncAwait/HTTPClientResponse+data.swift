@@ -14,7 +14,11 @@
 
 import NIOCore
 import NIOHTTP1
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
 internal import NIOFoundationCompat
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
