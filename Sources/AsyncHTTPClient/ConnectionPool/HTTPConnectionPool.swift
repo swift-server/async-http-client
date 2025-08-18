@@ -394,7 +394,10 @@ final class HTTPConnectionPool:
                 "ahc-connection-id": "\(connectionID)"
             ]
         )
-        let scheduled = eventLoop.scheduleTask(in: self.idleConnectionTimeout) {
+        let scheduled = eventLoop.scheduleTask(in: self.idleConnectionTimeout) { [weak self] in
+            guard let self else {
+                return
+            }
             // there might be a race between a cancelTimer call and the triggering
             // of this scheduled task. both want to acquire the lock
             self.modifyStateAndRunActions { stateMachine in
