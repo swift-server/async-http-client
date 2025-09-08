@@ -149,10 +149,11 @@ extension HTTPConnectionPool {
 
         private mutating func executeRequestOnPreferredEventLoop(_ request: Request, eventLoop: EventLoop) -> Action {
             if let connection = self.connections.leaseConnection(onPreferred: eventLoop) {
-                // Cool, a connection is available. If using this would put us below our needed extra set, we 
+                // Cool, a connection is available. If using this would put us below our needed extra set, we
                 // should create another.
                 let stats = self.connections.generalPurposeStats
-                let needExtraConnection = stats.nonLeased < (self.requests.count + self.preWarmedConnectionCount) && self.connections.canGrow
+                let needExtraConnection =
+                    stats.nonLeased < (self.requests.count + self.preWarmedConnectionCount) && self.connections.canGrow
                 let action: StateMachine.ConnectionAction
 
                 if needExtraConnection {
@@ -475,17 +476,25 @@ extension HTTPConnectionPool {
             at index: Int,
             context: HTTP1Connections.IdleConnectionContext
         ) -> EstablishedAction {
-            var requestAction = HTTPConnectionPool.StateMachine.RequestAction.none 
+            var requestAction = HTTPConnectionPool.StateMachine.RequestAction.none
             var parkedConnectionDetails: (HTTPConnectionPool.Connection.ID, any EventLoop)? = nil
 
             // 1. Check if there are waiting requests in the general purpose queue
             if let request = self.requests.popFirst(for: nil) {
-                requestAction = .executeRequest(request, self.connections.leaseConnection(at: index), cancelTimeout: true)
+                requestAction = .executeRequest(
+                    request,
+                    self.connections.leaseConnection(at: index),
+                    cancelTimeout: true
+                )
             }
 
             // 2. Check if there are waiting requests in the matching eventLoop queue
             if case .none = requestAction, let request = self.requests.popFirst(for: context.eventLoop) {
-                requestAction = .executeRequest(request, self.connections.leaseConnection(at: index), cancelTimeout: true)
+                requestAction = .executeRequest(
+                    request,
+                    self.connections.leaseConnection(at: index),
+                    cancelTimeout: true
+                )
             }
 
             // 3. Create a timeout timer to ensure the connection is closed if it is idle for too
@@ -500,7 +509,9 @@ extension HTTPConnectionPool {
             //    confirmed that.
             let connectionAction: EstablishedConnectionAction
 
-            if self.connections.generalPurposeStats.nonLeased < self.preWarmedConnectionCount && self.connections.canGrow {
+            if self.connections.generalPurposeStats.nonLeased < self.preWarmedConnectionCount
+                && self.connections.canGrow
+            {
                 // Re-use the event loop of the connection that just got created.
                 if let parkedConnectionDetails {
                     let newConnectionID = self.connections.createNewConnection(on: parkedConnectionDetails.1)
@@ -521,7 +532,7 @@ extension HTTPConnectionPool {
 
             return .init(
                 request: requestAction,
-                connection: connectionAction 
+                connection: connectionAction
             )
         }
 
@@ -616,7 +627,9 @@ extension HTTPConnectionPool {
             at index: Int,
             context: HTTP1Connections.FailedConnectionContext
         ) -> Action {
-            let needConnectionForRequest = context.connectionsStartingForUseCase < (self.requests.generalPurposeCount + self.preWarmedConnectionCount)
+            let needConnectionForRequest =
+                context.connectionsStartingForUseCase
+                < (self.requests.generalPurposeCount + self.preWarmedConnectionCount)
             if needConnectionForRequest {
                 // if we have more requests queued up, than we have starting connections, we should
                 // create a new connection

@@ -42,7 +42,11 @@ extension HTTPConnectionPool {
 
             case scheduleTimeoutTimer(Connection.ID, on: EventLoop)
             case cancelTimeoutTimer(Connection.ID)
-            case createConnectionAndCancelTimeoutTimer(createdID: Connection.ID, on: EventLoop, cancelTimerID: Connection.ID)
+            case createConnectionAndCancelTimeoutTimer(
+                createdID: Connection.ID,
+                on: EventLoop,
+                cancelTimerID: Connection.ID
+            )
             case scheduleTimeoutTimerAndCreateConnection(
                 timeoutID: Connection.ID,
                 newConnectionID: Connection.ID,
@@ -466,11 +470,25 @@ extension HTTPConnectionPool.StateMachine.ConnectionAction {
             self = .scheduleTimeoutTimer(connectionID, on: eventLoop)
         case .closeConnection(let connection, let isShutdown):
             self = .closeConnection(connection, isShutdown: isShutdown)
-        case .closeConnectionAndCreateConnection(let closeConnection, let isShutdown, let newConnectionID, let eventLoop):
-            self = .closeConnectionAndCreateConnection(closeConnection: closeConnection, isShutdown: isShutdown, newConnectionID: newConnectionID, on: eventLoop)
-        case .scheduleTimeoutTimerAndCreateConnection(let timeoutID, let newConnectionID, let eventLoop): 
-            self = .scheduleTimeoutTimerAndCreateConnection(timeoutID: timeoutID, newConnectionID: newConnectionID, on: eventLoop)
-        case .createConnection(connectionID: let connectionID, on: let eventLoop):
+        case .closeConnectionAndCreateConnection(
+            let closeConnection,
+            let isShutdown,
+            let newConnectionID,
+            let eventLoop
+        ):
+            self = .closeConnectionAndCreateConnection(
+                closeConnection: closeConnection,
+                isShutdown: isShutdown,
+                newConnectionID: newConnectionID,
+                on: eventLoop
+            )
+        case .scheduleTimeoutTimerAndCreateConnection(let timeoutID, let newConnectionID, let eventLoop):
+            self = .scheduleTimeoutTimerAndCreateConnection(
+                timeoutID: timeoutID,
+                newConnectionID: newConnectionID,
+                on: eventLoop
+            )
+        case .createConnection(let connectionID, on: let eventLoop):
             self = .createConnection(connectionID, on: eventLoop)
         }
     }
@@ -490,7 +508,12 @@ extension HTTPConnectionPool.StateMachine.ConnectionAction {
                 closeConnections: migrationAction.closeConnections,
                 scheduleTimeout: nil
             )
-        case .closeConnectionAndCreateConnection(closeConnection: let connection, isShutdown: let isShutdown, newConnectionID: _, on: _):
+        case .closeConnectionAndCreateConnection(
+            closeConnection: let connection,
+            let isShutdown,
+            newConnectionID: _,
+            on: _
+        ):
             // This event can only come _from_ the HTTP/1 pool, migrating to HTTP/2. We do not do prewarmed HTTP/2 connections,
             // so we can ignore the request for a new connection. This is thus the same as the case below.
             fallthrough
@@ -509,7 +532,11 @@ extension HTTPConnectionPool.StateMachine.ConnectionAction {
                 closeConnections: closeConnections,
                 scheduleTimeout: nil
             )
-        case .scheduleTimeoutTimerAndCreateConnection(timeoutID: let connectionID, newConnectionID: _, on: let eventLoop):
+        case .scheduleTimeoutTimerAndCreateConnection(
+            timeoutID: let connectionID,
+            newConnectionID: _,
+            on: let eventLoop
+        ):
             // This event can only come _from_ the HTTP/1 pool, migrating to HTTP/2. We do not do prewarmed HTTP/2 connections,
             // so we can ignore the request for a new connection. This is thus the same as the case below.
             fallthrough

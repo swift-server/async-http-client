@@ -930,14 +930,21 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             case .none:
                 try connections.parkConnection(connectionID)
             default:
-                return XCTFail("Unexpected request action \(createdAction.request), connection index: \(connectionIndex)")
+                return XCTFail(
+                    "Unexpected request action \(createdAction.request), connection index: \(connectionIndex)"
+                )
             }
 
-            if connectionIndex == 0, case .createConnection(let newConnectionID, let newConnectionEL) = createdAction.connection {
+            if connectionIndex == 0,
+                case .createConnection(let newConnectionID, let newConnectionEL) = createdAction.connection
+            {
                 (connectionID, connectionEL) = (newConnectionID, newConnectionEL)
                 connectionIDs.append(connectionID)
                 XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
-            } else if connectionIndex < 4, case .scheduleTimeoutTimerAndCreateConnection(let timeoutID, let newConnectionID, let newConnectionEL) = createdAction.connection {
+            } else if connectionIndex < 4,
+                case .scheduleTimeoutTimerAndCreateConnection(let timeoutID, let newConnectionID, let newConnectionEL) =
+                    createdAction.connection
+            {
                 XCTAssertEqual(connectionID, timeoutID)
                 (connectionID, connectionEL) = (newConnectionID, newConnectionEL)
                 connectionIDs.append(connectionID)
@@ -946,7 +953,9 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
                 // Expected, the loop will terminate now.
                 ()
             } else {
-                return XCTFail("Unexpected connection action: \(createdAction.connection) with index \(connectionIndex)")
+                return XCTFail(
+                    "Unexpected connection action: \(createdAction.connection) with index \(connectionIndex)"
+                )
             }
         }
 
@@ -1004,7 +1013,10 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
 
         // Here the state machine has _again_ asked us to create a connection. This is because the pre-warming
         // phase takes any opportunity to do that.
-        guard case .scheduleTimeoutTimerAndCreateConnection(_, let veryDelayedConnectionID, let veryDelayedLoop) = action.connection else {
+        guard
+            case .scheduleTimeoutTimerAndCreateConnection(_, let veryDelayedConnectionID, let veryDelayedLoop) = action
+                .connection
+        else {
             return XCTFail("Unexpected action: \(action.connection)")
         }
         try connections.parkConnection(connectionID)
@@ -1019,7 +1031,10 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         createdAction = state.newHTTP1ConnectionCreated(conn)
         try connections.parkConnection(connectionID)
 
-        guard case .scheduleTimeoutTimerAndCreateConnection(_, let nextConnectionID, let nextConnectionEL) = createdAction.connection else {
+        guard
+            case .scheduleTimeoutTimerAndCreateConnection(_, let nextConnectionID, let nextConnectionEL) = createdAction
+                .connection
+        else {
             return XCTFail("Unexpected connection action: \(createdAction.connection)")
         }
         (newConnectionID, newConnectionEL) = (nextConnectionID, nextConnectionEL)
@@ -1058,7 +1073,13 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             let request = HTTPConnectionPool.Request(mockRequest)
             let action = state.executeRequest(request)
 
-            guard case .createConnectionAndCancelTimeoutTimer(let newConnectionID, let newConnectionLoop, let activatedConnectionID) = action.connection else {
+            guard
+                case .createConnectionAndCancelTimeoutTimer(
+                    let newConnectionID,
+                    let newConnectionLoop,
+                    let activatedConnectionID
+                ) = action.connection
+            else {
                 return XCTFail("Unexpected connection action: \(action)")
             }
 
@@ -1116,7 +1137,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
     }
 
     func testPrewarmingAffectsConnectionFailure() throws {
-        struct SomeError: Error { }
+        struct SomeError: Error {}
         let elg = EmbeddedEventLoopGroup(loops: 4)
         defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
 
@@ -1153,7 +1174,10 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
 
         // Here the state machine has _again_ asked us to create a connection. This is because the pre-warming
         // phase takes any opportunity to do that.
-        guard case .scheduleTimeoutTimerAndCreateConnection(_, let veryDelayedConnectionID, let veryDelayedLoop) = action.connection else {
+        guard
+            case .scheduleTimeoutTimerAndCreateConnection(_, let veryDelayedConnectionID, let veryDelayedLoop) = action
+                .connection
+        else {
             return XCTFail("Unexpected action: \(action.connection)")
         }
         try connections.parkConnection(connectionID)
@@ -1168,7 +1192,10 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         createdAction = state.newHTTP1ConnectionCreated(conn)
         try connections.parkConnection(connectionID)
 
-        guard case .scheduleTimeoutTimerAndCreateConnection(_, let nextConnectionID, let nextConnectionEL) = createdAction.connection else {
+        guard
+            case .scheduleTimeoutTimerAndCreateConnection(_, let nextConnectionID, let nextConnectionEL) = createdAction
+                .connection
+        else {
             return XCTFail("Unexpected connection action: \(createdAction.connection)")
         }
         (newConnectionID, newConnectionEL) = (nextConnectionID, nextConnectionEL)
@@ -1276,7 +1303,10 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
 
         // Here the state machine has _again_ asked us to create a connection. This is because the pre-warming
         // phase takes any opportunity to do that.
-        guard case .scheduleTimeoutTimerAndCreateConnection(_, let veryDelayedConnectionID, let veryDelayedLoop) = action.connection else {
+        guard
+            case .scheduleTimeoutTimerAndCreateConnection(_, let veryDelayedConnectionID, let veryDelayedLoop) = action
+                .connection
+        else {
             return XCTFail("Unexpected action: \(action.connection)")
         }
         try connections.parkConnection(connectionID)
@@ -1291,7 +1321,10 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         createdAction = state.newHTTP1ConnectionCreated(conn)
         try connections.parkConnection(connectionID)
 
-        guard case .scheduleTimeoutTimerAndCreateConnection(_, let nextConnectionID, let nextConnectionEL) = createdAction.connection else {
+        guard
+            case .scheduleTimeoutTimerAndCreateConnection(_, let nextConnectionID, let nextConnectionEL) = createdAction
+                .connection
+        else {
             return XCTFail("Unexpected connection action: \(createdAction.connection)")
         }
         (newConnectionID, newConnectionEL) = (nextConnectionID, nextConnectionEL)
@@ -1334,7 +1367,10 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
         request = HTTPConnectionPool.Request(mockRequest)
         action = state.executeRequest(request)
-        guard case .createConnectionAndCancelTimeoutTimer(let extraConnectionID, let extraConnectionEL, _) = action.connection else {
+        guard
+            case .createConnectionAndCancelTimeoutTimer(let extraConnectionID, let extraConnectionEL, _) = action
+                .connection
+        else {
             return XCTFail("Unexpected connection action: \(action.connection)")
         }
         guard case .executeRequest(_, let requestConnection, _) = action.request else {
@@ -1419,7 +1455,10 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             createdAction = state.newHTTP1ConnectionCreated(conn)
             try connections.parkConnection(connectionID)
 
-            guard case .scheduleTimeoutTimerAndCreateConnection(_, let nextConnectionID, let nextConnectionEL) = createdAction.connection else {
+            guard
+                case .scheduleTimeoutTimerAndCreateConnection(_, let nextConnectionID, let nextConnectionEL) =
+                    createdAction.connection
+            else {
                 return XCTFail("Unexpected connection action: \(createdAction.connection)")
             }
             (newConnectionID, newConnectionEL) = (nextConnectionID, nextConnectionEL)
@@ -1439,7 +1478,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         XCTAssertEqual(connections.count, 8)
         XCTAssertEqual(connections.parked, 8)
 
-        // Now we're gonna actually complete that request from earlier. 
+        // Now we're gonna actually complete that request from earlier.
         try connections.activateConnection(requestConn.id)
         try connections.execute(mockRequest, on: requestConn)
         try connections.finishExecution(requestConn.id)

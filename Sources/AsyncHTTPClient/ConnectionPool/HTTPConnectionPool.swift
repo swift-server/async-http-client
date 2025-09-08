@@ -105,7 +105,12 @@ final class HTTPConnectionPool:
             enum Unlocked {
                 case createConnection(Connection.ID, on: EventLoop)
                 case closeConnection(Connection, isShutdown: StateMachine.ConnectionAction.IsShutdown)
-                case closeConnectionAndCreateConnection(close: Connection, newConnectionID: Connection.ID, on: EventLoop, isShutdown: StateMachine.ConnectionAction.IsShutdown)
+                case closeConnectionAndCreateConnection(
+                    close: Connection,
+                    newConnectionID: Connection.ID,
+                    on: EventLoop,
+                    isShutdown: StateMachine.ConnectionAction.IsShutdown
+                )
                 case cleanupConnections(CleanupContext, isShutdown: StateMachine.ConnectionAction.IsShutdown)
                 case migration(
                     createConnections: [(Connection.ID, EventLoop)],
@@ -192,13 +197,23 @@ final class HTTPConnectionPool:
                 self.unlocked.connection = .createConnection(newConnectionID, on: eventLoop)
             case .cancelTimeoutTimer(let connectionID):
                 self.locked.connection = .cancelTimeoutTimer(connectionID)
-            case .createConnectionAndCancelTimeoutTimer(createdID: let createdID, on: let eventLoop, cancelTimerID: let cancelID):
+            case .createConnectionAndCancelTimeoutTimer(let createdID, on: let eventLoop, cancelTimerID: let cancelID):
                 self.unlocked.connection = .createConnection(createdID, on: eventLoop)
                 self.locked.connection = .cancelTimeoutTimer(cancelID)
             case .closeConnection(let connection, let isShutdown):
                 self.unlocked.connection = .closeConnection(connection, isShutdown: isShutdown)
-            case .closeConnectionAndCreateConnection(let closeConnection, let isShutdown, let newConnectionID, let eventLoop):
-                self.unlocked.connection = .closeConnectionAndCreateConnection(close: closeConnection, newConnectionID: newConnectionID, on: eventLoop, isShutdown: isShutdown)
+            case .closeConnectionAndCreateConnection(
+                let closeConnection,
+                let isShutdown,
+                let newConnectionID,
+                let eventLoop
+            ):
+                self.unlocked.connection = .closeConnectionAndCreateConnection(
+                    close: closeConnection,
+                    newConnectionID: newConnectionID,
+                    on: eventLoop,
+                    isShutdown: isShutdown
+                )
             case .cleanupConnections(var cleanupContext, let isShutdown):
                 self.locked.connection = .cancelBackoffTimers(cleanupContext.connectBackoff)
                 cleanupContext.connectBackoff = []
@@ -296,7 +311,12 @@ final class HTTPConnectionPool:
                 self.delegate.connectionPoolDidShutdown(self, unclean: unclean)
             }
 
-        case .closeConnectionAndCreateConnection(let connectionToClose, let newConnectionID, let eventLoop, let isShutdown):
+        case .closeConnectionAndCreateConnection(
+            let connectionToClose,
+            let newConnectionID,
+            let eventLoop,
+            let isShutdown
+        ):
             self.logger.trace(
                 "closing and creating connection",
                 metadata: [
