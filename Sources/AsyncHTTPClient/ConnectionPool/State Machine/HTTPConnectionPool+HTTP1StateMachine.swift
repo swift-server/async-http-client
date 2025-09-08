@@ -579,7 +579,6 @@ extension HTTPConnectionPool {
                 let newConnectionID = self.connections.createNewConnection(on: connectionToClose.eventLoop)
                 connectionAction = .closeConnectionAndCreateConnection(
                     closeConnection: connectionToClose,
-                    isShutdown: .no,
                     newConnectionID: newConnectionID,
                     on: connectionToClose.eventLoop
                 )

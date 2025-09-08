@@ -1486,11 +1486,10 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
 
         // Here the state machine has asked us to close the connection and create a new one. That's because we've hit the
         // max usages limit.
-        guard case .closeConnectionAndCreateConnection(let toClose, let isShutdown, _, _) = action.connection else {
+        guard case .closeConnectionAndCreateConnection(let toClose, _, _) = action.connection else {
             return XCTFail("Unexpected action: \(action.connection)")
         }
         try connections.closeConnection(toClose)
-        XCTAssertEqual(isShutdown, .no)
 
         // We won't bother doing it though, it's enough that it asked.
     }

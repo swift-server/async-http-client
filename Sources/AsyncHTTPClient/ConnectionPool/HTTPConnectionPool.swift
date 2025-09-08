@@ -108,8 +108,7 @@ final class HTTPConnectionPool:
                 case closeConnectionAndCreateConnection(
                     close: Connection,
                     newConnectionID: Connection.ID,
-                    on: EventLoop,
-                    isShutdown: StateMachine.ConnectionAction.IsShutdown
+                    on: EventLoop
                 )
                 case cleanupConnections(CleanupContext, isShutdown: StateMachine.ConnectionAction.IsShutdown)
                 case migration(
@@ -204,15 +203,13 @@ final class HTTPConnectionPool:
                 self.unlocked.connection = .closeConnection(connection, isShutdown: isShutdown)
             case .closeConnectionAndCreateConnection(
                 let closeConnection,
-                let isShutdown,
                 let newConnectionID,
                 let eventLoop
             ):
                 self.unlocked.connection = .closeConnectionAndCreateConnection(
                     close: closeConnection,
                     newConnectionID: newConnectionID,
-                    on: eventLoop,
-                    isShutdown: isShutdown
+                    on: eventLoop
                 )
             case .cleanupConnections(var cleanupContext, let isShutdown):
                 self.locked.connection = .cancelBackoffTimers(cleanupContext.connectBackoff)
@@ -314,8 +311,7 @@ final class HTTPConnectionPool:
         case .closeConnectionAndCreateConnection(
             let connectionToClose,
             let newConnectionID,
-            let eventLoop,
-            let isShutdown
+            let eventLoop
         ):
             self.logger.trace(
                 "closing and creating connection",
@@ -324,18 +320,10 @@ final class HTTPConnectionPool:
                 ]
             )
 
-            // If the pool is shutdown, let's just not create this new connection.
-            if case .no = isShutdown {
-                self.createConnection(newConnectionID, on: eventLoop)
-            }
+            self.createConnection(newConnectionID, on: eventLoop)
 
             // we are not interested in the close promise...
             connectionToClose.close(promise: nil)
-
-            // This isn't really reachable.
-            if case .yes(let unclean) = isShutdown {
-                self.delegate.connectionPoolDidShutdown(self, unclean: unclean)
-            }
 
         case .cleanupConnections(let cleanupContext, let isShutdown):
             for connection in cleanupContext.close {

@@ -57,7 +57,6 @@ extension HTTPConnectionPool {
             case cleanupConnections(CleanupContext, isShutdown: IsShutdown)
             case closeConnectionAndCreateConnection(
                 closeConnection: Connection,
-                isShutdown: IsShutdown,
                 newConnectionID: Connection.ID,
                 on: EventLoop
             )
@@ -441,7 +440,6 @@ extension HTTPConnectionPool.StateMachine {
         )
         case closeConnectionAndCreateConnection(
             closeConnection: HTTPConnectionPool.Connection,
-            isShutdown: HTTPConnectionPool.StateMachine.ConnectionAction.IsShutdown,
             newConnectionID: HTTPConnectionPool.Connection.ID,
             on: EventLoop
         )
@@ -472,13 +470,11 @@ extension HTTPConnectionPool.StateMachine.ConnectionAction {
             self = .closeConnection(connection, isShutdown: isShutdown)
         case .closeConnectionAndCreateConnection(
             let closeConnection,
-            let isShutdown,
             let newConnectionID,
             let eventLoop
         ):
             self = .closeConnectionAndCreateConnection(
                 closeConnection: closeConnection,
-                isShutdown: isShutdown,
                 newConnectionID: newConnectionID,
                 on: eventLoop
             )
@@ -510,28 +506,14 @@ extension HTTPConnectionPool.StateMachine.ConnectionAction {
             )
         case .closeConnectionAndCreateConnection(
             closeConnection: let connection,
-            let isShutdown,
             newConnectionID: _,
             on: _
         ):
             // This event can only come _from_ the HTTP/1 pool, migrating to HTTP/2. We do not do prewarmed HTTP/2 connections,
             // so we can ignore the request for a new connection. This is thus the same as the case below.
-            fallthrough
+            return Self.closeConnection(connection, isShutdown: .no, migrationAction: migrationAction)
         case .closeConnection(let connection, let isShutdown):
-            guard isShutdown == .no else {
-                precondition(
-                    migrationAction.closeConnections.isEmpty && migrationAction.createConnections.isEmpty,
-                    "migration actions are not supported during shutdown"
-                )
-                return .closeConnection(connection, isShutdown: isShutdown)
-            }
-            var closeConnections = migrationAction.closeConnections
-            closeConnections.append(connection)
-            return .migration(
-                createConnections: migrationAction.createConnections,
-                closeConnections: closeConnections,
-                scheduleTimeout: nil
-            )
+            return Self.closeConnection(connection, isShutdown: isShutdown, migrationAction: migrationAction)
         case .scheduleTimeoutTimerAndCreateConnection(
             timeoutID: let connectionID,
             newConnectionID: _,
@@ -547,5 +529,26 @@ extension HTTPConnectionPool.StateMachine.ConnectionAction {
                 scheduleTimeout: (connectionID, eventLoop)
             )
         }
+    }
+
+    private static func closeConnection(
+        _ connection: HTTPConnectionPool.Connection,
+        isShutdown: HTTPConnectionPool.StateMachine.ConnectionAction.IsShutdown,
+        migrationAction: HTTPConnectionPool.StateMachine.ConnectionMigrationAction
+    ) -> Self {
+        guard isShutdown == .no else {
+            precondition(
+                migrationAction.closeConnections.isEmpty && migrationAction.createConnections.isEmpty,
+                "migration actions are not supported during shutdown"
+            )
+            return .closeConnection(connection, isShutdown: isShutdown)
+        }
+        var closeConnections = migrationAction.closeConnections
+        closeConnections.append(connection)
+        return .migration(
+            createConnections: migrationAction.createConnections,
+            closeConnections: closeConnections,
+            scheduleTimeout: nil
+        )
     }
 }
