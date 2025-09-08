@@ -62,7 +62,7 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
             maximumConcurrentConnections: 8,
             generator: .init(),
             maximumConnectionUses: nil,
-            preWarmedHTTP1ConnectionCount: 0,
+            preWarmedHTTP1ConnectionCount: 0
         )
 
         let el1 = elg.next()
