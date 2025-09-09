@@ -262,32 +262,30 @@ extension HTTPConnectionPool {
         private var overflowIndex: Array<HTTP1ConnectionState>.Index
         /// The number of times each connection can be used before it is closed and replaced.
         private let maximumConnectionUses: Int?
+        /// How many pre-warmed connections we should create.
+        private let preWarmedConnectionCount: Int
 
-        init(maximumConcurrentConnections: Int, generator: Connection.ID.Generator, maximumConnectionUses: Int?) {
+        init(
+            maximumConcurrentConnections: Int,
+            generator: Connection.ID.Generator,
+            maximumConnectionUses: Int?,
+            preWarmedHTTP1ConnectionCount: Int
+        ) {
             self.connections = []
             self.connections.reserveCapacity(min(maximumConcurrentConnections, 1024))
             self.overflowIndex = self.connections.endIndex
             self.maximumConcurrentConnections = maximumConcurrentConnections
             self.generator = generator
             self.maximumConnectionUses = maximumConnectionUses
+            self.preWarmedConnectionCount = preWarmedHTTP1ConnectionCount
         }
 
         var stats: Stats {
-            var stats = Stats()
-            // all additions here can be unchecked, since we will have at max self.connections.count
-            // which itself is an Int. For this reason we will never overflow.
-            for connectionState in self.connections {
-                if connectionState.isConnecting {
-                    stats.connecting &+= 1
-                } else if connectionState.isBackingOff {
-                    stats.backingOff &+= 1
-                } else if connectionState.isLeased {
-                    stats.leased &+= 1
-                } else if connectionState.isIdle {
-                    stats.idle &+= 1
-                }
-            }
-            return stats
+            self.connectionStats(in: self.connections.startIndex..<self.connections.endIndex)
+        }
+
+        var generalPurposeStats: Stats {
+            self.connectionStats(in: self.connections.startIndex..<self.overflowIndex)
         }
 
         var isEmpty: Bool {
@@ -326,6 +324,24 @@ extension HTTPConnectionPool {
                     count &+= 1
                 }
             }
+        }
+
+        private func connectionStats(in range: Range<Int>) -> Stats {
+            var stats = Stats()
+            // all additions here can be unchecked, since we will have at max self.connections.count
+            // which itself is an Int. For this reason we will never overflow.
+            for connectionState in self.connections[range] {
+                if connectionState.isConnecting {
+                    stats.connecting &+= 1
+                } else if connectionState.isBackingOff {
+                    stats.backingOff &+= 1
+                } else if connectionState.isLeased {
+                    stats.leased &+= 1
+                } else if connectionState.isIdle {
+                    stats.idle &+= 1
+                }
+            }
+            return stats
         }
 
         // MARK: - Mutations -
@@ -836,6 +852,10 @@ extension HTTPConnectionPool {
             var leased: Int = 0
             var connecting: Int = 0
             var backingOff: Int = 0
+
+            var nonLeased: Int {
+                self.idle + self.connecting + self.backingOff
+            }
         }
     }
 }

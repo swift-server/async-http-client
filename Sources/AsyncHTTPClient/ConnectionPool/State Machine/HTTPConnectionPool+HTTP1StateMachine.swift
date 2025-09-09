@@ -33,19 +33,23 @@ extension HTTPConnectionPool {
         /// The property was introduced to fail fast during testing.
         /// Otherwise this should always be true and not turned off.
         private let retryConnectionEstablishment: Bool
+        private let preWarmedConnectionCount: Int
 
         init(
             idGenerator: Connection.ID.Generator,
             maximumConcurrentConnections: Int,
             retryConnectionEstablishment: Bool,
             maximumConnectionUses: Int?,
+            preWarmedHTTP1ConnectionCount: Int,
             lifecycleState: StateMachine.LifecycleState
         ) {
             self.connections = HTTP1Connections(
                 maximumConcurrentConnections: maximumConcurrentConnections,
                 generator: idGenerator,
-                maximumConnectionUses: maximumConnectionUses
+                maximumConnectionUses: maximumConnectionUses,
+                preWarmedHTTP1ConnectionCount: preWarmedHTTP1ConnectionCount
             )
+            self.preWarmedConnectionCount = preWarmedHTTP1ConnectionCount
             self.retryConnectionEstablishment = retryConnectionEstablishment
 
             self.requests = RequestQueue()
@@ -145,9 +149,26 @@ extension HTTPConnectionPool {
 
         private mutating func executeRequestOnPreferredEventLoop(_ request: Request, eventLoop: EventLoop) -> Action {
             if let connection = self.connections.leaseConnection(onPreferred: eventLoop) {
+                // Cool, a connection is available. If using this would put us below our needed extra set, we
+                // should create another.
+                let stats = self.connections.generalPurposeStats
+                let needExtraConnection =
+                    stats.nonLeased < (self.requests.count + self.preWarmedConnectionCount) && self.connections.canGrow
+                let action: StateMachine.ConnectionAction
+
+                if needExtraConnection {
+                    action = .createConnectionAndCancelTimeoutTimer(
+                        createdID: self.connections.createNewConnection(on: eventLoop),
+                        on: eventLoop,
+                        cancelTimerID: connection.id
+                    )
+                } else {
+                    action = .cancelTimeoutTimer(connection.id)
+                }
+
                 return .init(
                     request: .executeRequest(request, connection, cancelTimeout: false),
-                    connection: .cancelTimeoutTimer(connection.id)
+                    connection: action
                 )
             }
 
@@ -294,7 +315,20 @@ extension HTTPConnectionPool {
             }
         }
 
-        mutating func connectionIdleTimeout(_ connectionID: Connection.ID) -> Action {
+        mutating func connectionIdleTimeout(_ connectionID: Connection.ID, on eventLoop: any EventLoop) -> Action {
+            // Don't close idle connections if we need pre-warmed connections. Instead, re-arm the idle timer.
+            // We still want the idle timers to make sure we eventually fall below the pre-warmed limit.
+            if self.preWarmedConnectionCount > 0 {
+                let stats = self.connections.generalPurposeStats
+                if stats.idle <= self.preWarmedConnectionCount {
+                    return .init(
+                        request: .none,
+                        connection: .scheduleTimeoutTimer(connectionID, on: eventLoop)
+                    )
+                }
+            }
+
+            // Ok, we do actually want the connection count to go down.
             guard let connection = self.connections.closeConnectionIfIdle(connectionID) else {
                 // because of a race this connection (connection close runs against trigger of timeout)
                 // was already removed from the state machine.
@@ -410,11 +444,7 @@ extension HTTPConnectionPool {
             case .running:
                 // Close the connection if it's expired.
                 if context.shouldBeClosed {
-                    let connection = self.connections.closeConnection(at: index)
-                    return .init(
-                        request: .none,
-                        connection: .closeConnection(connection, isShutdown: .no)
-                    )
+                    return self.nextActionForToBeClosedIdleConnection(at: index, context: context)
                 } else {
                     switch context.use {
                     case .generalPurpose:
@@ -446,28 +476,63 @@ extension HTTPConnectionPool {
             at index: Int,
             context: HTTP1Connections.IdleConnectionContext
         ) -> EstablishedAction {
+            var requestAction = HTTPConnectionPool.StateMachine.RequestAction.none
+            var parkedConnectionDetails: (HTTPConnectionPool.Connection.ID, any EventLoop)? = nil
+
             // 1. Check if there are waiting requests in the general purpose queue
             if let request = self.requests.popFirst(for: nil) {
-                return .init(
-                    request: .executeRequest(request, self.connections.leaseConnection(at: index), cancelTimeout: true),
-                    connection: .none
+                requestAction = .executeRequest(
+                    request,
+                    self.connections.leaseConnection(at: index),
+                    cancelTimeout: true
                 )
             }
 
             // 2. Check if there are waiting requests in the matching eventLoop queue
-            if let request = self.requests.popFirst(for: context.eventLoop) {
-                return .init(
-                    request: .executeRequest(request, self.connections.leaseConnection(at: index), cancelTimeout: true),
-                    connection: .none
+            if case .none = requestAction, let request = self.requests.popFirst(for: context.eventLoop) {
+                requestAction = .executeRequest(
+                    request,
+                    self.connections.leaseConnection(at: index),
+                    cancelTimeout: true
                 )
             }
 
             // 3. Create a timeout timer to ensure the connection is closed if it is idle for too
-            //    long.
-            let (connectionID, eventLoop) = self.connections.parkConnection(at: index)
+            //    long, assuming we don't already have a use for it.
+            if case .none = requestAction {
+                parkedConnectionDetails = self.connections.parkConnection(at: index)
+            }
+
+            // 4. We may need to create another connection to make sure we have enough pre-warmed ones.
+            //    We need to do that if we have fewer non-leased connections than we need pre-warmed ones _and_ the pool can grow.
+            //    Note that in this case we don't need to account for the number of pending requests, as that is 0: step 1
+            //    confirmed that.
+            let connectionAction: EstablishedConnectionAction
+
+            if self.connections.generalPurposeStats.nonLeased < self.preWarmedConnectionCount
+                && self.connections.canGrow
+            {
+                // Re-use the event loop of the connection that just got created.
+                if let parkedConnectionDetails {
+                    let newConnectionID = self.connections.createNewConnection(on: parkedConnectionDetails.1)
+                    connectionAction = .scheduleTimeoutTimerAndCreateConnection(
+                        timeoutID: parkedConnectionDetails.0,
+                        newConnectionID: newConnectionID,
+                        on: parkedConnectionDetails.1
+                    )
+                } else {
+                    let newConnectionID = self.connections.createNewConnection(on: context.eventLoop)
+                    connectionAction = .createConnection(connectionID: newConnectionID, on: context.eventLoop)
+                }
+            } else if let parkedConnectionDetails {
+                connectionAction = .scheduleTimeoutTimer(parkedConnectionDetails.0, on: parkedConnectionDetails.1)
+            } else {
+                connectionAction = .none
+            }
+
             return .init(
-                request: .none,
-                connection: .scheduleTimeoutTimer(connectionID, on: eventLoop)
+                request: requestAction,
+                connection: connectionAction
             )
         }
 
@@ -492,6 +557,37 @@ extension HTTPConnectionPool {
             return .init(
                 request: .none,
                 connection: .closeConnection(self.connections.closeConnection(at: index), isShutdown: .no)
+            )
+        }
+
+        private mutating func nextActionForToBeClosedIdleConnection(
+            at index: Int,
+            context: HTTP1Connections.IdleConnectionContext
+        ) -> EstablishedAction {
+            // Step 1: Tell the connection pool to drop what it knows about this object.
+            let connectionToClose = self.connections.closeConnection(at: index)
+
+            // Step 2: Check whether we need a connection to replace this one. We do if we have fewer non-leased connections
+            // than we requests + minimumPrewarming count _and_ the pool can grow. Note that in many cases the above closure
+            // will have made some space, which is just fine.
+            let nonLeased = self.connections.generalPurposeStats.nonLeased
+            let neededNonLeased = self.requests.generalPurposeCount + self.preWarmedConnectionCount
+
+            let connectionAction: EstablishedConnectionAction
+            if nonLeased < neededNonLeased && self.connections.canGrow {
+                // We re-use the EL of the connection we just closed.
+                let newConnectionID = self.connections.createNewConnection(on: connectionToClose.eventLoop)
+                connectionAction = .closeConnectionAndCreateConnection(
+                    closeConnection: connectionToClose,
+                    newConnectionID: newConnectionID,
+                    on: connectionToClose.eventLoop
+                )
+            } else {
+                connectionAction = .closeConnection(connectionToClose, isShutdown: .no)
+            }
+            return .init(
+                request: .none,
+                connection: connectionAction
             )
         }
 
@@ -530,7 +626,10 @@ extension HTTPConnectionPool {
             at index: Int,
             context: HTTP1Connections.FailedConnectionContext
         ) -> Action {
-            if context.connectionsStartingForUseCase < self.requests.generalPurposeCount {
+            let needConnectionForRequest =
+                context.connectionsStartingForUseCase
+                < (self.requests.generalPurposeCount + self.preWarmedConnectionCount)
+            if needConnectionForRequest {
                 // if we have more requests queued up, than we have starting connections, we should
                 // create a new connection
                 let (newConnectionID, newEventLoop) = self.connections.replaceConnection(at: index)

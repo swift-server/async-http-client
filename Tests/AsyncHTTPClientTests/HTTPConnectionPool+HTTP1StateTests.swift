@@ -31,7 +31,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: true,
             preferHTTP1: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
 
         var connections = MockConnectionPool()
@@ -116,7 +117,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             maximumConcurrentHTTP1Connections: 8,
             retryConnectionEstablishment: false,
             preferHTTP1: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
 
         var connections = MockConnectionPool()
@@ -185,7 +187,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             maximumConcurrentHTTP1Connections: 2,
             retryConnectionEstablishment: true,
             preferHTTP1: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
@@ -253,7 +256,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             maximumConcurrentHTTP1Connections: 2,
             retryConnectionEstablishment: true,
             preferHTTP1: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
@@ -294,7 +298,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             maximumConcurrentHTTP1Connections: 2,
             retryConnectionEstablishment: true,
             preferHTTP1: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
@@ -663,7 +668,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             return XCTFail("Expected to have one parked connection")
         }
 
-        let action = state.connectionIdleTimeout(connection.id)
+        let action = state.connectionIdleTimeout(connection.id, on: connection.eventLoop)
         XCTAssertEqual(action.connection, .closeConnection(connection, isShutdown: .no))
         XCTAssertEqual(action.request, .none)
         XCTAssertNoThrow(try connections.closeConnection(connection))
@@ -711,7 +716,7 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         XCTAssertEqual(state.http1ConnectionClosed(connection.id), .none)
 
         // triggered by timer
-        XCTAssertEqual(state.connectionIdleTimeout(connection.id), .none)
+        XCTAssertEqual(state.connectionIdleTimeout(connection.id, on: connection.eventLoop), .none)
     }
 
     func testConnectionBackoffVsShutdownRace() {
@@ -723,7 +728,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             maximumConcurrentHTTP1Connections: 6,
             retryConnectionEstablishment: true,
             preferHTTP1: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
@@ -764,7 +770,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             maximumConcurrentHTTP1Connections: 6,
             retryConnectionEstablishment: true,
             preferHTTP1: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
@@ -804,7 +811,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             maximumConcurrentHTTP1Connections: 6,
             retryConnectionEstablishment: true,
             preferHTTP1: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
 
         let mockRequest = MockHTTPScheduableRequest(eventLoop: eventLoop.next(), requiresEventLoopForChannel: false)
@@ -833,7 +841,8 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             maximumConcurrentHTTP1Connections: 6,
             retryConnectionEstablishment: true,
             preferHTTP1: true,
-            maximumConnectionUses: nil
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
         )
 
         let mockRequest1 = MockHTTPScheduableRequest(eventLoop: elg.next(), requiresEventLoopForChannel: false)
@@ -880,5 +889,608 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
             .failRequest(request2, HTTPClientError.getConnectionFromPoolTimeout, cancelTimeout: false)
         )
         XCTAssertEqual(timeoutAction.connection, .none)
+    }
+
+    func testPrewarmingSimpleFlow() throws {
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
+
+        var state = HTTPConnectionPool.StateMachine(
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 8,
+            retryConnectionEstablishment: true,
+            preferHTTP1: true,
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 4
+        )
+
+        var connectionIDs = [HTTPConnectionPool.Connection.ID]()
+        var connections = MockConnectionPool()
+
+        // attempt to send one request.
+        let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
+        let request = HTTPConnectionPool.Request(mockRequest)
+        var action = state.executeRequest(request)
+        guard case .createConnection(var connectionID, var connectionEL) = action.connection else {
+            return XCTFail("Unexpected connection action")
+        }
+        connectionIDs.append(connectionID)
+        XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), action.request)
+
+        XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+
+        // We're going to end up creating 5 connections immediately, even though only one is leased: the other 4 are pre-warmed.
+        for connectionIndex in 0..<5 {
+            let conn = try connections.succeedConnectionCreationHTTP1(connectionID)
+            let createdAction = state.newHTTP1ConnectionCreated(conn)
+
+            switch createdAction.request {
+            case .executeRequest(_, let connection, _):
+                try connections.execute(mockRequest, on: connection)
+            case .none:
+                try connections.parkConnection(connectionID)
+            default:
+                return XCTFail(
+                    "Unexpected request action \(createdAction.request), connection index: \(connectionIndex)"
+                )
+            }
+
+            if connectionIndex == 0,
+                case .createConnection(let newConnectionID, let newConnectionEL) = createdAction.connection
+            {
+                (connectionID, connectionEL) = (newConnectionID, newConnectionEL)
+                connectionIDs.append(connectionID)
+                XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+            } else if connectionIndex < 4,
+                case .scheduleTimeoutTimerAndCreateConnection(let timeoutID, let newConnectionID, let newConnectionEL) =
+                    createdAction.connection
+            {
+                XCTAssertEqual(connectionID, timeoutID)
+                (connectionID, connectionEL) = (newConnectionID, newConnectionEL)
+                connectionIDs.append(connectionID)
+                XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+            } else if connectionIndex == 4, case .scheduleTimeoutTimer = createdAction.connection {
+                // Expected, the loop will terminate now.
+                ()
+            } else {
+                return XCTFail(
+                    "Unexpected connection action: \(createdAction.connection) with index \(connectionIndex)"
+                )
+            }
+        }
+
+        XCTAssertEqual(connections.count, 5)
+        XCTAssertEqual(connections.parked, 4)
+        XCTAssertEqual(connectionIDs.count, 5)
+
+        // Now we complete the first request.
+        try connections.finishExecution(connectionIDs[0])
+        action = state.http1ConnectionReleased(connectionIDs[0])
+        guard case .scheduleTimeoutTimer = action.connection else {
+            return XCTFail("Unexpected action: \(action.connection)")
+        }
+        try connections.parkConnection(connectionIDs[0])
+
+        XCTAssertEqual(connections.count, 5)
+        XCTAssertEqual(connections.parked, 5)
+        XCTAssertEqual(connectionIDs.count, 5)
+    }
+
+    func testPrewarmingCreatesUpToTheMax() throws {
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
+
+        var state = HTTPConnectionPool.StateMachine(
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 8,
+            retryConnectionEstablishment: true,
+            preferHTTP1: true,
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 4
+        )
+
+        var connections = MockConnectionPool()
+
+        // Attempt to send one request. Complete the connection creation immediately, deferring the next connection creation, and then complete the
+        // request.
+        let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
+        let request = HTTPConnectionPool.Request(mockRequest)
+        var action = state.executeRequest(request)
+        guard case .createConnection(var connectionID, var connectionEL) = action.connection else {
+            return XCTFail("Unexpected connection action")
+        }
+        XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), action.request)
+
+        XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+        var conn = try connections.succeedConnectionCreationHTTP1(connectionID)
+        var createdAction = state.newHTTP1ConnectionCreated(conn)
+        guard case .createConnection(var newConnectionID, var newConnectionEL) = createdAction.connection else {
+            return XCTFail("Unexpected connection action")
+        }
+        try connections.execute(mockRequest, on: conn)
+        try connections.finishExecution(connectionID)
+        action = state.http1ConnectionReleased(connectionID)
+
+        // Here the state machine has _again_ asked us to create a connection. This is because the pre-warming
+        // phase takes any opportunity to do that.
+        guard
+            case .scheduleTimeoutTimerAndCreateConnection(_, let veryDelayedConnectionID, let veryDelayedLoop) = action
+                .connection
+        else {
+            return XCTFail("Unexpected action: \(action.connection)")
+        }
+        try connections.parkConnection(connectionID)
+
+        // At this stage we're gonna end up creating 3 connections. No outstanding requests are present, so
+        // we only need the pre-warmed set, which includes the one we already made.
+        //
+        // The first will ask for another connection
+        (connectionID, connectionEL) = (newConnectionID, newConnectionEL)
+        XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+        conn = try connections.succeedConnectionCreationHTTP1(connectionID)
+        createdAction = state.newHTTP1ConnectionCreated(conn)
+        try connections.parkConnection(connectionID)
+
+        guard
+            case .scheduleTimeoutTimerAndCreateConnection(_, let nextConnectionID, let nextConnectionEL) = createdAction
+                .connection
+        else {
+            return XCTFail("Unexpected connection action: \(createdAction.connection)")
+        }
+        (newConnectionID, newConnectionEL) = (nextConnectionID, nextConnectionEL)
+
+        // The second one only asks for a timeout.
+        (connectionID, connectionEL) = (newConnectionID, newConnectionEL)
+        XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+        conn = try connections.succeedConnectionCreationHTTP1(connectionID)
+        createdAction = state.newHTTP1ConnectionCreated(conn)
+        try connections.parkConnection(connectionID)
+
+        guard case .scheduleTimeoutTimer = createdAction.connection else {
+            return XCTFail("Unexpected connection action")
+        }
+
+        // Now we should complete the delayed connection request. This will also only ask for a timer.
+        (connectionID, connectionEL) = (veryDelayedConnectionID, veryDelayedLoop)
+        XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+        conn = try connections.succeedConnectionCreationHTTP1(connectionID)
+        createdAction = state.newHTTP1ConnectionCreated(conn)
+        try connections.parkConnection(connectionID)
+
+        guard case .scheduleTimeoutTimer = createdAction.connection else {
+            return XCTFail("Unexpected connection action")
+        }
+
+        XCTAssertEqual(connections.count, 4)
+        XCTAssertEqual(connections.parked, 4)
+
+        // Now we start sending requests. The first 4 requests will be accompanied by requests to create new connections,
+        // because as each connection goes out, the pre-warming creates another. We'll let them succeed.
+        for _ in 0..<4 {
+            let eventLoop = elg.next()
+
+            let mockRequest = MockHTTPScheduableRequest(eventLoop: eventLoop)
+            let request = HTTPConnectionPool.Request(mockRequest)
+            let action = state.executeRequest(request)
+
+            guard
+                case .createConnectionAndCancelTimeoutTimer(
+                    let newConnectionID,
+                    let newConnectionLoop,
+                    let activatedConnectionID
+                ) = action.connection
+            else {
+                return XCTFail("Unexpected connection action: \(action)")
+            }
+
+            guard case .executeRequest(_, let connection, _) = action.request else {
+                return XCTFail("Expected to execute a request next, but got: \(action.request)")
+            }
+
+            try connections.activateConnection(activatedConnectionID)
+            try connections.execute(mockRequest, on: connection)
+
+            // Now create the new connection.
+            XCTAssertNoThrow(try connections.createConnection(newConnectionID, on: newConnectionLoop))
+            conn = try connections.succeedConnectionCreationHTTP1(newConnectionID)
+            createdAction = state.newHTTP1ConnectionCreated(conn)
+            try connections.parkConnection(newConnectionID)
+        }
+
+        XCTAssertEqual(connections.count, 8)
+        XCTAssertEqual(connections.parked, 4)
+
+        // The next 4 should _not_ ask to create new connections. We're at the cap, and prewarming can't exceed it.
+        for _ in 0..<4 {
+            let eventLoop = elg.next()
+
+            let mockRequest = MockHTTPScheduableRequest(eventLoop: eventLoop)
+            let request = HTTPConnectionPool.Request(mockRequest)
+            let action = state.executeRequest(request)
+
+            guard case .cancelTimeoutTimer(let activatedConnectionID) = action.connection else {
+                return XCTFail("Unexpected connection action: \(action)")
+            }
+
+            guard case .executeRequest(_, let connection, _) = action.request else {
+                return XCTFail("Expected to execute a request next, but got: \(action.request)")
+            }
+
+            try connections.activateConnection(activatedConnectionID)
+            try connections.execute(mockRequest, on: connection)
+        }
+
+        XCTAssertEqual(connections.count, 8)
+        XCTAssertEqual(connections.parked, 0)
+
+        while let connectionID = connections.randomActiveConnection() {
+            try connections.finishExecution(connectionID)
+            action = state.http1ConnectionReleased(connectionID)
+
+            guard case .scheduleTimeoutTimer = action.connection else {
+                return XCTFail("Unexpected connection action: \(action.connection)")
+            }
+        }
+
+        XCTAssertEqual(connections.count, 8)
+        XCTAssertEqual(connections.parked, 0)
+    }
+
+    func testPrewarmingAffectsConnectionFailure() throws {
+        struct SomeError: Error {}
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
+
+        var state = HTTPConnectionPool.StateMachine(
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 8,
+            retryConnectionEstablishment: true,
+            preferHTTP1: true,
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 4
+        )
+
+        var connections = MockConnectionPool()
+
+        // Attempt to send one request. Complete the connection creation immediately, deferring the next connection creation, and then complete the
+        // request.
+        let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
+        let request = HTTPConnectionPool.Request(mockRequest)
+        var action = state.executeRequest(request)
+        guard case .createConnection(var connectionID, var connectionEL) = action.connection else {
+            return XCTFail("Unexpected connection action")
+        }
+        XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), action.request)
+
+        XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+        var conn = try connections.succeedConnectionCreationHTTP1(connectionID)
+        var createdAction = state.newHTTP1ConnectionCreated(conn)
+        guard case .createConnection(var newConnectionID, var newConnectionEL) = createdAction.connection else {
+            return XCTFail("Unexpected connection action")
+        }
+        try connections.execute(mockRequest, on: conn)
+        try connections.finishExecution(connectionID)
+        action = state.http1ConnectionReleased(connectionID)
+
+        // Here the state machine has _again_ asked us to create a connection. This is because the pre-warming
+        // phase takes any opportunity to do that.
+        guard
+            case .scheduleTimeoutTimerAndCreateConnection(_, let veryDelayedConnectionID, let veryDelayedLoop) = action
+                .connection
+        else {
+            return XCTFail("Unexpected action: \(action.connection)")
+        }
+        try connections.parkConnection(connectionID)
+
+        // At this stage we're gonna end up creating 3 connections. No outstanding requests are present, so
+        // we only need the pre-warmed set, which includes the one we already made.
+        //
+        // The first will ask for another connection
+        (connectionID, connectionEL) = (newConnectionID, newConnectionEL)
+        XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+        conn = try connections.succeedConnectionCreationHTTP1(connectionID)
+        createdAction = state.newHTTP1ConnectionCreated(conn)
+        try connections.parkConnection(connectionID)
+
+        guard
+            case .scheduleTimeoutTimerAndCreateConnection(_, let nextConnectionID, let nextConnectionEL) = createdAction
+                .connection
+        else {
+            return XCTFail("Unexpected connection action: \(createdAction.connection)")
+        }
+        (newConnectionID, newConnectionEL) = (nextConnectionID, nextConnectionEL)
+
+        // The second one only asks for a timeout.
+        (connectionID, connectionEL) = (newConnectionID, newConnectionEL)
+        XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+        conn = try connections.succeedConnectionCreationHTTP1(connectionID)
+        createdAction = state.newHTTP1ConnectionCreated(conn)
+        try connections.parkConnection(connectionID)
+
+        guard case .scheduleTimeoutTimer = createdAction.connection else {
+            return XCTFail("Unexpected connection action")
+        }
+
+        // Now we should complete the delayed connection request. This will also only ask for a timer.
+        (connectionID, connectionEL) = (veryDelayedConnectionID, veryDelayedLoop)
+        XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+        conn = try connections.succeedConnectionCreationHTTP1(connectionID)
+        createdAction = state.newHTTP1ConnectionCreated(conn)
+        try connections.parkConnection(connectionID)
+
+        guard case .scheduleTimeoutTimer = createdAction.connection else {
+            return XCTFail("Unexpected connection action")
+        }
+
+        XCTAssertEqual(connections.count, 4)
+        XCTAssertEqual(connections.parked, 4)
+
+        // Now, one of these connections idle-fails.
+        let parked = connections.randomParkedConnection()!
+        try connections.closeConnection(parked)
+        action = state.http1ConnectionClosed(parked.id)
+
+        guard case .createConnection(var id, on: let loop) = action.connection else {
+            return XCTFail("Unexpected connection action: \(action.connection)")
+        }
+
+        // A reasonable request. But it fails!
+        //
+        // Let's do this next bit a few times to convince ourselves it's a real problem.
+        for _ in 0..<8 {
+            // We're asked to schedule a backoff timer.
+            action = state.failedToCreateNewConnection(SomeError(), connectionID: id)
+            guard case .scheduleBackoffTimer(let backoffID, _, _) = action.connection else {
+                return XCTFail("Unexpected connection action: \(action.connection)")
+            }
+            XCTAssertEqual(backoffID, id)
+
+            // Once it passes, ask what to do. We'll be asked, again, to create a connection.
+            action = state.connectionCreationBackoffDone(backoffID)
+            guard case .createConnection(let backedOffID, on: let backedOffLoop) = action.connection else {
+                return XCTFail("Unexpected connection action: \(action.connection)")
+            }
+            XCTAssertNotEqual(backedOffID, id)
+            XCTAssertIdentical(backedOffLoop, loop)
+            id = backedOffID
+        }
+
+        // Finally it works.
+        XCTAssertNoThrow(try connections.createConnection(id, on: loop))
+        conn = try connections.succeedConnectionCreationHTTP1(id)
+        createdAction = state.newHTTP1ConnectionCreated(conn)
+        try connections.parkConnection(id)
+
+        guard case .scheduleTimeoutTimer = createdAction.connection else {
+            return XCTFail("Unexpected connection action")
+        }
+    }
+
+    func testIdleConnectionTimeoutHandlingWithPrewarming() throws {
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
+
+        var state = HTTPConnectionPool.StateMachine(
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 8,
+            retryConnectionEstablishment: true,
+            preferHTTP1: true,
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 4
+        )
+
+        var connections = MockConnectionPool()
+
+        // Attempt to send one request. Complete the connection creation immediately, deferring the next connection creation, and then complete the
+        // request.
+        var mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
+        var request = HTTPConnectionPool.Request(mockRequest)
+        var action = state.executeRequest(request)
+        guard case .createConnection(var connectionID, var connectionEL) = action.connection else {
+            return XCTFail("Unexpected connection action")
+        }
+        XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), action.request)
+
+        XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+        var conn = try connections.succeedConnectionCreationHTTP1(connectionID)
+        var createdAction = state.newHTTP1ConnectionCreated(conn)
+        guard case .createConnection(var newConnectionID, var newConnectionEL) = createdAction.connection else {
+            return XCTFail("Unexpected connection action")
+        }
+        try connections.execute(mockRequest, on: conn)
+        try connections.finishExecution(connectionID)
+        action = state.http1ConnectionReleased(connectionID)
+
+        // Here the state machine has _again_ asked us to create a connection. This is because the pre-warming
+        // phase takes any opportunity to do that.
+        guard
+            case .scheduleTimeoutTimerAndCreateConnection(_, let veryDelayedConnectionID, let veryDelayedLoop) = action
+                .connection
+        else {
+            return XCTFail("Unexpected action: \(action.connection)")
+        }
+        try connections.parkConnection(connectionID)
+
+        // At this stage we're gonna end up creating 3 connections. No outstanding requests are present, so
+        // we only need the pre-warmed set, which includes the one we already made.
+        //
+        // The first will ask for another connection
+        (connectionID, connectionEL) = (newConnectionID, newConnectionEL)
+        XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+        conn = try connections.succeedConnectionCreationHTTP1(connectionID)
+        createdAction = state.newHTTP1ConnectionCreated(conn)
+        try connections.parkConnection(connectionID)
+
+        guard
+            case .scheduleTimeoutTimerAndCreateConnection(_, let nextConnectionID, let nextConnectionEL) = createdAction
+                .connection
+        else {
+            return XCTFail("Unexpected connection action: \(createdAction.connection)")
+        }
+        (newConnectionID, newConnectionEL) = (nextConnectionID, nextConnectionEL)
+
+        // The second one only asks for a timeout.
+        (connectionID, connectionEL) = (newConnectionID, newConnectionEL)
+        XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+        conn = try connections.succeedConnectionCreationHTTP1(connectionID)
+        createdAction = state.newHTTP1ConnectionCreated(conn)
+        try connections.parkConnection(connectionID)
+
+        guard case .scheduleTimeoutTimer = createdAction.connection else {
+            return XCTFail("Unexpected connection action")
+        }
+
+        // Now we should complete the delayed connection request. This will also only ask for a timer.
+        (connectionID, connectionEL) = (veryDelayedConnectionID, veryDelayedLoop)
+        XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+        conn = try connections.succeedConnectionCreationHTTP1(connectionID)
+        createdAction = state.newHTTP1ConnectionCreated(conn)
+        try connections.parkConnection(connectionID)
+
+        guard case .scheduleTimeoutTimer = createdAction.connection else {
+            return XCTFail("Unexpected connection action")
+        }
+
+        XCTAssertEqual(connections.count, 4)
+        XCTAssertEqual(connections.parked, 4)
+
+        // Now, the idle timeout timer fires. We can do this a few times, it'll keep
+        // re-arming.
+        for _ in 0..<8 {
+            action = state.connectionIdleTimeout(connectionID, on: connectionEL)
+            guard case .scheduleTimeoutTimer = createdAction.connection else {
+                return XCTFail("Unexpected connection action")
+            }
+        }
+
+        // Let's force another connection to be created for a request.
+        mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
+        request = HTTPConnectionPool.Request(mockRequest)
+        action = state.executeRequest(request)
+        guard
+            case .createConnectionAndCancelTimeoutTimer(let extraConnectionID, let extraConnectionEL, _) = action
+                .connection
+        else {
+            return XCTFail("Unexpected connection action: \(action.connection)")
+        }
+        guard case .executeRequest(_, let requestConnection, _) = action.request else {
+            return XCTFail("Unexpected request action")
+        }
+
+        XCTAssertNoThrow(try connections.createConnection(extraConnectionID, on: extraConnectionEL))
+        conn = try connections.succeedConnectionCreationHTTP1(extraConnectionID)
+        createdAction = state.newHTTP1ConnectionCreated(conn)
+        guard case .scheduleTimeoutTimer = createdAction.connection else {
+            return XCTFail("Unexpected connection action: \(createdAction.connection)")
+        }
+        try connections.activateConnection(requestConnection.id)
+        try connections.execute(mockRequest, on: requestConnection)
+        try connections.finishExecution(requestConnection.id)
+        try connections.parkConnection(requestConnection.id)
+        action = state.http1ConnectionReleased(requestConnection.id)
+
+        // Back to idle.
+        guard case .scheduleTimeoutTimer = action.connection else {
+            return XCTFail("Unexpected action: \(action.connection)")
+        }
+        try connections.parkConnection(extraConnectionID)
+
+        XCTAssertEqual(connections.count, 5)
+        XCTAssertEqual(connections.parked, 5)
+
+        // This time when the idle timeout fires, we're actually asked to close the connection.
+        action = state.connectionIdleTimeout(connectionID, on: connectionEL)
+        guard case .closeConnection = action.connection else {
+            return XCTFail("Unexpected connection action: \(createdAction.connection)")
+        }
+    }
+
+    func testPrewarmingForcesReCreationOfConnectionsWhenTheyHitMaxUses() throws {
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
+
+        // The scenario we want to hit can only happen when there is never a spare pre-warmed connection
+        // in the pool _and_ we can't create more. The easiest way to test this is to just
+        // create pre-warmed connections up to the pool limit, which they won't pass.
+        var state = HTTPConnectionPool.StateMachine(
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 8,
+            retryConnectionEstablishment: true,
+            preferHTTP1: true,
+            maximumConnectionUses: 1,
+            preWarmedHTTP1ConnectionCount: 8
+        )
+
+        var connections = MockConnectionPool()
+
+        // Attempt to send one request. Complete the connection creation immediately, deferring the next connection creation, but don't
+        // complete the request.
+        let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
+        let request = HTTPConnectionPool.Request(mockRequest)
+        var action = state.executeRequest(request)
+        guard case .createConnection(var connectionID, var connectionEL) = action.connection else {
+            return XCTFail("Unexpected connection action")
+        }
+        XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), action.request)
+
+        XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+        var conn = try connections.succeedConnectionCreationHTTP1(connectionID)
+        var createdAction = state.newHTTP1ConnectionCreated(conn)
+        try connections.parkConnection(connectionID)
+        guard case .createConnection(var newConnectionID, var newConnectionEL) = createdAction.connection else {
+            return XCTFail("Unexpected connection action")
+        }
+        guard case .executeRequest(_, let requestConn, _) = createdAction.request else {
+            return XCTFail("Unexpected request action: \(action.request)")
+        }
+
+        // At this stage we're gonna end up creating 7 more connections. No outstanding requests are present, so
+        // we only need the pre-warmed set, which includes the one we already made.
+        //
+        // The first six will ask for another connection.
+        for _ in 0..<6 {
+            (connectionID, connectionEL) = (newConnectionID, newConnectionEL)
+            XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+            conn = try connections.succeedConnectionCreationHTTP1(connectionID)
+            createdAction = state.newHTTP1ConnectionCreated(conn)
+            try connections.parkConnection(connectionID)
+
+            guard
+                case .scheduleTimeoutTimerAndCreateConnection(_, let nextConnectionID, let nextConnectionEL) =
+                    createdAction.connection
+            else {
+                return XCTFail("Unexpected connection action: \(createdAction.connection)")
+            }
+            (newConnectionID, newConnectionEL) = (nextConnectionID, nextConnectionEL)
+        }
+
+        // The seventh one only asks for a timeout.
+        (connectionID, connectionEL) = (newConnectionID, newConnectionEL)
+        XCTAssertNoThrow(try connections.createConnection(connectionID, on: connectionEL))
+        conn = try connections.succeedConnectionCreationHTTP1(connectionID)
+        createdAction = state.newHTTP1ConnectionCreated(conn)
+        try connections.parkConnection(connectionID)
+
+        guard case .scheduleTimeoutTimer = createdAction.connection else {
+            return XCTFail("Unexpected connection action: \(createdAction.connection)")
+        }
+
+        XCTAssertEqual(connections.count, 8)
+        XCTAssertEqual(connections.parked, 8)
+
+        // Now we're gonna actually complete that request from earlier.
+        try connections.activateConnection(requestConn.id)
+        try connections.execute(mockRequest, on: requestConn)
+        try connections.finishExecution(requestConn.id)
+        action = state.http1ConnectionReleased(requestConn.id)
+
+        // Here the state machine has asked us to close the connection and create a new one. That's because we've hit the
+        // max usages limit.
+        guard case .closeConnectionAndCreateConnection(let toClose, _, _) = action.connection else {
+            return XCTFail("Unexpected action: \(action.connection)")
+        }
+        try connections.closeConnection(toClose)
+
+        // We won't bother doing it though, it's enough that it asked.
     }
 }
