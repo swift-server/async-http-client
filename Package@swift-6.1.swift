@@ -54,7 +54,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.6.0"),
         .package(url: "https://github.com/apple/swift-atomics.git", from: "1.0.2"),
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.0.0"),
-        .package(url: "https://github.com/apple/swift-distributed-tracing.git", from: "1.2.0"),
+        .package(url: "https://github.com/apple/swift-distributed-tracing.git", from: "1.0.0"),
     ],
     targets: [
         .target(
@@ -83,6 +83,7 @@ let package = Package(
                 .product(name: "Algorithms", package: "swift-algorithms"),
                 // Observability support
                 .product(name: "Tracing", package: "swift-distributed-tracing", condition: .when(traits: ["TracingSupport"])),
+                .product(name: "InMemoryTracing", package: "swift-distributed-tracing", condition: .when(traits: ["TracingSupport"])),
             ],
             swiftSettings: strictConcurrencySettings
         ),
@@ -102,6 +103,9 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Atomics", package: "swift-atomics"),
                 .product(name: "Algorithms", package: "swift-algorithms"),
+                // Observability support
+                .product(name: "Tracing", package: "swift-distributed-tracing", condition: .when(traits: ["TracingSupport"])),
+                .product(name: "InMemoryTracing", package: "swift-distributed-tracing", condition: .when(traits: ["TracingSupport"])),
             ],
             resources: [
                 .copy("Resources/self_signed_cert.pem"),

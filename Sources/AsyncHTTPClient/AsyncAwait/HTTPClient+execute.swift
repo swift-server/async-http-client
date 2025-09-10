@@ -15,6 +15,9 @@
 import Logging
 import NIOCore
 import NIOHTTP1
+#if TracingSupport
+import Tracing
+#endif
 
 import struct Foundation.URL
 
@@ -36,12 +39,27 @@ extension HTTPClient {
         deadline: NIODeadline,
         logger: Logger? = nil
     ) async throws -> HTTPClientResponse {
-        try await self.executeAndFollowRedirectsIfNeeded(
-            request,
-            deadline: deadline,
-            logger: logger ?? Self.loggingDisabled,
-            redirectState: RedirectState(self.configuration.redirectConfiguration.mode, initialURL: request.url)
-        )
+        func doExecute() async throws -> HTTPClientResponse {
+            try await self.executeAndFollowRedirectsIfNeeded(
+                request,
+                deadline: deadline,
+                logger: logger ?? Self.loggingDisabled,
+                redirectState: RedirectState(self.configuration.redirectConfiguration.mode, initialURL: request.url)
+            )
+        }
+
+        #if TracingSupport
+        if let tracer = self.tracer {
+            return try await tracer.withSpan("\(request.method)") { span -> (HTTPClientResponse) in
+                let attr = self.configuration.tracing.attributeKeys
+                span.attributes[attr.requestMethod] = request.method.rawValue
+                // Set more attributes on the span
+                return try await doExecute()
+            }
+        }
+        #endif
+        
+        return try await doExecute()
     }
 }
 

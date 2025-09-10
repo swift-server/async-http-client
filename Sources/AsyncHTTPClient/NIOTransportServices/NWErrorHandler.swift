@@ -25,7 +25,11 @@ extension HTTPClient {
     /// A wrapper for `POSIX` errors thrown by `Network.framework`.
     public struct NWPOSIXError: Error, CustomStringConvertible {
         /// POSIX error code (enum)
+        #if compiler(>=6.1)
+        nonisolated(unsafe) public let errorCode: POSIXErrorCode
+        #else
         public let errorCode: POSIXErrorCode
+        #endif
 
         /// actual reason, in human readable form
         private let reason: String

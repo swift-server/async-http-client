@@ -18,6 +18,10 @@ import NIOCore
 import NIOHTTP1
 import NIOSSL
 
+#if TracingSupport
+import Tracing
+#endif // TracingSupport
+
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 @usableFromInline
 final class Transaction:
@@ -32,7 +36,31 @@ final class Transaction:
     let preferredEventLoop: EventLoop
     let requestOptions: RequestOptions
 
+    #if TracingSupport
+    let span: (any Span)?
+    #endif
+
     private let state: NIOLockedValueBox<StateMachine>
+
+    #if TracingSupport
+    init(
+        request: HTTPClientRequest.Prepared,
+        requestOptions: RequestOptions,
+        logger: Logger,
+        connectionDeadline: NIODeadline,
+        preferredEventLoop: EventLoop,
+        span: (any Span)?,
+        responseContinuation: CheckedContinuation<HTTPClientResponse, Error>
+    ) {
+        self.request = request
+        self.requestOptions = requestOptions
+        self.logger = logger
+        self.connectionDeadline = connectionDeadline
+        self.preferredEventLoop = preferredEventLoop
+        self.span = span
+        self.state = NIOLockedValueBox(StateMachine(responseContinuation))
+    }
+    #endif // TracingSupport 
 
     init(
         request: HTTPClientRequest.Prepared,
@@ -42,16 +70,23 @@ final class Transaction:
         preferredEventLoop: EventLoop,
         responseContinuation: CheckedContinuation<HTTPClientResponse, Error>
     ) {
+        print("[swift] new transaction = \(request)")
         self.request = request
         self.requestOptions = requestOptions
         self.logger = logger
         self.connectionDeadline = connectionDeadline
         self.preferredEventLoop = preferredEventLoop
+        self.span = nil
         self.state = NIOLockedValueBox(StateMachine(responseContinuation))
     }
 
     func cancel() {
-        self.fail(CancellationError())
+        let error = CancellationError()
+        self.fail(error)
+        #if TracingSupport
+        self.span?.recordError(error)
+        self.span?.end()
+        #endif
     }
 
     // MARK: Request body helpers
