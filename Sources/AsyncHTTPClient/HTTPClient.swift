@@ -15,6 +15,7 @@
 import Atomics
 import Foundation
 import Logging
+import Tracing
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
@@ -807,7 +808,7 @@ public final class HTTPClient: Sendable {
     public struct Configuration {
         /// TLS configuration, defaults to `TLSConfiguration.makeClientConfiguration()`.
         public var tlsConfiguration: Optional<TLSConfiguration>
-
+        
         /// Sometimes it can be useful to connect to one host e.g. `x.example.com` but
         /// request and validate the certificate chain as if we would connect to `y.example.com`.
         /// ``dnsOverride`` allows to do just that by mapping host names which we will request and validate the certificate chain, to a different
@@ -817,7 +818,7 @@ public final class HTTPClient: Sendable {
         /// `url` of `https://example.com/`, the ``HTTPClient`` will actually open a connection to `localhost` instead of `example.com`.
         /// ``HTTPClient`` will still request certificates from the server for `example.com` and validate them as if we would connect to `example.com`.
         public var dnsOverride: [String: String] = [:]
-
+        
         /// Enables following 3xx redirects automatically.
         ///
         /// Following redirects are supported:
@@ -841,24 +842,24 @@ public final class HTTPClient: Sendable {
         /// Ignore TLS unclean shutdown error, defaults to `false`.
         @available(
             *,
-            deprecated,
-            message:
+             deprecated,
+             message:
                 "AsyncHTTPClient now correctly supports handling unexpected SSL connection drops. This property is ignored"
         )
         public var ignoreUncleanSSLShutdown: Bool {
             get { false }
             set {}
         }
-
+        
         /// What HTTP versions to use.
         ///
         /// Set to ``HTTPVersion-swift.struct/automatic`` by default which will use HTTP/2 if run over https and the server supports it, otherwise HTTP/1
         public var httpVersion: HTTPVersion
-
+        
         /// Whether ``HTTPClient`` will let Network.framework sit in the `.waiting` state awaiting new network changes, or fail immediately. Defaults to `true`,
         /// which is the recommended setting. Only set this to `false` when attempting to trigger a particular error path.
         public var networkFrameworkWaitForConnectivity: Bool
-
+        
         /// The maximum number of times each connection can be used before it is replaced with a new one. Use `nil` (the default)
         /// if no limit should be applied to each connection.
         ///
@@ -870,20 +871,35 @@ public final class HTTPClient: Sendable {
                 }
             }
         }
-
+        
         /// Whether ``HTTPClient`` will use Multipath TCP or not
         /// By default, don't use it
         public var enableMultipath: Bool
-
+        
         /// A method with access to the HTTP/1 connection channel that is called when creating the connection.
         public var http1_1ConnectionDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)?
-
+        
         /// A method with access to the HTTP/2 connection channel that is called when creating the connection.
         public var http2ConnectionDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)?
-
+        
         /// A method with access to the HTTP/2 stream channel that is called when creating the stream.
         public var http2StreamChannelDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)?
-
+        
+        private var anyTracer: (any Sendable)?
+        
+        @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+        public var tracer: (any Tracer)? {
+            get {
+                guard let anyTracer else {
+                    return nil
+                }
+                return anyTracer as! (any Tracer)?
+            }
+            set {
+                self.anyTracer = newValue
+            }
+        }
+        
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
@@ -902,6 +918,29 @@ public final class HTTPClient: Sendable {
             self.httpVersion = .automatic
             self.networkFrameworkWaitForConnectivity = true
             self.enableMultipath = false
+        }
+        
+        @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+        public init(
+            tlsConfiguration: TLSConfiguration? = nil,
+            redirectConfiguration: RedirectConfiguration? = nil,
+            timeout: Timeout = Timeout(),
+            connectionPool: ConnectionPool = ConnectionPool(),
+            proxy: Proxy? = nil,
+            ignoreUncleanSSLShutdown: Bool = false,
+            decompression: Decompression = .disabled,
+            tracer: (any Tracer)? = InstrumentationSystem.tracer
+        ) {
+            self.init(
+                tlsConfiguration: tlsConfiguration,
+                redirectConfiguration: redirectConfiguration,
+                timeout: timeout,
+                connectionPool: connectionPool,
+                proxy: proxy,
+                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
+                decompression: decompression
+            )
+            self.anyTracer = tracer
         }
 
         public init(
