@@ -13,10 +13,21 @@
 //===----------------------------------------------------------------------===//
 
 import Logging
+import Tracing
 import NIOCore
 import NIOHTTP1
 
 import struct Foundation.URL
+
+private struct HTTPHeadersInjector: Injector, @unchecked Sendable {
+    static let shared: HTTPHeadersInjector = HTTPHeadersInjector()
+    
+    private init() {}
+
+    func inject(_ value: String, forKey name: String, into headers: inout HTTPHeaders) {
+        headers.add(name: name, value: value)
+    }
+}
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClient {
@@ -36,12 +47,27 @@ extension HTTPClient {
         deadline: NIODeadline,
         logger: Logger? = nil
     ) async throws -> HTTPClientResponse {
-        try await self.executeAndFollowRedirectsIfNeeded(
-            request,
-            deadline: deadline,
-            logger: logger ?? Self.loggingDisabled,
-            redirectState: RedirectState(self.configuration.redirectConfiguration.mode, initialURL: request.url)
-        )
+        func perform(request: HTTPClientRequest) async throws -> HTTPClientResponse {
+            try await self.executeAndFollowRedirectsIfNeeded(
+                request,
+                deadline: deadline,
+                logger: logger ?? Self.loggingDisabled,
+                redirectState: RedirectState(self.configuration.redirectConfiguration.mode, initialURL: request.url)
+            )
+        }
+        if let tracer = self.configuration.tracer {
+            return try await tracer.withSpan("HTTPClient.execute") { span in
+                var request = request
+                tracer.inject(
+                    span.context,
+                    into: &request.headers,
+                    using: HTTPHeadersInjector.shared
+                )
+                return try await perform(request: request)
+            }
+        } else {
+            return try await perform(request: request)
+        }
     }
 }
 
