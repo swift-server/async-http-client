@@ -18,6 +18,10 @@ import NIOHTTP1
 
 import struct Foundation.URL
 
+#if TracingSupport
+import Tracing
+#endif
+
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClient {
     /// Execute arbitrary HTTP requests.
@@ -36,12 +40,33 @@ extension HTTPClient {
         deadline: NIODeadline,
         logger: Logger? = nil
     ) async throws -> HTTPClientResponse {
-        try await self.executeAndFollowRedirectsIfNeeded(
-            request,
-            deadline: deadline,
-            logger: logger ?? Self.loggingDisabled,
-            redirectState: RedirectState(self.configuration.redirectConfiguration.mode, initialURL: request.url)
-        )
+        try await withRequestSpan(request) {
+            try await self.executeAndFollowRedirectsIfNeeded(
+                request,
+                deadline: deadline,
+                logger: logger ?? Self.loggingDisabled,
+                redirectState: RedirectState(self.configuration.redirectConfiguration.mode, initialURL: request.url)
+            )
+        }
+    }
+
+    @inlinable
+    func withRequestSpan<ReturnType>(
+        _ request: HTTPClientRequest,
+        _ body: () async throws -> ReturnType
+    ) async rethrows -> ReturnType {
+        #if TracingSupport
+        if let tracer = self.tracer {
+            return try await tracer.withSpan("\(request.method)") { span in
+                let attr = self.configuration.tracing.attributeKeys
+                span.attributes[attr.requestMethod] = request.method.rawValue
+                // Set more attributes on the span
+                return try await body()
+            }
+        }
+        #endif
+
+        return try await body()
     }
 }
 

@@ -1,4 +1,4 @@
-// swift-tools-version:5.10
+// swift-tools-version:6.1
 //===----------------------------------------------------------------------===//
 //
 // This source file is part of the AsyncHTTPClient open source project
@@ -38,6 +38,10 @@ let package = Package(
     products: [
         .library(name: "AsyncHTTPClient", targets: ["AsyncHTTPClient"])
     ],
+    traits: [
+        .trait(name: "TracingSupport"),
+        .default(enabledTraits: ["TracingSupport"]),
+    ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.81.0"),
         .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.30.0"),
@@ -47,7 +51,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.6.0"),
         .package(url: "https://github.com/apple/swift-atomics.git", from: "1.0.2"),
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.0.0"),
-        .package(url: "https://github.com/apple/swift-distributed-tracing.git", from: "1.3.0"),
+        .package(url: "https://github.com/apple/swift-distributed-tracing.git", from: "1.0.0"),
     ],
     targets: [
         .target(
@@ -75,8 +79,16 @@ let package = Package(
                 .product(name: "Atomics", package: "swift-atomics"),
                 .product(name: "Algorithms", package: "swift-algorithms"),
                 // Observability support
-                .product(name: "Tracing", package: "swift-distributed-tracing"),
-                .product(name: "InMemoryTracing", package: "swift-distributed-tracing"),
+                .product(
+                    name: "Tracing",
+                    package: "swift-distributed-tracing",
+                    condition: .when(traits: ["TracingSupport"])
+                ),
+                .product(
+                    name: "InMemoryTracing",
+                    package: "swift-distributed-tracing",
+                    condition: .when(traits: ["TracingSupport"])
+                ),
             ],
             swiftSettings: strictConcurrencySettings
         ),
@@ -97,8 +109,16 @@ let package = Package(
                 .product(name: "Atomics", package: "swift-atomics"),
                 .product(name: "Algorithms", package: "swift-algorithms"),
                 // Observability support
-                .product(name: "Tracing", package: "swift-distributed-tracing"),
-                .product(name: "InMemoryTracing", package: "swift-distributed-tracing"),
+                .product(
+                    name: "Tracing",
+                    package: "swift-distributed-tracing",
+                    condition: .when(traits: ["TracingSupport"])
+                ),
+                .product(
+                    name: "InMemoryTracing",
+                    package: "swift-distributed-tracing",
+                    condition: .when(traits: ["TracingSupport"])
+                ),
             ],
             resources: [
                 .copy("Resources/self_signed_cert.pem"),

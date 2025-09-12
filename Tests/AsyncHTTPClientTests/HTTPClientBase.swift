@@ -61,6 +61,7 @@ class XCTestCaseHTTPClientTestsBaseClass: XCTestCase {
             }
         )
         backgroundLogger.logLevel = .trace
+
         self.defaultClient = HTTPClient(
             eventLoopGroupProvider: .shared(self.clientGroup),
             configuration: HTTPClient.Configuration().enableFastFailureModeForTesting(),
