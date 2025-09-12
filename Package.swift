@@ -1,4 +1,4 @@
-// swift-tools-version:6.1
+// swift-tools-version:5.10
 //===----------------------------------------------------------------------===//
 //
 // This source file is part of the AsyncHTTPClient open source project
