@@ -34,14 +34,6 @@ struct HTTPHeadersInjector: Injector, @unchecked Sendable {
 }
 #endif  // TracingSupport
 
-// #if TracingSupport
-// @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
-// typealias HTTPClientTracingSupportTracerType = any Tracer
-// #else
-// enum TracingSupportDisabledTracer {}
-// typealias HTTPClientTracingSupportTracerType = TracingSupportDisabledTracer
-// #endif
-
 protocol _TracingSupportOperations {
     // associatedtype TracerType
 
@@ -99,8 +91,7 @@ extension RequestBag.LoopBoundState {
 
     mutating func failRequestSpanAsCancelled() {
         if #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) {
-            let error = CancellationError()
-            failRequestSpan(error: error)
+            failRequestSpan(error: CancellationError())
         } else {
             fatalError("Unexpected configuration; expected availability of CancellationError")
         }

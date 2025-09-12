@@ -66,8 +66,10 @@ public final class HTTPClient: Sendable {
     ///
     /// All HTTP transactions will occur on loops owned by this group.
     public let eventLoopGroup: EventLoopGroup
-    let configuration: Configuration
     let poolManager: HTTPConnectionPool.Manager
+
+    @usableFromInline
+    let configuration: Configuration
 
     /// Shared thread pool used for file IO. It is lazily created on first access of ``Task/fileIOThreadPool``.
     private let fileIOThreadPool: NIOLockedValueBox<NIOThreadPool?>
@@ -76,14 +78,13 @@ public final class HTTPClient: Sendable {
     private let canBeShutDown: Bool
 
     #if TracingSupport
-    @_spi(Tracing)
     @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
     public var tracer: (any Tracer)? {
         configuration.tracing.tracer
     }
     #endif  // TracingSupport
 
-    public static let loggingDisabled = Logger(label: "AHC-do-not-log", factory: { _ in SwiftLogNoOpLogHandler() })
+    static let loggingDisabled = Logger(label: "AHC-do-not-log", factory: { _ in SwiftLogNoOpLogHandler() })
 
     /// Create an ``HTTPClient`` with specified `EventLoopGroup` provider and configuration.
     ///
@@ -717,21 +718,6 @@ public final class HTTPClient: Sendable {
             request,
             requestID: globalRequestID.wrappingIncrementThenLoad(ordering: .relaxed)
         )
-
-        // #if TracingSupport
-        // let span: (any Span)? // we may be still executing the same span, e.g. under redirection etc.
-        // if let activeSpan {
-        //     span = activeSpan
-        // } else if let tracer = self.tracer {
-        //     let s = tracer.startSpan(request.method.rawValue)
-        //     let attrs = self.configuration.tracing.attributeKeys
-        //     s.attributes[attrs.requestMethod] = request.method.rawValue
-        //     s.attributes["loc"] = "\(#fileID):\(#line)"
-        //     span = s
-        // } else {
-        //     span = nil
-        // }
-        // #endif
 
         let taskEL: EventLoop
         switch eventLoopPreference.preference {

@@ -40,7 +40,7 @@ extension HTTPClient {
         deadline: NIODeadline,
         logger: Logger? = nil
     ) async throws -> HTTPClientResponse {
-        func doExecute() async throws -> HTTPClientResponse {
+        try await withRequestSpan(request) {
             try await self.executeAndFollowRedirectsIfNeeded(
                 request,
                 deadline: deadline,
@@ -48,19 +48,25 @@ extension HTTPClient {
                 redirectState: RedirectState(self.configuration.redirectConfiguration.mode, initialURL: request.url)
             )
         }
+    }
 
+    @inlinable
+    func withRequestSpan<ReturnType>(
+        _ request: HTTPClientRequest,
+        _ body: () async throws -> ReturnType
+    ) async rethrows -> ReturnType {
         #if TracingSupport
         if let tracer = self.tracer {
-            return try await tracer.withSpan("\(request.method)") { span -> (HTTPClientResponse) in
+            return try await tracer.withSpan("\(request.method)") { span in
                 let attr = self.configuration.tracing.attributeKeys
                 span.attributes[attr.requestMethod] = request.method.rawValue
                 // Set more attributes on the span
-                return try await doExecute()
+                return try await body()
             }
         }
         #endif
 
-        return try await doExecute()
+        return try await body()
     }
 }
 

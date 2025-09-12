@@ -74,8 +74,7 @@ final class Transaction:
     }
 
     func cancel() {
-        let error = CancellationError()
-        self.fail(error)
+        self.fail(CancellationError())
     }
 
     // MARK: Request body helpers
