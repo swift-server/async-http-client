@@ -77,7 +77,7 @@ public final class HTTPClient: Sendable {
 
     #if TracingSupport
     @_spi(Tracing)
-    @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)  // for TaskLocal ServiceContext
+    @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
     public var tracer: (any Tracer)? {
         configuration.tracing.tracer
     }
@@ -768,16 +768,22 @@ public final class HTTPClient: Sendable {
                 return nil
             case .shuttingDown, .shutDown:
                 logger.debug("client is shutting down, failing request")
-                let error = HTTPClientError.alreadyShutdown
-                // #if TracingSupport
-                // span?.recordError(error)
-                // span?.end()
-                // #endif
+                #if TracingSupport
+                if #available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *) {
+                    return Task<Delegate.Response>.failedTask(
+                        eventLoop: taskEL,
+                        error: HTTPClientError.alreadyShutdown,
+                        logger: logger,
+                        tracer: tracer,
+                        makeOrGetFileIOThreadPool: self.makeOrGetFileIOThreadPool
+                    )
+                }
+                #endif // TracingSupport 
+
                 return Task<Delegate.Response>.failedTask(
                     eventLoop: taskEL,
-                    error: error,
+                    error: HTTPClientError.alreadyShutdown,
                     logger: logger,
-                    tracer: tracer,
                     makeOrGetFileIOThreadPool: self.makeOrGetFileIOThreadPool
                 )
             }
@@ -802,12 +808,29 @@ public final class HTTPClient: Sendable {
             }
         }()
 
+        let task: HTTPClient.Task<Delegate.Response> 
+        #if TracingSupport
+        if #available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *) {
+            task = Task<Delegate.Response>(
+                eventLoop: taskEL,
+                logger: logger,
+                tracer: tracer,
+                makeOrGetFileIOThreadPool: self.makeOrGetFileIOThreadPool
+            )
+        } else {
+            task = Task<Delegate.Response>(
+                eventLoop: taskEL,
+                logger: logger,
+                makeOrGetFileIOThreadPool: self.makeOrGetFileIOThreadPool
+            )
+        }
+        #else
         let task = Task<Delegate.Response>(
             eventLoop: taskEL,
             logger: logger,
-            tracer: tracer,
             makeOrGetFileIOThreadPool: self.makeOrGetFileIOThreadPool
         )
+        #endif // TracingSupport
 
         do {
             let requestBag = try RequestBag(
@@ -1109,8 +1132,16 @@ public final class HTTPClient: Sendable {
             }
         }
 
+        /// Configuration for tracing attributes set by the HTTPClient.
         public var attributeKeys: AttributeKeys
 
+
+        public init() {
+            self._tracer = nil
+            self.attributeKeys = .init()
+        }
+
+        @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
         public init(
             tracer: (any Tracer)? = InstrumentationSystem.tracer,
             attributeKeys: AttributeKeys = .init()

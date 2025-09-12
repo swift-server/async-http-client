@@ -929,7 +929,15 @@ extension HTTPClient {
         public let logger: Logger  // We are okay to store the logger here because a Task is for only one request.
 
         #if TracingSupport
-        public let tracer: (any Tracer)?  // Ok to store the tracer here because a Task is for only one request.
+        let anyTracer: Optional<any Sendable>  // Ok to store the tracer here because a Task is for only one request.
+        
+        @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+        public var tracer: (any Tracer)? {
+            get {
+                print("[swift][\(#fileID):\(#line)] _tracer = \(anyTracer)")
+                return anyTracer as! (any Tracer)?
+            }
+        }
         #endif
 
         let promise: EventLoopPromise<Response>
@@ -965,7 +973,7 @@ extension HTTPClient {
             self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.logger = logger
-            self.tracer = nil
+            self.anyTracer = nil
             self.makeOrGetFileIOThreadPool = makeOrGetFileIOThreadPool
             self.state = NIOLockedValueBox(State(isCancelled: false, taskDelegate: nil))
         }
@@ -986,6 +994,7 @@ extension HTTPClient {
         }
 
         #if TracingSupport
+        @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
         init(
             eventLoop: EventLoop,
             logger: Logger,
@@ -995,11 +1004,13 @@ extension HTTPClient {
             self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.logger = logger
-            self.tracer = tracer
+            print("[swift] set any tracer on TASK = \(tracer)")
+            self.anyTracer = tracer
             self.makeOrGetFileIOThreadPool = makeOrGetFileIOThreadPool
             self.state = NIOLockedValueBox(State(isCancelled: false, taskDelegate: nil))
         }
 
+        @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
         static func failedTask(
             eventLoop: EventLoop,
             error: Error,

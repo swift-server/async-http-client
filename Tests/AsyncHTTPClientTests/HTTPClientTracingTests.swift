@@ -85,6 +85,10 @@ final class HTTPClientTracingTests: XCTestCaseHTTPClientTestsBaseClass {
         let url = self.defaultHTTPBinURLPrefix + "echo-method"
         let _ = try client.post(url: url).wait()
 
+        guard tracer.activeSpans.isEmpty else {
+            XCTFail("Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)")
+            return
+        }
         guard let span = tracer.finishedSpans.first else {
             XCTFail("No span was recorded!")
             return
@@ -98,6 +102,10 @@ final class HTTPClientTracingTests: XCTestCaseHTTPClientTestsBaseClass {
         let request = HTTPClientRequest(url: url)
         let _ = try await client.execute(request, deadline: .distantFuture)
 
+        guard tracer.activeSpans.isEmpty else {
+            XCTFail("Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)")
+            return
+        }
         guard let span = tracer.finishedSpans.first else {
             XCTFail("No span was recorded!")
             return

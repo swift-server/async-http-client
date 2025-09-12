@@ -34,22 +34,24 @@ struct HTTPHeadersInjector: Injector, @unchecked Sendable {
 }
 #endif  // TracingSupport
 
-#if TracingSupport
-typealias HTTPClientTracingSupportTracerType = any Tracer
-#else
-enum TracingSupportDisabledTracer {}
-typealias HTTPClientTracingSupportTracerType = TracingSupportDisabledTracer
-#endif
+// #if TracingSupport
+// @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+// typealias HTTPClientTracingSupportTracerType = any Tracer
+// #else
+// enum TracingSupportDisabledTracer {}
+// typealias HTTPClientTracingSupportTracerType = TracingSupportDisabledTracer
+// #endif
 
 protocol _TracingSupportOperations {
-    associatedtype TracerType
+    // associatedtype TracerType
 
     /// Starts the "overall" Span that encompases the beginning of a request until receipt of the head part of the response.
-    mutating func startRequestSpan(tracer: TracerType?)
+    mutating func startRequestSpan(tracer: Any?)
 
     /// Fails the active overall span given some internal error, e.g. timeout, pool shutdown etc.
     /// This is not to be used for failing a span given a failure status coded HTTPResponse.
     mutating func failRequestSpan(error: any Error)
+    mutating func failRequestSpanAsCancelled() // because CancellationHandler availability...
 
     /// Ends the active overall span upon receipt of the response head.
     ///
@@ -65,7 +67,7 @@ extension RequestBag.LoopBoundState {
     typealias TracerType = HTTPClientTracingSupportTracerType
 
     @inlinable
-    mutating func startRequestSpan(tracer: TracerType?) {}
+    mutating func startRequestSpan(tracer: Any?) {}
 
     @inlinable
     mutating func failRequestSpan(error: any Error) {}
@@ -77,10 +79,14 @@ extension RequestBag.LoopBoundState {
 #else  // TracingSupport
 
 extension RequestBag.LoopBoundState {
-    typealias TracerType = Tracer
+    // typealias TracerType = Tracer
 
-    mutating func startRequestSpan(tracer: (any Tracer)?) {
-        guard let tracer else {
+    mutating func startRequestSpan(tracer: Any?) {
+        guard #available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *), 
+            let tracer = tracer as? (any Tracer)?,
+            let tracer else {
+            // print("[swift][\(#fileID):\(#line)] MISSING TRACER: \(tracer)")
+            fatalError("[swift][\(#fileID):\(#line)] MISSING TRACER: \(tracer)")
             return
         }
 
@@ -92,13 +98,23 @@ extension RequestBag.LoopBoundState {
         self.activeSpan?.attributes["loc"] = "\(#fileID):\(#line)"
     }
 
-    // TODO: should be able to record the reason for the failure, e.g. timeout, cancellation etc.
+    mutating func failRequestSpanAsCancelled() {
+        if #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) {
+            let error = CancellationError()
+            failRequestSpan(error: error)
+        } else {
+            fatalError("Unexpected configuration; expected availability of CancellationError")
+        }
+    }
+
     mutating func failRequestSpan(error: any Error) {
         guard let span = activeSpan else {
             return
         }
 
         span.recordError(error)
+        span.end()
+
         self.activeSpan = nil
     }
 

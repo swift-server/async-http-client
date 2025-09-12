@@ -69,11 +69,15 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
         self.task.logger
     }
 
-    let connectionDeadline: NIODeadline
-
-    var tracer: HTTPClientTracingSupportTracerType? {
+    var anyTracer: (any Sendable)? {
+        self.task.anyTracer
+    }
+    @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+    var tracer: (any Tracer)? {
         self.task.tracer
     }
+
+    let connectionDeadline: NIODeadline
 
     let requestOptions: RequestOptions
 
@@ -96,6 +100,8 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
         self.poolKey = .init(request, dnsOverride: requestOptions.dnsOverride)
         self.eventLoopPreference = eventLoopPreference
         self.task = task
+
+        assert(task.anyTracer != nil, "tracer was nil!") 
 
         let loopBoundState = LoopBoundState(
             request: request,
@@ -128,18 +134,19 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
 
     private func willExecuteRequest0(_ executor: HTTPRequestExecutor) {
         // Immediately start a span for the "whole" request
-        self.loopBoundState.value.startRequestSpan(tracer: self.tracer)
+        print("[swift] WILL EXECUTE \(self.anyTracer)")
+        self.loopBoundState.value.startRequestSpan(tracer: self.anyTracer)
 
         let action = self.loopBoundState.value.state.willExecuteRequest(executor)
         switch action {
         case .cancelExecuter(let executor):
             executor.cancelRequest(self)
-            self.loopBoundState.value.failRequestSpan(error: CancellationError())
+            self.loopBoundState.value.failRequestSpanAsCancelled()
         case .failTaskAndCancelExecutor(let error, let executor):
             self.delegate.didReceiveError(task: self.task, error)
             self.task.failInternal(with: error)
             executor.cancelRequest(self)
-            self.loopBoundState.value.failRequestSpan(error: CancellationError())
+            self.loopBoundState.value.failRequestSpan(error: error)
         case .none:
             break
         }
