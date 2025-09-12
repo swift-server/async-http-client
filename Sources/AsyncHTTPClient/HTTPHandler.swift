@@ -929,7 +929,7 @@ extension HTTPClient {
         public let logger: Logger  // We are okay to store the logger here because a Task is for only one request.
 
         #if TracingSupport
-        let anyTracer: (any Sendable)? = nil  // Ok to store the tracer here because a Task is for only one request.
+        let anyTracer: (any Sendable)?  // Ok to store the tracer here because a Task is for only one request.
 
         @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
         public var tracer: (any Tracer)? {
@@ -972,6 +972,9 @@ extension HTTPClient {
             self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.logger = logger
+            #if TracingSupport
+            self.anyTracer = nil
+            #endif
             self.makeOrGetFileIOThreadPool = makeOrGetFileIOThreadPool
             self.state = NIOLockedValueBox(State(isCancelled: false, taskDelegate: nil))
         }
