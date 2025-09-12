@@ -54,11 +54,11 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
         var consumeBodyPartStackDepth: Int
         // if a redirect occurs, we store the task for it so we can propagate cancellation
         var redirectTask: HTTPClient.Task<Delegate.Response>? = nil
-        
-        #if TracingSupport 
+
+        #if TracingSupport
         // The current span, representing the entire request/response made by an execute call.
         var activeSpan: (any Span)? = nil
-        #endif // TracingSupport
+        #endif  // TracingSupport
     }
 
     private let loopBoundState: NIOLoopBoundBox<LoopBoundState>

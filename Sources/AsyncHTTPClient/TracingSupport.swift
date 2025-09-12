@@ -25,14 +25,14 @@ import Tracing
 #if TracingSupport
 struct HTTPHeadersInjector: Injector, @unchecked Sendable {
     static let shared: HTTPHeadersInjector = HTTPHeadersInjector()
-    
+
     private init() {}
 
     func inject(_ value: String, forKey name: String, into headers: inout HTTPHeaders) {
         headers.add(name: name, value: value)
     }
 }
-#endif // TracingSupport
+#endif  // TracingSupport
 
 #if TracingSupport
 typealias HTTPClientTracingSupportTracerType = any Tracer
@@ -52,12 +52,12 @@ protocol _TracingSupportOperations {
     mutating func failRequestSpan(error: any Error)
 
     /// Ends the active overall span upon receipt of the response head.
-    /// 
+    ///
     /// If the status code is in error range, this will automatically fail the span.
     mutating func endRequestSpan(response: HTTPResponseHead)
 }
 
-extension RequestBag.LoopBoundState: _TracingSupportOperations { }
+extension RequestBag.LoopBoundState: _TracingSupportOperations {}
 
 #if !TracingSupport
 /// Operations used to start/end spans at apropriate times from the Request lifecycle.
@@ -66,7 +66,7 @@ extension RequestBag.LoopBoundState {
 
     @inlinable
     mutating func startRequestSpan(tracer: TracerType?) {}
-    
+
     @inlinable
     mutating func failRequestSpan(error: any Error) {}
 
@@ -74,7 +74,7 @@ extension RequestBag.LoopBoundState {
     mutating func endRequestSpan(response: HTTPResponseHead) {}
 }
 
-#else // TracingSupport
+#else  // TracingSupport
 
 extension RequestBag.LoopBoundState {
     typealias TracerType = Tracer
@@ -84,13 +84,16 @@ extension RequestBag.LoopBoundState {
             return
         }
 
-        assert(self.activeSpan == nil, "Unexpected active span when starting new request span! Was: \(String(describing: self.activeSpan))")
+        assert(
+            self.activeSpan == nil,
+            "Unexpected active span when starting new request span! Was: \(String(describing: self.activeSpan))"
+        )
         self.activeSpan = tracer.startSpan("\(request.method)")
         self.activeSpan?.attributes["loc"] = "\(#fileID):\(#line)"
     }
 
     // TODO: should be able to record the reason for the failure, e.g. timeout, cancellation etc.
-    mutating func failRequestSpan(error: any Error) { 
+    mutating func failRequestSpan(error: any Error) {
         guard let span = activeSpan else {
             return
         }
@@ -114,4 +117,4 @@ extension RequestBag.LoopBoundState {
     }
 }
 
-#endif // TracingSupport
+#endif  // TracingSupport

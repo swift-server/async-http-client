@@ -35,9 +35,6 @@ let strictConcurrencySettings: [SwiftSetting] = {
 
 let package = Package(
     name: "async-http-client",
-    platforms: [ // FIXME: must remove this
-        .macOS("10.15")
-    ],
     products: [
         .library(name: "AsyncHTTPClient", targets: ["AsyncHTTPClient"])
     ],
@@ -82,7 +79,11 @@ let package = Package(
                 .product(name: "Atomics", package: "swift-atomics"),
                 .product(name: "Algorithms", package: "swift-algorithms"),
                 // Observability support
-                .product(name: "Tracing", package: "swift-distributed-tracing", condition: .when(traits: ["TracingSupport"])),
+                .product(
+                    name: "Tracing",
+                    package: "swift-distributed-tracing",
+                    condition: .when(traits: ["TracingSupport"])
+                ),
             ],
             swiftSettings: strictConcurrencySettings
         ),

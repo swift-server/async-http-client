@@ -20,7 +20,7 @@ import NIOSSL
 
 #if TracingSupport
 import Tracing
-#endif // TracingSupport
+#endif  // TracingSupport
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 @usableFromInline
@@ -60,7 +60,7 @@ final class Transaction:
         self.span = span
         self.state = NIOLockedValueBox(StateMachine(responseContinuation))
     }
-    #endif // TracingSupport 
+    #endif  // TracingSupport
 
     init(
         request: HTTPClientRequest.Prepared,

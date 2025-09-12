@@ -81,7 +81,7 @@ public final class HTTPClient: Sendable {
     public var tracer: (any Tracer)? {
         configuration.tracing.tracer
     }
-    #endif // TracingSupport
+    #endif  // TracingSupport
 
     public static let loggingDisabled = Logger(label: "AHC-do-not-log", factory: { _ in SwiftLogNoOpLogHandler() })
 
@@ -684,7 +684,7 @@ public final class HTTPClient: Sendable {
         deadline: NIODeadline? = nil,
         logger: Logger?
     ) -> Task<Delegate.Response> {
-        return self._execute(
+        self._execute(
             request: request,
             delegate: delegate,
             eventLoop: eventLoopPreference,
@@ -718,7 +718,7 @@ public final class HTTPClient: Sendable {
             requestID: globalRequestID.wrappingIncrementThenLoad(ordering: .relaxed)
         )
 
-        // #if TracingSupport 
+        // #if TracingSupport
         // let span: (any Span)? // we may be still executing the same span, e.g. under redirection etc.
         // if let activeSpan {
         //     span = activeSpan
@@ -732,7 +732,7 @@ public final class HTTPClient: Sendable {
         //     span = nil
         // }
         // #endif
-        
+
         let taskEL: EventLoop
         switch eventLoopPreference.preference {
         case .indifferent:
@@ -1086,19 +1086,19 @@ public final class HTTPClient: Sendable {
 
     #if TracingSupport
     public struct TracingConfiguration: Sendable {
-        
-        @usableFromInline 
-        var _tracer: Optional<any Sendable> // erasure trick so we don't have to make Configuration @available
 
-        /// Tracer that should be used by the HTTPClient. 
-        /// 
+        @usableFromInline
+        var _tracer: Optional<any Sendable>  // erasure trick so we don't have to make Configuration @available
+
+        /// Tracer that should be used by the HTTPClient.
+        ///
         /// This is selected at configuration creation time, and if no tracer is passed explicitly,
         /// (including `nil` in order to disable traces), the default global bootstrapped tracer will
         /// be stored in this property, and used for all subsequent requests made by this client.
         @inlinable
         @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
-        public var tracer: (any Tracer)? { 
-            get { 
+        public var tracer: (any Tracer)? {
+            get {
                 guard let _tracer else {
                     return nil
                 }
@@ -1121,13 +1121,13 @@ public final class HTTPClient: Sendable {
 
         /// Span attribute keys that the HTTPClient should set automatically.
         /// This struct allows the configuration of the attribute names (keys) which will be used for the apropriate values.
-        public struct AttributeKeys: Sendable { 
+        public struct AttributeKeys: Sendable {
             public var requestMethod: String = "http.request.method"
             public var requestBodySize: String = "http.request.body.size"
 
             public var responseBodySize: String = "http.response.size"
             public var responseStatusCode: String = "http.status_code"
-            
+
             public var httpFlavor: String = "http.flavor"
 
             public init() {}

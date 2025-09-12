@@ -927,9 +927,9 @@ extension HTTPClient {
         public let eventLoop: EventLoop
         /// The `Logger` used by the `Task` for logging.
         public let logger: Logger  // We are okay to store the logger here because a Task is for only one request.
-        
+
         #if TracingSupport
-        public let tracer: (any Tracer)?  // We are okay to store the tracer here because a Task is for only one request.
+        public let tracer: (any Tracer)?  // Ok to store the tracer here because a Task is for only one request.
         #endif
 
         let promise: EventLoopPromise<Response>
@@ -986,7 +986,12 @@ extension HTTPClient {
         }
 
         #if TracingSupport
-        init(eventLoop: EventLoop, logger: Logger, tracer: (any Tracer)?, makeOrGetFileIOThreadPool: @escaping @Sendable () -> NIOThreadPool) {
+        init(
+            eventLoop: EventLoop,
+            logger: Logger,
+            tracer: (any Tracer)?,
+            makeOrGetFileIOThreadPool: @escaping @Sendable () -> NIOThreadPool
+        ) {
             self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.logger = logger

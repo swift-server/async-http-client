@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if TracingSupport 
+#if TracingSupport
 
 @_spi(Tracing) import AsyncHTTPClient  // NOT @testable - tests that need @testable go into HTTPClientInternalTests.swift
 import Atomics
@@ -36,7 +36,7 @@ import Network
 import Tracing
 import InMemoryTracing
 
-fileprivate func makeTracedHTTPClient(tracer: InMemoryTracer) -> HTTPClient {
+private func makeTracedHTTPClient(tracer: InMemoryTracer) -> HTTPClient {
     var config = HTTPClient.Configuration()
     config.httpVersion = .automatic
     config.tracing.tracer = tracer
@@ -80,7 +80,7 @@ final class HTTPClientTracingTests: XCTestCaseHTTPClientTestsBaseClass {
 
         XCTAssertEqual(span.operationName, "GET")
     }
-    
+
     func testTrace_post_sync() throws {
         let url = self.defaultHTTPBinURLPrefix + "echo-method"
         let _ = try client.post(url: url).wait()
