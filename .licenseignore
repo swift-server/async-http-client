@@ -16,6 +16,8 @@
 *.json
 Package.swift
 **/Package.swift
+Package@swift-*.swift
+**/Package@swift-*.swift
 Package@-*.swift
 **/Package@-*.swift
 Package.resolved
