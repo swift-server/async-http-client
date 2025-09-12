@@ -38,10 +38,6 @@ let package = Package(
     products: [
         .library(name: "AsyncHTTPClient", targets: ["AsyncHTTPClient"])
     ],
-    traits: [
-        .trait(name: "TracingSupport"),
-        .default(enabledTraits: ["TracingSupport"]),
-    ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.81.0"),
         .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.30.0"),
@@ -79,11 +75,8 @@ let package = Package(
                 .product(name: "Atomics", package: "swift-atomics"),
                 .product(name: "Algorithms", package: "swift-algorithms"),
                 // Observability support
-                .product(
-                    name: "Tracing",
-                    package: "swift-distributed-tracing",
-                    condition: .when(traits: ["TracingSupport"])
-                ),
+                .product(name: "Tracing", package: "swift-distributed-tracing"),
+                .product(name: "InMemoryTracing", package: "swift-distributed-tracing"),
             ],
             swiftSettings: strictConcurrencySettings
         ),
@@ -103,6 +96,9 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Atomics", package: "swift-atomics"),
                 .product(name: "Algorithms", package: "swift-algorithms"),
+                // Observability support
+                .product(name: "Tracing", package: "swift-distributed-tracing"),
+                .product(name: "InMemoryTracing", package: "swift-distributed-tracing"),
             ],
             resources: [
                 .copy("Resources/self_signed_cert.pem"),

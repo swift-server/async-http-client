@@ -711,7 +711,7 @@ public final class HTTPClient: Sendable {
         eventLoop eventLoopPreference: EventLoopPreference,
         deadline: NIODeadline? = nil,
         logger originalLogger: Logger?,
-        redirectState: RedirectState?,
+        redirectState: RedirectState?
     ) -> Task<Delegate.Response> {
         let logger = (originalLogger ?? HTTPClient.loggingDisabled).attachingRequestInformation(
             request,
