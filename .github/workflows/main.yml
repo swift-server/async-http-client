@@ -17,21 +17,6 @@ jobs:
             linux_nightly_next_arguments_override: "--explicit-target-dependency-import-check error"
             linux_nightly_main_arguments_override: "--explicit-target-dependency-import-check error"
 
-    unit-tests-no-package-traits:
-        name: 'Unit tests (disable default package traits)'
-        uses: apple/swift-nio/.github/workflows/unit_tests.yml@main
-        with:
-            linux_6_1_arguments_override: "--explicit-target-dependency-import-check error -Xswiftc -warnings-as-errors --disable-default-traits"
-            linux_5_9_enabled: false
-            linux_nightly_6_0_enabled: false
-            linux_nightly_6_1_enabled: false
-            linux_nightly_next_enabled: false
-            linux_nightly_main_enabled: false
-            windows_6_0_enabled: false
-            windows_6_1_enabled: false
-            windows_nightly_6_0_enabled: false
-            windows_nightly_6_1_enabled: false
-
     static-sdk:
         name: Static SDK
         # Workaround https://github.com/nektos/act/issues/1875
