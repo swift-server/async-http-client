@@ -69,13 +69,21 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
         self.task.logger
     }
 
+    // Available unconditionally, so we can simplify callsites which can just try to pass this value
+    // regardless if the real tracer exists or not.
     var anyTracer: (any Sendable)? {
+        #if TracingSupport
         self.task.anyTracer
+        #else
+        nil
+        #endif
     }
+    #if TracingSupport
     @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
     var tracer: (any Tracer)? {
         self.task.tracer
     }
+    #endif  // TracingSupport
 
     let connectionDeadline: NIODeadline
 
@@ -100,8 +108,6 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
         self.poolKey = .init(request, dnsOverride: requestOptions.dnsOverride)
         self.eventLoopPreference = eventLoopPreference
         self.task = task
-
-        assert(task.anyTracer != nil, "tracer was nil!") 
 
         let loopBoundState = LoopBoundState(
             request: request,
@@ -134,7 +140,6 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
 
     private func willExecuteRequest0(_ executor: HTTPRequestExecutor) {
         // Immediately start a span for the "whole" request
-        print("[swift] WILL EXECUTE \(self.anyTracer)")
         self.loopBoundState.value.startRequestSpan(tracer: self.anyTracer)
 
         let action = self.loopBoundState.value.state.willExecuteRequest(executor)

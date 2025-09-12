@@ -46,12 +46,12 @@ protocol _TracingSupportOperations {
     // associatedtype TracerType
 
     /// Starts the "overall" Span that encompases the beginning of a request until receipt of the head part of the response.
-    mutating func startRequestSpan(tracer: Any?)
+    mutating func startRequestSpan<T>(tracer: T?)
 
     /// Fails the active overall span given some internal error, e.g. timeout, pool shutdown etc.
     /// This is not to be used for failing a span given a failure status coded HTTPResponse.
     mutating func failRequestSpan(error: any Error)
-    mutating func failRequestSpanAsCancelled() // because CancellationHandler availability...
+    mutating func failRequestSpanAsCancelled()  // because CancellationHandler availability...
 
     /// Ends the active overall span upon receipt of the response head.
     ///
@@ -64,13 +64,14 @@ extension RequestBag.LoopBoundState: _TracingSupportOperations {}
 #if !TracingSupport
 /// Operations used to start/end spans at apropriate times from the Request lifecycle.
 extension RequestBag.LoopBoundState {
-    typealias TracerType = HTTPClientTracingSupportTracerType
-
     @inlinable
-    mutating func startRequestSpan(tracer: Any?) {}
+    mutating func startRequestSpan<T>(tracer: T?) {}
 
     @inlinable
     mutating func failRequestSpan(error: any Error) {}
+
+    @inlinable
+    mutating func failRequestSpanAsCancelled() {}
 
     @inlinable
     mutating func endRequestSpan(response: HTTPResponseHead) {}
@@ -81,12 +82,10 @@ extension RequestBag.LoopBoundState {
 extension RequestBag.LoopBoundState {
     // typealias TracerType = Tracer
 
-    mutating func startRequestSpan(tracer: Any?) {
-        guard #available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *), 
-            let tracer = tracer as? (any Tracer)?,
-            let tracer else {
-            // print("[swift][\(#fileID):\(#line)] MISSING TRACER: \(tracer)")
-            fatalError("[swift][\(#fileID):\(#line)] MISSING TRACER: \(tracer)")
+    mutating func startRequestSpan<T>(tracer: T?) {
+        guard #available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *),
+            let tracer = tracer as! (any Tracer)?
+        else {
             return
         }
 

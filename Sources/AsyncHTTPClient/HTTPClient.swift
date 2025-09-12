@@ -778,7 +778,7 @@ public final class HTTPClient: Sendable {
                         makeOrGetFileIOThreadPool: self.makeOrGetFileIOThreadPool
                     )
                 }
-                #endif // TracingSupport 
+                #endif  // TracingSupport
 
                 return Task<Delegate.Response>.failedTask(
                     eventLoop: taskEL,
@@ -808,7 +808,7 @@ public final class HTTPClient: Sendable {
             }
         }()
 
-        let task: HTTPClient.Task<Delegate.Response> 
+        let task: HTTPClient.Task<Delegate.Response>
         #if TracingSupport
         if #available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *) {
             task = Task<Delegate.Response>(
@@ -825,12 +825,12 @@ public final class HTTPClient: Sendable {
             )
         }
         #else
-        let task = Task<Delegate.Response>(
+        task = Task<Delegate.Response>(
             eventLoop: taskEL,
             logger: logger,
             makeOrGetFileIOThreadPool: self.makeOrGetFileIOThreadPool
         )
-        #endif // TracingSupport
+        #endif  // TracingSupport
 
         do {
             let requestBag = try RequestBag(
@@ -1134,7 +1134,6 @@ public final class HTTPClient: Sendable {
 
         /// Configuration for tracing attributes set by the HTTPClient.
         public var attributeKeys: AttributeKeys
-
 
         public init() {
             self._tracer = nil

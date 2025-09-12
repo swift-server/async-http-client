@@ -36,10 +36,6 @@ final class Transaction:
     let preferredEventLoop: EventLoop
     let requestOptions: RequestOptions
 
-    #if TracingSupport
-    let span: (any Span)?
-    #endif
-
     private let state: NIOLockedValueBox<StateMachine>
 
     #if TracingSupport
@@ -57,7 +53,6 @@ final class Transaction:
         self.logger = logger
         self.connectionDeadline = connectionDeadline
         self.preferredEventLoop = preferredEventLoop
-        self.span = span
         self.state = NIOLockedValueBox(StateMachine(responseContinuation))
     }
     #endif  // TracingSupport
@@ -70,23 +65,17 @@ final class Transaction:
         preferredEventLoop: EventLoop,
         responseContinuation: CheckedContinuation<HTTPClientResponse, Error>
     ) {
-        print("[swift] new transaction = \(request)")
         self.request = request
         self.requestOptions = requestOptions
         self.logger = logger
         self.connectionDeadline = connectionDeadline
         self.preferredEventLoop = preferredEventLoop
-        self.span = nil
         self.state = NIOLockedValueBox(StateMachine(responseContinuation))
     }
 
     func cancel() {
         let error = CancellationError()
         self.fail(error)
-        #if TracingSupport
-        self.span?.recordError(error)
-        self.span?.end()
-        #endif
     }
 
     // MARK: Request body helpers
