@@ -1089,35 +1089,29 @@ public final class HTTPClient: Sendable {
             }
         }
 
+        // TODO: Open up customization of keys we use?
         /// Configuration for tracing attributes set by the HTTPClient.
-        public var attributeKeys: AttributeKeys
+        @usableFromInline
+        package var attributeKeys: AttributeKeys
 
         public init() {
             self._tracer = nil
             self.attributeKeys = .init()
         }
 
-        @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
-        public init(
-            tracer: (any Tracer)? = InstrumentationSystem.tracer,
-            attributeKeys: AttributeKeys = .init()
-        ) {
-            self._tracer = tracer
-            self.attributeKeys = attributeKeys
-        }
-
         /// Span attribute keys that the HTTPClient should set automatically.
         /// This struct allows the configuration of the attribute names (keys) which will be used for the apropriate values.
-        public struct AttributeKeys: Sendable {
-            public var requestMethod: String = "http.request.method"
-            public var requestBodySize: String = "http.request.body.size"
+        @usableFromInline
+        package struct AttributeKeys: Sendable {
+            @usableFromInline package var requestMethod: String = "http.request.method"
+            @usableFromInline package var requestBodySize: String = "http.request.body.size"
 
-            public var responseBodySize: String = "http.response.size"
-            public var responseStatusCode: String = "http.status_code"
+            @usableFromInline package var responseBodySize: String = "http.response.size"
+            @usableFromInline package var responseStatusCode: String = "http.status_code"
 
-            public var httpFlavor: String = "http.flavor"
+            @usableFromInline package var httpFlavor: String = "http.flavor"
 
-            public init() {}
+            @usableFromInline package init() {}
         }
     }
 
