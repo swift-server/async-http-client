@@ -994,7 +994,7 @@ extension HTTPClient.Task {
         eventLoop: EventLoop,
         logger: Logger
     ) {
-        self.init(eventLoop: eventLoop, logger: logger) {
+        self.init(eventLoop: eventLoop, logger: logger, tracing: .init()) {
             preconditionFailure("thread pool not needed in tests")
         }
     }

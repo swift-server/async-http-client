@@ -17,10 +17,7 @@ import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
 import NIOSSL
-
-#if TracingSupport
 import Tracing
-#endif
 
 @preconcurrency
 final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendable {
@@ -55,10 +52,10 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
         // if a redirect occurs, we store the task for it so we can propagate cancellation
         var redirectTask: HTTPClient.Task<Delegate.Response>? = nil
 
-        #if TracingSupport
+        // - Distributed tracing
+        var tracing: HTTPClient.TracingConfiguration
         // The current span, representing the entire request/response made by an execute call.
         var activeSpan: (any Span)? = nil
-        #endif  // TracingSupport
     }
 
     private let loopBoundState: NIOLoopBoundBox<LoopBoundState>
@@ -72,18 +69,12 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
     // Available unconditionally, so we can simplify callsites which can just try to pass this value
     // regardless if the real tracer exists or not.
     var anyTracer: (any Sendable)? {
-        #if TracingSupport
-        self.task.anyTracer
-        #else
-        nil
-        #endif
+        self.task.tracing._tracer
     }
-    #if TracingSupport
     @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
     var tracer: (any Tracer)? {
         self.task.tracer
     }
-    #endif  // TracingSupport
 
     let connectionDeadline: NIODeadline
 
@@ -112,7 +103,8 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
         let loopBoundState = LoopBoundState(
             request: request,
             state: StateMachine(redirectHandler: redirectHandler),
-            consumeBodyPartStackDepth: 0
+            consumeBodyPartStackDepth: 0,
+            tracing: task.tracing
         )
         self.loopBoundState = NIOLoopBoundBox.makeBoxSendingValue(loopBoundState, eventLoop: task.eventLoop)
         self.connectionDeadline = connectionDeadline

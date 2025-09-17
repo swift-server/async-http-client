@@ -12,10 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if TracingSupport
-
 @_spi(Tracing) import AsyncHTTPClient  // NOT @testable - tests that need @testable go into HTTPClientInternalTests.swift
 import Atomics
+import InMemoryTracing
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -27,14 +26,12 @@ import NIOPosix
 import NIOSSL
 import NIOTestUtils
 import NIOTransportServices
+import Tracing
 import XCTest
 
 #if canImport(Network)
 import Network
 #endif
-
-import Tracing
-import InMemoryTracing
 
 private func makeTracedHTTPClient(tracer: InMemoryTracer) -> HTTPClient {
     var config = HTTPClient.Configuration()
@@ -97,6 +94,24 @@ final class HTTPClientTracingTests: XCTestCaseHTTPClientTestsBaseClass {
         XCTAssertEqual(span.operationName, "POST")
     }
 
+    func testTrace_post_sync_404_error() throws {
+        let url = self.defaultHTTPBinURLPrefix + "404-not-existent"
+        let _ = try client.post(url: url).wait()
+
+        guard tracer.activeSpans.isEmpty else {
+            XCTFail("Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)")
+            return
+        }
+        guard let span = tracer.finishedSpans.first else {
+            XCTFail("No span was recorded!")
+            return
+        }
+
+        XCTAssertEqual(span.operationName, "POST")
+        XCTAssertTrue(span.errors.isEmpty, "Should have recorded error")
+        XCTAssertEqual(span.attributes.get(client.tracing.attributeKeys.responseStatusCode), 404)
+    }
+
     func testTrace_execute_async() async throws {
         let url = self.defaultHTTPBinURLPrefix + "echo-method"
         let request = HTTPClientRequest(url: url)
@@ -113,6 +128,23 @@ final class HTTPClientTracingTests: XCTestCaseHTTPClientTestsBaseClass {
 
         XCTAssertEqual(span.operationName, "GET")
     }
-}
 
-#endif
+    func testTrace_execute_async_404_error() async throws {
+        let url = self.defaultHTTPBinURLPrefix + "404-does-not-exist"
+        let request = HTTPClientRequest(url: url)
+        let _ = try await client.execute(request, deadline: .distantFuture)
+
+        guard tracer.activeSpans.isEmpty else {
+            XCTFail("Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)")
+            return
+        }
+        guard let span = tracer.finishedSpans.first else {
+            XCTFail("No span was recorded!")
+            return
+        }
+
+        XCTAssertEqual(span.operationName, "GET")
+        XCTAssertTrue(span.errors.isEmpty, "Should have recorded error")
+        XCTAssertEqual(span.attributes.get(client.tracing.attributeKeys.responseStatusCode), 404)
+    }
+}

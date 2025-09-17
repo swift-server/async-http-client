@@ -71,10 +71,10 @@ let package = Package(
                 .product(name: "NIOHTTPCompression", package: "swift-nio-extras"),
                 .product(name: "NIOSOCKS", package: "swift-nio-extras"),
                 .product(name: "NIOTransportServices", package: "swift-nio-transport-services"),
-                .product(name: "Logging", package: "swift-log"),
                 .product(name: "Atomics", package: "swift-atomics"),
                 .product(name: "Algorithms", package: "swift-algorithms"),
                 // Observability support
+                .product(name: "Logging", package: "swift-log"),
                 .product(name: "Tracing", package: "swift-distributed-tracing"),
                 .product(name: "InMemoryTracing", package: "swift-distributed-tracing"),
             ],
@@ -93,10 +93,10 @@ let package = Package(
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
                 .product(name: "NIOHTTP2", package: "swift-nio-http2"),
                 .product(name: "NIOSOCKS", package: "swift-nio-extras"),
-                .product(name: "Logging", package: "swift-log"),
                 .product(name: "Atomics", package: "swift-atomics"),
                 .product(name: "Algorithms", package: "swift-algorithms"),
                 // Observability support
+                .product(name: "Logging", package: "swift-log"),
                 .product(name: "Tracing", package: "swift-distributed-tracing"),
                 .product(name: "InMemoryTracing", package: "swift-distributed-tracing"),
             ],

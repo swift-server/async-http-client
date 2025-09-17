@@ -19,10 +19,7 @@ import NIOCore
 import NIOHTTP1
 import NIOPosix
 import NIOSSL
-
-#if TracingSupport
 import Tracing
-#endif
 
 #if compiler(>=6.0)
 import Foundation
@@ -928,16 +925,11 @@ extension HTTPClient {
         /// The `Logger` used by the `Task` for logging.
         public let logger: Logger  // We are okay to store the logger here because a Task is for only one request.
 
-        #if TracingSupport
-        let anyTracer: (any Sendable)?  // Ok to store the tracer here because a Task is for only one request.
-
         @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
         public var tracer: (any Tracer)? {
-            get {
-                anyTracer as! (any Tracer)?
-            }
+            tracing.tracer
         }
-        #endif
+        let tracing: TracingConfiguration
 
         let promise: EventLoopPromise<Response>
 
@@ -968,66 +960,36 @@ extension HTTPClient {
             self.makeOrGetFileIOThreadPool()
         }
 
-        init(eventLoop: EventLoop, logger: Logger, makeOrGetFileIOThreadPool: @escaping @Sendable () -> NIOThreadPool) {
-            self.eventLoop = eventLoop
-            self.promise = eventLoop.makePromise()
-            self.logger = logger
-            #if TracingSupport
-            self.anyTracer = nil
-            #endif
-            self.makeOrGetFileIOThreadPool = makeOrGetFileIOThreadPool
-            self.state = NIOLockedValueBox(State(isCancelled: false, taskDelegate: nil))
-        }
-
-        static func failedTask(
-            eventLoop: EventLoop,
-            error: Error,
-            logger: Logger,
-            makeOrGetFileIOThreadPool: @escaping @Sendable () -> NIOThreadPool
-        ) -> Task<Response> {
-            let task = self.init(
-                eventLoop: eventLoop,
-                logger: logger,
-                makeOrGetFileIOThreadPool: makeOrGetFileIOThreadPool
-            )
-            task.promise.fail(error)
-            return task
-        }
-
-        #if TracingSupport
-        @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
         init(
             eventLoop: EventLoop,
             logger: Logger,
-            tracer: (any Tracer)?,
+            tracing: TracingConfiguration,
             makeOrGetFileIOThreadPool: @escaping @Sendable () -> NIOThreadPool
         ) {
             self.eventLoop = eventLoop
             self.promise = eventLoop.makePromise()
             self.logger = logger
-            self.anyTracer = tracer
+            self.tracing = tracing
             self.makeOrGetFileIOThreadPool = makeOrGetFileIOThreadPool
             self.state = NIOLockedValueBox(State(isCancelled: false, taskDelegate: nil))
         }
 
-        @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
         static func failedTask(
             eventLoop: EventLoop,
             error: Error,
             logger: Logger,
-            tracer: (any Tracer)?,
+            tracing: TracingConfiguration,
             makeOrGetFileIOThreadPool: @escaping @Sendable () -> NIOThreadPool
         ) -> Task<Response> {
             let task = self.init(
                 eventLoop: eventLoop,
                 logger: logger,
-                tracer: tracer,
+                tracing: tracing,
                 makeOrGetFileIOThreadPool: makeOrGetFileIOThreadPool
             )
             task.promise.fail(error)
             return task
         }
-        #endif
 
         /// `EventLoopFuture` for the response returned by this request.
         public var futureResult: EventLoopFuture<Response> {

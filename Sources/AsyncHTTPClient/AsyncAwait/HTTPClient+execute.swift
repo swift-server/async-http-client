@@ -15,12 +15,9 @@
 import Logging
 import NIOCore
 import NIOHTTP1
+import Tracing
 
 import struct Foundation.URL
-
-#if TracingSupport
-import Tracing
-#endif
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClient {

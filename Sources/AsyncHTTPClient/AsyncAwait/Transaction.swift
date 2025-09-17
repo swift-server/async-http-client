@@ -17,10 +17,7 @@ import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
 import NIOSSL
-
-#if TracingSupport
 import Tracing
-#endif  // TracingSupport
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 @usableFromInline
@@ -38,7 +35,6 @@ final class Transaction:
 
     private let state: NIOLockedValueBox<StateMachine>
 
-    #if TracingSupport
     init(
         request: HTTPClientRequest.Prepared,
         requestOptions: RequestOptions,
@@ -55,7 +51,6 @@ final class Transaction:
         self.preferredEventLoop = preferredEventLoop
         self.state = NIOLockedValueBox(StateMachine(responseContinuation))
     }
-    #endif  // TracingSupport
 
     init(
         request: HTTPClientRequest.Prepared,
