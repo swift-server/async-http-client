@@ -46,25 +46,6 @@ extension HTTPClient {
             )
         }
     }
-
-    @inlinable
-    func withRequestSpan<ReturnType>(
-        _ request: HTTPClientRequest,
-        _ body: () async throws -> ReturnType
-    ) async rethrows -> ReturnType {
-        #if TracingSupport
-        if let tracer = self.tracer {
-            return try await tracer.withSpan("\(request.method)") { span in
-                let attr = self.configuration.tracing.attributeKeys
-                span.attributes[attr.requestMethod] = request.method.rawValue
-                // Set more attributes on the span
-                return try await body()
-            }
-        }
-        #endif
-
-        return try await body()
-    }
 }
 
 // MARK: Connivence methods
