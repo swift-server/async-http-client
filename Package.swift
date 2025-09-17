@@ -76,7 +76,6 @@ let package = Package(
                 // Observability support
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Tracing", package: "swift-distributed-tracing"),
-                .product(name: "InMemoryTracing", package: "swift-distributed-tracing"),
             ],
             swiftSettings: strictConcurrencySettings
         ),
