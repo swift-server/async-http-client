@@ -1106,7 +1106,7 @@ public final class HTTPClient: Sendable {
             @usableFromInline package var requestMethod: String = "http.request.method"
             @usableFromInline package var requestBodySize: String = "http.request.body.size"
 
-            @usableFromInline package var responseBodySize: String = "http.response.size"
+            @usableFromInline package var responseBodySize: String = "http.response.body.size"
             @usableFromInline package var responseStatusCode: String = "http.status_code"
 
             @usableFromInline package var httpFlavor: String = "http.flavor"
