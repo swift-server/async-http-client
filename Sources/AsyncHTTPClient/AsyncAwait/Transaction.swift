@@ -41,23 +41,6 @@ final class Transaction:
         logger: Logger,
         connectionDeadline: NIODeadline,
         preferredEventLoop: EventLoop,
-        span: (any Span)?,
-        responseContinuation: CheckedContinuation<HTTPClientResponse, Error>
-    ) {
-        self.request = request
-        self.requestOptions = requestOptions
-        self.logger = logger
-        self.connectionDeadline = connectionDeadline
-        self.preferredEventLoop = preferredEventLoop
-        self.state = NIOLockedValueBox(StateMachine(responseContinuation))
-    }
-
-    init(
-        request: HTTPClientRequest.Prepared,
-        requestOptions: RequestOptions,
-        logger: Logger,
-        connectionDeadline: NIODeadline,
-        preferredEventLoop: EventLoop,
         responseContinuation: CheckedContinuation<HTTPClientResponse, Error>
     ) {
         self.request = request
