@@ -17,6 +17,7 @@ import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
 import NIOSSL
+import Tracing
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 @usableFromInline

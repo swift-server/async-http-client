@@ -23,6 +23,7 @@ import NIOPosix
 import NIOSSL
 import NIOTLS
 import NIOTransportServices
+import Tracing
 
 extension Logger {
     private func requestInfo(_ request: HTTPClient.Request) -> Logger.Metadata.Value {
@@ -62,14 +63,28 @@ public final class HTTPClient: Sendable {
     ///
     /// All HTTP transactions will occur on loops owned by this group.
     public let eventLoopGroup: EventLoopGroup
-    let configuration: Configuration
     let poolManager: HTTPConnectionPool.Manager
+
+    @usableFromInline
+    let configuration: Configuration
 
     /// Shared thread pool used for file IO. It is lazily created on first access of ``Task/fileIOThreadPool``.
     private let fileIOThreadPool: NIOLockedValueBox<NIOThreadPool?>
 
     private let state: NIOLockedValueBox<State>
     private let canBeShutDown: Bool
+
+    /// Tracer configured for this HTTPClient at configuration time.
+    @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+    public var tracer: (any Tracer)? {
+        configuration.tracing.tracer
+    }
+
+    /// Access to tracing configuration in order to get configured attribute keys etc.
+    @usableFromInline
+    package var tracing: TracingConfiguration {
+        self.configuration.tracing
+    }
 
     static let loggingDisabled = Logger(label: "AHC-do-not-log", factory: { _ in SwiftLogNoOpLogHandler() })
 
@@ -705,6 +720,7 @@ public final class HTTPClient: Sendable {
             request,
             requestID: globalRequestID.wrappingIncrementThenLoad(ordering: .relaxed)
         )
+
         let taskEL: EventLoop
         switch eventLoopPreference.preference {
         case .indifferent:
@@ -734,7 +750,7 @@ public final class HTTPClient: Sendable {
             ]
         )
 
-        let failedTask: Task<Delegate.Response>? = self.state.withLockedValue { state in
+        let failedTask: Task<Delegate.Response>? = self.state.withLockedValue { state -> (Task<Delegate.Response>?) in
             switch state {
             case .upAndRunning:
                 return nil
@@ -744,6 +760,7 @@ public final class HTTPClient: Sendable {
                     eventLoop: taskEL,
                     error: HTTPClientError.alreadyShutdown,
                     logger: logger,
+                    tracing: tracing,
                     makeOrGetFileIOThreadPool: self.makeOrGetFileIOThreadPool
                 )
             }
@@ -768,11 +785,14 @@ public final class HTTPClient: Sendable {
             }
         }()
 
-        let task = Task<Delegate.Response>(
-            eventLoop: taskEL,
-            logger: logger,
-            makeOrGetFileIOThreadPool: self.makeOrGetFileIOThreadPool
-        )
+        let task: HTTPClient.Task<Delegate.Response> =
+            Task<Delegate.Response>(
+                eventLoop: taskEL,
+                logger: logger,
+                tracing: self.tracing,
+                makeOrGetFileIOThreadPool: self.makeOrGetFileIOThreadPool
+            )
+
         do {
             let requestBag = try RequestBag(
                 request: request,
@@ -883,6 +903,9 @@ public final class HTTPClient: Sendable {
 
         /// A method with access to the HTTP/2 stream channel that is called when creating the stream.
         public var http2StreamChannelDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)?
+
+        /// Configuration how distributed traces are created and handled.
+        public var tracing: TracingConfiguration = .init()
 
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
@@ -1011,6 +1034,84 @@ public final class HTTPClient: Sendable {
             self.http1_1ConnectionDebugInitializer = http1_1ConnectionDebugInitializer
             self.http2ConnectionDebugInitializer = http2ConnectionDebugInitializer
             self.http2StreamChannelDebugInitializer = http2StreamChannelDebugInitializer
+        }
+
+        public init(
+            tlsConfiguration: TLSConfiguration? = nil,
+            redirectConfiguration: RedirectConfiguration? = nil,
+            timeout: Timeout = Timeout(),
+            connectionPool: ConnectionPool = ConnectionPool(),
+            proxy: Proxy? = nil,
+            ignoreUncleanSSLShutdown: Bool = false,
+            decompression: Decompression = .disabled,
+            http1_1ConnectionDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2ConnectionDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2StreamChannelDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            tracing: TracingConfiguration = .init()
+        ) {
+            self.init(
+                tlsConfiguration: tlsConfiguration,
+                redirectConfiguration: redirectConfiguration,
+                timeout: timeout,
+                connectionPool: connectionPool,
+                proxy: proxy,
+                ignoreUncleanSSLShutdown: ignoreUncleanSSLShutdown,
+                decompression: decompression
+            )
+            self.http1_1ConnectionDebugInitializer = http1_1ConnectionDebugInitializer
+            self.http2ConnectionDebugInitializer = http2ConnectionDebugInitializer
+            self.http2StreamChannelDebugInitializer = http2StreamChannelDebugInitializer
+            self.tracing = tracing
+        }
+    }
+
+    public struct TracingConfiguration: Sendable {
+
+        @usableFromInline
+        var _tracer: Optional<any Sendable>  // erasure trick so we don't have to make Configuration @available
+
+        /// Tracer that should be used by the HTTPClient.
+        ///
+        /// This is selected at configuration creation time, and if no tracer is passed explicitly,
+        /// (including `nil` in order to disable traces), the default global bootstrapped tracer will
+        /// be stored in this property, and used for all subsequent requests made by this client.
+        @inlinable
+        @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+        public var tracer: (any Tracer)? {
+            get {
+                guard let _tracer else {
+                    return nil
+                }
+                return _tracer as! (any Tracer)?
+            }
+            set {
+                self._tracer = newValue
+            }
+        }
+
+        // TODO: Open up customization of keys we use?
+        /// Configuration for tracing attributes set by the HTTPClient.
+        @usableFromInline
+        package var attributeKeys: AttributeKeys
+
+        public init() {
+            self._tracer = nil
+            self.attributeKeys = .init()
+        }
+
+        /// Span attribute keys that the HTTPClient should set automatically.
+        /// This struct allows the configuration of the attribute names (keys) which will be used for the apropriate values.
+        @usableFromInline
+        package struct AttributeKeys: Sendable {
+            @usableFromInline package var requestMethod: String = "http.request.method"
+            @usableFromInline package var requestBodySize: String = "http.request.body.size"
+
+            @usableFromInline package var responseBodySize: String = "http.response.body.size"
+            @usableFromInline package var responseStatusCode: String = "http.status_code"
+
+            @usableFromInline package var httpFlavor: String = "http.flavor"
+
+            @usableFromInline package init() {}
         }
     }
 

@@ -17,6 +17,7 @@ import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
 import NIOSSL
+import Tracing
 
 @preconcurrency
 final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendable {
@@ -50,6 +51,11 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
         var consumeBodyPartStackDepth: Int
         // if a redirect occurs, we store the task for it so we can propagate cancellation
         var redirectTask: HTTPClient.Task<Delegate.Response>? = nil
+
+        // - Distributed tracing
+        var tracing: HTTPClient.TracingConfiguration
+        // The current span, representing the entire request/response made by an execute call.
+        var activeSpan: (any Span)? = nil
     }
 
     private let loopBoundState: NIOLoopBoundBox<LoopBoundState>
@@ -58,6 +64,16 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
 
     var logger: Logger {
         self.task.logger
+    }
+
+    // Available unconditionally, so we can simplify callsites which can just try to pass this value
+    // regardless if the real tracer exists or not.
+    var anyTracer: (any Sendable)? {
+        self.task.tracing._tracer
+    }
+    @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+    var tracer: (any Tracer)? {
+        self.task.tracer
     }
 
     let connectionDeadline: NIODeadline
@@ -87,7 +103,8 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
         let loopBoundState = LoopBoundState(
             request: request,
             state: StateMachine(redirectHandler: redirectHandler),
-            consumeBodyPartStackDepth: 0
+            consumeBodyPartStackDepth: 0,
+            tracing: task.tracing
         )
         self.loopBoundState = NIOLoopBoundBox.makeBoxSendingValue(loopBoundState, eventLoop: task.eventLoop)
         self.connectionDeadline = connectionDeadline
@@ -114,14 +131,19 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
     // MARK: - Request -
 
     private func willExecuteRequest0(_ executor: HTTPRequestExecutor) {
+        // Immediately start a span for the "whole" request
+        self.loopBoundState.value.startRequestSpan(tracer: self.anyTracer)
+
         let action = self.loopBoundState.value.state.willExecuteRequest(executor)
         switch action {
         case .cancelExecuter(let executor):
             executor.cancelRequest(self)
+            self.loopBoundState.value.failRequestSpanAsCancelled()
         case .failTaskAndCancelExecutor(let error, let executor):
             self.delegate.didReceiveError(task: self.task, error)
             self.task.failInternal(with: error)
             executor.cancelRequest(self)
+            self.loopBoundState.value.failRequestSpan(error: error)
         case .none:
             break
         }
@@ -230,6 +252,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
 
     private func receiveResponseHead0(_ head: HTTPResponseHead) {
         self.delegate.didVisitURL(task: self.task, self.loopBoundState.value.request, head)
+        self.loopBoundState.value.endRequestSpan(response: head)
 
         // runs most likely on channel eventLoop
         switch self.loopBoundState.value.state.receiveResponseHead(head) {
