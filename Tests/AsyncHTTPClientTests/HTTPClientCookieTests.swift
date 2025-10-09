@@ -14,8 +14,13 @@
 
 import AsyncHTTPClient
 import CAsyncHTTPClient
-import Foundation
 import XCTest
+
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 
 class HTTPClientCookieTests: XCTestCase {
     func testCookie() {

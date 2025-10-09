@@ -13,7 +13,6 @@
 //===----------------------------------------------------------------------===//
 
 import Atomics
-import Foundation
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -30,6 +29,12 @@ import NIOTransportServices
 import XCTest
 
 @testable import AsyncHTTPClient
+
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 
 #if canImport(xlocale)
 import xlocale
