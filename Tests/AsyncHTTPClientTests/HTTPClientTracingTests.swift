@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-@_spi(Tracing) @testable import AsyncHTTPClient
+@_spi(Tracing) import AsyncHTTPClient  // NOT @testable - tests that need @testable go into HTTPClientTracingInternalTests.swift
 import Atomics
 import InMemoryTracing
 import Logging
@@ -146,17 +146,5 @@ final class HTTPClientTracingTests: XCTestCaseHTTPClientTestsBaseClass {
         XCTAssertEqual(span.operationName, "GET")
         XCTAssertTrue(span.errors.isEmpty, "Should have recorded error")
         XCTAssertEqual(span.attributes.get(client.tracing.attributeKeys.responseStatusCode), 404)
-    }
-
-    func testTrace_preparedHeaders_include_fromSpan() async throws {
-        let url = self.defaultHTTPBinURLPrefix + "404-does-not-exist"
-        let request = HTTPClientRequest(url: url)
-
-        try tracer.withSpan("operation") { span in
-            let prepared = try HTTPClientRequest.Prepared(request, tracing: self.client.tracing)
-            XCTAssertTrue(prepared.head.headers.count > 2)
-            XCTAssertTrue(prepared.head.headers.contains(name: "in-memory-trace-id"))
-            XCTAssertTrue(prepared.head.headers.contains(name: "in-memory-span-id"))
-        }
     }
 }

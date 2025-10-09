@@ -95,8 +95,8 @@ extension HTTPClient {
             let preparedRequest =
                 try HTTPClientRequest.Prepared(
                     currentRequest,
-                    tracing: self.configuration.tracing,
-                    dnsOverride: configuration.dnsOverride
+                    dnsOverride: configuration.dnsOverride,
+                    tracing: self.configuration.tracing
                 )
             let response = try await {
                 var response = try await self.executeCancellable(preparedRequest, deadline: deadline, logger: logger)

@@ -49,8 +49,8 @@ extension HTTPClientRequest {
 extension HTTPClientRequest.Prepared {
     init(
         _ request: HTTPClientRequest,
-        tracing: HTTPClient.TracingConfiguration? = nil,
-        dnsOverride: [String: String] = [:]
+        dnsOverride: [String: String] = [:],
+        tracing: HTTPClient.TracingConfiguration? = nil
     ) throws {
         guard !request.url.isEmpty, let url = URL(string: request.url) else {
             throw HTTPClientError.invalidURL
