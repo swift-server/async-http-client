@@ -1095,7 +1095,11 @@ public final class HTTPClient: Sendable {
         package var attributeKeys: AttributeKeys
 
         public init() {
-            self._tracer = nil
+            if #available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *) {
+                self._tracer = InstrumentationSystem.tracer
+            } else {
+                self._tracer = nil
+            }
             self.attributeKeys = .init()
         }
 
