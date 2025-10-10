@@ -12,9 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Instrumentation
 import NIOCore
 import NIOHTTP1
 import NIOSSL
+import ServiceContextModule
 
 import struct Foundation.URL
 
@@ -45,7 +47,11 @@ extension HTTPClientRequest {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest.Prepared {
-    init(_ request: HTTPClientRequest, dnsOverride: [String: String] = [:]) throws {
+    init(
+        _ request: HTTPClientRequest,
+        dnsOverride: [String: String] = [:],
+        tracing: HTTPClient.TracingConfiguration? = nil
+    ) throws {
         guard !request.url.isEmpty, let url = URL(string: request.url) else {
             throw HTTPClientError.invalidURL
         }
@@ -54,6 +60,12 @@ extension HTTPClientRequest.Prepared {
 
         var headers = request.headers
         headers.addHostIfNeeded(for: deconstructedURL)
+        if let tracer = tracing?.tracer,
+            let context = ServiceContext.current
+        {
+            tracer.inject(context, into: &headers, using: HTTPHeadersInjector.shared)
+        }
+
         let metadata = try headers.validateAndSetTransportFraming(
             method: request.method,
             bodyLength: .init(request.body)
