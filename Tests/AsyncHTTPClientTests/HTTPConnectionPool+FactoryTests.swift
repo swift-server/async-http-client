@@ -57,7 +57,10 @@ class HTTPConnectionPool_FactoryTests: XCTestCase {
                 logger: .init(label: "test")
             ).wait()
         ) {
-            XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
+            guard let error = $0 as? ChannelError, case .connectTimeout = error else {
+                XCTFail("Unexpected error: \($0)")
+                return
+            }
         }
     }
 
@@ -208,5 +211,26 @@ final class ExplodingRequester: HTTPConnectionRequester {
 
     func waitingForConnectivity(_: HTTPConnectionPool.Connection.ID, error: Error) {
         XCTFail("waitingForConnectivity called unexpectedly")
+    }
+}
+
+extension HTTPConnectionPool.ConnectionFactory {
+    fileprivate func makeChannel<Requester: HTTPConnectionRequester>(
+        requester: Requester,
+        connectionID: HTTPConnectionPool.Connection.ID,
+        deadline: NIODeadline,
+        eventLoop: EventLoop,
+        logger: Logger
+    ) -> EventLoopFuture<NegotiatedProtocol> {
+        let promise = eventLoop.makePromise(of: NegotiatedProtocol.self)
+        self.makeChannel(
+            requester: requester,
+            connectionID: connectionID,
+            deadline: deadline,
+            eventLoop: eventLoop,
+            logger: logger,
+            promise: promise
+        )
+        return promise.futureResult
     }
 }
