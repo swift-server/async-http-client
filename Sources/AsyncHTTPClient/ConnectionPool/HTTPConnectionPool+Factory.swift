@@ -251,7 +251,7 @@ extension HTTPConnectionPool.ConnectionFactory {
             deadline: deadline,
             eventLoop: eventLoop
         ).connect(target: self.key.connectionTarget).map {
-            .http1_1 ($0)
+            .http1_1($0)
         }.cascade(to: promise)
     }
 
@@ -481,7 +481,8 @@ extension HTTPConnectionPool.ConnectionFactory {
         bootstrapFuture.whenComplete { result in
             switch result {
             case .success(let bootstrap):
-                bootstrap.connect(target: self.key.connectionTarget).flatMap { channel -> EventLoopFuture<(Channel, String?)> in
+                bootstrap.connect(target: self.key.connectionTarget).flatMap {
+                    channel -> EventLoopFuture<(Channel, String?)> in
                     do {
                         // if the channel is closed before flatMap is executed, all ChannelHandler are removed
                         // and TLSEventsHandler is therefore not present either
@@ -511,7 +512,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                 }.cascade(to: promise)
             case .failure(let error):
                 promise.fail(error)
-            }  
+            }
         }
     }
 
