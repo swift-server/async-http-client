@@ -27,6 +27,12 @@ import Foundation
 @preconcurrency import Foundation
 #endif
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
+
 extension HTTPClient {
     /// A request body.
     public struct Body: Sendable {
