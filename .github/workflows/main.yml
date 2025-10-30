@@ -1,7 +1,7 @@
 name: Main
 
 permissions:
-  contents: read
+    contents: read
 
 on:
     push:
