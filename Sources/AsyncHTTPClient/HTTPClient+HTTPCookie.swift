@@ -28,6 +28,9 @@ import Darwin
 import Musl
 #elseif canImport(Android)
 import Android
+#elseif os(Windows)
+import ucrt
+import WinSDK
 #elseif canImport(Glibc)
 import Glibc
 #endif
@@ -216,12 +219,19 @@ extension String.UTF8View.SubSequence {
     }
 }
 
+#if !os(Windows)
 nonisolated(unsafe) private let posixLocale: UnsafeMutableRawPointer = {
     // All POSIX systems must provide a "POSIX" locale, and its date/time formats are US English.
     // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap07.html#tag_07_03_05
     let _posixLocale = newlocale(LC_TIME_MASK | LC_NUMERIC_MASK, "POSIX", nil)!
     return UnsafeMutableRawPointer(_posixLocale)
 }()
+#else
+nonisolated(unsafe) private let posixLocale: UnsafeMutableRawPointer = {
+    // FIXME: This can be cleaner. But the Windows shim doesn't need a locale pointer
+    return UnsafeMutableRawPointer(bitPattern: 0)!
+}()
+#endif
 
 private func parseTimestamp(_ utf8: String.UTF8View.SubSequence, format: String) -> tm? {
     var timeComponents = tm()
@@ -251,6 +261,16 @@ private func parseCookieTime(_ timestampUTF8: String.UTF8View.SubSequence) -> In
     else {
         return nil
     }
+    #if os(Windows)
+    let timegm = _mkgmtime
+    #endif
+
     let timestamp = Int64(timegm(&timeComponents))
-    return timestamp == -1 && errno == EOVERFLOW ? nil : timestamp
+
+    #if os(Windows)
+    let err = GetLastError()
+    #else
+    let err = errno
+    #endif
+    return timestamp == -1 && err == EOVERFLOW ? nil : timestamp
 }
