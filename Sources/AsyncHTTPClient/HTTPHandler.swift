@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Algorithms
+import Foundation
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -20,8 +21,6 @@ import NIOHTTP1
 import NIOPosix
 import NIOSSL
 import Tracing
-
-import Foundation
 
 extension HTTPClient {
     /// A request body.
