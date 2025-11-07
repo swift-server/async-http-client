@@ -1,4 +1,4 @@
-// swift-tools-version:5.10
+// swift-tools-version:6.0
 //===----------------------------------------------------------------------===//
 //
 // This source file is part of the AsyncHTTPClient open source project
@@ -19,10 +19,6 @@ let strictConcurrencyDevelopment = false
 
 let strictConcurrencySettings: [SwiftSetting] = {
     var initialSettings: [SwiftSetting] = []
-    initialSettings.append(contentsOf: [
-        .enableUpcomingFeature("StrictConcurrency"),
-        .enableUpcomingFeature("InferSendableFromCaptures"),
-    ])
 
     if strictConcurrencyDevelopment {
         // -warnings-as-errors here is a workaround so that IDE-based development can
