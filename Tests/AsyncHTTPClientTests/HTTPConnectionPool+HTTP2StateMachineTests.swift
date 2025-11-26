@@ -1559,7 +1559,10 @@ class HTTPConnectionPool_HTTP2StateMachineTests: XCTestCase {
 
         // 3. connection fails – with make connection callback
 
-        let action = state.failedToCreateNewConnection(IOError(errnoCode: -1, reason: "Test failure"), connectionID: connectionID)
+        let action = state.failedToCreateNewConnection(
+            IOError(errnoCode: -1, reason: "Test failure"),
+            connectionID: connectionID
+        )
         XCTAssertEqual(action.request, .none)
         guard case .scheduleBackoffTimer(connectionID, _, on: let backoffTimerEL) = action.connection else {
             XCTFail("Unexpected connection action: \(action.connection)")
