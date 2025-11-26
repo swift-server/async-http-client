@@ -1493,4 +1493,48 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
 
         // We won't bother doing it though, it's enough that it asked.
     }
+
+    func testFailConnectionRacesAgainstConnectionCreationFailed() {
+        let elg = EmbeddedEventLoopGroup(loops: 4)
+        defer { XCTAssertNoThrow(try elg.syncShutdownGracefully()) }
+
+        var state = HTTPConnectionPool.StateMachine(
+            idGenerator: .init(),
+            maximumConcurrentHTTP1Connections: 2,
+            retryConnectionEstablishment: true,
+            preferHTTP1: true,
+            maximumConnectionUses: nil,
+            preWarmedHTTP1ConnectionCount: 0
+        )
+
+        let mockRequest = MockHTTPScheduableRequest(eventLoop: elg.next())
+        let request = HTTPConnectionPool.Request(mockRequest)
+
+        let executeAction = state.executeRequest(request)
+        XCTAssertEqual(.scheduleRequestTimeout(for: request, on: mockRequest.eventLoop), executeAction.request)
+
+        // 1. connection attempt
+        guard case .createConnection(let connectionID, on: let connectionEL) = executeAction.connection else {
+            return XCTFail("Unexpected connection action: \(executeAction.connection)")
+        }
+        XCTAssert(connectionEL === mockRequest.eventLoop)  // XCTAssertIdentical not available on Linux
+
+        // 2. connection fails – first with closed callback
+
+        XCTAssertEqual(state.http1ConnectionClosed(connectionID), .none)
+
+        // 3. connection fails – with make connection callback
+
+        let action = state.failedToCreateNewConnection(
+            IOError(errnoCode: -1, reason: "Test failure"),
+            connectionID: connectionID
+        )
+        XCTAssertEqual(action.request, .none)
+        guard case .scheduleBackoffTimer(connectionID, _, on: let backoffTimerEL) = action.connection else {
+            XCTFail("Unexpected connection action: \(action.connection)")
+            return
+        }
+        XCTAssertIdentical(connectionEL, backoffTimerEL)
+
+    }
 }

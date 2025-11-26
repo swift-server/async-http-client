@@ -187,10 +187,22 @@ extension HTTPConnectionPool {
             }
         }
 
-        mutating func fail() {
+        enum FailAction {
+            case removeConnection
+            case none
+        }
+
+        mutating func fail() -> FailAction {
             switch self.state {
-            case .starting, .active, .backingOff, .draining:
+            case .starting:
+                // If the connection fails while we are starting it, the fail call raced with
+                // `failedToConnect` (promises are succeeded or failed before channel handler
+                // callbacks). let's keep the state in `starting`, so that `failedToConnect` can
+                // create a backoff timer.
+                return .none
+            case .active, .backingOff, .draining:
                 self.state = .closed
+                return .removeConnection
             case .closed:
                 preconditionFailure("Invalid state: \(self.state)")
             }
@@ -749,10 +761,16 @@ extension HTTPConnectionPool {
                 // must ignore the event.
                 return nil
             }
-            self.connections[index].fail()
-            let eventLoop = self.connections[index].eventLoop
-            let context = FailedConnectionContext(eventLoop: eventLoop)
-            return (index, context)
+
+            switch self.connections[index].fail() {
+            case .none:
+                return nil
+
+            case .removeConnection:
+                let eventLoop = self.connections[index].eventLoop
+                let context = FailedConnectionContext(eventLoop: eventLoop)
+                return (index, context)
+            }
         }
 
         mutating func shutdown() -> CleanupContext {

@@ -166,10 +166,22 @@ extension HTTPConnectionPool {
             }
         }
 
-        mutating func fail() {
+        enum FailAction {
+            case removeConnection
+            case none
+        }
+
+        mutating func fail() -> FailAction {
             switch self.state {
-            case .starting, .backingOff, .idle, .leased:
+            case .starting:
+                // If the connection fails while we are starting it, the fail call raced with
+                // `failedToConnect` (promises are succeeded or failed before channel handler
+                // callbacks). let's keep the state in `starting`, so that `failedToConnect` can
+                // create a backoff timer.
+                return .none
+            case .backingOff, .idle, .leased:
                 self.state = .closed
+                return .removeConnection
             case .closed:
                 preconditionFailure("Invalid state: \(self.state)")
             }
@@ -559,23 +571,28 @@ extension HTTPConnectionPool {
             }
 
             let use: ConnectionUse
-            self.connections[index].fail()
-            let eventLoop = self.connections[index].eventLoop
-            let starting: Int
-            if index < self.overflowIndex {
-                use = .generalPurpose
-                starting = self.startingGeneralPurposeConnections
-            } else {
-                use = .eventLoop(eventLoop)
-                starting = self.startingEventLoopConnections(on: eventLoop)
-            }
+            switch self.connections[index].fail() {
+            case .removeConnection:
+                let eventLoop = self.connections[index].eventLoop
+                let starting: Int
+                if index < self.overflowIndex {
+                    use = .generalPurpose
+                    starting = self.startingGeneralPurposeConnections
+                } else {
+                    use = .eventLoop(eventLoop)
+                    starting = self.startingEventLoopConnections(on: eventLoop)
+                }
 
-            let context = FailedConnectionContext(
-                eventLoop: eventLoop,
-                use: use,
-                connectionsStartingForUseCase: starting
-            )
-            return (index, context)
+                let context = FailedConnectionContext(
+                    eventLoop: eventLoop,
+                    use: use,
+                    connectionsStartingForUseCase: starting
+                )
+                return (index, context)
+
+            case .none:
+                return nil
+            }
         }
 
         // MARK: Migration
