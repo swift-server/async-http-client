@@ -226,20 +226,18 @@ extension HTTPConnectionPool {
         ) -> EstablishedAction {
             self.failedConsecutiveConnectionAttempts = 0
             self.lastConnectFailure = nil
-            if self.connections.hasActiveConnection(for: connection.eventLoop) {
-                guard let (index, _) = self.connections.failConnection(connection.id) else {
-                    preconditionFailure("we have established a new connection that we know nothing about?")
-                }
-                self.connections.removeConnection(at: index)
+            let doesConnectionExistsForEL = self.connections.hasActiveConnection(for: connection.eventLoop)
+            let (index, context) = self.connections.newHTTP2ConnectionEstablished(
+                connection,
+                maxConcurrentStreams: maxConcurrentStreams
+            )
+            if doesConnectionExistsForEL {
+                let connection = self.connections.closeConnection(at: index)
                 return .init(
                     request: .none,
                     connection: .closeConnection(connection, isShutdown: .no)
                 )
             } else {
-                let (index, context) = self.connections.newHTTP2ConnectionEstablished(
-                    connection,
-                    maxConcurrentStreams: maxConcurrentStreams
-                )
                 return self.nextActionForAvailableConnection(at: index, context: context)
             }
         }
@@ -424,6 +422,8 @@ extension HTTPConnectionPool {
             self.failedConsecutiveConnectionAttempts += 1
             self.lastConnectFailure = error
 
+            let eventLoop = self.connections.backoffNextConnectionAttempt(connectionID)
+
             switch self.lifecycleState {
             case .running:
                 guard self.retryConnectionEstablishment else {
@@ -440,7 +440,6 @@ extension HTTPConnectionPool {
                     )
                 }
 
-                let eventLoop = self.connections.backoffNextConnectionAttempt(connectionID)
                 let backoff = calculateBackoff(failedAttempt: self.failedConsecutiveConnectionAttempts)
                 return .init(
                     request: .none,
