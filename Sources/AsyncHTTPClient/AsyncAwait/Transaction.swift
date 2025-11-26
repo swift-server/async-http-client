@@ -105,26 +105,43 @@ final class Transaction:
 
     struct BreakTheWriteLoopError: Swift.Error {}
 
-    // FIXME: Refactor this to not use `self.state.unsafe`.
     private func writeRequestBodyPart(_ part: ByteBuffer) async throws {
-        self.state.unsafe.lock()
-        switch self.state.unsafe.withValueAssumingLockIsAcquired({ state in state.writeNextRequestPart() }) {
+        let action = self.state.withLockedValue { state in
+            state.writeNextRequestPart()
+        }
+
+        switch action {
         case .writeAndContinue(let executor):
-            self.state.unsafe.unlock()
             executor.writeRequestBodyPart(.byteBuffer(part), request: self, promise: nil)
-
-        case .writeAndWait(let executor):
+        case .writeAndWait:
+            // Holding the lock here *should* be safe but because of a bug in the runtime
+            // it isn't, so drop the lock, create the continuation and try again.
+            //
+            // See https://github.com/swiftlang/swift/issues/85668
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                self.state.unsafe.withValueAssumingLockIsAcquired({ state in
-                    state.waitForRequestBodyDemand(continuation: continuation)
-                })
-                self.state.unsafe.unlock()
+                let action = self.state.withLockedValue { state in
+                    // Check that nothing has changed between dropping and re-acquiring the lock.
+                    let action = state.writeNextRequestPart()
+                    switch action {
+                    case .writeAndContinue, .fail:
+                        ()
+                    case .writeAndWait:
+                        state.waitForRequestBodyDemand(continuation: continuation)
+                    }
+                    return action
+                }
 
-                executor.writeRequestBodyPart(.byteBuffer(part), request: self, promise: nil)
+                switch action {
+                case .writeAndContinue(let executor):
+                    executor.writeRequestBodyPart(.byteBuffer(part), request: self, promise: nil)
+                    continuation.resume()
+                case .writeAndWait(let executor):
+                    executor.writeRequestBodyPart(.byteBuffer(part), request: self, promise: nil)
+                case .fail:
+                    continuation.resume(throwing: BreakTheWriteLoopError())
+                }
             }
-
         case .fail:
-            self.state.unsafe.unlock()
             throw BreakTheWriteLoopError()
         }
     }
