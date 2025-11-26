@@ -1519,9 +1519,19 @@ class HTTPConnectionPool_HTTP1StateMachineTests: XCTestCase {
         }
         XCTAssert(connectionEL === mockRequest.eventLoop)  // XCTAssertIdentical not available on Linux
 
-        // 2. connection fails
+        // 2. connection fails – first with closed callback
 
-        state.http1ConnectionClosed(connectionID)
-        state.failedToCreateNewConnection(IOError(errnoCode: -1, reason: "Test failure"), connectionID: connectionID)
+        XCTAssertEqual(state.http1ConnectionClosed(connectionID), .none)
+
+        // 3. connection fails – with make connection callback
+
+        let action = state.failedToCreateNewConnection(IOError(errnoCode: -1, reason: "Test failure"), connectionID: connectionID)
+        XCTAssertEqual(action.request, .none)
+        guard case .scheduleBackoffTimer(connectionID, _, on: let backoffTimerEL) = action.connection else {
+            XCTFail("Unexpected connection action: \(action.connection)")
+            return
+        }
+        XCTAssertIdentical(connectionEL, backoffTimerEL)
+
     }
 }
