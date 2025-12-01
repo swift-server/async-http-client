@@ -250,6 +250,11 @@ extension HTTPConnectionPool {
             self.failedConsecutiveConnectionAttempts += 1
             self.lastConnectFailure = error
 
+            // We don't care how many waiting requests we have at this point, we will schedule a
+            // retry. More tasks, may appear until the backoff has completed. The final
+            // decision about the retry will be made in `connectionCreationBackoffDone(_:)`
+            let eventLoop = self.connections.backoffNextConnectionAttempt(connectionID)
+
             switch self.lifecycleState {
             case .running:
                 guard self.retryConnectionEstablishment else {
@@ -265,10 +270,6 @@ extension HTTPConnectionPool {
                         connection: .none
                     )
                 }
-                // We don't care how many waiting requests we have at this point, we will schedule a
-                // retry. More tasks, may appear until the backoff has completed. The final
-                // decision about the retry will be made in `connectionCreationBackoffDone(_:)`
-                let eventLoop = self.connections.backoffNextConnectionAttempt(connectionID)
 
                 let backoff = calculateBackoff(failedAttempt: self.failedConsecutiveConnectionAttempts)
                 return .init(
