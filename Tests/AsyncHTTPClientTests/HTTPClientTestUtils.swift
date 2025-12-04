@@ -14,6 +14,7 @@
 
 import Atomics
 import Foundation
+import InMemoryLogging
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -1290,65 +1291,21 @@ extension EventLoopFuture where Value: Sendable {
     }
 }
 
-struct CollectEverythingLogHandler: LogHandler {
-    var metadata: Logger.Metadata = [:]
-    var logLevel: Logger.Level = .info
-    let logStore: LogStore
+extension InMemoryLogHandler {
+    static func makeLogger(
+        logLevel: Logger.Level = .info,
+        function: String = #function
+    ) -> (InMemoryLogHandler, Logger) {
+        let handler = InMemoryLogHandler()
 
-    final class LogStore: Sendable {
-        struct Entry {
-            var level: Logger.Level
-            var message: String
-            var metadata: [String: String]
-        }
-
-        private let logs = NIOLockedValueBox<[Entry]>([])
-
-        var allEntries: [Entry] {
-            get {
-                self.logs.withLockedValue { $0 }
+        var logger = Logger(
+            label: "\(function)",
+            factory: { _ in
+                handler
             }
-            set {
-                self.logs.withLockedValue { $0 = newValue }
-            }
-        }
-
-        func append(level: Logger.Level, message: Logger.Message, metadata: Logger.Metadata?) {
-            self.logs.withLockedValue {
-                $0.append(
-                    Entry(
-                        level: level,
-                        message: message.description,
-                        metadata: metadata?.mapValues { $0.description } ?? [:]
-                    )
-                )
-            }
-        }
-    }
-
-    init(logStore: LogStore) {
-        self.logStore = logStore
-    }
-
-    func log(
-        level: Logger.Level,
-        message: Logger.Message,
-        metadata: Logger.Metadata?,
-        source: String,
-        file: String,
-        function: String,
-        line: UInt
-    ) {
-        self.logStore.append(level: level, message: message, metadata: self.metadata.merging(metadata ?? [:]) { $1 })
-    }
-
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-        get {
-            self.metadata[key]
-        }
-        set {
-            self.metadata[key] = newValue
-        }
+        )
+        logger.logLevel = logLevel
+        return (handler, logger)
     }
 }
 
