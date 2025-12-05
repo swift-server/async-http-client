@@ -51,7 +51,9 @@ class MockSOCKSServer {
         let bootstrap: ServerBootstrap
         if misbehave {
             bootstrap = ServerBootstrap(group: elg)
+                #if !os(Windows)
                 .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+                #endif
                 .childChannelInitializer { channel in
                     channel.eventLoop.makeCompletedFuture {
                         try channel.pipeline.syncOperations.addHandler(TestSOCKSBadServerHandler())
@@ -59,7 +61,9 @@ class MockSOCKSServer {
                 }
         } else {
             bootstrap = ServerBootstrap(group: elg)
+                #if !os(Windows)
                 .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+                #endif
                 .childChannelInitializer { channel in
                     channel.eventLoop.makeCompletedFuture {
                         let handshakeHandler = SOCKSServerHandshakeHandler()
