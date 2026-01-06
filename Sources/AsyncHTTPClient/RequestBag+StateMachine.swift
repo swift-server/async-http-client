@@ -401,7 +401,7 @@ extension RequestBag.StateMachine {
         case none
     }
 
-    mutating func succeedRequest(_ newChunks: CircularBuffer<ByteBuffer>?) -> ReceiveResponseEndAction {
+    mutating func receiveResponseEnd(_ newChunks: CircularBuffer<ByteBuffer>?) -> ReceiveResponseEndAction {
         switch self.state {
         case .initialized, .queued, .deadlineExceededWhileQueued:
             preconditionFailure("How can we receive a response body part, if the request hasn't started yet.")

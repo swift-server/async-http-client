@@ -286,7 +286,7 @@ extension Transaction: HTTPExecutableRequest {
         }
     }
 
-    func succeedRequest(_ buffer: CircularBuffer<ByteBuffer>?) {
+    func receiveResponseEnd(_ buffer: CircularBuffer<ByteBuffer>?, trailers: HTTPHeaders?) {
         let succeedAction = self.state.withLockedValue { state in
             state.receiveResponseEnd(buffer)
         }
