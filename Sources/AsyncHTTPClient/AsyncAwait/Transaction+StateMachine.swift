@@ -468,7 +468,7 @@ extension Transaction {
             case none
         }
 
-        mutating func succeedRequest(_ newChunks: CircularBuffer<ByteBuffer>?) -> ReceiveResponseEndAction {
+        mutating func receiveResponseEnd(_ newChunks: CircularBuffer<ByteBuffer>?) -> ReceiveResponseEndAction {
             switch self.state {
             case .initialized,
                 .queued,

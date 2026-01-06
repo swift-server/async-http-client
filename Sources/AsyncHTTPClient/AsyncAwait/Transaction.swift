@@ -288,7 +288,7 @@ extension Transaction: HTTPExecutableRequest {
 
     func succeedRequest(_ buffer: CircularBuffer<ByteBuffer>?) {
         let succeedAction = self.state.withLockedValue { state in
-            state.succeedRequest(buffer)
+            state.receiveResponseEnd(buffer)
         }
         switch succeedAction {
         case .finishResponseStream(let source, let finalResponse):
