@@ -479,8 +479,14 @@ extension Transaction {
                 )
 
             case .executing(let context, let requestState, .streamingBody(let source)):
-                self.state = .executing(context, requestState, .finished)
+                switch requestState {
+                case .finished:
+                    self.state = .finished(error: nil)
+                case .paused, .producing, .requestHeadSent:
+                    self.state = .executing(context, requestState, .finished)
+                }
                 return .finishResponseStream(source, finalBody: newChunks)
+
             case .finished:
                 // the request failed or was cancelled before, we can ignore all events
                 return .none
