@@ -245,6 +245,12 @@ extension Transaction: HTTPExecutableRequest {
         }
     }
 
+    func requestBodyStreamSent() {
+        self.state.withLockedValue { state in
+            state.requestBodyStreamSent()
+        }
+    }
+
     // MARK: Response
 
     func receiveResponseHead(_ head: HTTPResponseHead) {

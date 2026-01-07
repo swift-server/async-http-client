@@ -187,6 +187,10 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
         self.loopBoundState.value.state.pauseRequestBodyStream()
     }
 
+    private func requestBodyStreamSent0() {
+
+    }
+
     private func writeNextRequestPart(_ part: IOData) -> EventLoopFuture<Void> {
         if self.eventLoop.inEventLoop {
             return self.writeNextRequestPart0(part)
@@ -514,6 +518,16 @@ extension RequestBag: HTTPExecutableRequest {
         } else {
             self.task.eventLoop.execute {
                 self.pauseRequestBodyStream0()
+            }
+        }
+    }
+
+    func requestBodyStreamSent() {
+        if self.task.eventLoop.inEventLoop {
+            self.requestBodyStreamSent0()
+        } else {
+            self.task.eventLoop.execute {
+                self.requestBodyStreamSent0()
             }
         }
     }

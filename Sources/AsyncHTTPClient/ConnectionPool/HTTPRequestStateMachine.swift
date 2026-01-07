@@ -73,7 +73,7 @@ struct HTTPRequestStateMachine {
     }
 
     enum Action {
-        /// A action to execute, when we consider a successful request "done".
+        /// A action to execute, when we consider a request or response stream "done".
         enum FinalSuccessfulRequestAction {
             /// Close the connection
             case close
@@ -81,7 +81,7 @@ struct HTTPRequestStateMachine {
             /// as soon as we wrote the request end onto the wire.
             ///
             /// The promise is an optional write promise.
-            case sendRequestEnd(EventLoopPromise<Void>?)
+            case requestDone
             /// Do nothing. This is action is used, if the request failed, before we the request head was written onto the wire.
             /// This might happen if the request is cancelled, or the request failed the soundness check.
             case none
@@ -102,7 +102,7 @@ struct HTTPRequestStateMachine {
             startIdleTimer: Bool
         )
         case sendBodyPart(IOData, EventLoopPromise<Void>?)
-        case sendRequestEnd(EventLoopPromise<Void>?)
+        case sendRequestEnd(EventLoopPromise<Void>?, FinalSuccessfulRequestAction)
         case failSendBodyPart(Error, EventLoopPromise<Void>?)
         case failSendStreamFinished(Error, EventLoopPromise<Void>?)
 
@@ -370,7 +370,7 @@ struct HTTPRequestStateMachine {
             }
 
             self.state = .running(.endSent, .waitingForHead)
-            return .sendRequestEnd(promise)
+            return .sendRequestEnd(promise, .none)
 
         case .running(
             .streaming(let expectedBodyLength, let sentBodyBytes, _),
@@ -385,7 +385,7 @@ struct HTTPRequestStateMachine {
             }
 
             self.state = .running(.endSent, .receivingBody(head, streamState))
-            return .sendRequestEnd(promise)
+            return .sendRequestEnd(promise, .none)
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, _), .endReceived):
             if let expected = expectedBodyLength, expected != sentBodyBytes {
@@ -395,7 +395,7 @@ struct HTTPRequestStateMachine {
             }
 
             self.state = .finished
-            return .forwardResponseEnd(.sendRequestEnd(promise), .init())
+            return .sendRequestEnd(promise, .none)
 
         case .failed(let error):
             return .failSendStreamFinished(error, promise)
@@ -648,7 +648,8 @@ struct HTTPRequestStateMachine {
                         ),
                         .endReceived
                     )
-                    return .forwardResponseBodyParts(remainingBuffer)
+                    return .forwardResponseEnd(.none, remainingBuffer)
+
                 case .close:
                     // If we receive a `.close` as a connectionAction from the responseStreamState
                     // this means, that the response end was signaled by a connection close. Since
