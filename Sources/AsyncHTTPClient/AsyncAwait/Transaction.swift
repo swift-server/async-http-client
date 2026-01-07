@@ -287,10 +287,10 @@ extension Transaction: HTTPExecutableRequest {
     }
 
     func receiveResponseEnd(_ buffer: CircularBuffer<ByteBuffer>?, trailers: HTTPHeaders?) {
-        let succeedAction = self.state.withLockedValue { state in
+        let receiveResponseEndAction = self.state.withLockedValue { state in
             state.receiveResponseEnd(buffer)
         }
-        switch succeedAction {
+        switch receiveResponseEndAction {
         case .finishResponseStream(let source, let finalResponse):
             if let finalResponse = finalResponse {
                 _ = source.yield(contentsOf: finalResponse)
