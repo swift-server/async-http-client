@@ -111,9 +111,9 @@ struct HTTPRequestStateMachine {
 
         case forwardResponseHead(HTTPResponseHead, pauseRequestBodyStream: Bool)
         case forwardResponseBodyParts(CircularBuffer<ByteBuffer>)
+        case forwardResponseEnd(FinalSuccessfulRequestAction, CircularBuffer<ByteBuffer>)
 
         case failRequest(Error, FinalFailedRequestAction)
-        case succeedRequest(FinalSuccessfulRequestAction, CircularBuffer<ByteBuffer>)
 
         case read
         case wait
@@ -395,7 +395,7 @@ struct HTTPRequestStateMachine {
             }
 
             self.state = .finished
-            return .succeedRequest(.sendRequestEnd(promise), .init())
+            return .forwardResponseEnd(.sendRequestEnd(promise), .init())
 
         case .failed(let error):
             return .failSendStreamFinished(error, promise)
@@ -671,7 +671,7 @@ struct HTTPRequestStateMachine {
                 // connection should be closed anyway.
                 let (remainingBuffer, _) = responseStreamState.end()
                 state = .finished
-                return .succeedRequest(.close, remainingBuffer)
+                return .forwardResponseEnd(.close, remainingBuffer)
             }
 
         case .running(.endSent, .receivingBody(_, var responseStreamState)):
@@ -680,9 +680,9 @@ struct HTTPRequestStateMachine {
                 state = .finished
                 switch action {
                 case .none:
-                    return .succeedRequest(.none, remainingBuffer)
+                    return .forwardResponseEnd(.none, remainingBuffer)
                 case .close:
-                    return .succeedRequest(.close, remainingBuffer)
+                    return .forwardResponseEnd(.close, remainingBuffer)
                 }
             }
 
