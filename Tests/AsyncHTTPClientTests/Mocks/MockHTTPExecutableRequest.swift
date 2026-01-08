@@ -157,7 +157,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
         receiveResponseBodyPartsCallback(buffer)
     }
 
-    func succeedRequest(_ buffer: CircularBuffer<NIOCore.ByteBuffer>?) {
+    func receiveResponseEnd(_ buffer: CircularBuffer<ByteBuffer>?, trailers: HTTPHeaders?) {
         self.events.append(.succeedRequest(buffer))
         guard let succeedRequestCallback = succeedRequestCallback else {
             return self.calledUnimplementedMethod(#function)

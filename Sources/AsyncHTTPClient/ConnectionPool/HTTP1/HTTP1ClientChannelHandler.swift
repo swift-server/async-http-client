@@ -319,7 +319,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             switch finalAction {
             case .close:
                 context.close(promise: nil)
-                oldRequest.succeedRequest(buffer)
+                oldRequest.receiveResponseEnd(buffer, trailers: nil)
             case .sendRequestEnd(let writePromise, let shouldClose):
                 let writePromise = writePromise ?? context.eventLoop.makePromise(of: Void.self)
                 // We need to defer succeeding the old request to avoid ordering issues
@@ -336,7 +336,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                             self.onConnectionIdle()
                         }
 
-                        oldRequest.succeedRequest(buffer)
+                        oldRequest.receiveResponseEnd(buffer, trailers: nil)
                     case .failure(let error):
                         context.close(promise: nil)
                         oldRequest.fail(error)
@@ -346,7 +346,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                 context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: writePromise)
             case .informConnectionIsIdle:
                 self.onConnectionIdle()
-                oldRequest.succeedRequest(buffer)
+                oldRequest.receiveResponseEnd(buffer, trailers: nil)
             }
 
         case .failRequest(let error, let finalAction):

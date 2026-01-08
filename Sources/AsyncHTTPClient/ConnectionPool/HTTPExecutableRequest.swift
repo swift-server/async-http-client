@@ -260,10 +260,12 @@ protocol HTTPExecutableRequest: AnyObject, Sendable {
     /// to ask for more data.
     func receiveResponseBodyParts(_ buffer: CircularBuffer<ByteBuffer>)
 
-    /// Succeeds the executing request. The executor will not call any further methods on the request after this method.
+    /// Finishes the server response.
     ///
-    /// - Parameter buffer: The remaining response body parts, that were received before the request end
-    func succeedRequest(_ buffer: CircularBuffer<ByteBuffer>?)
+    /// - Parameters:
+    ///   - buffer: The remaining response body parts, that were received before the response end
+    ///   - trailers: The response trailers if any where received. Nil means no trailers were received.
+    func receiveResponseEnd(_ buffer: CircularBuffer<ByteBuffer>?, trailers: HTTPHeaders?)
 
     /// Fails the executing request, with an error.
     func fail(_ error: Error)
