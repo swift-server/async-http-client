@@ -206,7 +206,9 @@ extension Transaction: HTTPExecutableRequest {
         }
     }
 
-    func requestHeadSent() {}
+    func requestHeadSent() {
+//        state.
+    }
 
     func resumeRequestBodyStream() {
         let action = self.state.withLockedValue { state in
@@ -331,8 +333,12 @@ extension Transaction: HTTPExecutableRequest {
             requestBodyStreamContinuation?.resume(throwing: error)
             executor.cancelRequest(self)
 
-        case .failRequestStreamContinuation(let bodyStreamContinuation, let error):
+        case .failRequestStreamContinuation(let bodyStreamContinuation, let error, let executor):
             bodyStreamContinuation.resume(throwing: error)
+            executor.cancelRequest(self)
+
+        case .cancelExecutor(let executor):
+            executor.cancelRequest(self)
         }
     }
 

@@ -345,12 +345,12 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             // other way around.
 
             let oldRequest = self.request!
-            self.request = nil
             self.runTimeoutAction(.clearIdleReadTimeoutTimer, context: context)
             self.runTimeoutAction(.clearIdleWriteTimeoutTimer, context: context)
 
             switch finalAction {
             case .close:
+                self.request = nil
                 context.close(promise: nil)
                 oldRequest.receiveResponseEnd(buffer, trailers: nil)
 
@@ -358,6 +358,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                 oldRequest.receiveResponseEnd(buffer, trailers: nil)
 
             case .informConnectionIsIdle:
+                self.request = nil
                 self.onConnectionIdle()
                 oldRequest.receiveResponseEnd(buffer, trailers: nil)
             }

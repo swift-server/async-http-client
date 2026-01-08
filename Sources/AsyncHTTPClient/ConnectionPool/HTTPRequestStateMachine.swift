@@ -681,7 +681,7 @@ struct HTTPRequestStateMachine {
                 state = .finished
                 switch action {
                 case .none:
-                    return .forwardResponseEnd(.none, remainingBuffer)
+                    return .forwardResponseEnd(.requestDone, remainingBuffer)
                 case .close:
                     return .forwardResponseEnd(.close, remainingBuffer)
                 }

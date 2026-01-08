@@ -98,7 +98,8 @@ extension Transaction {
                 bodyStreamContinuation: CheckedContinuation<Void, Error>?
             )
 
-            case failRequestStreamContinuation(CheckedContinuation<Void, Error>, Error)
+            case failRequestStreamContinuation(CheckedContinuation<Void, Error>, Error, HTTPRequestExecutor)
+            case cancelExecutor(HTTPRequestExecutor)
         }
 
         mutating func fail(_ error: Error) -> FailAction {
@@ -161,8 +162,23 @@ extension Transaction {
                     return .failResponseStream(source, error, context.executor, bodyStreamContinuation: nil)
                 }
 
-            case .finished(error: _),
-                .executing(_, _, .finished):
+            case .executing(let context, let requestStreamState, .finished):
+                // an error occured after full response received, but before the full request was sent
+                self.state = .finished(error: error)
+                switch requestStreamState {
+                case .paused(let bodyStreamContinuation):
+                    if let bodyStreamContinuation {
+                        return .failRequestStreamContinuation(
+                            bodyStreamContinuation, error, context.executor
+                        )
+                    } else {
+                        return .cancelExecutor(context.executor)
+                    }
+                case .endForwarded, .finished, .producing, .requestHeadSent:
+                    return .cancelExecutor(context.executor)
+                }
+
+            case .finished(error: _):
                 return .none
             }
         }
@@ -197,6 +213,10 @@ extension Transaction {
                 .finished(error: .none):
                 preconditionFailure("Invalid state: \(self.state)")
             }
+        }
+
+        mutating func requestHeadSent() {
+            
         }
 
         enum ResumeProducingAction {
