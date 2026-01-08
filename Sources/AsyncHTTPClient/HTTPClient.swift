@@ -1265,7 +1265,7 @@ extension HTTPClient.Configuration {
 
     /// Specifies redirect processing settings.
     public struct RedirectConfiguration: Sendable {
-        enum Mode {
+        enum Mode: Hashable {
             /// Redirects are not followed.
             case disallow
             /// Redirects are followed with a specified limit.
@@ -1340,7 +1340,7 @@ extension HTTPClient.Configuration {
     }
 
     public struct HTTPVersion: Sendable, Hashable {
-        enum Configuration {
+        enum Configuration: String {
             case http1Only
             case automatic
         }
@@ -1394,6 +1394,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case deadlineExceeded
         case httpEndReceivedAfterHeadWith1xx
         case shutdownUnsupported
+        case invalidRedirectConfiguration
+        case invalidHTTPVersionConfiguration
     }
 
     private var code: Code
@@ -1479,6 +1481,10 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
             return "HTTP end received after head with 1xx"
         case .shutdownUnsupported:
             return "The global singleton HTTP client cannot be shut down"
+        case .invalidRedirectConfiguration:
+            return "The redirect mode specified in the configuration is not a valid value"
+        case .invalidHTTPVersionConfiguration:
+            return "The HTTP version specified in the configuration is not a valid value"
         }
     }
 
@@ -1569,6 +1575,12 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     ///  - A connection could not be created within the timout period.
     ///  - Tasks are not processed fast enough on the existing connections, to process all waiters in time
     public static let getConnectionFromPoolTimeout = HTTPClientError(code: .getConnectionFromPoolTimeout)
+
+    /// The redirect mode specified in the configuration is not a valid value
+    public static let invalidRedirectConfiguration = HTTPClientError(code: .invalidRedirectConfiguration)
+
+    /// The http version specified in the configuration is not a valid value.
+    public static let invalidHTTPVersionConfiguration = HTTPClientError(code: .invalidHTTPVersionConfiguration)
 
     @available(
         *,
