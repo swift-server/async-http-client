@@ -3,6 +3,22 @@ import NIOCore
 
 @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 extension HTTPClient.Configuration {
+    /// Initializes HTTPClient configuration from a ConfigReader.
+    ///
+    /// ## Configuration keys:
+    /// - `dnsOverrides` (string array, optional): Colon-separated host:IP pairs for DNS overrides (e.g., "localhost:127.0.0.1").
+    /// - `redirect.mode` (string, optional, default: "follow"): Redirect handling mode ("follow" or "disallow").
+    /// - `redirect.maxRedirects` (int, optional, default: 5): Maximum allowed redirects (used when mode is "follow").
+    /// - `redirect.allowCycles` (bool, optional, default: false): Allow cyclic redirects (used when mode is "follow").
+    /// - `timeout.connectionMs` (int, optional): Connection timeout in milliseconds.
+    /// - `timeout.readMs` (int, optional): Read timeout in milliseconds.
+    /// - `timeout.writeMs` (int, optional): Write timeout in milliseconds.
+    /// - `connectionPool.idleTimeoutMs` (int, optional, default: 60000): Connection idle timeout in milliseconds.
+    /// - `connectionPool.concurrentHTTP1ConnectionsPerHostSoftLimit` (int, optional, default: 8): Soft limit for concurrent HTTP/1.1 connections per host.
+    /// - `connectionPool.retryConnectionEstablishment` (bool, optional, default: true): Retry failed connection establishment.
+    /// - `connectionPool.preWarmedHTTP1ConnectionCount` (int, optional, default: 0): Number of pre-warmed HTTP/1.1 connections per host.
+    /// - `httpVersion` (string, optional): HTTP version to use ( "automatic" or  "http1Only").
+    /// - `maximumUsesPerConnection` (int, optional): Maximum uses per connection.
     public init(configReader: ConfigReader) throws {
         self.init()
 

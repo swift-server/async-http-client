@@ -1576,7 +1576,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     ///  - Tasks are not processed fast enough on the existing connections, to process all waiters in time
     public static let getConnectionFromPoolTimeout = HTTPClientError(code: .getConnectionFromPoolTimeout)
 
-    /// The redirect mode specified in the configuration is not a valid value
+    /// The redirect mode specified in the configuration is not a valid value.
     public static let invalidRedirectConfiguration = HTTPClientError(code: .invalidRedirectConfiguration)
 
     /// The http version specified in the configuration is not a valid value.
