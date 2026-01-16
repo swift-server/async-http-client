@@ -1019,6 +1019,59 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             }
         }
     }
+
+    func testResponseBytesHelper() {
+        XCTAsyncTest {
+            let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
+            defer { XCTAssertNoThrow(try bin.shutdown()) }
+            let client = makeDefaultHTTPClient()
+            defer { XCTAssertNoThrow(try client.syncShutdown()) }
+            let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+            var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/")
+            request.method = .POST
+            request.body = .bytes(ByteBuffer(string: "1234"))
+
+            guard let response = await XCTAssertNoThrowWithResult(
+                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+            ) else { return }
+            XCTAssertEqual(response.headers["content-length"], ["4"])
+            guard let body = await XCTAssertNoThrowWithResult(
+                try await response.bytes(upTo: 5)
+            ) else { return }
+            XCTAssertEqual(body, ByteBuffer(string: "1234"))
+
+            guard var responseNoContentLength = await XCTAssertNoThrowWithResult(
+                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+            ) else { return }
+            responseNoContentLength.headers.remove(name: "content-length")
+            guard let body2 = await XCTAssertNoThrowWithResult(
+                try await responseNoContentLength.bytes(upTo: 4)
+            ) else { return }
+            XCTAssertEqual(body2, ByteBuffer(string: "1234"))
+        }
+    }
+
+    func testResponseBodyDataHelper() {
+        XCTAsyncTest {
+            let bin = HTTPBin(.http2(compress: false)) { _ in HTTPEchoHandler() }
+            defer { XCTAssertNoThrow(try bin.shutdown()) }
+            let client = makeDefaultHTTPClient()
+            defer { XCTAssertNoThrow(try client.syncShutdown()) }
+            let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+            var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/")
+            request.method = .POST
+            request.body = .bytes(ByteBuffer(string: "1234"))
+
+            guard let response = await XCTAssertNoThrowWithResult(
+                try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+            ) else { return }
+            XCTAssertEqual(response.headers["content-length"], ["4"])
+            guard let bodyData = await XCTAssertNoThrowWithResult(
+                try await response.data(upTo: 4)
+            ) else { return }
+            XCTAssertEqual(bodyData, "1234".data(using: .utf8))
+        }
+    }
 }
 
 struct AnySendableSequence<Element>: @unchecked Sendable {
