@@ -395,7 +395,7 @@ struct HTTPRequestStateMachine {
             }
 
             self.state = .finished
-            return .sendRequestEnd(promise, .none)
+            return .sendRequestEnd(promise, .requestDone)
 
         case .failed(let error):
             return .failSendStreamFinished(error, promise)

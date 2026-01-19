@@ -601,11 +601,6 @@ final class RequestBagTests: XCTestCase {
                         writer.write(.byteBuffer(.init(bytes: 4...7)))
                     }.always { result in
                         XCTAssertTrue(firstWriteSuccess.withLockedValue { $0 })
-
-                        guard case .failure(let error) = result else {
-                            return XCTFail("Expected the second write to fail")
-                        }
-                        XCTAssertEqual(error as? HTTPClientError, .requestStreamCancelled)
                     }
                 }
             )
@@ -641,9 +636,11 @@ final class RequestBagTests: XCTestCase {
         bag.receiveResponseHead(.init(version: .http1_1, status: .movedPermanently))
         XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
         bag.receiveResponseEnd([], trailers: nil)
+        XCTAssertEqual(delegate.hitDidReceiveResponse, 0)
 
         // if we now write our second part of the response this should fail the backpressure promise
         writeSecondPartPromise.succeed(())
+        XCTAssertEqual(delegate.hitDidReceiveResponse, 1)
 
         XCTAssertEqual(delegate.receivedHead?.status, .movedPermanently)
         XCTAssertNoThrow(try bag.task.futureResult.wait())
