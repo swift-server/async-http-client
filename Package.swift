@@ -24,6 +24,9 @@ let strictConcurrencySettings: [SwiftSetting] = {
         // -warnings-as-errors here is a workaround so that IDE-based development can
         // get tripped up on -require-explicit-sendable.
         initialSettings.append(.unsafeFlags(["-Xfrontend", "-require-explicit-sendable", "-warnings-as-errors"]))
+        initialSettings.append(.enableExperimentalFeature("LifetimeDependence"))
+        initialSettings.append(.enableExperimentalFeature("Lifetimes"))
+        initialSettings.append(.enableUpcomingFeature("LifetimeDependence"))
     }
 
     return initialSettings
@@ -45,6 +48,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-distributed-tracing.git", from: "1.3.0"),
         .package(url: "https://github.com/apple/swift-configuration.git", from: "1.0.0"),
+        .package(path: "../swift-http-client-server-apis"),
     ],
     targets: [
         .target(
@@ -74,6 +78,9 @@ let package = Package(
                 // Observability support
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Tracing", package: "swift-distributed-tracing"),
+
+                // HTTP APIs
+                .product(name: "HTTPAPIs", package: "swift-http-client-server-apis"),
             ],
             swiftSettings: strictConcurrencySettings
         ),
