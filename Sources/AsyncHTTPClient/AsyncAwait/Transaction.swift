@@ -207,7 +207,7 @@ extension Transaction: HTTPExecutableRequest {
     }
 
     func requestHeadSent() {
-//        state.
+        // protocol requirement. Intentionally not needed.
     }
 
     func resumeRequestBodyStream() {

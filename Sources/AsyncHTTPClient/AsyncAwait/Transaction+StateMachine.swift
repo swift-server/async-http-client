@@ -215,10 +215,6 @@ extension Transaction {
             }
         }
 
-        mutating func requestHeadSent() {
-            
-        }
-
         enum ResumeProducingAction {
             case startStream(ByteBufferAllocator)
             case resumeStream(CheckedContinuation<Void, Error>)
@@ -400,11 +396,9 @@ extension Transaction {
 
             case .executing(_, .endForwarded, .finished):
                 self.state = .finished(error: nil)
-//                return .
 
             case .executing(let context, .endForwarded, let responseState):
                 self.state = .executing(context, .finished, responseState)
-//                return .
 
             case .finished:
                 break

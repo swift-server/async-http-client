@@ -601,6 +601,14 @@ final class RequestBagTests: XCTestCase {
                         writer.write(.byteBuffer(.init(bytes: 4...7)))
                     }.always { result in
                         XCTAssertTrue(firstWriteSuccess.withLockedValue { $0 })
+
+                        switch result {
+                        case .success:
+                            // upload can now continue even after we have received the response end.
+                            break
+                        case .failure(let failure):
+                            XCTFail("Unexpected error: \(failure)")
+                        }
                     }
                 }
             )
