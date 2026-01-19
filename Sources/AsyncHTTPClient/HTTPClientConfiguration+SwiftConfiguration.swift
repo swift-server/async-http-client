@@ -1,3 +1,4 @@
+#if compiler(>=6.2)
 import Configuration
 import NIOCore
 
@@ -119,3 +120,4 @@ extension HTTPClient.Configuration.HTTPVersion {
         self = .init(configuration: base)
     }
 }
+#endif

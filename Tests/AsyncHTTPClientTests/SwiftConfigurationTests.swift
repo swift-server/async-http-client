@@ -1,3 +1,4 @@
+#if compiler(>=6.2)
 import Configuration
 import Foundation
 import NIOCore
@@ -243,3 +244,4 @@ struct HTTPClientConfigurationPropsTests {
         #expect(config.dnsOverride.count == 1)
     }
 }
+#endif
