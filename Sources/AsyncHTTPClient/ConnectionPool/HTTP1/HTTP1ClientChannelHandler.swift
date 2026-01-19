@@ -248,7 +248,11 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             // We need to defer succeeding the old request to avoid ordering issues
 
             writePromise.futureResult.hop(to: context.eventLoop).assumeIsolated().whenComplete { result in
-                let oldRequest = self.request!
+                guard let oldRequest = self.request else {
+                    // in the meantime an error might have happened, which is why this request is
+                    // not reference anymore.
+                    return
+                }
                 oldRequest.requestBodyStreamSent()
                 switch result {
                 case .success:

@@ -61,7 +61,10 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         )
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
         XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
-        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.informConnectionIsIdle, .init([responseBody])))
+        XCTAssertEqual(
+            state.channelRead(.end(nil)),
+            .forwardResponseEnd(.informConnectionIsIdle, .init([responseBody]))
+        )
         XCTAssertEqual(state.channelReadComplete(), .wait)
     }
 
@@ -190,7 +193,10 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         )
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
         XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
-        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.informConnectionIsIdle, .init([responseBody])))
+        XCTAssertEqual(
+            state.channelRead(.end(nil)),
+            .forwardResponseEnd(.informConnectionIsIdle, .init([responseBody]))
+        )
         XCTAssertEqual(state.channelInactive(), .fireChannelInactive)
     }
 

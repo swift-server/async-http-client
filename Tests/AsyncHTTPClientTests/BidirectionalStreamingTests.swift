@@ -12,10 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Testing
 import AsyncHTTPClient
 import NIOCore
 import NIOHTTP1
+import Testing
 
 @Suite("Request and response streaming")
 struct BidirectionalStreamingTests {

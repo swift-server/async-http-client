@@ -169,7 +169,9 @@ extension Transaction {
                 case .paused(let bodyStreamContinuation):
                     if let bodyStreamContinuation {
                         return .failRequestStreamContinuation(
-                            bodyStreamContinuation, error, context.executor
+                            bodyStreamContinuation,
+                            error,
+                            context.executor
                         )
                     } else {
                         return .cancelExecutor(context.executor)
