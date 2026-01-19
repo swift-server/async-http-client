@@ -24,7 +24,6 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
     private var state: HTTP1ConnectionStateMachine = .init() {
         didSet {
             self.eventLoop.assertInEventLoop()
-//            print(self.state) 
         }
     }
 
