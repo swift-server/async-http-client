@@ -310,6 +310,13 @@ extension Transaction: HTTPExecutableRequest {
         }
     }
 
+    func httpResponseStreamTerminated() {
+        let action = self.state.withLockedValue { state in
+            state.httpResponseStreamTerminated()
+        }
+        self.performFailAction(action)
+    }
+
     func fail(_ error: Error) {
         let action = self.state.withLockedValue { state in
             state.fail(error)
@@ -381,6 +388,6 @@ extension Transaction: NIOAsyncSequenceProducerDelegate {
 
     @usableFromInline
     func didTerminate() {
-        self.fail(HTTPClientError.cancelled)
+        self.httpResponseStreamTerminated()
     }
 }

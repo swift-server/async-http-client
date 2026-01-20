@@ -532,6 +532,15 @@ extension Transaction {
             }
         }
 
+        mutating func httpResponseStreamTerminated() -> FailAction {
+            switch self.state {
+            case .executing(_, _, .finished), .finished:
+                return .none
+            default:
+                return self.fail(HTTPClientError.cancelled)
+            }
+        }
+
         enum DeadlineExceededAction {
             case none
             case cancelSchedulerOnly(scheduler: HTTPRequestScheduler)

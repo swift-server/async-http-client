@@ -21,7 +21,7 @@ import Testing
 struct BidirectionalStreamingTests {
     @Test func requestStreamCanOutliveResponse() async throws {
         let (bodyStream, bodyWriteContinuation) = AsyncStream.makeStream(of: AsyncStream<ByteBuffer>.self)
-        let httpBin = HTTPBin { _ in
+        let httpBin = HTTPBin(.http1_1(ssl: false)) { _ in
             let (stream, continuation) = AsyncStream.makeStream(of: ByteBuffer.self)
             bodyWriteContinuation.yield(stream)
             return HTTPRequestStreamingChannel(bodyStreamContinuation: continuation)
@@ -31,6 +31,8 @@ struct BidirectionalStreamingTests {
 
         let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
 
+        defer { #expect(throws: Never.self) { try httpClient.shutdown() } }
+
         var request = HTTPClientRequest(url: "http://localhost:\(httpBin.port)")
         let (stream, continuation) = AsyncStream.makeStream(of: ByteBuffer.self)
         request.body = .stream(stream, length: .unknown)
@@ -38,7 +40,7 @@ struct BidirectionalStreamingTests {
         await #expect(throws: Never.self) {
             let response = try await httpClient.execute(request, timeout: .seconds(60), logger: nil)
             var iterator = response.body.makeAsyncIterator()
-            #expect(try await iterator.next() == nil)
+            #expect(try await iterator.next() == nil)  // response is finished.
         }
 
         var bodyStreamIterator = bodyStream.makeAsyncIterator()
