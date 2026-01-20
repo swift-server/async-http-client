@@ -57,7 +57,7 @@ struct HTTP1ConnectionStateMachine {
             startIdleTimer: Bool
         )
         case sendBodyPart(IOData, EventLoopPromise<Void>?)
-        case sendRequestEnd(EventLoopPromise<Void>?, FinalSuccessfulStreamAction)
+        case sendRequestEnd(trailers: HTTPHeaders?, EventLoopPromise<Void>?, FinalSuccessfulStreamAction)
         case failSendBodyPart(Error, EventLoopPromise<Void>?)
         case failSendStreamFinished(Error, EventLoopPromise<Void>?)
 
@@ -66,7 +66,7 @@ struct HTTP1ConnectionStateMachine {
 
         case forwardResponseHead(HTTPResponseHead, pauseRequestBodyStream: Bool)
         case forwardResponseBodyParts(CircularBuffer<ByteBuffer>)
-        case forwardResponseEnd(FinalSuccessfulStreamAction, CircularBuffer<ByteBuffer>)
+        case forwardResponseEnd(FinalSuccessfulStreamAction, CircularBuffer<ByteBuffer>, HTTPHeaders?)
 
         case failRequest(Error, FinalFailedStreamAction)
 
@@ -218,13 +218,13 @@ struct HTTP1ConnectionStateMachine {
         }
     }
 
-    mutating func requestStreamFinished(promise: EventLoopPromise<Void>?) -> Action {
+    mutating func requestStreamFinished(trailers: HTTPHeaders?, promise: EventLoopPromise<Void>?) -> Action {
         guard case .inRequest(var requestStateMachine, let close) = self.state else {
             fatalError("Invalid state: \(self.state)")
         }
 
         return self.avoidingStateMachineCoW { state -> Action in
-            let action = requestStateMachine.requestStreamFinished(promise: promise)
+            let action = requestStateMachine.requestStreamFinished(trailers: trailers, promise: promise)
             state = .inRequest(requestStateMachine, close: close)
             return state.modify(with: action)
         }
@@ -427,7 +427,7 @@ extension HTTP1ConnectionStateMachine.State {
             return .resumeRequestBodyStream
         case .sendBodyPart(let part, let writePromise):
             return .sendBodyPart(part, writePromise)
-        case .sendRequestEnd(let writePromise, let finalAction):
+        case .sendRequestEnd(trailers: let trailers, let writePromise, let finalAction):
             guard case .inRequest(_, close: let close) = self else {
                 assertionFailure("Invalid state: \(self)")
                 self = .closing
@@ -450,13 +450,13 @@ extension HTTP1ConnectionStateMachine.State {
             case .none:
                 newFinalAction = .none
             }
-            return .sendRequestEnd(writePromise, newFinalAction)
+            return .sendRequestEnd(trailers: trailers, writePromise, newFinalAction)
 
         case .forwardResponseHead(let head, let pauseRequestBodyStream):
             return .forwardResponseHead(head, pauseRequestBodyStream: pauseRequestBodyStream)
         case .forwardResponseBodyParts(let parts):
             return .forwardResponseBodyParts(parts)
-        case .forwardResponseEnd(let finalAction, let finalParts):
+        case .forwardResponseEnd(let finalAction, let finalParts, let trailers):
             guard case .inRequest(_, close: let close) = self else {
                 assertionFailure("Invalid state: \(self)")
                 self = .closing
@@ -480,7 +480,7 @@ extension HTTP1ConnectionStateMachine.State {
                 // request is ongoing. request stream is still alive
                 newFinalAction = .none
             }
-            return .forwardResponseEnd(newFinalAction, finalParts)
+            return .forwardResponseEnd(newFinalAction, finalParts, trailers)
 
         case .failRequest(let error, let finalAction):
             switch self {

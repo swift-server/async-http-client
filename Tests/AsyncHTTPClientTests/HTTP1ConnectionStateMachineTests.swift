@@ -52,7 +52,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         // once we receive a writable event again, we can allow the producer to produce more data
         XCTAssertEqual(state.writabilityChanged(writable: true), .resumeRequestBodyStream)
         XCTAssertEqual(state.requestStreamPartReceived(part3, promise: nil), .sendBodyPart(part3, nil))
-        XCTAssertEqual(state.requestStreamFinished(promise: nil), .sendRequestEnd(nil, .none))
+        XCTAssertEqual(state.requestStreamFinished(trailers: nil, promise: nil), .sendRequestEnd(trailers: nil, nil, .none))
 
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(
@@ -63,7 +63,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
         XCTAssertEqual(
             state.channelRead(.end(nil)),
-            .forwardResponseEnd(.informConnectionIsIdle, .init([responseBody]))
+            .forwardResponseEnd(.informConnectionIsIdle, [responseBody], nil)
         )
         XCTAssertEqual(state.channelReadComplete(), .wait)
     }
@@ -99,7 +99,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelReadComplete(), .forwardResponseBodyParts(.init([part2])))
         XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
         XCTAssertEqual(state.read(), .read)
-        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.informConnectionIsIdle, .init()))
+        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.informConnectionIsIdle, [], nil))
         XCTAssertEqual(state.channelReadComplete(), .wait)
         XCTAssertEqual(state.read(), .read)
     }
@@ -143,7 +143,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         )
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
         XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
-        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.close, .init([responseBody])))
+        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.close, [responseBody], nil))
         XCTAssertEqual(state.channelInactive(), .fireChannelInactive)
     }
 
@@ -166,7 +166,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         )
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
         XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
-        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.close, .init([responseBody])))
+        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.close, [responseBody], nil))
         XCTAssertEqual(state.channelInactive(), .fireChannelInactive)
     }
 
@@ -195,7 +195,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
         XCTAssertEqual(
             state.channelRead(.end(nil)),
-            .forwardResponseEnd(.informConnectionIsIdle, .init([responseBody]))
+            .forwardResponseEnd(.informConnectionIsIdle, [responseBody], nil)
         )
         XCTAssertEqual(state.channelInactive(), .fireChannelInactive)
     }
@@ -220,7 +220,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         )
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
         XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
-        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.close, .init([responseBody])))
+        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.close, [responseBody], nil))
     }
 
     func testNIOTriggersChannelActiveTwice() {
@@ -373,7 +373,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
             state.channelRead(.head(responseHead)),
             .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
         )
-        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.close, []))
+        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.close, [], nil))
     }
 
     func testWeDontCrashAfterEarlyHintsAndConnectionClose() {
@@ -451,10 +451,10 @@ extension HTTP1ConnectionStateMachine.Action: Equatable {
             return lhsData == rhsData
 
         case (
-            .forwardResponseEnd(let lhsFinalAction, let lhsFinalBuffer),
-            .forwardResponseEnd(let rhsFinalAction, let rhsFinalBuffer)
+            .forwardResponseEnd(let lhsFinalAction, let lhsFinalBuffer, let lhsTrailers),
+            .forwardResponseEnd(let rhsFinalAction, let rhsFinalBuffer, let rhsTrailers)
         ):
-            return lhsFinalAction == rhsFinalAction && lhsFinalBuffer == rhsFinalBuffer
+            return lhsFinalAction == rhsFinalAction && lhsFinalBuffer == rhsFinalBuffer && lhsTrailers == rhsTrailers
 
         case (.failRequest(_, let lhsFinalAction), .failRequest(_, let rhsFinalAction)):
             return lhsFinalAction == rhsFinalAction
