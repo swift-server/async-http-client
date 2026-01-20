@@ -72,15 +72,64 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
     private let file: StaticString
     private let line: UInt
 
-    let willExecuteRequestCallback: (@Sendable (HTTPRequestExecutor) -> Void)? = nil
-    let requestHeadSentCallback: (@Sendable () -> Void)? = nil
-    let resumeRequestBodyStreamCallback: (@Sendable () -> Void)? = nil
-    let pauseRequestBodyStreamCallback: (@Sendable () -> Void)? = nil
-    let requestBodyStreamSentCallback: (@Sendable () -> Void)? = nil
-    let receiveResponseHeadCallback: (@Sendable (HTTPResponseHead) -> Void)? = nil
-    let receiveResponseBodyPartsCallback: (@Sendable (CircularBuffer<ByteBuffer>) -> Void)? = nil
-    let receiveResponseEndCallback: (@Sendable (CircularBuffer<ByteBuffer>?, HTTPHeaders?) -> Void)? = nil
-    let failCallback: (@Sendable (Error) -> Void)? = nil
+    struct Callbacks {
+        var willExecuteRequestCallback: (@Sendable (HTTPRequestExecutor) -> Void)? = nil
+        var requestHeadSentCallback: (@Sendable () -> Void)? = nil
+        var resumeRequestBodyStreamCallback: (@Sendable () -> Void)? = nil
+        var pauseRequestBodyStreamCallback: (@Sendable () -> Void)? = nil
+        var requestBodyStreamSentCallback: (@Sendable () -> Void)? = nil
+        var receiveResponseHeadCallback: (@Sendable (HTTPResponseHead) -> Void)? = nil
+        var receiveResponseBodyPartsCallback: (@Sendable (CircularBuffer<ByteBuffer>) -> Void)? = nil
+        var receiveResponseEndCallback: (@Sendable (CircularBuffer<ByteBuffer>?, HTTPHeaders?) -> Void)? = nil
+        var failCallback: (@Sendable (Error) -> Void)? = nil
+    }
+
+    let callbacks: NIOLockedValueBox<Callbacks> = .init(.init())
+
+    var willExecuteRequestCallback: (@Sendable (HTTPRequestExecutor) -> Void)? {
+        get { self.callbacks.withLockedValue { $0.willExecuteRequestCallback } }
+        set { self.callbacks.withLockedValue { $0.willExecuteRequestCallback = newValue } }
+    }
+
+    var requestHeadSentCallback: (@Sendable () -> Void)? {
+        get { self.callbacks.withLockedValue { $0.requestHeadSentCallback } }
+        set { self.callbacks.withLockedValue { $0.requestHeadSentCallback = newValue } }
+    }
+
+    var resumeRequestBodyStreamCallback: (@Sendable () -> Void)? {
+        get { self.callbacks.withLockedValue { $0.resumeRequestBodyStreamCallback } }
+        set { self.callbacks.withLockedValue { $0.resumeRequestBodyStreamCallback = newValue } }
+    }
+
+    var pauseRequestBodyStreamCallback: (@Sendable () -> Void)? {
+        get { self.callbacks.withLockedValue { $0.pauseRequestBodyStreamCallback } }
+        set { self.callbacks.withLockedValue { $0.pauseRequestBodyStreamCallback = newValue } }
+    }
+
+    var requestBodyStreamSentCallback: (@Sendable () -> Void)? {
+        get { self.callbacks.withLockedValue { $0.requestBodyStreamSentCallback } }
+        set { self.callbacks.withLockedValue { $0.requestBodyStreamSentCallback = newValue } }
+    }
+
+    var receiveResponseHeadCallback: (@Sendable (HTTPResponseHead) -> Void)? {
+        get { self.callbacks.withLockedValue { $0.receiveResponseHeadCallback } }
+        set { self.callbacks.withLockedValue { $0.receiveResponseHeadCallback = newValue } }
+    }
+
+    var receiveResponseBodyPartsCallback: (@Sendable (CircularBuffer<ByteBuffer>) -> Void)? {
+        get { self.callbacks.withLockedValue { $0.receiveResponseBodyPartsCallback } }
+        set { self.callbacks.withLockedValue { $0.receiveResponseBodyPartsCallback = newValue } }
+    }
+
+    var receiveResponseEndCallback: (@Sendable (CircularBuffer<ByteBuffer>?, HTTPHeaders?) -> Void)? {
+        get { self.callbacks.withLockedValue { $0.receiveResponseEndCallback } }
+        set { self.callbacks.withLockedValue { $0.receiveResponseEndCallback = newValue } }
+    }
+
+    var failCallback: (@Sendable (Error) -> Void)? {
+        get { self.callbacks.withLockedValue { $0.failCallback } }
+        set { self.callbacks.withLockedValue { $0.failCallback = newValue } }
+    }
 
     /// captures all ``HTTPExecutableRequest`` method calls in the order of occurrence, including arguments.
     /// If you are not interested in the arguments you can use `events.map(\.kind)` to get all events without arguments.
@@ -170,11 +219,11 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
     }
 
     func receiveResponseEnd(_ buffer: CircularBuffer<ByteBuffer>?, trailers: HTTPHeaders?) {
-        self.events.append(.receiveResponseEnd(buffer, nil))
+        self.events.append(.receiveResponseEnd(buffer, trailers))
         guard let receiveResponseEndCallback = self.receiveResponseEndCallback else {
             return self.calledUnimplementedMethod(#function)
         }
-        receiveResponseEndCallback(buffer, nil)
+        receiveResponseEndCallback(buffer, trailers)
     }
 
     func fail(_ error: Error) {

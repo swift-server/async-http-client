@@ -242,7 +242,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         case .sendBodyPart(let part, let writePromise):
             context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: writePromise)
 
-        case .sendRequestEnd(let writePromise, let finalAction):
+        case .sendRequestEnd(let trailers, let writePromise, let finalAction):
 
             let writePromise = writePromise ?? context.eventLoop.makePromise(of: Void.self)
             // We need to defer succeeding the old request to avoid ordering issues
@@ -282,7 +282,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                 }
             }
 
-            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: writePromise)
+            context.writeAndFlush(self.wrapOutboundOut(.end(trailers)), promise: writePromise)
 
             if let readTimeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
                 self.runTimeoutAction(readTimeoutAction, context: context)
@@ -339,7 +339,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             // that the request is neither failed nor finished yet
             self.request!.receiveResponseBodyParts(buffer)
 
-        case .forwardResponseEnd(let finalAction, let buffer):
+        case .forwardResponseEnd(let finalAction, let buffer, let trailers):
             // We can force unwrap the request here, as we have just validated in the state machine,
             // that the request is neither failed nor finished yet
 
@@ -358,15 +358,15 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             case .close:
                 self.request = nil
                 context.close(promise: nil)
-                oldRequest.receiveResponseEnd(buffer, trailers: nil)
+                oldRequest.receiveResponseEnd(buffer, trailers: trailers)
 
             case .none:
-                oldRequest.receiveResponseEnd(buffer, trailers: nil)
+                oldRequest.receiveResponseEnd(buffer, trailers: trailers)
 
             case .informConnectionIsIdle:
                 self.request = nil
                 self.onConnectionIdle()
-                oldRequest.receiveResponseEnd(buffer, trailers: nil)
+                oldRequest.receiveResponseEnd(buffer, trailers: trailers)
             }
 
         case .failRequest(let error, let finalAction):
@@ -504,14 +504,18 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         self.run(action, context: context)
     }
 
-    fileprivate func finishRequestBodyStream0(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
+    fileprivate func finishRequestBodyStream0(
+        trailers: HTTPHeaders?,
+        request: HTTPExecutableRequest,
+        promise: EventLoopPromise<Void>?
+    ) {
         guard self.request === request, let context = self.channelContext else {
             // See code comment in `writeRequestBodyPart0`
             promise?.fail(HTTPClientError.requestStreamCancelled)
             return
         }
 
-        let action = self.state.requestStreamFinished(promise: promise)
+        let action = self.state.requestStreamFinished(trailers: trailers, promise: promise)
         self.run(action, context: context)
     }
 
@@ -565,9 +569,9 @@ extension HTTP1ClientChannelHandler {
             }
         }
 
-        func finishRequestBodyStream(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
+        func finishRequestBodyStream(trailers: HTTPHeaders?, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
             self.loopBound.execute {
-                $0.finishRequestBodyStream0(request, promise: promise)
+                $0.finishRequestBodyStream0(trailers: trailers, request: request, promise: promise)
             }
         }
 
