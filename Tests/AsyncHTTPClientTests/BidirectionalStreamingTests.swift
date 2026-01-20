@@ -31,7 +31,7 @@ struct BidirectionalStreamingTests {
 
         let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
 
-        defer { #expect(throws: Never.self) { try httpClient.shutdown() } }
+        defer { #expect(throws: Never.self) { try httpClient.syncShutdown() } }
 
         var request = HTTPClientRequest(url: "http://localhost:\(httpBin.port)")
         let (stream, continuation) = AsyncStream.makeStream(of: ByteBuffer.self)
