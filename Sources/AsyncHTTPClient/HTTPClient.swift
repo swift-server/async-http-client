@@ -1111,7 +1111,15 @@ public final class HTTPClient: Sendable {
             @usableFromInline package var requestBodySize: String = "http.request.body.size"
 
             @usableFromInline package var responseBodySize: String = "http.response.body.size"
-            @usableFromInline package var responseStatusCode: String = "http.status_code"
+            @usableFromInline package var responseStatusCode: String = "http.response.status_code"
+
+            @usableFromInline package var networkProtocolVersion: String = "network.protocol.version"
+
+            @usableFromInline package var urlPath: String = "url.path"
+            @usableFromInline package var urlScheme: String = "url.scheme"
+
+            @usableFromInline package var serverHostname: String = "server.hostname"
+            @usableFromInline package var serverPort: String = "server.port"
 
             @usableFromInline package var httpFlavor: String = "http.flavor"
 

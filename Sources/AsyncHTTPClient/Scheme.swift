@@ -13,7 +13,8 @@
 //===----------------------------------------------------------------------===//
 
 /// List of schemes `HTTPClient` currently supports
-enum Scheme: String {
+@usableFromInline
+enum Scheme: String, Sendable {
     case http
     case https
     case unix
