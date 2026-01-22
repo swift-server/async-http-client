@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import NIOHTTP1
+import OTelSemanticConventions
 import Tracing
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
@@ -27,24 +28,32 @@ extension HTTPClient {
         }
 
         return try await tracer.withSpan(request.method.rawValue, ofKind: .client) { span in
-            let keys = self.configuration.tracing.attributeKeys
-            span.attributes[keys.requestMethod] = request.method.rawValue
+            span.attributes.http.request.method = .init(rawValue: request.method.rawValue)
+
+            // set request headers
+            for header in request.headers {
+                span.attributes.http.request.header.set(header.name, to: [header.value])
+            }
 
             // set url attributes
             if let deconstructedURL = try? DeconstructedURL(url: request.url) {
-                span.attributes[keys.urlScheme] = deconstructedURL.scheme.rawValue
-                span.attributes[keys.urlPath] = deconstructedURL.uri
-                span.attributes[keys.serverHostname] = deconstructedURL.connectionTarget.host
-                span.attributes[keys.serverPort] = deconstructedURL.connectionTarget.port
+                span.attributes.url.path = deconstructedURL.uri
+                span.attributes.url.scheme = deconstructedURL.scheme.rawValue
+                span.attributes.server.address = deconstructedURL.connectionTarget.host
+                span.attributes.server.port = deconstructedURL.connectionTarget.port
             }
 
             let response = try await body()
 
             // set response span attributes
-            TracingSupport.handleResponseStatusCode(span, response.status, keys: tracing.attributeKeys)
+            TracingSupport.handleResponseStatusCode(span, response.status)
+
+            for header in response.headers {
+                span.attributes.http.response.header.set(header.name, to: [header.value])
+            }
             
             // set network protocol version
-            span.attributes[keys.networkProtocolVersion] = "\(response.version.major).\(response.version.minor)"
+            span.attributes.network.protocol.version = "\(response.version.major).\(response.version.minor)"
 
             return response
         }
