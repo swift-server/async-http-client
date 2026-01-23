@@ -14,7 +14,7 @@
 
 import struct Foundation.URL
 
-struct DeconstructedURL: Sendable {
+struct DeconstructedURL {
     var scheme: Scheme
     var connectionTarget: ConnectionTarget
     var uri: String
