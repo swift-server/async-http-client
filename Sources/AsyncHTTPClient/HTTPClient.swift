@@ -1396,6 +1396,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case shutdownUnsupported
         case invalidRedirectConfiguration
         case invalidHTTPVersionConfiguration
+        case invalidDNSOverridesConfiguration
     }
 
     private var code: Code
@@ -1485,6 +1486,9 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
             return "The redirect mode specified in the configuration is not a valid value"
         case .invalidHTTPVersionConfiguration:
             return "The HTTP version specified in the configuration is not a valid value"
+        case .invalidDNSOverridesConfiguration:
+            return
+                "The DNS overrides specified in the configuration are not valid. Please specify in the format hostname1:ip1,hostname2:ip2"
         }
     }
 
@@ -1581,6 +1585,9 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
 
     /// The http version specified in the configuration is not a valid value.
     public static let invalidHTTPVersionConfiguration = HTTPClientError(code: .invalidHTTPVersionConfiguration)
+
+    /// The DNS overrides specified in the configuration are not valid.
+    public static let invalidDNSOverridesConfiguration = HTTPClientError(code: .invalidDNSOverridesConfiguration)
 
     @available(
         *,

@@ -37,10 +37,13 @@ extension HTTPClient.Configuration {
         if let dnsOverridesList = configReader.stringArray(forKey: "dnsOverrides") {
             for entry in dnsOverridesList {
                 guard let separatorIndex = entry.firstIndex(of: ":") else {
-                    continue
+                    throw HTTPClientError.invalidDNSOverridesConfiguration
                 }
                 let key = entry.prefix(upTo: separatorIndex)
                 let value = entry.suffix(from: entry.index(after: separatorIndex))
+                if key.isEmpty || value.isEmpty {
+                    throw HTTPClientError.invalidDNSOverridesConfiguration
+                }
                 self.dnsOverride[String(key)] = String(value.filter { !$0.isWhitespace })
             }
         }

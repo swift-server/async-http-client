@@ -158,16 +158,38 @@ struct HTTPClientConfigurationPropsTests {
 
     @Test
     @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
-    func dnsOverridesWithInvalidFormatIgnored() throws {
+    func dnsOverridesWithInvalidFormat() throws {
         let testProvider = InMemoryProvider(values: [
             "dnsOverrides": .init(.stringArray(["invalidentry", "localhost:127.0.0.1"]), isSecret: false)
         ])
         let configReader = ConfigReader(provider: testProvider)
-        let config = try HTTPClient.Configuration(configReader: configReader)
+        #expect(throws: HTTPClientError.invalidDNSOverridesConfiguration) {
+            _ = try HTTPClient.Configuration(configReader: configReader)
+        }
+    }
 
-        // Invalid entry should be ignored, valid one should be processed
-        #expect(config.dnsOverride["localhost"] == "127.0.0.1")
-        #expect(config.dnsOverride.count == 1)
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func dnsOverridesWithBlankValue() throws {
+        let testProvider = InMemoryProvider(values: [
+            "dnsOverrides": .init(.stringArray(["localhost:"]), isSecret: false)
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        #expect(throws: HTTPClientError.invalidDNSOverridesConfiguration) {
+            _ = try HTTPClient.Configuration(configReader: configReader)
+        }
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func dnsOverridesWithBlankKey() throws {
+        let testProvider = InMemoryProvider(values: [
+            "dnsOverrides": .init(.stringArray([":127.0.0.1"]), isSecret: false)
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        #expect(throws: HTTPClientError.invalidDNSOverridesConfiguration) {
+            _ = try HTTPClient.Configuration(configReader: configReader)
+        }
     }
 
     @Test
