@@ -172,6 +172,17 @@ struct HTTPClientConfigurationPropsTests {
 
     @Test
     @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func dnsOverridesWithSpaces() throws {
+        let testProvider = InMemoryProvider(values: [
+            "dnsOverrides": .init(.stringArray(["test.com: 127.0.0.1"]), isSecret: false)
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        let config = try HTTPClient.Configuration(configReader: configReader)
+        #expect(config.dnsOverride == ["test.com": "127.0.0.1"])
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
     func timeoutConfigurationPartial() throws {
         let testProvider = InMemoryProvider(values: [
             "timeout.connectionMs": 1000,
@@ -183,7 +194,6 @@ struct HTTPClientConfigurationPropsTests {
         #expect(config.timeout.connect == .milliseconds(1000))
         #expect(config.timeout.read == .milliseconds(2000))
         #expect(config.timeout.write == nil)
-
     }
 
     @Test
@@ -242,20 +252,6 @@ struct HTTPClientConfigurationPropsTests {
         let config = try HTTPClient.Configuration(configReader: configReader)
 
         #expect(config.dnsOverride.isEmpty)
-    }
-
-    @Test
-    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
-    func singleDnsOverride() throws {
-        let testProvider = InMemoryProvider(values: [
-            "dnsOverrides": .init(.stringArray(["api.example.com:10.0.0.1"]), isSecret: false)
-        ])
-
-        let configReader = ConfigReader(provider: testProvider)
-        let config = try HTTPClient.Configuration(configReader: configReader)
-
-        #expect(config.dnsOverride["api.example.com"] == "10.0.0.1")
-        #expect(config.dnsOverride.count == 1)
     }
 }
 #endif

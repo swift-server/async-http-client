@@ -41,7 +41,7 @@ extension HTTPClient.Configuration {
                 }
                 let key = entry.prefix(upTo: separatorIndex)
                 let value = entry.suffix(from: entry.index(after: separatorIndex))
-                self.dnsOverride[String(key)] = String(value)
+                self.dnsOverride[String(key)] = String(value.filter { !$0.isWhitespace })
             }
         }
 
