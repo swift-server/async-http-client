@@ -1070,6 +1070,15 @@ public final class HTTPClient: Sendable {
         @usableFromInline
         var _tracer: Optional<any Sendable>  // erasure trick so we don't have to make Configuration @available
 
+        public var allowedHeaders: Set<String> = []
+        public var sensitivePathComponents: Set<String> = []
+        public var sensitiveQueryComponents: Set<String> = [
+            "AWSAccessKeyId",
+            "Signature",
+            "sig",
+            "X-Goog-Signature"
+        ]
+
         /// Tracer that should be used by the HTTPClient.
         ///
         /// This is selected at configuration creation time, and if no tracer is passed explicitly,

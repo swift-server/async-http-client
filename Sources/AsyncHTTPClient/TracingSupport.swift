@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Foundation
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -34,6 +35,28 @@ struct TracingSupport {
         }
 
         span.attributes.http.response.statusCode = Int(status.code)
+    }
+
+    @inlinable
+    static func sanitizePath(_ path: String, redactionComponents: Set<String>) -> String {
+        redactionComponents.reduce(path) { path, component in
+            path.replacingOccurrences(of: component, with: "REDACTED")
+        }
+    }
+
+    @inlinable
+    static func sanitizeQuery(_ query: String, redactionComponents: Set<String>) -> String {
+        query.components(separatedBy: "&").map {
+            let nameAndValue = $0
+                .trimmingCharacters(in: .whitespaces)
+                .components(separatedBy: "=")
+
+            if redactionComponents.contains(nameAndValue[0]) {
+                return "\(nameAndValue[0])=REDACTED"
+            }
+
+            return $0
+        }.joined(separator: "&")
     }
 }
 
