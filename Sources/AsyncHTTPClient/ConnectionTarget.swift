@@ -14,8 +14,7 @@
 
 import enum NIOCore.SocketAddress
 
-@usableFromInline
-enum ConnectionTarget: Equatable, Hashable, Sendable {
+enum ConnectionTarget: Equatable, Hashable {
     // We keep the IP address serialization precisely as it is in the URL.
     // Some platforms have quirks in their implementations of 'ntop', for example
     // writing IPv6 addresses as having embedded IPv4 sections (e.g. [::192.168.0.1] vs [::c0a8:1]).
@@ -45,7 +44,6 @@ enum ConnectionTarget: Equatable, Hashable, Sendable {
 extension ConnectionTarget {
     /// The host name which will be send as an HTTP `Host` header.
     /// Only returns nil if the `self` is a `unixSocket`.
-    @usableFromInline
     var host: String? {
         switch self {
         case .ipAddress(let serialization, _): return serialization
@@ -56,7 +54,6 @@ extension ConnectionTarget {
 
     /// The host name which will be send as an HTTP host header.
     /// Only returns nil if the `self` is a `unixSocket`.
-    @usableFromInline
     var port: Int? {
         switch self {
         case .ipAddress(_, let address): return address.port!

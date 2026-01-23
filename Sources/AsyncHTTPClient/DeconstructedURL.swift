@@ -14,16 +14,11 @@
 
 import struct Foundation.URL
 
-@usableFromInline
 struct DeconstructedURL: Sendable {
-    @usableFromInline
     var scheme: Scheme
-    @usableFromInline
     var connectionTarget: ConnectionTarget
-    @usableFromInline
     var uri: String
 
-    @usableFromInline
     init(
         scheme: Scheme,
         connectionTarget: ConnectionTarget,
@@ -36,7 +31,6 @@ struct DeconstructedURL: Sendable {
 }
 
 extension DeconstructedURL {
-    @usableFromInline
     init(url: String) throws {
         guard let url = URL(string: url) else {
             throw HTTPClientError.invalidURL
