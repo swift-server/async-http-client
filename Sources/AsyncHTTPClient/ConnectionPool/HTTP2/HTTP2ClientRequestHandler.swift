@@ -197,7 +197,13 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             context.writeAndFlush(self.wrapOutboundOut(.body(data)), promise: writePromise)
 
         case .sendRequestEnd(let writePromise, let finalAction):
-            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: writePromise)
+            let promise = writePromise ?? context.eventLoop.makePromise(of: Void.self)
+            let request = self.request!
+            promise.futureResult.whenSuccess {
+                request.requestBodyStreamSent()
+            }
+
+            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: promise)
 
             if let readTimeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
                 self.runTimeoutAction(readTimeoutAction, context: context)
