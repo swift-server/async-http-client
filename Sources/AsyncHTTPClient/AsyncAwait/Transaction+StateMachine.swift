@@ -385,7 +385,12 @@ extension Transaction {
             }
         }
 
-        mutating func requestBodyStreamSent() {
+        enum RequestBodyStreamSentAction {
+            case none
+            case failure(Error)
+        }
+
+        mutating func requestBodyStreamSent() -> RequestBodyStreamSentAction {
             switch self.state {
             case .initialized,
                 .queued,
@@ -394,16 +399,19 @@ extension Transaction {
                 .executing(_, .finished, _),
                 .executing(_, .producing, _),
                 .executing(_, .paused, _):
-                preconditionFailure("Invalid state: \(self.state)")
+                assertionFailure("Invalid state: \(self.state)")
+                return .failure(HTTPClientError.internalStateFailure())
 
             case .executing(_, .endForwarded, .finished):
                 self.state = .finished(error: nil)
+                return .none
 
             case .executing(let context, .endForwarded, let responseState):
                 self.state = .executing(context, .finished, responseState)
+                return .none
 
             case .finished:
-                break
+                return .none
             }
         }
 

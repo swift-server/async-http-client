@@ -429,7 +429,9 @@ extension HTTP1ConnectionStateMachine.State {
             return .sendBodyPart(part, writePromise)
         case .sendRequestEnd(let writePromise, let finalAction):
             guard case .inRequest(_, close: let close) = self else {
-                fatalError("Invalid state: \(self)")
+                assertionFailure("Invalid state: \(self)")
+                self = .closing
+                return .failRequest(HTTPClientError.internalStateFailure(), .close(writePromise))
             }
 
             let newFinalAction: HTTP1ConnectionStateMachine.Action.FinalSuccessfulStreamAction
@@ -456,7 +458,9 @@ extension HTTP1ConnectionStateMachine.State {
             return .forwardResponseBodyParts(parts)
         case .forwardResponseEnd(let finalAction, let finalParts):
             guard case .inRequest(_, close: let close) = self else {
-                fatalError("Invalid state: \(self)")
+                assertionFailure("Invalid state: \(self)")
+                self = .closing
+                return .failRequest(HTTPClientError.internalStateFailure(), .close(nil))
             }
 
             let newFinalAction: HTTP1ConnectionStateMachine.Action.FinalSuccessfulStreamAction

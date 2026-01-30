@@ -190,7 +190,8 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
     }
 
     private func requestBodyStreamSent0() {
-
+        // Intentionally empty: This hook is provided for consistency with the protocol
+        // but requires no action in this implementation.
     }
 
     private func writeNextRequestPart(_ part: IOData) -> EventLoopFuture<Void> {

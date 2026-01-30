@@ -248,8 +248,15 @@ extension Transaction: HTTPExecutableRequest {
     }
 
     func requestBodyStreamSent() {
-        self.state.withLockedValue { state in
+        let action = self.state.withLockedValue { state in
             state.requestBodyStreamSent()
+        }
+
+        switch action {
+        case .none:
+            break
+        case .failure(let error):
+            self.fail(error)
         }
     }
 
