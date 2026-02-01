@@ -34,7 +34,7 @@ import Crypto
 /// - Warning: Always deploy with non-empty `backupPins` to avoid lockout during rotation.
 /// - SeeAlso: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1
 /// - SeeAlso: https://owasp.org/www-project-mobile-security-testing-guide/latest/0x05g-Testing-Network-Communication.html
-public struct SPKIPinningConfiguration: Sendable {
+public struct SPKIPinningConfiguration: Sendable, Hashable {
     /// Base64-encoded SHA-256 hashes of current production SPKI values.
     public var primaryPins: Set<String>
 
@@ -88,7 +88,7 @@ public struct SPKIPinningConfiguration: Sendable {
 /// Pinning failures indicate the server presented a certificate with an unexpected public key.
 /// This typically occurs during certificate rotation (expected) or MITM attacks (malicious).
 /// The verification policy determines whether to block the connection or allow it with warnings.
-public enum SPKIPinningVerification: Sendable {
+public enum SPKIPinningVerification: Sendable, Hashable {
     /// Immediately terminate the connection on pin validation failure.
     ///
     /// Use this policy in production environments where security is paramount.
