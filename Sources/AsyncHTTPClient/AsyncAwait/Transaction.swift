@@ -173,6 +173,7 @@ final class Transaction:
 extension Transaction: HTTPSchedulableRequest {
     var poolKey: ConnectionPool.Key { self.request.poolKey }
     var tlsConfiguration: TLSConfiguration? { self.request.tlsConfiguration }
+    var tlsPinning: SPKIPinningConfiguration? { self.request.tlsPinning }
     var requiredEventLoop: EventLoop? { nil }
 
     func requestWasQueued(_ scheduler: HTTPRequestScheduler) {

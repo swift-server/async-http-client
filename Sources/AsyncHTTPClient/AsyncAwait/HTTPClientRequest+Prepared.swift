@@ -42,6 +42,7 @@ extension HTTPClientRequest {
         var head: HTTPRequestHead
         var body: Body?
         var tlsConfiguration: TLSConfiguration?
+        var tlsPinning: SPKIPinningConfiguration?
     }
 }
 

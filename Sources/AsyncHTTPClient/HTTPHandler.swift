@@ -232,6 +232,22 @@ extension HTTPClient {
         /// Request-specific TLS configuration, defaults to no request-specific TLS configuration.
         public var tlsConfiguration: TLSConfiguration?
 
+        /// Optional SPKI (SubjectPublicKeyInfo) pinning configuration for TLS certificate validation.
+        ///
+        /// When configured, the client validates the server's leaf certificate public key against the provided
+        /// SHA-256 hashes after TLS handshake completion. This provides protection against compromised
+        /// Certificate Authorities by enforcing explicit trust in specific cryptographic identities.
+        ///
+        /// - Warning: Always configure non-empty `backupPins` in production environments. Missing backup pins
+        ///   during certificate rotation will cause complete service outage (catastrophic lockout).
+        ///
+        /// - Note: Despite the industry term "certificate pinning", this implementation pins the SPKI structure
+        ///   (RFC 5280 Section 4.1) rather than the full certificate. This approach survives legitimate
+        ///   certificate rotations while maintaining cryptographic security.
+        ///
+        /// - SeeAlso: https://owasp.org/www-project-mobile-security-testing-guide/latest/0x05g-Testing-Network-Communication.html
+        public var tlsPinning: SPKIPinningConfiguration?
+
         /// Parsed, validated and deconstructed URL.
         let deconstructedURL: DeconstructedURL
 
@@ -253,7 +269,14 @@ extension HTTPClient {
             headers: HTTPHeaders = HTTPHeaders(),
             body: Body? = nil
         ) throws {
-            try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: nil)
+            try self.init(
+                url: url,
+                method: method,
+                headers: headers,
+                body: body,
+                tlsConfiguration: nil,
+                tlsPinning: nil
+            )
         }
 
         /// Create HTTP request.
@@ -274,13 +297,21 @@ extension HTTPClient {
             method: HTTPMethod = .GET,
             headers: HTTPHeaders = HTTPHeaders(),
             body: Body? = nil,
-            tlsConfiguration: TLSConfiguration?
+            tlsConfiguration: TLSConfiguration?,
+            tlsPinning: SPKIPinningConfiguration?
         ) throws {
             guard let url = URL(string: url) else {
                 throw HTTPClientError.invalidURL
             }
 
-            try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: tlsConfiguration)
+            try self.init(
+                url: url,
+                method: method,
+                headers: headers,
+                body: body,
+                tlsConfiguration: tlsConfiguration,
+                tlsPinning: tlsPinning
+            )
         }
 
         /// Create an HTTP `Request`.
@@ -297,7 +328,14 @@ extension HTTPClient {
         ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws
         {
-            try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: nil)
+            try self.init(
+                url: url,
+                method: method,
+                headers: headers,
+                body: body,
+                tlsConfiguration: nil,
+                tlsPinning: nil
+            )
         }
 
         /// Create an HTTP `Request`.
@@ -318,7 +356,8 @@ extension HTTPClient {
             method: HTTPMethod = .GET,
             headers: HTTPHeaders = HTTPHeaders(),
             body: Body? = nil,
-            tlsConfiguration: TLSConfiguration?
+            tlsConfiguration: TLSConfiguration?,
+            tlsPinning: SPKIPinningConfiguration?
         ) throws {
             self.deconstructedURL = try DeconstructedURL(url: url)
 
@@ -327,6 +366,7 @@ extension HTTPClient {
             self.headers = headers
             self.body = body
             self.tlsConfiguration = tlsConfiguration
+            self.tlsPinning = tlsPinning
         }
 
         /// Remote host, resolved from `URL`.
