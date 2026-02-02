@@ -1405,6 +1405,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case socksHandshakeTimeout
         case httpProxyHandshakeTimeout
         case tlsHandshakeTimeout
+        case invalidDigestLength
         case invalidCertificatePinning(String)
         case serverOfferedUnsupportedApplicationProtocol(String)
         case requestStreamCancelled
@@ -1485,6 +1486,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
             return "HTTP proxy handshake timeout"
         case .tlsHandshakeTimeout:
             return "TLS handshake timeout"
+        case .invalidDigestLength:
+            return "Invalid digest length"
         case .invalidCertificatePinning:
             return "Invalid certificate pinning"
         case .serverOfferedUnsupportedApplicationProtocol:
@@ -1566,7 +1569,9 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let httpProxyHandshakeTimeout = HTTPClientError(code: .httpProxyHandshakeTimeout)
     /// The tls handshake timed out.
     public static let tlsHandshakeTimeout = HTTPClientError(code: .tlsHandshakeTimeout)
-    /// Certificate pinning validation failed
+    /// The hash digest length is invalid.
+    public static let invalidDigestLength = HTTPClientError(code: .invalidDigestLength)
+    /// The server's certificate did not match any pinned SPKI hash.
     public static func invalidCertificatePinning(_ reason: String) -> HTTPClientError {
         HTTPClientError(code: .invalidCertificatePinning(reason))
     }

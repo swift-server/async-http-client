@@ -399,9 +399,7 @@ extension HTTPConnectionPool.ConnectionFactory {
 
                     if #available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *), let tlsPinning {
                         let pinningHandler = SPKIPinningHandler(
-                            primaryPins: tlsPinning.primaryPins,
-                            backupPins: tlsPinning.backupPins,
-                            verification: tlsPinning.verification,
+                            tlsPinning: tlsPinning,
                             logger: logger
                         )
                         try channel.pipeline.syncOperations.addHandler(pinningHandler)
@@ -611,9 +609,7 @@ extension HTTPConnectionPool.ConnectionFactory {
 
                             if #available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *), let tlsPinning {
                                 let pinningHandler = SPKIPinningHandler(
-                                    primaryPins: tlsPinning.primaryPins,
-                                    backupPins: tlsPinning.backupPins,
-                                    verification: tlsPinning.verification,
+                                    tlsPinning: tlsPinning,
                                     logger: logger
                                 )
                                 try sync.addHandler(pinningHandler)

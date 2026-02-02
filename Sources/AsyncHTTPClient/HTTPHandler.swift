@@ -273,7 +273,8 @@ extension HTTPClient {
         ///     - method: HTTP method.
         ///     - headers: Custom HTTP headers.
         ///     - body: Request body.
-        ///     - tlsConfiguration: Request TLS configuration
+        ///     - tlsConfiguration: Request TLS configuration.
+        ///     - tlsPinning: SPKI pinning configuration to validate server certificates.
         /// - throws:
         ///     - `invalidURL` if URL cannot be parsed.
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
@@ -332,7 +333,8 @@ extension HTTPClient {
         ///     - method: HTTP method.
         ///     - headers: Custom HTTP headers.
         ///     - body: Request body.
-        ///     - tlsConfiguration: Request TLS configuration
+        ///     - tlsConfiguration: Request TLS configuration.
+        ///     - tlsPinning: SPKI pinning configuration to validate server certificates.
         /// - throws:
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
