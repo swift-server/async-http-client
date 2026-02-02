@@ -227,54 +227,62 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
             return
         }
 
-        validateSPKI(context: context, event: tlsEvent)
+        context.pipeline.handler(type: NIOSSLHandler.self).assumeIsolated().whenComplete {
+            self.validateSPKI(
+                context: context,
+                event: tlsEvent,
+                peerCertificate: $0.map(\.peerCertificate)
+            )
+        }
     }
 
-    private func validateSPKI(context: ChannelHandlerContext, event: TLSUserEvent) {
-        context.channel.pipeline.handler(type: NIOSSLHandler.self).assumeIsolated().whenComplete { result in
-            switch result {
-            case .success(let sslHandler):
-                guard let leaf = sslHandler.peerCertificate else {
-                    self.handlePinningFailure(
-                        context: context,
-                        reason: "Empty certificate chain",
-                        event: event
-                    )
-                    return
-                }
-
-                do {
-                    let publicKey = try leaf.extractPublicKey()
-                    let spkiBytes = try publicKey.toSPKIBytes()
-
-                    let isValid = self.tlsPinning.contains(spkiBytes: spkiBytes)
-
-                    if isValid {
-                        context.fireUserInboundEventTriggered(event)
-                        self.logger.debug("SPKI pin validation succeeded")
-                    } else {
-                        self.handlePinningFailure(
-                            context: context,
-                            reason: "SPKI pin mismatch",
-                            event: event
-                        )
-                    }
-
-                } catch {
-                    self.handlePinningFailure(
-                        context: context,
-                        reason: "SPKI extraction failed: \(error)",
-                        event: event
-                    )
-                }
-
-            case .failure(let error):
+    func validateSPKI(
+        context: ChannelHandlerContext,
+        event: TLSUserEvent,
+        peerCertificate result: Result<NIOSSLCertificate?, Error>
+    ) {
+        switch result {
+        case .success(let peerCertificate):
+            guard let leaf = peerCertificate else {
                 self.handlePinningFailure(
                     context: context,
-                    reason: "SSL handler not found: \(error)",
+                    reason: "Empty certificate chain",
+                    event: event
+                )
+                return
+            }
+
+            do {
+                let publicKey = try leaf.extractPublicKey()
+                let spkiBytes = try publicKey.toSPKIBytes()
+
+                let isValid = self.tlsPinning.contains(spkiBytes: spkiBytes)
+
+                if isValid {
+                    context.fireUserInboundEventTriggered(event)
+                    self.logger.debug("SPKI pin validation succeeded")
+                } else {
+                    self.handlePinningFailure(
+                        context: context,
+                        reason: "SPKI pin mismatch",
+                        event: event
+                    )
+                }
+
+            } catch {
+                self.handlePinningFailure(
+                    context: context,
+                    reason: "SPKI extraction failed: \(error)",
                     event: event
                 )
             }
+
+        case .failure(let error):
+            self.handlePinningFailure(
+                context: context,
+                reason: "SSL handler not found: \(error)",
+                event: event
+            )
         }
     }
 
@@ -296,7 +304,7 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
             let error = HTTPClientError.invalidCertificatePinning(reason)
             context.fireErrorCaught(error)
 
-            context.close(mode: .all, promise: nil)
+            context.close(promise: nil)
 
         case .audit:
             logger.warning("SPKI pinning failed — connection allowed for audit purposes", metadata: metadata)
