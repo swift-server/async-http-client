@@ -53,6 +53,9 @@ public struct HTTPClientRequest: Sendable {
     /// Request-specific TLS configuration, defaults to no request-specific TLS configuration.
     public var tlsConfiguration: TLSConfiguration?
 
+    /// Optional SPKI pinning configuration for TLS certificate validation.
+    public var tlsPinning: SPKIPinningConfiguration?
+
     public init(url: String) {
         self.url = url
         self.method = .GET

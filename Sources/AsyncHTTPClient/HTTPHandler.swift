@@ -232,20 +232,7 @@ extension HTTPClient {
         /// Request-specific TLS configuration, defaults to no request-specific TLS configuration.
         public var tlsConfiguration: TLSConfiguration?
 
-        /// Optional SPKI (SubjectPublicKeyInfo) pinning configuration for TLS certificate validation.
-        ///
-        /// When configured, the client validates the server's leaf certificate public key against the provided
-        /// SHA-256 hashes after TLS handshake completion. This provides protection against compromised
-        /// Certificate Authorities by enforcing explicit trust in specific cryptographic identities.
-        ///
-        /// - Warning: Always configure non-empty `backupPins` in production environments. Missing backup pins
-        ///   during certificate rotation will cause complete service outage (catastrophic lockout).
-        ///
-        /// - Note: Despite the industry term "certificate pinning", this implementation pins the SPKI structure
-        ///   (RFC 5280 Section 4.1) rather than the full certificate. This approach survives legitimate
-        ///   certificate rotations while maintaining cryptographic security.
-        ///
-        /// - SeeAlso: https://owasp.org/www-project-mobile-security-testing-guide/latest/0x05g-Testing-Network-Communication.html
+        /// Optional SPKI pinning configuration for TLS certificate validation.
         public var tlsPinning: SPKIPinningConfiguration?
 
         /// Parsed, validated and deconstructed URL.

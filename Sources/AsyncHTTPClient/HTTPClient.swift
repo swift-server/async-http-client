@@ -828,6 +828,9 @@ public final class HTTPClient: Sendable {
         /// TLS configuration, defaults to `TLSConfiguration.makeClientConfiguration()`.
         public var tlsConfiguration: Optional<TLSConfiguration>
 
+        /// Optional SPKI pinning configuration for TLS certificate validation.
+        public var tlsPinning: SPKIPinningConfiguration?
+
         /// Sometimes it can be useful to connect to one host e.g. `x.example.com` but
         /// request and validate the certificate chain as if we would connect to `y.example.com`.
         /// ``dnsOverride`` allows to do just that by mapping host names which we will request and validate the certificate chain, to a different
@@ -909,6 +912,7 @@ public final class HTTPClient: Sendable {
 
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
+            tlsPinning: SPKIPinningConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
             timeout: Timeout = Timeout(),
             connectionPool: ConnectionPool = ConnectionPool(),
@@ -917,6 +921,7 @@ public final class HTTPClient: Sendable {
             decompression: Decompression = .disabled
         ) {
             self.tlsConfiguration = tlsConfiguration
+            self.tlsPinning = tlsPinning
             self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
             self.timeout = timeout
             self.connectionPool = connectionPool
@@ -929,6 +934,7 @@ public final class HTTPClient: Sendable {
 
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
+            tlsPinning: SPKIPinningConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
             timeout: Timeout = Timeout(),
             proxy: Proxy? = nil,
@@ -937,6 +943,7 @@ public final class HTTPClient: Sendable {
         ) {
             self.init(
                 tlsConfiguration: tlsConfiguration,
+                tlsPinning: tlsPinning,
                 redirectConfiguration: redirectConfiguration,
                 timeout: timeout,
                 connectionPool: ConnectionPool(),
@@ -948,6 +955,7 @@ public final class HTTPClient: Sendable {
 
         public init(
             certificateVerification: CertificateVerification,
+            tlsPinning: SPKIPinningConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
             timeout: Timeout = Timeout(),
             maximumAllowedIdleTimeInConnectionPool: TimeAmount = .seconds(60),
@@ -959,6 +967,7 @@ public final class HTTPClient: Sendable {
             tlsConfig.certificateVerification = certificateVerification
             self.init(
                 tlsConfiguration: tlsConfig,
+                tlsPinning: tlsPinning,
                 redirectConfiguration: redirectConfiguration,
                 timeout: timeout,
                 connectionPool: ConnectionPool(idleTimeout: maximumAllowedIdleTimeInConnectionPool),
@@ -970,6 +979,7 @@ public final class HTTPClient: Sendable {
 
         public init(
             certificateVerification: CertificateVerification,
+            tlsPinning: SPKIPinningConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
             timeout: Timeout = Timeout(),
             connectionPool: TimeAmount = .seconds(60),
@@ -982,6 +992,7 @@ public final class HTTPClient: Sendable {
             tlsConfig.certificateVerification = certificateVerification
             self.init(
                 tlsConfiguration: tlsConfig,
+                tlsPinning: tlsPinning,
                 redirectConfiguration: redirectConfiguration,
                 timeout: timeout,
                 connectionPool: ConnectionPool(idleTimeout: connectionPool),
@@ -993,6 +1004,7 @@ public final class HTTPClient: Sendable {
 
         public init(
             certificateVerification: CertificateVerification,
+            tlsPinning: SPKIPinningConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
             timeout: Timeout = Timeout(),
             proxy: Proxy? = nil,
@@ -1001,6 +1013,7 @@ public final class HTTPClient: Sendable {
         ) {
             self.init(
                 certificateVerification: certificateVerification,
+                tlsPinning: tlsPinning,
                 redirectConfiguration: redirectConfiguration,
                 timeout: timeout,
                 maximumAllowedIdleTimeInConnectionPool: .seconds(60),
@@ -1012,6 +1025,7 @@ public final class HTTPClient: Sendable {
 
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
+            tlsPinning: SPKIPinningConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
             timeout: Timeout = Timeout(),
             connectionPool: ConnectionPool = ConnectionPool(),
@@ -1024,6 +1038,7 @@ public final class HTTPClient: Sendable {
         ) {
             self.init(
                 tlsConfiguration: tlsConfiguration,
+                tlsPinning: tlsPinning,
                 redirectConfiguration: redirectConfiguration,
                 timeout: timeout,
                 connectionPool: connectionPool,
@@ -1038,6 +1053,7 @@ public final class HTTPClient: Sendable {
 
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
+            tlsPinning: SPKIPinningConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
             timeout: Timeout = Timeout(),
             connectionPool: ConnectionPool = ConnectionPool(),
@@ -1051,6 +1067,7 @@ public final class HTTPClient: Sendable {
         ) {
             self.init(
                 tlsConfiguration: tlsConfiguration,
+                tlsPinning: tlsPinning,
                 redirectConfiguration: redirectConfiguration,
                 timeout: timeout,
                 connectionPool: connectionPool,

@@ -46,7 +46,7 @@ extension HTTPConnectionPool {
             self.sslContextCache = sslContextCache
             self.tlsConfiguration =
                 tlsConfiguration ?? clientConfiguration.tlsConfiguration ?? .makeClientConfiguration()
-            self.tlsPinning = tlsPinning
+            self.tlsPinning = tlsPinning ?? clientConfiguration.tlsPinning
         }
     }
 }

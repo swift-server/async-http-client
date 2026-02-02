@@ -83,7 +83,8 @@ extension HTTPClientRequest.Prepared {
                 headers: headers
             ),
             body: request.body.map { .init($0) },
-            tlsConfiguration: request.tlsConfiguration
+            tlsConfiguration: request.tlsConfiguration,
+            tlsPinning: request.tlsPinning
         )
     }
 }
