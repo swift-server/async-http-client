@@ -221,8 +221,10 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
     }
 
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
-        guard let tlsEvent = event as? TLSUserEvent,
-              case .handshakeCompleted = tlsEvent else {
+        guard
+            let tlsEvent = event as? TLSUserEvent,
+            case .handshakeCompleted = tlsEvent
+        else {
             context.fireUserInboundEventTriggered(event)
             return
         }

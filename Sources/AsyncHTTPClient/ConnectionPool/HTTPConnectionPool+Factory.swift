@@ -408,6 +408,8 @@ extension HTTPConnectionPool.ConnectionFactory {
                     let tlsEventHandler = TLSEventsHandler(deadline: deadline)
                     try channel.pipeline.syncOperations.addHandler(tlsEventHandler)
 
+                    // The tlsEstablishedFuture is set as soon as the TLSEventsHandler is in a
+                    // pipeline. It is created in TLSEventsHandler's handlerAdded method.
                     return tlsEventHandler.tlsEstablishedFuture!
                 } catch {
                     return channel.eventLoop.makeFailedFuture(error)
