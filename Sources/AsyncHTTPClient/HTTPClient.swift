@@ -1481,7 +1481,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case .shutdownUnsupported:
             return "The global singleton HTTP client cannot be shut down"
         case .internalStateFailure(let file, let line):
-            return "An internal state failure has occurred (File: \(file), line: \(line)). Please open an issue with a reproducer if possible"
+            return
+                "An internal state failure has occurred (File: \(file), line: \(line)). Please open an issue with a reproducer if possible"
         }
     }
 
