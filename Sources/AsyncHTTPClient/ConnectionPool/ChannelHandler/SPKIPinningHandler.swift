@@ -20,22 +20,20 @@ import Logging
 import Crypto
 import Algorithms
 
-/// A hash of a SubjectPublicKeyInfo (SPKI) structure for certificate pinning.
+/// SPKI hash for certificate pinning validation.
 ///
-/// Validates server identity by hashing the DER-encoded public key structure
-/// (RFC 5280, Section 4.1) rather than the full certificate. This approach:
-/// - Survives legitimate certificate rotations (same key, new expiration)
-/// - Prevents algorithm downgrade attacks
-/// - Provides stronger security guarantees than full-certificate pinning
+/// Validates server identity using the DER-encoded public key structure (RFC 5280, Section 4.1)
+/// rather than the full certificate. This approach survives legitimate certificate rotations
+/// and prevents algorithm downgrade attacks.
 ///
-/// Equality considers both digest bytes and hash algorithm — hashes with identical
-/// bytes but different algorithms (e.g., SHA-256 vs SHA-384) are distinct values.
+/// Equality considers both digest bytes and hash algorithm — hashes with identical bytes
+/// but different algorithms are distinct values.
 ///
 /// - SeeAlso: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1
 /// - SeeAlso: https://owasp.org/www-project-mobile-security-testing-guide/latest/0x05g-Testing-Network-Communication.html
 public struct SPKIHash: Sendable, Hashable {
 
-    /// The raw hash digest bytes of the SPKI structure.
+    /// Raw hash digest bytes of the SPKI structure.
     public let bytes: Data
 
     fileprivate let algorithmID: ObjectIdentifier
@@ -43,10 +41,10 @@ public struct SPKIHash: Sendable, Hashable {
 
     // MARK: - Initialization
 
-    /// Creates an SPKI hash from a base64-encoded string using SHA-256.
+    /// Creates an SPKI hash from a base64-encoded SHA-256 digest.
     ///
     /// - Parameters:
-    ///   - base64: Base64-encoded hash digest. Whitespace is automatically stripped.
+    ///   - base64: Base64-encoded hash digest (whitespace is stripped).
     ///
     /// - Throws: `HTTPClientError.invalidDigestLength` if decoded data isn't 32 bytes.
     @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -70,6 +68,17 @@ public struct SPKIHash: Sendable, Hashable {
             throw HTTPClientError.invalidDigestLength
         }
         try self.init(algorithm: algorithm, bytes: data)
+    }
+
+    /// Creates an SPKI hash from raw SHA-256 digest bytes.
+    ///
+    /// - Parameters:
+    ///   - bytes: Raw SHA-256 digest bytes (must be 32 bytes).
+    ///
+    /// - Throws: `HTTPClientError.invalidDigestLength` if byte count isn't 32.
+    @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+    public init(bytes: Data) throws {
+        try self.init(algorithm: SHA256.self, bytes: bytes)
     }
 
     /// Creates an SPKI hash from raw digest bytes using a specified hash algorithm.
@@ -106,7 +115,6 @@ public struct SPKIHash: Sendable, Hashable {
 }
 
 /// Constant-time comparison to prevent timing attacks.
-/// Always iterates all candidates and bytes regardless of match position.
 internal func constantTimeAnyMatch(_ target: Data, _ candidates: [SPKIHash]) -> Bool {
     guard !candidates.isEmpty else { return false }
 
@@ -121,43 +129,44 @@ internal func constantTimeAnyMatch(_ target: Data, _ candidates: [SPKIHash]) -> 
     return anyMatch != 0
 }
 
-/// Configuration for SPKI (SubjectPublicKeyInfo) pinning.
+/// Configuration for SPKI pinning validation.
 ///
-/// Validates server identity by hashing the public key structure rather than the
-/// full certificate. Supports multiple hash algorithms simultaneously.
+/// Maintains two pin sets:
+/// - `activePins`: Certificates currently deployed in production
+/// - `backupPins`: Pre-deployed hashes for upcoming certificate rotations
 ///
-/// - Warning: Always deploy with non-empty `backupPins` to avoid lockout during rotation.
+/// - Warning: Always deploy non-empty `backupPins` at least 30 days before certificate
+///   expiration to prevent service disruption during rotation.
 public struct SPKIPinningConfiguration: Sendable, Hashable {
-    /// Current production SPKI hashes.
-    public let primaryPins: [SPKIHash]
+    /// SPKI hashes of certificates currently deployed in production.
+    public let activePins: [SPKIHash]
 
-    /// SPKI hashes for upcoming certificate rotations.
+    /// SPKI hashes pre-deployed for upcoming certificate rotations.
     public let backupPins: [SPKIHash]
 
-    /// Failure behavior policy on pin mismatch.
-    public let verification: SPKIPinningVerification
+    /// Policy for handling pin validation failures.
+    public let policy: SPKIPinningPolicy
 
     private let pinsByAlgorithm: [ObjectIdentifier: [SPKIHash]]
 
-    /// Creates an SPKI pinning configuration with primary and backup pins.
+    /// Creates an SPKI pinning configuration.
     ///
     /// - Parameters:
-    ///   - primaryPins: Hashes of current production certificates.
-    ///   - backupPins: Hashes for certificates scheduled for future deployment.
-    ///                 Required in production to prevent service disruption during rotation.
-    ///   - verification: Policy for handling pin validation failures.
+    ///   - activePins: Hashes of currently deployed certificates.
+    ///   - backupPins: Hashes for upcoming certificate rotations (required in production).
+    ///   - policy: Validation failure policy (`.strict` for production, `.audit` for debugging).
     ///
-    /// - Warning: Deploying with empty `backupPins` in `.failRequest` mode risks
-    ///   catastrophic lockout when certificates rotate.
+    /// - Warning: Empty `backupPins` in `.strict` mode risks catastrophic lockout during
+    ///   certificate rotation.
     public init(
-        primaryPins: [SPKIHash],
+        activePins: [SPKIHash],
         backupPins: [SPKIHash],
-        verification: SPKIPinningVerification = .failRequest
+        policy: SPKIPinningPolicy = .strict
     ) {
-        self.primaryPins = primaryPins
+        self.activePins = activePins
         self.backupPins = backupPins
-        self.pinsByAlgorithm = Dictionary(grouping: Set(primaryPins + backupPins), by: \.algorithmID)
-        self.verification = verification
+        self.pinsByAlgorithm = Dictionary(grouping: Set(activePins + backupPins), by: \.algorithmID)
+        self.policy = policy
     }
 
     internal func contains(spkiBytes: [UInt8]) -> Bool {
@@ -174,19 +183,16 @@ public struct SPKIPinningConfiguration: Sendable, Hashable {
     }
 }
 
-/// Behavior when SPKI pin validation fails.
-public enum SPKIPinningVerification: Sendable, Hashable {
-    /// Immediately terminate the connection on pin validation failure.
-    case failRequest
+/// Policy for handling SPKI pin validation failures.
+public enum SPKIPinningPolicy: Sendable, Hashable {
+    /// Reject connections with untrusted certificates.
+    case strict
 
-    /// Allow the connection to proceed but log a warning.
-    case logAndProceed
+    /// Permit connections with untrusted certificates for observability only.
+    case audit
 }
 
-/// ChannelHandler that implements certificate pinning using SPKI hashes.
-///
-/// Validates the server's leaf certificate public key against pre-configured hashes
-/// after TLS handshake completion.
+/// ChannelHandler that validates server certificates using SPKI pinning.
 ///
 /// - Warning: Never deploy without backup pins in production environments.
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -204,9 +210,9 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
         self.tlsPinning = tlsPinning
         self.logger = logger
 
-        if tlsPinning.backupPins.isEmpty && tlsPinning.verification == .failRequest {
+        if tlsPinning.backupPins.isEmpty && tlsPinning.policy == .strict {
             logger.warning(
-                "SPKIPinningHandler deployed without backup pins in failRequest mode - catastrophic lockout risk!",
+                "SPKIPinningHandler deployed without backup pins in strict mode - catastrophic lockout risk!",
                 metadata: [
                     "recommendation": .string("Deploy backup pins 30+ days before certificate expiration")
                 ]
@@ -278,13 +284,13 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
         event: TLSUserEvent
     ) {
         let metadata: Logger.Metadata = [
-            "pinning_action": .string(tlsPinning.verification == .failRequest ? "blocked" : "allowed_with_warning"),
-            "expected_primary_pins": .string(tlsPinning.primaryPins.map { $0.bytes.base64EncodedString() }.joined(separator: ", ")),
+            "pinning_action": .string(tlsPinning.policy == .strict ? "blocked" : "allowed_for_audit"),
+            "expected_active_pins": .string(tlsPinning.activePins.map { $0.bytes.base64EncodedString() }.joined(separator: ", ")),
             "expected_backup_pins": .string(tlsPinning.backupPins.map { $0.bytes.base64EncodedString() }.joined(separator: ", "))
         ]
 
-        switch tlsPinning.verification {
-        case .failRequest:
+        switch tlsPinning.policy {
+        case .strict:
             logger.error("SPKI pinning failed — connection blocked", metadata: metadata)
 
             let error = HTTPClientError.invalidCertificatePinning(reason)
@@ -292,8 +298,8 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
 
             context.close(mode: .all, promise: nil)
 
-        case .logAndProceed:
-            logger.warning("SPKI pinning failed — connection allowed (staging mode)", metadata: metadata)
+        case .audit:
+            logger.warning("SPKI pinning failed — connection allowed for audit purposes", metadata: metadata)
             context.fireUserInboundEventTriggered(event)
         }
     }
