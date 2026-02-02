@@ -4032,12 +4032,12 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             configuration: configuration
         )
         let decoder = JSONDecoder()
-        
+
         defer {
             XCTAssertNoThrow(try localClient.syncShutdown())
             XCTAssertNoThrow(try localHTTPBin.shutdown())
         }
-        
+
         // First two requests use identical TLS configurations.
         var tlsConfig = TLSConfiguration.makeClientConfiguration()
         tlsConfig.certificateVerification = .none
@@ -4053,7 +4053,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             return
         }
         let firstConnectionNumber = try decoder.decode(RequestInfo.self, from: firstBody).connectionNumber
-        
+
         let secondRequest = try HTTPClient.Request(
             url: "https://localhost:\(localHTTPBin.port)/get",
             method: .GET,
@@ -4066,7 +4066,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             return
         }
         let secondConnectionNumber = try decoder.decode(RequestInfo.self, from: secondBody).connectionNumber
-        
+
         // Uses a different TLS config.
         var tlsConfig2 = TLSConfiguration.makeClientConfiguration()
         tlsConfig2.certificateVerification = .none
@@ -4083,7 +4083,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             return
         }
         let thirdConnectionNumber = try decoder.decode(RequestInfo.self, from: thirdBody).connectionNumber
-        
+
         XCTAssertEqual(firstResponse.status, .ok)
         XCTAssertEqual(secondResponse.status, .ok)
         XCTAssertEqual(thirdResponse.status, .ok)
