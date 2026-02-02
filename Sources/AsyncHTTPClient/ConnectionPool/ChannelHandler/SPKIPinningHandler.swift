@@ -120,14 +120,13 @@ public enum SPKIPinningVerification: Sendable, Hashable {
 ///   risk catastrophic lockout during certificate rotation.
 /// - SeeAlso: OWASP MSTG-NETWORK-4, NIST SP 800-52 Rev. 2 Section 3.4.3
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
-final class SPKIPinningHandler: ChannelInboundHandler {
+final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
 
-    typealias InboundIn = Any
-    typealias OutboundOut = Any
+    typealias InboundIn = NIOAny
 
     private let logger: Logger
-    private let validPins: Set<SHA256Digest>
-    private let backupPins: Set<SHA256Digest>
+    private let validPins: Set<Data>
+    private let backupPins: Set<Data>
     private let verification: SPKIPinningVerification
 
     /// Creates a pinning handler with SHA-256 hashes of SPKI structures.
@@ -151,10 +150,10 @@ final class SPKIPinningHandler: ChannelInboundHandler {
         logger: Logger
     ) {
         self.validPins = Set(primaryPins.compactMap {
-            Data(base64Encoded: $0).map(SHA256.hash(data:))
+            Data(base64Encoded: $0)
         })
         self.backupPins = Set(backupPins.compactMap {
-            Data(base64Encoded: $0).map(SHA256.hash(data:))
+            Data(base64Encoded: $0)
         })
         self.verification = verification
         self.logger = logger
@@ -176,10 +175,10 @@ final class SPKIPinningHandler: ChannelInboundHandler {
             return
         }
 
-        validateSPKI(context: context)
+        validateSPKI(context: context, event: tlsEvent)
     }
 
-    private func validateSPKI(context: ChannelHandlerContext) {
+    private func validateSPKI(context: ChannelHandlerContext, event: TLSUserEvent) {
         context.channel.pipeline.handler(type: NIOSSLHandler.self).assumeIsolated().whenComplete { result in
             switch result {
             case .success(let sslHandler):
@@ -187,7 +186,8 @@ final class SPKIPinningHandler: ChannelInboundHandler {
                     self.handlePinningFailure(
                         context: context,
                         reason: "Empty certificate chain",
-                        receivedSPKIHash: nil
+                        receivedSPKIHash: nil,
+                        event: event
                     )
                     return
                 }
@@ -195,14 +195,17 @@ final class SPKIPinningHandler: ChannelInboundHandler {
                 do {
                     let publicKey = try leaf.extractPublicKey()
                     let spkiBytes = try publicKey.toSPKIBytes()
-                    let spkiData = Data(spkiBytes)
-                    let receivedHash = SHA256.hash(data: spkiData)
+                    let receivedHash = Data(SHA256.hash(data: spkiBytes))
+
+                    self.validPins.forEach {
+                        print($0.base64EncodedString())
+                    }
 
                     let isValid = self.validPins.contains(receivedHash) ||
                                   self.backupPins.contains(receivedHash)
 
                     if isValid {
-                        context.fireUserInboundEventTriggered(TLSUserEvent.handshakeCompleted)
+                        context.fireUserInboundEventTriggered(event)
                         self.logger.debug(
                             "SPKI pin validation succeeded",
                             metadata: [
@@ -214,7 +217,8 @@ final class SPKIPinningHandler: ChannelInboundHandler {
                         self.handlePinningFailure(
                             context: context,
                             reason: "SPKI pin mismatch",
-                            receivedSPKIHash: receivedHash
+                            receivedSPKIHash: receivedHash,
+                            event: event
                         )
                     }
 
@@ -222,7 +226,8 @@ final class SPKIPinningHandler: ChannelInboundHandler {
                     self.handlePinningFailure(
                         context: context,
                         reason: "SPKI extraction failed: \(error)",
-                        receivedSPKIHash: nil
+                        receivedSPKIHash: nil,
+                        event: event
                     )
                 }
 
@@ -230,7 +235,8 @@ final class SPKIPinningHandler: ChannelInboundHandler {
                 self.handlePinningFailure(
                     context: context,
                     reason: "SSL handler not found: \(error)",
-                    receivedSPKIHash: nil
+                    receivedSPKIHash: nil,
+                    event: event
                 )
             }
         }
@@ -239,7 +245,8 @@ final class SPKIPinningHandler: ChannelInboundHandler {
     private func handlePinningFailure(
         context: ChannelHandlerContext,
         reason: String,
-        receivedSPKIHash: SHA256Digest?
+        receivedSPKIHash: Data?,
+        event: TLSUserEvent
     ) {
         let metadata: Logger.Metadata = [
             "pinning_action": .string(verification == .failRequest ? "blocked" : "allowed_with_warning"),
@@ -251,19 +258,16 @@ final class SPKIPinningHandler: ChannelInboundHandler {
         switch verification {
         case .failRequest:
             logger.error("SPKI pinning failed — connection blocked", metadata: metadata)
+
+            let error = HTTPClientError.invalidCertificatePinning(reason)
+            context.fireErrorCaught(error)
+
             context.close(mode: .all, promise: nil)
 
         case .logAndProceed:
             logger.warning("SPKI pinning failed — connection allowed (staging mode)", metadata: metadata)
-            context.fireUserInboundEventTriggered(TLSUserEvent.handshakeCompleted)
+            context.fireUserInboundEventTriggered(event)
         }
-    }
-}
-
-@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
-extension SHA256Digest {
-    func base64EncodedString() -> String {
-        Data(self).base64EncodedString()
     }
 }
 

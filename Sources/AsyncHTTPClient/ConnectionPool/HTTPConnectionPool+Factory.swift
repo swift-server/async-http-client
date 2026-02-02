@@ -396,8 +396,6 @@ extension HTTPConnectionPool.ConnectionFactory {
                         serverHostname: sslServerHostname
                     )
                     try channel.pipeline.syncOperations.addHandler(sslHandler)
-                    let tlsEventHandler = TLSEventsHandler(deadline: deadline)
-                    try channel.pipeline.syncOperations.addHandler(tlsEventHandler)
 
                     if #available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *), let tlsPinning {
                         let pinningHandler = SPKIPinningHandler(
@@ -408,6 +406,9 @@ extension HTTPConnectionPool.ConnectionFactory {
                         )
                         try channel.pipeline.syncOperations.addHandler(pinningHandler)
                     }
+
+                    let tlsEventHandler = TLSEventsHandler(deadline: deadline)
+                    try channel.pipeline.syncOperations.addHandler(tlsEventHandler)
 
                     return tlsEventHandler.tlsEstablishedFuture!
                 } catch {
@@ -607,7 +608,6 @@ extension HTTPConnectionPool.ConnectionFactory {
                             let tlsEventHandler = TLSEventsHandler(deadline: deadline)
 
                             try sync.addHandler(sslHandler)
-                            try sync.addHandler(tlsEventHandler)
 
                             if #available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *), let tlsPinning {
                                 let pinningHandler = SPKIPinningHandler(
@@ -618,6 +618,8 @@ extension HTTPConnectionPool.ConnectionFactory {
                                 )
                                 try sync.addHandler(pinningHandler)
                             }
+
+                            try sync.addHandler(tlsEventHandler)
 
                             return channel.eventLoop.makeSucceededVoidFuture()
                         } catch {

@@ -1405,6 +1405,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case socksHandshakeTimeout
         case httpProxyHandshakeTimeout
         case tlsHandshakeTimeout
+        case invalidCertificatePinning(String)
         case serverOfferedUnsupportedApplicationProtocol(String)
         case requestStreamCancelled
         case getConnectionFromPoolTimeout
@@ -1484,6 +1485,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
             return "HTTP proxy handshake timeout"
         case .tlsHandshakeTimeout:
             return "TLS handshake timeout"
+        case .invalidCertificatePinning:
+            return "Invalid certificate pinning"
         case .serverOfferedUnsupportedApplicationProtocol:
             return "Server offered unsupported application protocol"
         case .requestStreamCancelled:
@@ -1563,6 +1566,10 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let httpProxyHandshakeTimeout = HTTPClientError(code: .httpProxyHandshakeTimeout)
     /// The tls handshake timed out.
     public static let tlsHandshakeTimeout = HTTPClientError(code: .tlsHandshakeTimeout)
+    /// Certificate pinning validation failed
+    public static func invalidCertificatePinning(_ reason: String) -> HTTPClientError {
+        HTTPClientError(code: .invalidCertificatePinning(reason))
+    }
     /// The remote server only offered an unsupported application protocol
     public static func serverOfferedUnsupportedApplicationProtocol(_ proto: String) -> HTTPClientError {
         HTTPClientError(code: .serverOfferedUnsupportedApplicationProtocol(proto))
