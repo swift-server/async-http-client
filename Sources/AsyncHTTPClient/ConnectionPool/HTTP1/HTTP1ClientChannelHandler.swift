@@ -569,7 +569,11 @@ extension HTTP1ClientChannelHandler {
             }
         }
 
-        func finishRequestBodyStream(trailers: HTTPHeaders?, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
+        func finishRequestBodyStream(
+            trailers: HTTPHeaders?,
+            request: HTTPExecutableRequest,
+            promise: EventLoopPromise<Void>?
+        ) {
             self.loopBound.execute {
                 $0.finishRequestBodyStream0(trailers: trailers, request: request, promise: promise)
             }

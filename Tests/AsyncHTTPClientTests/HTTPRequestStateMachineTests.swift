@@ -77,7 +77,10 @@ class HTTPRequestStateMachineTests: XCTestCase {
         // once we receive a writable event again, we can allow the producer to produce more data
         XCTAssertEqual(state.writabilityChanged(writable: true), .resumeRequestBodyStream)
         XCTAssertEqual(state.requestStreamPartReceived(part3, promise: nil), .sendBodyPart(part3, nil))
-        XCTAssertEqual(state.requestStreamFinished(trailers: nil, promise: nil), .sendRequestEnd(trailers: nil, nil, .none))
+        XCTAssertEqual(
+            state.requestStreamFinished(trailers: nil, promise: nil),
+            .sendRequestEnd(trailers: nil, nil, .none)
+        )
 
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(
@@ -132,7 +135,10 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let part0 = IOData.byteBuffer(ByteBuffer(bytes: [0, 1, 2, 3]))
         XCTAssertEqual(state.requestStreamPartReceived(part0, promise: nil), .sendBodyPart(part0, nil))
 
-        state.requestStreamFinished(trailers: nil, promise: nil).assertFailRequest(HTTPClientError.bodyLengthMismatch, .close(nil))
+        state.requestStreamFinished(trailers: nil, promise: nil).assertFailRequest(
+            HTTPClientError.bodyLengthMismatch,
+            .close(nil)
+        )
     }
 
     func testRequestBodyStreamIsCancelledIfServerRespondsWith301() {
@@ -273,7 +279,10 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.requestStreamPartReceived(part1, promise: nil), .sendBodyPart(part1, nil))
         let part2 = IOData.byteBuffer(ByteBuffer(bytes: 8...11))
         XCTAssertEqual(state.requestStreamPartReceived(part2, promise: nil), .sendBodyPart(part2, nil))
-        XCTAssertEqual(state.requestStreamFinished(trailers: nil, promise: nil), .sendRequestEnd(trailers: nil, nil, .requestDone))
+        XCTAssertEqual(
+            state.requestStreamFinished(trailers: nil, promise: nil),
+            .sendRequestEnd(trailers: nil, nil, .requestDone)
+        )
 
         XCTAssertEqual(
             state.requestStreamPartReceived(part2, promise: nil),
@@ -308,7 +317,10 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.requestStreamPartReceived(part1, promise: nil), .sendBodyPart(part1, nil))
         let part2 = IOData.byteBuffer(ByteBuffer(bytes: 8...11))
         XCTAssertEqual(state.requestStreamPartReceived(part2, promise: nil), .sendBodyPart(part2, nil))
-        XCTAssertEqual(state.requestStreamFinished(trailers: nil, promise: nil), .sendRequestEnd(trailers: nil, nil, .none))
+        XCTAssertEqual(
+            state.requestStreamFinished(trailers: nil, promise: nil),
+            .sendRequestEnd(trailers: nil, nil, .none)
+        )
 
         XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.requestDone, [], nil))
     }
@@ -339,7 +351,10 @@ class HTTPRequestStateMachineTests: XCTestCase {
 
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: 4...7))
         XCTAssertEqual(state.requestStreamPartReceived(part1, promise: nil), .sendBodyPart(part1, nil))
-        state.requestStreamFinished(trailers: nil, promise: nil).assertFailRequest(HTTPClientError.bodyLengthMismatch, .close(nil))
+        state.requestStreamFinished(trailers: nil, promise: nil).assertFailRequest(
+            HTTPClientError.bodyLengthMismatch,
+            .close(nil)
+        )
         XCTAssertEqual(state.channelInactive(), .wait)
     }
 
@@ -368,7 +383,10 @@ class HTTPRequestStateMachineTests: XCTestCase {
 
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: 4...7))
         XCTAssertEqual(state.requestStreamPartReceived(part1, promise: nil), .sendBodyPart(part1, nil))
-        state.requestStreamFinished(trailers: nil, promise: nil).assertFailRequest(HTTPClientError.bodyLengthMismatch, .close(nil))
+        state.requestStreamFinished(trailers: nil, promise: nil).assertFailRequest(
+            HTTPClientError.bodyLengthMismatch,
+            .close(nil)
+        )
         XCTAssertEqual(state.channelRead(.end(nil)), .wait)
     }
 
@@ -973,8 +991,12 @@ extension HTTPRequestStateMachine.Action: Equatable {
         case (.sendBodyPart(let lhsData, let lhsPromise), .sendBodyPart(let rhsData, let rhsPromise)):
             return lhsData == rhsData && lhsPromise?.futureResult == rhsPromise?.futureResult
 
-        case (.sendRequestEnd(let lhsTrailers, let lhsPromise, let lhsAction), .sendRequestEnd(let rhsTrailers, let rhsPromise, let rhsAction)):
-            return lhsTrailers == rhsTrailers && lhsPromise?.futureResult == rhsPromise?.futureResult && lhsAction == rhsAction
+        case (
+            .sendRequestEnd(let lhsTrailers, let lhsPromise, let lhsAction),
+            .sendRequestEnd(let rhsTrailers, let rhsPromise, let rhsAction)
+        ):
+            return lhsTrailers == rhsTrailers && lhsPromise?.futureResult == rhsPromise?.futureResult
+                && lhsAction == rhsAction
 
         case (.pauseRequestBodyStream, .pauseRequestBodyStream):
             return true

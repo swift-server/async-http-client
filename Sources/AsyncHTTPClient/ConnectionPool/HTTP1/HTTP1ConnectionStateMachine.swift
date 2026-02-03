@@ -427,7 +427,7 @@ extension HTTP1ConnectionStateMachine.State {
             return .resumeRequestBodyStream
         case .sendBodyPart(let part, let writePromise):
             return .sendBodyPart(part, writePromise)
-        case .sendRequestEnd(trailers: let trailers, let writePromise, let finalAction):
+        case .sendRequestEnd(let trailers, let writePromise, let finalAction):
             guard case .inRequest(_, close: let close) = self else {
                 assertionFailure("Invalid state: \(self)")
                 self = .closing
