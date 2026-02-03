@@ -28,9 +28,10 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
             case requestHeadSent
             case resumeRequestBodyStream
             case pauseRequestBodyStream
+            case requestBodySent
             case receiveResponseHead
             case receiveResponseBodyParts
-            case succeedRequest
+            case receiveResponseEnd
             case fail
         }
 
@@ -38,9 +39,10 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
         case requestHeadSent
         case resumeRequestBodyStream
         case pauseRequestBodyStream
+        case requestBodySent
         case receiveResponseHead(HTTPResponseHead)
         case receiveResponseBodyParts(CircularBuffer<ByteBuffer>)
-        case succeedRequest(CircularBuffer<ByteBuffer>?)
+        case receiveResponseEnd(CircularBuffer<ByteBuffer>?, HTTPHeaders?)
         case fail(Error)
 
         var kind: Kind {
@@ -49,9 +51,10 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
             case .requestHeadSent: return .requestHeadSent
             case .resumeRequestBodyStream: return .resumeRequestBodyStream
             case .pauseRequestBodyStream: return .pauseRequestBodyStream
+            case .requestBodySent: return .requestBodySent
             case .receiveResponseHead: return .receiveResponseHead
             case .receiveResponseBodyParts: return .receiveResponseBodyParts
-            case .succeedRequest: return .succeedRequest
+            case .receiveResponseEnd: return .receiveResponseEnd
             case .fail: return .fail
             }
         }
@@ -73,9 +76,10 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
     let requestHeadSentCallback: (@Sendable () -> Void)? = nil
     let resumeRequestBodyStreamCallback: (@Sendable () -> Void)? = nil
     let pauseRequestBodyStreamCallback: (@Sendable () -> Void)? = nil
+    let requestBodyStreamSentCallback: (@Sendable () -> Void)? = nil
     let receiveResponseHeadCallback: (@Sendable (HTTPResponseHead) -> Void)? = nil
     let receiveResponseBodyPartsCallback: (@Sendable (CircularBuffer<ByteBuffer>) -> Void)? = nil
-    let succeedRequestCallback: (@Sendable (CircularBuffer<ByteBuffer>?) -> Void)? = nil
+    let receiveResponseEndCallback: (@Sendable (CircularBuffer<ByteBuffer>?, HTTPHeaders?) -> Void)? = nil
     let failCallback: (@Sendable (Error) -> Void)? = nil
 
     /// captures all ``HTTPExecutableRequest`` method calls in the order of occurrence, including arguments.
@@ -141,6 +145,14 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
         pauseRequestBodyStreamCallback()
     }
 
+    func requestBodyStreamSent() {
+        self.events.append(.requestBodySent)
+        guard let requestBodyStreamSentCallback = self.requestBodyStreamSentCallback else {
+            return self.calledUnimplementedMethod(#function)
+        }
+        requestBodyStreamSentCallback()
+    }
+
     func receiveResponseHead(_ head: HTTPResponseHead) {
         self.events.append(.receiveResponseHead(head))
         guard let receiveResponseHeadCallback = receiveResponseHeadCallback else {
@@ -158,11 +170,11 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
     }
 
     func receiveResponseEnd(_ buffer: CircularBuffer<ByteBuffer>?, trailers: HTTPHeaders?) {
-        self.events.append(.succeedRequest(buffer))
-        guard let succeedRequestCallback = succeedRequestCallback else {
+        self.events.append(.receiveResponseEnd(buffer, nil))
+        guard let receiveResponseEndCallback = self.receiveResponseEndCallback else {
             return self.calledUnimplementedMethod(#function)
         }
-        succeedRequestCallback(buffer)
+        receiveResponseEndCallback(buffer, nil)
     }
 
     func fail(_ error: Error) {

@@ -1394,6 +1394,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case deadlineExceeded
         case httpEndReceivedAfterHeadWith1xx
         case shutdownUnsupported
+        case internalStateFailure(file: String, line: UInt)
     }
 
     private var code: Code
@@ -1479,6 +1480,9 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
             return "HTTP end received after head with 1xx"
         case .shutdownUnsupported:
             return "The global singleton HTTP client cannot be shut down"
+        case .internalStateFailure(let file, let line):
+            return
+                "An internal state failure has occurred (File: \(file), line: \(line)). Please open an issue with a reproducer if possible"
         }
     }
 
@@ -1569,6 +1573,11 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     ///  - A connection could not be created within the timout period.
     ///  - Tasks are not processed fast enough on the existing connections, to process all waiters in time
     public static let getConnectionFromPoolTimeout = HTTPClientError(code: .getConnectionFromPoolTimeout)
+
+    /// A state machine has reached an unsupported state, that wasn't considered when implementing.
+    public static func internalStateFailure(file: String = #fileID, line: UInt = #line) -> HTTPClientError {
+        HTTPClientError(code: .internalStateFailure(file: file, line: line))
+    }
 
     @available(
         *,
