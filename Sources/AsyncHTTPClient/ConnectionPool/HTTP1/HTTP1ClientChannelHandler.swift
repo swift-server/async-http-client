@@ -263,6 +263,8 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
 
                     switch finalAction {
                     case .none:
+                        // we must nil out the request here, as we are still uploading the request
+                        // and therefore still need the reference to it.
                         break
 
                     case .informConnectionIsIdle:

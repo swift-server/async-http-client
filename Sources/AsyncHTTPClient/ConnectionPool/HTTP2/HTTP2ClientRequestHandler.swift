@@ -198,6 +198,8 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
         case .sendRequestEnd(let writePromise, let finalAction):
             let promise = writePromise ?? context.eventLoop.makePromise(of: Void.self)
+            // We can force unwrap the request here, as we have just validated in the state machine,
+            // that the request is neither failed nor finished yet
             let request = self.request!
             promise.futureResult.whenSuccess {
                 request.requestBodyStreamSent()
