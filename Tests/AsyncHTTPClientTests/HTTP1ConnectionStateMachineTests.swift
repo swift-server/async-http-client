@@ -52,7 +52,10 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         // once we receive a writable event again, we can allow the producer to produce more data
         XCTAssertEqual(state.writabilityChanged(writable: true), .resumeRequestBodyStream)
         XCTAssertEqual(state.requestStreamPartReceived(part3, promise: nil), .sendBodyPart(part3, nil))
-        XCTAssertEqual(state.requestStreamFinished(trailers: nil, promise: nil), .sendRequestEnd(trailers: nil, nil, .none))
+        XCTAssertEqual(
+            state.requestStreamFinished(trailers: nil, promise: nil),
+            .sendRequestEnd(trailers: nil, nil, .none)
+        )
 
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(

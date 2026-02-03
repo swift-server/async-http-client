@@ -213,7 +213,11 @@ extension MockRequestExecutor: HTTPRequestExecutor {
         promise?.succeed(())
     }
 
-    func finishRequestBodyStream(trailers: HTTPHeaders?, request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
+    func finishRequestBodyStream(
+        trailers: HTTPHeaders?,
+        request: HTTPExecutableRequest,
+        promise: EventLoopPromise<Void>?
+    ) {
         self.writeNextRequestPart(.endOfStream, request: request)
         promise?.succeed(())
     }

@@ -603,14 +603,23 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
         channel.write(request, promise: nil)
 
         XCTAssertEqual(try channel.readOutbound(as: HTTPClientRequestPart.self), .head(request.requestHead))
-        XCTAssertEqual(try channel.readOutbound(as: HTTPClientRequestPart.self), .body(.byteBuffer(.init(string: "Hello World"))))
+        XCTAssertEqual(
+            try channel.readOutbound(as: HTTPClientRequestPart.self),
+            .body(.byteBuffer(.init(string: "Hello World")))
+        )
         XCTAssertEqual(try channel.readOutbound(as: HTTPClientRequestPart.self), .end(["trailer": "foo"]))
 
         XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.head(.init(version: .http1_1, status: .ok))))
         XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.body(.init(string: "Foo Bar"))))
         XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.end(["trailer": "bar"])))
 
-        XCTAssertEqual(request.events.map(\.kind), [.willExecuteRequest, .requestHeadSent, .resumeRequestBodyStream, .requestBodySent, .receiveResponseHead, .receiveResponseEnd])
+        XCTAssertEqual(
+            request.events.map(\.kind),
+            [
+                .willExecuteRequest, .requestHeadSent, .resumeRequestBodyStream, .requestBodySent, .receiveResponseHead,
+                .receiveResponseEnd,
+            ]
+        )
     }
 
 }
