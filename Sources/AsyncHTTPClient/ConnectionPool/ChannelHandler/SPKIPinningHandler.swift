@@ -101,8 +101,7 @@ internal func constantTimeAnyMatch(_ target: Data, _ candidates: [SPKIHash]) -> 
 
     var anyMatch: UInt8 = 0
     for candidate in candidates {
-        let lengthDiff = UInt8(bitPattern: Int8(target.count - candidate.bytes.count))
-        var diff = lengthDiff
+        var diff: UInt8 = (target.count == candidate.bytes.count) ? 0 : 1
 
         let maxLength = max(target.count, candidate.bytes.count)
         for i in 0 ..< maxLength {
@@ -110,6 +109,7 @@ internal func constantTimeAnyMatch(_ target: Data, _ candidates: [SPKIHash]) -> 
             let b = i < candidate.bytes.count ? candidate.bytes[i] : 0
             diff |= a ^ b
         }
+
         anyMatch |= (diff == 0) ? 1 : 0
     }
     return anyMatch != 0
