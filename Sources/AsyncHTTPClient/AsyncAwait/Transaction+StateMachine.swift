@@ -38,6 +38,7 @@ extension Transaction {
             case requestHeadSent
             case producing
             case paused(continuation: CheckedContinuation<Void, Error>?)
+            case endForwarded
             case finished
         }
 
@@ -97,7 +98,8 @@ extension Transaction {
                 bodyStreamContinuation: CheckedContinuation<Void, Error>?
             )
 
-            case failRequestStreamContinuation(CheckedContinuation<Void, Error>, Error)
+            case failRequestStreamContinuation(CheckedContinuation<Void, Error>, Error, HTTPRequestExecutor)
+            case cancelExecutor(HTTPRequestExecutor)
         }
 
         mutating func fail(_ error: Error) -> FailAction {
@@ -135,7 +137,7 @@ extension Transaction {
                         bodyStreamContinuation: continuation
                     )
 
-                case .requestHeadSent, .finished, .producing, .paused(continuation: .none):
+                case .requestHeadSent, .endForwarded, .finished, .producing, .paused(continuation: .none):
                     self.state = .finished(error: error)
                     return .failResponseHead(
                         context.continuation,
@@ -156,12 +158,29 @@ extension Transaction {
                         context.executor,
                         bodyStreamContinuation: bodyStreamContinuation
                     )
-                case .finished, .producing, .requestHeadSent:
+                case .endForwarded, .finished, .producing, .requestHeadSent:
                     return .failResponseStream(source, error, context.executor, bodyStreamContinuation: nil)
                 }
 
-            case .finished(error: _),
-                .executing(_, _, .finished):
+            case .executing(let context, let requestStreamState, .finished):
+                // an error occured after full response received, but before the full request was sent
+                self.state = .finished(error: error)
+                switch requestStreamState {
+                case .paused(let bodyStreamContinuation):
+                    if let bodyStreamContinuation {
+                        return .failRequestStreamContinuation(
+                            bodyStreamContinuation,
+                            error,
+                            context.executor
+                        )
+                    } else {
+                        return .cancelExecutor(context.executor)
+                    }
+                case .endForwarded, .finished, .producing, .requestHeadSent:
+                    return .cancelExecutor(context.executor)
+                }
+
+            case .finished(error: _):
                 return .none
             }
         }
@@ -232,7 +251,7 @@ extension Transaction {
                 self.state = .executing(context, .producing, responseState)
                 return .resumeStream(continuation)
 
-            case .executing(_, .finished, _):
+            case .executing(_, .endForwarded, _), .executing(_, .finished, _):
                 // the channels writability changed to writable after we have forwarded all the
                 // request bytes. Can be ignored.
                 return .none
@@ -254,6 +273,7 @@ extension Transaction {
                 self.state = .executing(context, .paused(continuation: nil), responseSteam)
 
             case .executing(_, .paused, _),
+                .executing(_, .endForwarded, _),
                 .executing(_, .finished, _),
                 .finished:
                 // the channels writability changed to paused after we have already forwarded all
@@ -298,7 +318,7 @@ extension Transaction {
                     "A write continuation already exists, but we tried to set another one. Invalid state: \(self.state)"
                 )
 
-            case .finished, .executing(_, .finished, _):
+            case .finished, .executing(_, .endForwarded, _), .executing(_, .finished, _):
                 return .fail
             }
         }
@@ -309,6 +329,7 @@ extension Transaction {
                 .queued,
                 .deadlineExceededWhileQueued,
                 .executing(_, .requestHeadSent, _),
+                .executing(_, .endForwarded, _),
                 .executing(_, .finished, _):
                 preconditionFailure(
                     "A request stream can only produce, if the request was started. Invalid state: \(self.state)"
@@ -343,6 +364,7 @@ extension Transaction {
             case .initialized,
                 .queued,
                 .deadlineExceededWhileQueued,
+                .executing(_, .endForwarded, _),
                 .executing(_, .finished, _):
                 preconditionFailure("Invalid state: \(self.state)")
 
@@ -355,17 +377,38 @@ extension Transaction {
                 .executing(let context, .paused(continuation: .none), let responseState),
                 .executing(let context, .requestHeadSent, let responseState):
 
-                switch responseState {
-                case .finished:
-                    // if the response stream has already finished before the request, we must succeed
-                    // the final continuation.
-                    self.state = .finished(error: nil)
-                    return .forwardStreamFinished(context.executor)
+                self.state = .executing(context, .endForwarded, responseState)
+                return .forwardStreamFinished(context.executor)
 
-                case .waitingForResponseHead, .streamingBody:
-                    self.state = .executing(context, .finished, responseState)
-                    return .forwardStreamFinished(context.executor)
-                }
+            case .finished:
+                return .none
+            }
+        }
+
+        enum RequestBodyStreamSentAction {
+            case none
+            case failure(Error)
+        }
+
+        mutating func requestBodyStreamSent() -> RequestBodyStreamSentAction {
+            switch self.state {
+            case .initialized,
+                .queued,
+                .deadlineExceededWhileQueued,
+                .executing(_, .requestHeadSent, _),
+                .executing(_, .finished, _),
+                .executing(_, .producing, _),
+                .executing(_, .paused, _):
+                assertionFailure("Invalid state: \(self.state)")
+                return .failure(HTTPClientError.internalStateFailure())
+
+            case .executing(_, .endForwarded, .finished):
+                self.state = .finished(error: nil)
+                return .none
+
+            case .executing(let context, .endForwarded, let responseState):
+                self.state = .executing(context, .finished, responseState)
+                return .none
 
             case .finished:
                 return .none
@@ -482,7 +525,7 @@ extension Transaction {
                 switch requestState {
                 case .finished:
                     self.state = .finished(error: nil)
-                case .paused, .producing, .requestHeadSent:
+                case .paused, .producing, .requestHeadSent, .endForwarded:
                     self.state = .executing(context, requestState, .finished)
                 }
                 return .finishResponseStream(source, finalBody: newChunks)
@@ -494,6 +537,15 @@ extension Transaction {
                 preconditionFailure(
                     "Already received an eof or error before. Must not receive further events. Invalid state: \(self.state)"
                 )
+            }
+        }
+
+        mutating func httpResponseStreamTerminated() -> FailAction {
+            switch self.state {
+            case .executing(_, _, .finished), .finished:
+                return .none
+            default:
+                return self.fail(HTTPClientError.cancelled)
             }
         }
 
@@ -538,7 +590,7 @@ extension Transaction {
                         executor: context.executor,
                         bodyStreamContinuation: continuation
                     )
-                case .requestHeadSent, .finished, .producing, .paused(continuation: .none):
+                case .requestHeadSent, .endForwarded, .finished, .producing, .paused(continuation: .none):
                     self.state = .finished(error: error)
                     return .cancel(
                         requestContinuation: context.continuation,

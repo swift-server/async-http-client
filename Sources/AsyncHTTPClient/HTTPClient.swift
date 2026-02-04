@@ -1397,6 +1397,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case invalidRedirectConfiguration
         case invalidHTTPVersionConfiguration
         case invalidDNSOverridesConfiguration
+        case internalStateFailure(file: String, line: UInt)
     }
 
     private var code: Code
@@ -1489,6 +1490,9 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case .invalidDNSOverridesConfiguration:
             return
                 "The DNS overrides specified in the configuration are not valid. Please specify in the format hostname1:ip1,hostname2:ip2"
+        case .internalStateFailure(let file, let line):
+            return
+                "An internal state failure has occurred (File: \(file), line: \(line)). Please open an issue with a reproducer if possible"
         }
     }
 
@@ -1588,6 +1592,11 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
 
     /// The DNS overrides specified in the configuration are not valid.
     public static let invalidDNSOverridesConfiguration = HTTPClientError(code: .invalidDNSOverridesConfiguration)
+
+    /// A state machine has reached an unsupported state, that wasn't considered when implementing.
+    public static func internalStateFailure(file: String = #fileID, line: UInt = #line) -> HTTPClientError {
+        HTTPClientError(code: .internalStateFailure(file: file, line: line))
+    }
 
     @available(
         *,

@@ -59,12 +59,15 @@ extension RequestBag {
             case initialized(RedirectHandler<Delegate.Response>?)
             case buffering(CircularBuffer<ByteBuffer>, next: Next)
             case waitingForRemote
+            case endReceived
         }
 
         private var state: State
+        private let requestFramingMetadata: RequestFramingMetadata
 
-        init(redirectHandler: RedirectHandler<Delegate.Response>?) {
+        init(redirectHandler: RedirectHandler<Delegate.Response>?, requestFramingMetadata: RequestFramingMetadata) {
             self.state = .initialized(redirectHandler)
+            self.requestFramingMetadata = requestFramingMetadata
         }
     }
 }
@@ -98,6 +101,20 @@ extension RequestBag.StateMachine {
         case cancelExecuter(HTTPRequestExecutor)
         case failTaskAndCancelExecutor(Error, HTTPRequestExecutor)
         case none
+    }
+
+    mutating func requestHeadSent() {
+        switch self.state {
+        case .initialized:
+            fatalError()
+        case .executing(let executor, .initialized, let responseStream):
+            if self.requestFramingMetadata.body == .fixedSize(0) {
+                self.state = .executing(executor, .finished, responseStream)
+            }
+
+        default:
+            break
+        }
     }
 
     mutating func willExecuteRequest(_ executor: HTTPRequestExecutor) -> WillExecuteRequestAction {
@@ -143,7 +160,9 @@ extension RequestBag.StateMachine {
             // request bytes. Can be ignored.
             return .none
 
-        case .executing(_, .initialized, .buffering), .executing(_, .initialized, .waitingForRemote):
+        case .executing(_, .initialized, .buffering),
+            .executing(_, .initialized, .waitingForRemote),
+            .executing(_, .initialized, .endReceived):
             preconditionFailure("Invalid states: Response can not be received before request")
 
         case .redirected:
@@ -239,6 +258,7 @@ extension RequestBag.StateMachine {
 
     enum FinishAction {
         case forwardStreamFinished(HTTPRequestExecutor, EventLoopPromise<Void>?)
+        case forwardStreamFinishedAndSucceedTask(HTTPRequestExecutor, EventLoopPromise<Void>?)
         case forwardStreamFailureAndFailTask(HTTPRequestExecutor, Error, EventLoopPromise<Void>?)
         case none
     }
@@ -254,8 +274,15 @@ extension RequestBag.StateMachine {
             case .producing:
                 switch result {
                 case .success:
-                    self.state = .executing(executor, .finished, responseState)
-                    return .forwardStreamFinished(executor, nil)
+                    switch responseState {
+                    case .initialized, .buffering, .waitingForRemote:
+                        self.state = .executing(executor, .finished, responseState)
+                        return .forwardStreamFinished(executor, nil)
+                    case .endReceived:
+                        self.state = .finished(error: nil)
+                        return .forwardStreamFinishedAndSucceedTask(executor, nil)
+                    }
+
                 case .failure(let error):
                     self.state = .finished(error: error)
                     return .forwardStreamFailureAndFailTask(executor, error, nil)
@@ -264,8 +291,15 @@ extension RequestBag.StateMachine {
             case .paused(let promise):
                 switch result {
                 case .success:
-                    self.state = .executing(executor, .finished, responseState)
-                    return .forwardStreamFinished(executor, promise)
+                    switch responseState {
+                    case .initialized, .buffering, .waitingForRemote:
+                        self.state = .executing(executor, .finished, responseState)
+                        return .forwardStreamFinished(executor, promise)
+                    case .endReceived:
+                        self.state = .finished(error: nil)
+                        return .forwardStreamFinishedAndSucceedTask(executor, promise)
+                    }
+
                 case .failure(let error):
                     self.state = .finished(error: error)
                     return .forwardStreamFailureAndFailTask(executor, error, promise)
@@ -346,7 +380,7 @@ extension RequestBag.StateMachine {
         switch self.state {
         case .initialized, .queued, .deadlineExceededWhileQueued:
             preconditionFailure("How can we receive a response body part, if the request hasn't started yet.")
-        case .executing(_, _, .initialized):
+        case .executing(_, _, .initialized), .executing(_, _, .endReceived):
             preconditionFailure("If we receive a response body, we must have received a head before")
 
         case .executing(let executor, let requestState, .buffering(var currentBuffer, next: let next)):
@@ -405,7 +439,7 @@ extension RequestBag.StateMachine {
         switch self.state {
         case .initialized, .queued, .deadlineExceededWhileQueued:
             preconditionFailure("How can we receive a response body part, if the request hasn't started yet.")
-        case .executing(_, _, .initialized):
+        case .executing(_, _, .initialized), .executing(_, _, .endReceived):
             preconditionFailure("If we receive a response body, we must have received a head before")
 
         case .executing(let executor, let requestState, .buffering(var buffer, next: let next)):
@@ -426,8 +460,15 @@ extension RequestBag.StateMachine {
 
         case .executing(let executor, let requestState, .waitingForRemote):
             guard var newChunks = newChunks, !newChunks.isEmpty else {
-                self.state = .finished(error: nil)
-                return .succeedRequest
+                switch requestState {
+                case .initialized, .paused, .producing:
+                    self.state = .executing(executor, requestState, .endReceived)
+                    return .none
+
+                case .finished:
+                    self.state = .finished(error: nil)
+                    return .succeedRequest
+                }
             }
 
             let first = newChunks.removeFirst()
@@ -484,7 +525,7 @@ extension RequestBag.StateMachine {
             self.state = .finished(error: error)
             return .failTask(error, executorToCancel: executor)
 
-        case .executing(_, _, .waitingForRemote):
+        case .executing(_, _, .waitingForRemote), .executing(_, _, .endReceived):
             preconditionFailure(
                 "Invalid state... We just returned from a consumption function. We can't already be waiting"
             )
@@ -550,6 +591,10 @@ extension RequestBag.StateMachine {
                 "Invalid state... We just returned from a consumption function. We can't already be waiting"
             )
 
+        case .executing(_, _, .endReceived):
+            // we can't succeed the request here, as we have not sent all request parts.
+            return .doNothing
+
         case .redirected:
             return .doNothing
 
@@ -614,10 +659,9 @@ extension RequestBag.StateMachine {
         case .executing(let executor, _, .buffering(_, next: .error(_))):
             // this would override another error, let's keep the first one
             return .cancelExecutor(executor)
-        case .executing(let executor, _, .initialized):
-            self.state = .finished(error: error)
-            return .failTask(error, nil, executor)
-        case .executing(let executor, _, .waitingForRemote):
+        case .executing(let executor, _, .initialized),
+            .executing(let executor, _, .waitingForRemote),
+            .executing(let executor, _, .endReceived):
             self.state = .finished(error: error)
             return .failTask(error, nil, executor)
         case .redirected:
