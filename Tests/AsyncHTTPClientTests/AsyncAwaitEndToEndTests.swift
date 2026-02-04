@@ -1046,8 +1046,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             config.httpVersion = .automatic
 
             config.tlsPinning = SPKIPinningConfiguration(
-                activePins: [try SPKIHash(base64: pinBase64)],
-                backupPins: [],
+                pins: [try SPKIHash(algorithm: SHA256.self, base64: pinBase64)],
                 policy: .strict
             )
 
@@ -1091,8 +1090,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             config.httpVersion = .automatic
 
             config.tlsPinning = SPKIPinningConfiguration(
-                activePins: [try SPKIHash(base64: pinBase64)],
-                backupPins: [],
+                pins: [try SPKIHash(algorithm: SHA256.self, base64: pinBase64)],
                 policy: .strict
             )
 
@@ -1116,6 +1114,96 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                     "Unexpected error: \(httpClientError.description)"
                 )
             }
+        }
+    }
+
+    func testSPKIPinning_ValidPin_AuditMode_AllowsConnection() {
+        XCTAsyncTest {
+            let certificate = TestTLS.certificate
+            let privateKey = TestTLS.privateKey
+
+            let tlsConfig = TLSConfiguration.makeServerConfiguration(
+                certificateChain: [.certificate(certificate)],
+                privateKey: .privateKey(privateKey)
+            )
+
+            let bin = HTTPBin(.http2(tlsConfiguration: tlsConfig))
+            defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+            let publicKey = try certificate.extractPublicKey()
+            let spkiBytes = try publicKey.toSPKIBytes()
+            let spkiHash = SHA256.hash(data: Data(spkiBytes))
+            let pinBase64 = Data(spkiHash).base64EncodedString()
+
+            var config = HTTPClient.Configuration().enableFastFailureModeForTesting()
+            config.tlsConfiguration = TLSConfiguration.makeClientConfiguration()
+            config.tlsConfiguration?.trustRoots = .certificates([certificate])
+            config.tlsConfiguration?.certificateVerification = .noHostnameVerification
+            config.httpVersion = .automatic
+
+            config.tlsPinning = SPKIPinningConfiguration(
+                pins: [try SPKIHash(algorithm: SHA256.self, base64: pinBase64)],
+                policy: .audit // <-- AUDIT MODE
+            )
+
+            let localClient = HTTPClient(
+                eventLoopGroupProvider: .shared(MultiThreadedEventLoopGroup.singleton),
+                configuration: config
+            )
+            defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+
+            let request = HTTPClientRequest(url: "https://localhost:\(bin.port)/get")
+
+            guard let response = await XCTAssertNoThrowWithResult(
+                try await localClient.execute(request, deadline: .now() + .seconds(10))
+            ) else { return }
+
+            XCTAssertEqual(response.status, .ok)
+            XCTAssertEqual(response.version, .http2)
+        }
+    }
+
+    func testSPKIPinning_InvalidPin_AuditMode_AllowsConnection() {
+        XCTAsyncTest {
+            let certificate = TestTLS.certificate
+            let privateKey = TestTLS.privateKey
+
+            let tlsConfig = TLSConfiguration.makeServerConfiguration(
+                certificateChain: [.certificate(certificate)],
+                privateKey: .privateKey(privateKey)
+            )
+
+            let bin = HTTPBin(.http2(tlsConfiguration: tlsConfig))
+            defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+            let spkiHash = SHA256.hash(data: Data(UUID().uuidString.utf8))
+            let pinBase64 = Data(spkiHash).base64EncodedString()
+
+            var config = HTTPClient.Configuration().enableFastFailureModeForTesting()
+            config.tlsConfiguration = TLSConfiguration.makeClientConfiguration()
+            config.tlsConfiguration?.trustRoots = .certificates([certificate])
+            config.tlsConfiguration?.certificateVerification = .noHostnameVerification
+            config.httpVersion = .automatic
+
+            config.tlsPinning = SPKIPinningConfiguration(
+                pins: [try SPKIHash(algorithm: SHA256.self, base64: pinBase64)],
+                policy: .audit // <-- AUDIT MODE
+            )
+
+            let localClient = HTTPClient(
+                eventLoopGroupProvider: .shared(MultiThreadedEventLoopGroup.singleton),
+                configuration: config
+            )
+            defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+
+            let request = HTTPClientRequest(url: "https://localhost:\(bin.port)/get")
+
+            guard let response = await XCTAssertNoThrowWithResult(
+                try await localClient.execute(request, deadline: .now() + .seconds(10))
+            ) else { return }
+
+            XCTAssertEqual(response.status, .ok)
+            XCTAssertEqual(response.version, .http2)
         }
     }
 }

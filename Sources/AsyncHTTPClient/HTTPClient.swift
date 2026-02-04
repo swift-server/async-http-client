@@ -912,7 +912,6 @@ public final class HTTPClient: Sendable {
 
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
-            tlsPinning: SPKIPinningConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
             timeout: Timeout = Timeout(),
             connectionPool: ConnectionPool = ConnectionPool(),
@@ -921,7 +920,7 @@ public final class HTTPClient: Sendable {
             decompression: Decompression = .disabled
         ) {
             self.tlsConfiguration = tlsConfiguration
-            self.tlsPinning = tlsPinning
+            self.tlsPinning = nil
             self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
             self.timeout = timeout
             self.connectionPool = connectionPool
@@ -934,7 +933,6 @@ public final class HTTPClient: Sendable {
 
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
-            tlsPinning: SPKIPinningConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
             timeout: Timeout = Timeout(),
             proxy: Proxy? = nil,
@@ -943,7 +941,6 @@ public final class HTTPClient: Sendable {
         ) {
             self.init(
                 tlsConfiguration: tlsConfiguration,
-                tlsPinning: tlsPinning,
                 redirectConfiguration: redirectConfiguration,
                 timeout: timeout,
                 connectionPool: ConnectionPool(),
@@ -955,7 +952,6 @@ public final class HTTPClient: Sendable {
 
         public init(
             certificateVerification: CertificateVerification,
-            tlsPinning: SPKIPinningConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
             timeout: Timeout = Timeout(),
             maximumAllowedIdleTimeInConnectionPool: TimeAmount = .seconds(60),
@@ -967,7 +963,6 @@ public final class HTTPClient: Sendable {
             tlsConfig.certificateVerification = certificateVerification
             self.init(
                 tlsConfiguration: tlsConfig,
-                tlsPinning: tlsPinning,
                 redirectConfiguration: redirectConfiguration,
                 timeout: timeout,
                 connectionPool: ConnectionPool(idleTimeout: maximumAllowedIdleTimeInConnectionPool),
@@ -979,7 +974,6 @@ public final class HTTPClient: Sendable {
 
         public init(
             certificateVerification: CertificateVerification,
-            tlsPinning: SPKIPinningConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
             timeout: Timeout = Timeout(),
             connectionPool: TimeAmount = .seconds(60),
@@ -992,7 +986,6 @@ public final class HTTPClient: Sendable {
             tlsConfig.certificateVerification = certificateVerification
             self.init(
                 tlsConfiguration: tlsConfig,
-                tlsPinning: tlsPinning,
                 redirectConfiguration: redirectConfiguration,
                 timeout: timeout,
                 connectionPool: ConnectionPool(idleTimeout: connectionPool),
@@ -1004,7 +997,6 @@ public final class HTTPClient: Sendable {
 
         public init(
             certificateVerification: CertificateVerification,
-            tlsPinning: SPKIPinningConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
             timeout: Timeout = Timeout(),
             proxy: Proxy? = nil,
@@ -1013,7 +1005,6 @@ public final class HTTPClient: Sendable {
         ) {
             self.init(
                 certificateVerification: certificateVerification,
-                tlsPinning: tlsPinning,
                 redirectConfiguration: redirectConfiguration,
                 timeout: timeout,
                 maximumAllowedIdleTimeInConnectionPool: .seconds(60),
@@ -1025,7 +1016,6 @@ public final class HTTPClient: Sendable {
 
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
-            tlsPinning: SPKIPinningConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
             timeout: Timeout = Timeout(),
             connectionPool: ConnectionPool = ConnectionPool(),
@@ -1038,7 +1028,6 @@ public final class HTTPClient: Sendable {
         ) {
             self.init(
                 tlsConfiguration: tlsConfiguration,
-                tlsPinning: tlsPinning,
                 redirectConfiguration: redirectConfiguration,
                 timeout: timeout,
                 connectionPool: connectionPool,
@@ -1053,7 +1042,6 @@ public final class HTTPClient: Sendable {
 
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
-            tlsPinning: SPKIPinningConfiguration? = nil,
             redirectConfiguration: RedirectConfiguration? = nil,
             timeout: Timeout = Timeout(),
             connectionPool: ConnectionPool = ConnectionPool(),
@@ -1067,7 +1055,6 @@ public final class HTTPClient: Sendable {
         ) {
             self.init(
                 tlsConfiguration: tlsConfiguration,
-                tlsPinning: tlsPinning,
                 redirectConfiguration: redirectConfiguration,
                 timeout: timeout,
                 connectionPool: connectionPool,
@@ -1079,6 +1066,35 @@ public final class HTTPClient: Sendable {
             self.http2ConnectionDebugInitializer = http2ConnectionDebugInitializer
             self.http2StreamChannelDebugInitializer = http2StreamChannelDebugInitializer
             self.tracing = tracing
+        }
+
+        public init(
+            tlsConfiguration: TLSConfiguration? = nil,
+            tlsPinning: SPKIPinningConfiguration?,
+            redirectConfiguration: RedirectConfiguration? = nil,
+            timeout: Timeout = Timeout(),
+            connectionPool: ConnectionPool = ConnectionPool(),
+            proxy: Proxy? = nil,
+            decompression: Decompression = .disabled,
+            http1_1ConnectionDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2ConnectionDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2StreamChannelDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            tracing: TracingConfiguration = .init()
+        ) {
+            self.init(
+                tlsConfiguration: tlsConfiguration,
+                redirectConfiguration: redirectConfiguration,
+                timeout: timeout,
+                connectionPool: connectionPool,
+                proxy: proxy,
+                ignoreUncleanSSLShutdown: false,
+                decompression: decompression,
+                http1_1ConnectionDebugInitializer: http1_1ConnectionDebugInitializer,
+                http2ConnectionDebugInitializer: http2ConnectionDebugInitializer,
+                http2StreamChannelDebugInitializer: http2StreamChannelDebugInitializer,
+                tracing: tracing
+            )
+            self.tlsPinning = tlsPinning
         }
     }
 
