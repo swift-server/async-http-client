@@ -207,7 +207,9 @@ extension Transaction: HTTPExecutableRequest {
         }
     }
 
-    func requestHeadSent() {}
+    func requestHeadSent() {
+        // protocol requirement. Intentionally not needed.
+    }
 
     func resumeRequestBodyStream() {
         let action = self.state.withLockedValue { state in
@@ -243,6 +245,19 @@ extension Transaction: HTTPExecutableRequest {
     func pauseRequestBodyStream() {
         self.state.withLockedValue { state in
             state.pauseRequestBodyStream()
+        }
+    }
+
+    func requestBodyStreamSent() {
+        let action = self.state.withLockedValue { state in
+            state.requestBodyStreamSent()
+        }
+
+        switch action {
+        case .none:
+            break
+        case .failure(let error):
+            self.fail(error)
         }
     }
 
@@ -303,6 +318,13 @@ extension Transaction: HTTPExecutableRequest {
         }
     }
 
+    func httpResponseStreamTerminated() {
+        let action = self.state.withLockedValue { state in
+            state.httpResponseStreamTerminated()
+        }
+        self.performFailAction(action)
+    }
+
     func fail(_ error: Error) {
         let action = self.state.withLockedValue { state in
             state.fail(error)
@@ -326,8 +348,12 @@ extension Transaction: HTTPExecutableRequest {
             requestBodyStreamContinuation?.resume(throwing: error)
             executor.cancelRequest(self)
 
-        case .failRequestStreamContinuation(let bodyStreamContinuation, let error):
+        case .failRequestStreamContinuation(let bodyStreamContinuation, let error, let executor):
             bodyStreamContinuation.resume(throwing: error)
+            executor.cancelRequest(self)
+
+        case .cancelExecutor(let executor):
+            executor.cancelRequest(self)
         }
     }
 
@@ -370,6 +396,6 @@ extension Transaction: NIOAsyncSequenceProducerDelegate {
 
     @usableFromInline
     func didTerminate() {
-        self.fail(HTTPClientError.cancelled)
+        self.httpResponseStreamTerminated()
     }
 }

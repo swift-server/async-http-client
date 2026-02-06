@@ -247,6 +247,11 @@ protocol HTTPExecutableRequest: AnyObject, Sendable {
     /// This will be called on the Channel's EventLoop. Do **not block** during your execution!
     func pauseRequestBodyStream()
 
+    /// Will be called by the ChannelHandler to indicate that the request body stream has been sent.
+    ///
+    /// This will be called on the Channel's EventLoop. Do **not block** during your execution!
+    func requestBodyStreamSent()
+
     /// Receive a response head.
     ///
     /// Please note that `receiveResponseHead` and `receiveResponseBodyPart` may
