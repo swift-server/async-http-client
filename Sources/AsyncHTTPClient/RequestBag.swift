@@ -86,6 +86,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
     let eventLoopPreference: HTTPClient.EventLoopPreference
 
     let tlsConfiguration: TLSConfiguration?
+    let tlsPinning: SPKIPinningConfiguration?
 
     init(
         request: HTTPClient.Request,
@@ -116,6 +117,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
         self.delegate = delegate
 
         self.tlsConfiguration = request.tlsConfiguration
+        self.tlsPinning = request.tlsPinning
 
         self.task.taskDelegate = self
         self.task.futureResult.whenComplete { _ in
