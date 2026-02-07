@@ -44,6 +44,8 @@ import Musl
 import Android
 #elseif canImport(Glibc)
 import Glibc
+#elseif os(Windows)
+import WinSDK
 #endif
 
 /// Are we testing NIO Transport services
@@ -70,7 +72,9 @@ let canBindIPv6Loopback: Bool = {
     let elg = MultiThreadedEventLoopGroup(numberOfThreads: 1)
     defer { try! elg.syncShutdownGracefully() }
     let serverChannel = try? ServerBootstrap(group: elg)
+        #if !os(Windows)
         .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+        #endif
         .bind(host: "::1", port: 0)
         .wait()
     let didBind = (serverChannel != nil)
@@ -78,6 +82,7 @@ let canBindIPv6Loopback: Bool = {
     return didBind
 }()
 
+#if !os(Windows)
 /// Runs the given block in the context of a non-English C locale (in this case, German).
 /// Throws an XCTSkip error if the locale is not supported by the system.
 func withCLocaleSetToGerman(_ body: () throws -> Void) throws {
@@ -95,6 +100,7 @@ func withCLocaleSetToGerman(_ body: () throws -> Void) throws {
     defer { _ = uselocale(oldLocale) }
     try body()
 }
+#endif
 
 final class TestHTTPDelegate: HTTPClientResponseDelegate {
     typealias Response = Void
@@ -259,7 +265,13 @@ enum TemporaryFileHelpers {
         let templateBytesCount = templateBytes.count
         let fd = templateBytes.withUnsafeMutableBufferPointer { ptr in
             ptr.baseAddress!.withMemoryRebound(to: Int8.self, capacity: templateBytesCount) { ptr in
+                #if os(Windows)
+                // _mktemp_s is not great, as it's rumored to have limited randomness, but Windows doesn't have mkstemp
+                // And this is a test utility only.
+                _mktemp_s(ptr, templateBytesCount)
+                #else
                 mkstemp(ptr)
+                #endif
             }
         }
         templateBytes.removeLast()
@@ -512,11 +524,13 @@ where
         let connectionIDAtomic = ManagedAtomic(0)
 
         let serverChannel = try! ServerBootstrap(group: self.group)
+            #if !os(Windows)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .serverChannelOption(
                 ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT),
                 value: reusePort ? 1 : 0
             )
+            #endif
             .serverChannelInitializer { [activeConnCounterHandler] channel in
                 channel.pipeline.addHandler(activeConnCounterHandler)
             }.childChannelInitializer { channel in
