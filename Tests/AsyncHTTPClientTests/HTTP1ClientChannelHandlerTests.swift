@@ -908,7 +908,7 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         let channel = EmbeddedChannel(handlers: [handler], loop: eventLoop)
         XCTAssertNoThrow(try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).wait())
 
-        // non empty body is important to trigger this bug as we otherwise finish the request in a single flush
+        // non empty body is important to allow sending trailers as the request is finished in a single flush otherwise
         let request = MockHTTPExecutableRequest(
             head: .init(version: .http1_1, method: .POST, uri: "http://localhost/"),
             framingMetadata: RequestFramingMetadata(connectionClose: false, body: .stream),
