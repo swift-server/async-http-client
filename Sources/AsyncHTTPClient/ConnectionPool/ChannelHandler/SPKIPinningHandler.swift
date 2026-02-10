@@ -25,9 +25,6 @@ import Algorithms
 /// Validates server identity using the DER-encoded public key structure (RFC 5280, Section 4.1).
 /// Survives legitimate certificate rotations and prevents algorithm downgrade attacks.
 ///
-/// Equality requires matching digest bytes *and* hash algorithm. Length mismatches are treated
-/// as inequality — critical for constant-time security guarantees.
-///
 /// - SeeAlso: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1
 /// - SeeAlso: https://owasp.org/www-project-mobile-security-testing-guide/latest/0x05g-Testing-Network-Communication.html
 public struct SPKIHash: Sendable, Hashable {
@@ -124,9 +121,10 @@ internal func constantTimeAnyMatch(_ target: Data, _ candidates: [SPKIHash]) -> 
 
 /// Configuration for SPKI pinning validation.
 ///
-/// - Warning: Always deploy backup pins ≥ 30 days before certificate expiration. Empty pin sets
-///   in `.strict` mode will reject all connections during rotation.
+/// - Warning: Always deploy multiple pins to enable safe certificate rotation.
+///   Single-pin configurations in `.strict` mode risk catastrophic lockout.
 public struct SPKIPinningConfiguration: Sendable, Hashable {
+
     /// SPKI hashes of trusted certificates.
     public let pins: [SPKIHash]
 
@@ -138,7 +136,8 @@ public struct SPKIPinningConfiguration: Sendable, Hashable {
     /// Creates an SPKI pinning configuration.
     ///
     /// - Parameters:
-    ///   - pins: Hashes of trusted certificates (must not be empty in production).
+    ///   - pins: Hashes of trusted certificates. For production safety, include
+    ///           pins for both current and upcoming certificates to enable rotation.
     ///   - policy: Validation failure policy (`.strict` for production, `.audit` for debugging).
     public init(
         pins: [SPKIHash],
@@ -163,28 +162,50 @@ public struct SPKIPinningConfiguration: Sendable, Hashable {
     }
 }
 
-/// Policy for handling SPKI pin validation failures.
+/// Security policy for SPKI pin validation failures.
 ///
-/// SPKI pinning can fail due to certificate mismatch, invalid SPKI extraction, or missing SSL handler.
-/// This policy determines whether the connection proceeds or is terminated.
+/// Determines the client's response when a server's certificate fails SPKI pin validation:
+/// - `.audit`: Permit the connection for observability (staging/debugging only)
+/// - `.strict`: Terminate the connection immediately (production environments)
+///
+/// - Warning: Never use `.audit` in production — it effectively disables pinning security
+///   guarantees while maintaining audit visibility.
 public struct SPKIPinningPolicy: Sendable, Hashable {
 
-    /// Permit connections with untrusted certificates for observability only.
-    public static let audit = SPKIPinningPolicy(name: "audit", rawValue: 1 << 0)
-
-    /// Reject connections with untrusted certificates.
-    public static let strict = SPKIPinningPolicy(name: "strict", rawValue: 1 << 1)
-
-    public var description: String {
-        return name
+    private enum RawValue: Sendable, Hashable {
+        case audit
+        case strict
     }
 
-    private let name: String
-    private let rawValue: UInt8
+    /// Permit connections with untrusted certificates for observability only.
+    ///
+    /// Use exclusively for debugging, testing, or migration scenarios. Never use in production.
+    public static let audit = SPKIPinningPolicy(rawValue: .audit)
 
-    private init(name: String, rawValue: UInt8) {
-        self.name = name
+    /// Reject connections with untrusted certificates.
+    ///
+    /// Use in production environments where security is paramount.
+    public static let strict = SPKIPinningPolicy(rawValue: .strict)
+
+    public var description: String {
+        switch self.rawValue {
+        case .audit: return "audit"
+        case .strict: return "strict"
+        }
+    }
+
+    private let rawValue: RawValue
+
+    private init(rawValue: RawValue) {
         self.rawValue = rawValue
+    }
+
+    public static func ==(lhs: Self, rhs: Self) -> Bool {
+        lhs.rawValue == rhs.rawValue
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rawValue)
     }
 }
 
@@ -212,7 +233,7 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
                 "SPKIPinningHandler deployed with < 2 pins in strict mode — catastrophic lockout risk on certificate rotation!",
                 metadata: [
                     "current_pin_count": .stringConvertible(tlsPinning.pins.count),
-                    "recommendation": .string("Deploy backup pins ≥ 30 days before certificate expiration")
+                    "recommendation": .string("Deploy multiple pins to enable safe certificate rotation")
                 ]
             )
         }
@@ -241,7 +262,6 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
                     "policy": .string(tlsPinning.policy.description)
                 ]
             )
-
             context.fireUserInboundEventTriggered(event)
 
         case .rejected(let error):
@@ -266,8 +286,8 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
             guard let leaf = peerCertificate else {
                 let error = SPKIPinningHandlerError.emptyCertificateChain
                 return tlsPinning.policy == .audit
-                ? .auditWarning(error)
-                : .rejected(error)
+                    ? .auditWarning(error)
+                    : .rejected(error)
             }
 
             let spkiBytes: [UInt8]
@@ -277,8 +297,8 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
             } catch {
                 let error = SPKIPinningHandlerError.extractionFailed(String(describing: error))
                 return tlsPinning.policy == .audit
-                ? .auditWarning(error)
-                : .rejected(error)
+                    ? .auditWarning(error)
+                    : .rejected(error)
             }
 
             if tlsPinning.contains(spkiBytes: spkiBytes) {
@@ -287,14 +307,14 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
 
             let error = SPKIPinningHandlerError.pinMismatch
             return tlsPinning.policy == .audit
-            ? .auditWarning(error)
-            : .rejected(error)
+                ? .auditWarning(error)
+                : .rejected(error)
 
         case .failure(let error):
             let handlerError = SPKIPinningHandlerError.handlerNotFound(String(describing: error))
             return tlsPinning.policy == .audit
-            ? .auditWarning(handlerError)
-            : .rejected(handlerError)
+                ? .auditWarning(handlerError)
+                : .rejected(handlerError)
         }
     }
 }
@@ -312,7 +332,6 @@ enum PinningValidationResult {
 }
 
 enum SPKIPinningHandlerError: Error, CustomStringConvertible {
-
     case emptyCertificateChain
     case pinMismatch
     case extractionFailed(String)
