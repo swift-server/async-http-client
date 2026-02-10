@@ -102,7 +102,7 @@ struct HTTPRequestStateMachine {
             startIdleTimer: Bool
         )
         case sendBodyPart(IOData, EventLoopPromise<Void>?)
-        case sendRequestEnd(EventLoopPromise<Void>?, FinalSuccessfulRequestAction)
+        case sendRequestEnd(trailers: HTTPHeaders?, EventLoopPromise<Void>?, FinalSuccessfulRequestAction)
         case failSendBodyPart(Error, EventLoopPromise<Void>?)
         case failSendStreamFinished(Error, EventLoopPromise<Void>?)
 
@@ -111,7 +111,7 @@ struct HTTPRequestStateMachine {
 
         case forwardResponseHead(HTTPResponseHead, pauseRequestBodyStream: Bool)
         case forwardResponseBodyParts(CircularBuffer<ByteBuffer>)
-        case forwardResponseEnd(FinalSuccessfulRequestAction, CircularBuffer<ByteBuffer>)
+        case forwardResponseEnd(FinalSuccessfulRequestAction, CircularBuffer<ByteBuffer>, HTTPHeaders?)
 
         case failRequest(Error, FinalFailedRequestAction)
 
@@ -353,7 +353,7 @@ struct HTTPRequestStateMachine {
         }
     }
 
-    mutating func requestStreamFinished(promise: EventLoopPromise<Void>?) -> Action {
+    mutating func requestStreamFinished(trailers: HTTPHeaders?, promise: EventLoopPromise<Void>?) -> Action {
         switch self.state {
         case .initialized,
             .waitForChannelToBecomeWritable,
@@ -370,7 +370,7 @@ struct HTTPRequestStateMachine {
             }
 
             self.state = .running(.endSent, .waitingForHead)
-            return .sendRequestEnd(promise, .none)
+            return .sendRequestEnd(trailers: trailers, promise, .none)
 
         case .running(
             .streaming(let expectedBodyLength, let sentBodyBytes, _),
@@ -385,7 +385,7 @@ struct HTTPRequestStateMachine {
             }
 
             self.state = .running(.endSent, .receivingBody(head, streamState))
-            return .sendRequestEnd(promise, .none)
+            return .sendRequestEnd(trailers: trailers, promise, .none)
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, _), .endReceived):
             if let expected = expectedBodyLength, expected != sentBodyBytes {
@@ -395,7 +395,7 @@ struct HTTPRequestStateMachine {
             }
 
             self.state = .finished
-            return .sendRequestEnd(promise, .requestDone)
+            return .sendRequestEnd(trailers: trailers, promise, .requestDone)
 
         case .failed(let error):
             return .failSendStreamFinished(error, promise)
@@ -497,8 +497,8 @@ struct HTTPRequestStateMachine {
             return self.receivedHTTPResponseHead(head)
         case .body(let body):
             return self.receivedHTTPResponseBodyPart(body)
-        case .end:
-            return self.receivedHTTPResponseEnd()
+        case .end(let trailers):
+            return self.receivedHTTPResponseEnd(trailers: trailers)
         }
     }
 
@@ -618,7 +618,7 @@ struct HTTPRequestStateMachine {
         }
     }
 
-    private mutating func receivedHTTPResponseEnd() -> Action {
+    private mutating func receivedHTTPResponseEnd(trailers: HTTPHeaders?) -> Action {
         switch self.state {
         case .initialized, .waitForChannelToBecomeWritable:
             preconditionFailure(
@@ -648,7 +648,7 @@ struct HTTPRequestStateMachine {
                         ),
                         .endReceived
                     )
-                    return .forwardResponseEnd(.none, remainingBuffer)
+                    return .forwardResponseEnd(.none, remainingBuffer, trailers)
 
                 case .close:
                     // If we receive a `.close` as a connectionAction from the responseStreamState
@@ -672,7 +672,7 @@ struct HTTPRequestStateMachine {
                 // connection should be closed anyway.
                 let (remainingBuffer, _) = responseStreamState.end()
                 state = .finished
-                return .forwardResponseEnd(.close, remainingBuffer)
+                return .forwardResponseEnd(.close, remainingBuffer, trailers)
             }
 
         case .running(.endSent, .receivingBody(_, var responseStreamState)):
@@ -681,9 +681,9 @@ struct HTTPRequestStateMachine {
                 state = .finished
                 switch action {
                 case .none:
-                    return .forwardResponseEnd(.requestDone, remainingBuffer)
+                    return .forwardResponseEnd(.requestDone, remainingBuffer, trailers)
                 case .close:
-                    return .forwardResponseEnd(.close, remainingBuffer)
+                    return .forwardResponseEnd(.close, remainingBuffer, trailers)
                 }
             }
 

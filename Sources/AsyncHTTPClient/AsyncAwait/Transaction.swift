@@ -157,7 +157,7 @@ final class Transaction:
             break
 
         case .forwardStreamFinished(let executor):
-            executor.finishRequestBodyStream(self, promise: nil)
+            executor.finishRequestBodyStream(trailers: nil, request: self, promise: nil)
         }
         return
     }
