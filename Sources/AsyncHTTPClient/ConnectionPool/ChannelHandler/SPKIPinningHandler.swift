@@ -88,28 +88,35 @@ public struct SPKIHash: Sendable, Hashable {
     }
 }
 
-/// Constant-time digest comparison preventing timing attacks.
+/// Constant-time comparison to prevent timing attacks during SPKI pin validation.
 ///
-/// Compares digests without truncation — length mismatches and byte differences are incorporated
-/// into a single constant-time result. Prevents false positives from partial matches (e.g., SHA-256
-/// vs SHA-1).
+/// Timing attacks exploit micro-variations in execution time to infer secret values.
+/// This function eliminates such leaks by:
+/// 1. Iterating a fixed number of times (determined by hash algorithm)
+/// 2. Processing all candidates even after a match is found
+/// 3. Performing all secret-dependent operations before any conditional branches
 ///
-/// - Warning: Never use truncating comparisons (like `zip`) for cryptographic equality — they
-///   silently accept partial matches.
+/// SECURITY INVARIANT: All candidates share identical length (enforced by
+/// SPKIPinningConfiguration grouping and SPKIHash validation). Length mismatches
+/// are rejected early using public knowledge (algorithm-determined digest size),
+/// which cannot leak secret information.
 internal func constantTimeAnyMatch(_ target: Data, _ candidates: [SPKIHash]) -> Bool {
     guard !candidates.isEmpty else { return false }
 
+    let expectedLength = candidates[0].bytes.count
+    guard target.count == expectedLength else { return false }
+
     var anyMatch: UInt8 = 0
     for candidate in candidates {
-        var diff: UInt8 = (target.count == candidate.bytes.count) ? 0 : 1
+        precondition(
+            candidate.bytes.count == expectedLength,
+            "Algorithm grouping invariant violated: candidates must share identical length"
+        )
 
-        let maxLength = max(target.count, candidate.bytes.count)
-        for i in 0 ..< maxLength {
-            let a = i < target.count ? target[i] : 0
-            let b = i < candidate.bytes.count ? candidate.bytes[i] : 0
-            diff |= a ^ b
+        var diff: UInt8 = 0
+        for i in 0 ..< expectedLength {
+            diff |= target[i] ^ candidate.bytes[i]
         }
-
         anyMatch |= (diff == 0) ? 1 : 0
     }
     return anyMatch != 0
@@ -192,16 +199,13 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
 
     private let tlsPinning: SPKIPinningConfiguration
     private let logger: Logger
-    private let executor: SPKIPinningExecutor
 
     init(
         tlsPinning: SPKIPinningConfiguration,
-        logger: Logger,
-        executor: SPKIPinningExecutor = DefaultSPKIPinningExecutor()
+        logger: Logger
     ) {
         self.tlsPinning = tlsPinning
         self.logger = logger
-        self.executor = executor
 
         if tlsPinning.pins.count < 2 && tlsPinning.policy == .strict {
             logger.warning(
@@ -215,29 +219,44 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
     }
 
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
-        guard
-            let tlsEvent = event as? TLSUserEvent,
-            case .handshakeCompleted = tlsEvent
-        else {
+        guard case .handshakeCompleted = (event as? TLSUserEvent) else {
             context.fireUserInboundEventTriggered(event)
             return
         }
 
         // ⚠️ Security-critical: handshake propagation is delayed until validation completes
-        context.pipeline.handler(type: NIOSSLHandler.self).assumeIsolated().whenComplete {
-            let result = self.validatePinning(for: $0.map(\.peerCertificate))
+        let result = self.validatePinning(for: Result {
+            try context.pipeline.syncOperations.handler(type: NIOSSLHandler.self).peerCertificate
+        })
 
-            switch result {
-            case .accepted:
-                self.executor.propagateHandshakeEvent(context: context, event: tlsEvent)
+        switch result {
+        case .accepted:
+            context.fireUserInboundEventTriggered(event)
 
-            case .auditWarning(let error):
-                self.executor.logAuditWarning(logger: self.logger, error: error, policy: self.tlsPinning.policy)
-                self.executor.propagateHandshakeEvent(context: context, event: tlsEvent)
+        case .auditWarning(let error):
+            logger.warning(
+                "SPKI pinning failed — connection allowed for audit purposes",
+                metadata: [
+                    "error": .string(String(describing: error)),
+                    "policy": .string(tlsPinning.policy.description)
+                ]
+            )
 
-            case .rejected(let error):
-                self.executor.logErrorAndClose(context: context, logger: self.logger, error: error, tlsPinning: self.tlsPinning)
-            }
+            context.fireUserInboundEventTriggered(event)
+
+        case .rejected(let error):
+            let metadata: Logger.Metadata = [
+                "policy": .string(tlsPinning.policy.description),
+                "expected_pins": .string(
+                    tlsPinning.pins.map { $0.bytes.base64EncodedString() }.joined(separator: ", ")
+                )
+            ]
+
+            logger.error("SPKI pinning failed — connection blocked", metadata: metadata)
+
+            let error = HTTPClientError.invalidCertificatePinning(String(describing: error))
+            context.fireErrorCaught(error)
+            context.close(promise: nil)
         }
     }
 
@@ -277,44 +296,6 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
             ? .auditWarning(handlerError)
             : .rejected(handlerError)
         }
-    }
-}
-
-protocol SPKIPinningExecutor {
-    func propagateHandshakeEvent(context: ChannelHandlerContext, event: TLSUserEvent)
-    func logAuditWarning(logger: Logger, error: Error, policy: SPKIPinningPolicy)
-    func logErrorAndClose(context: ChannelHandlerContext, logger: Logger, error: Error, tlsPinning: SPKIPinningConfiguration)
-}
-
-struct DefaultSPKIPinningExecutor: SPKIPinningExecutor {
-
-    func propagateHandshakeEvent(context: ChannelHandlerContext, event: TLSUserEvent) {
-        context.fireUserInboundEventTriggered(event)
-    }
-
-    func logAuditWarning(logger: Logger, error: Error, policy: SPKIPinningPolicy) {
-        logger.warning(
-            "SPKI pinning failed — connection allowed for audit purposes",
-            metadata: [
-                "error": .string(String(describing: error)),
-                "policy": .string(policy.description)
-            ]
-        )
-    }
-
-    func logErrorAndClose(context: ChannelHandlerContext, logger: Logger, error: Error, tlsPinning: SPKIPinningConfiguration) {
-        let metadata: Logger.Metadata = [
-            "policy": .string(tlsPinning.policy.description),
-            "expected_pins": .string(
-                tlsPinning.pins.map { $0.bytes.base64EncodedString() }.joined(separator: ", ")
-            )
-        ]
-
-        logger.error("SPKI pinning failed — connection blocked", metadata: metadata)
-
-        let error = HTTPClientError.invalidCertificatePinning(String(describing: error))
-        context.fireErrorCaught(error)
-        context.close(promise: nil)
     }
 }
 

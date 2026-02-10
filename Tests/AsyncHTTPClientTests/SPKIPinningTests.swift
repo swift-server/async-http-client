@@ -276,27 +276,3 @@ class SPKIPinningTests: XCTestCase {
         return (certificate, spkiHash)
     }
 }
-
-final class MockSPKIPinningExecutor: SPKIPinningExecutor {
-
-    var propagateCallCount = 0
-    var lastPropagatedEvent: TLSUserEvent?
-    var auditWarningLogged = false
-    var lastLoggedError: Error?
-    var closeCallCount = 0
-
-    func propagateHandshakeEvent(context: ChannelHandlerContext, event: TLSUserEvent) {
-        propagateCallCount += 1
-        lastPropagatedEvent = event
-    }
-
-    func logAuditWarning(logger: Logger, error: Error, policy: SPKIPinningPolicy) {
-        auditWarningLogged = true
-        lastLoggedError = error
-    }
-
-    func logErrorAndClose(context: ChannelHandlerContext, logger: Logger, error: Error, tlsPinning: SPKIPinningConfiguration) {
-        closeCallCount += 1
-        lastLoggedError = error
-    }
-}
