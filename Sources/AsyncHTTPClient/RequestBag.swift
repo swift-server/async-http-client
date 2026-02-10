@@ -239,7 +239,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
             promise.futureResult.whenSuccess {
                 self.delegate.didSendRequest(task: self.task)
             }
-            writer.finishRequestBodyStream(self, promise: promise)
+            writer.finishRequestBodyStream(trailers: nil, request: self, promise: promise)
 
         case .forwardStreamFinishedAndSucceedTask(let writer, let writerPromise):
             let promise = writerPromise ?? self.task.eventLoop.makePromise(of: Void.self)
@@ -258,7 +258,7 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
                     self.task.promise.fail(error)
                 }
             }
-            writer.finishRequestBodyStream(self, promise: promise)
+            writer.finishRequestBodyStream(trailers: nil, request: self, promise: promise)
 
         case .forwardStreamFailureAndFailTask(let writer, let error, let promise):
             writer.cancelRequest(self)
