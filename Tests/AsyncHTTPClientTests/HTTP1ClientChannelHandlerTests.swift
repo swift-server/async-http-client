@@ -946,6 +946,16 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
             ]
         )
     }
+
+    func testDefaultMaxBufferSize() {
+        if MemoryLayout<Int>.size == 8 {
+            XCTAssertEqual(ResponseAccumulator.maxByteBufferSize, Int(UInt32.max))
+        } else if MemoryLayout<Int>.size == 4 {
+            XCTAssertEqual(ResponseAccumulator.maxByteBufferSize, Int(Int32.max))
+        } else {
+            XCTFail("What platform is this?")
+        }
+    }
 }
 
 final class TestBackpressureWriter: Sendable {
