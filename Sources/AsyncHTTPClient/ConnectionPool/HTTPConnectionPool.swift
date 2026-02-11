@@ -51,6 +51,7 @@ final class HTTPConnectionPool:
         eventLoopGroup: EventLoopGroup,
         sslContextCache: SSLContextCache,
         tlsConfiguration: TLSConfiguration?,
+        tlsPinning: SPKIPinningConfiguration?,
         clientConfiguration: HTTPClient.Configuration,
         key: ConnectionPool.Key,
         delegate: HTTPConnectionPoolDelegate,
@@ -61,6 +62,7 @@ final class HTTPConnectionPool:
         self.connectionFactory = ConnectionFactory(
             key: key,
             tlsConfiguration: tlsConfiguration,
+            tlsPinning: tlsPinning,
             clientConfiguration: clientConfiguration,
             sslContextCache: sslContextCache
         )
