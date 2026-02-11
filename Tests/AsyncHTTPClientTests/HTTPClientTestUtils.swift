@@ -786,16 +786,19 @@ internal struct HTTPResponseBuilder {
     var body: ByteBuffer?
     var requestBodyByteCount: Int
     let responseBodyIsRequestBodyByteCount: Bool
+    let trailers: HTTPHeaders?
 
     init(
         _ version: HTTPVersion = HTTPVersion(major: 1, minor: 1),
         status: HTTPResponseStatus,
         headers: HTTPHeaders = HTTPHeaders(),
-        responseBodyIsRequestBodyByteCount: Bool = false
+        responseBodyIsRequestBodyByteCount: Bool = false,
+        trailers: HTTPHeaders? = nil
     ) {
         self.head = HTTPResponseHead(version: version, status: status, headers: headers)
         self.requestBodyByteCount = 0
         self.responseBodyIsRequestBodyByteCount = responseBodyIsRequestBodyByteCount
+        self.trailers = trailers
     }
 
     mutating func add(_ part: ByteBuffer) {
@@ -962,6 +965,9 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                     return
                 }
                 self.resps.append(HTTPResponseBuilder(status: .ok))
+                return
+            case "/trailers":
+                self.resps.append(HTTPResponseBuilder(status: .ok, trailers: ["hello": "world"]))
                 return
             case "/stats":
                 var body = context.channel.allocator.buffer(capacity: 1)
@@ -1133,7 +1139,7 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                     return
                 }
 
-                context.writeAndFlush(self.wrapOutboundOut(.end(nil))).assumeIsolated().whenComplete { result in
+                context.writeAndFlush(self.wrapOutboundOut(.end(response.trailers))).assumeIsolated().whenComplete { result in
                     self.isServingRequest = false
                     switch result {
                     case .success:

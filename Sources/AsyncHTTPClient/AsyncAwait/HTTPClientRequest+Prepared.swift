@@ -101,6 +101,10 @@ extension HTTPClientRequest.Prepared.Body {
             )
         case .byteBuffer(let byteBuffer):
             self = .byteBuffer(byteBuffer)
+        #if canImport(HTTPAPIs)
+        case .httpClientRequestBody:
+            fatalError("Unimplemented")
+        #endif
         }
     }
 }
@@ -115,6 +119,10 @@ extension RequestBodyLength {
             self = .known(Int64(buffer.readableBytes))
         case .sequence(let length, _, _), .asyncSequence(let length, _):
             self = length
+        #if canImport(HTTPAPIs)
+        case .httpClientRequestBody:
+            fatalError("Unimplemented")
+        #endif
         }
     }
 }

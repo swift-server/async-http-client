@@ -17,6 +17,7 @@ import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
 import NIOSSL
+import Synchronization
 import Tracing
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
@@ -277,6 +278,7 @@ extension Transaction: HTTPExecutableRequest {
                 version: head.version,
                 status: head.status,
                 headers: head.headers,
+                transaction: self,
                 body: body,
                 history: []
             )
@@ -303,7 +305,7 @@ extension Transaction: HTTPExecutableRequest {
 
     func receiveResponseEnd(_ buffer: CircularBuffer<ByteBuffer>?, trailers: HTTPHeaders?) {
         let receiveResponseEndAction = self.state.withLockedValue { state in
-            state.receiveResponseEnd(buffer)
+            state.receiveResponseEnd(buffer, trailers: trailers)
         }
         switch receiveResponseEndAction {
         case .finishResponseStream(let source, let finalResponse):
@@ -314,6 +316,12 @@ extension Transaction: HTTPExecutableRequest {
 
         case .none:
             break
+        }
+    }
+
+    var trailers: HTTPHeaders? {
+        self.state.withLockedValue {
+            $0.trailers
         }
     }
 

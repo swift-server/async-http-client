@@ -12,25 +12,8 @@ import HTTPAPIs
 import Testing
 import AsyncHTTPClient
 
-#if canImport(Darwin)
-public import Security
-#endif
-
 @Suite
 struct AbstractHTTPClientTest {
-
-    @available(macOS 26.2, iOS 26.2, watchOS 26.2, tvOS 26.2, visionOS 26.2, *)
-    struct EventHandler: HTTPClientEventHandler {
-        func handleRedirection(response: HTTPTypes.HTTPResponse, newRequest: HTTPTypes.HTTPRequest) async throws -> HTTPAPIs.HTTPClientRedirectionAction {
-            .deliverRedirectionResponse
-        }
-
-        #if canImport(Darwin)
-        func handleServerTrust(_ trust: SecTrust) async throws -> HTTPAPIs.HTTPClientTrustResult {
-            fatalError()
-        }
-        #endif
-    }
 
     @available(macOS 26.2, iOS 26.2, watchOS 26.2, tvOS 26.2, visionOS 26.2, *)
     @Test func testExample() async throws {
@@ -41,7 +24,7 @@ struct AbstractHTTPClientTest {
         let client = HTTPClient()
         defer { try! client.shutdown().wait() }
 
-        let request = HTTPRequest(method: .get, scheme: "http", authority: "127.0.0.1:\(bin.port)", path: "/stats")
+        let request = HTTPRequest(method: .get, scheme: "http", authority: "127.0.0.1:\(bin.port)", path: "/trailers")
 //        let body = HTTPClientRequestBody.restartable { (writer: consuming AsyncHTTPClient.HTTPClient.RequestWriter) in
 //            try await writer.produceAndConclude { writer in
 //
@@ -55,13 +38,11 @@ struct AbstractHTTPClientTest {
 //            }
 //        }
 
-        let handler = EventHandler()
 
         try await client.perform(
             request: request,
             body: nil,
-            configuration: .init(),
-            eventHandler: handler
+            options: .init(),
         ) { response, responseReader in
             print("status: \(response.status)")
             for header in response.headerFields {
@@ -73,6 +54,8 @@ struct AbstractHTTPClientTest {
                     print(String(decoding: buffer, as: Unicode.UTF8.self))
                 }
             }
+
+            print(trailers)
         }
 
     }

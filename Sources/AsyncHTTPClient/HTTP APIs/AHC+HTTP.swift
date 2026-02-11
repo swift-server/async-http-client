@@ -23,89 +23,24 @@ import BasicContainers
 
 @available(macOS 26.2, iOS 26.2, watchOS 26.2, tvOS 26.2, *)
 extension AsyncHTTPClient.HTTPClient: HTTPAPIs.HTTPClient {
-    public typealias RequestConcludingWriter = RequestWriter
+    public typealias RequestWriter = RequestBodyWriter
     public typealias ResponseConcludingReader = ResponseReader
 
-    public struct RequestWriter: ConcludingAsyncWriter, ~Copyable, SendableMetatype {
-        public typealias Underlying = RequestBodyWriter
-        public typealias FinalElement = HTTPFields?
-
-        final class Storage: Sendable {
-            struct StateMachine: ~Copyable {
-
-                enum State: ~Copyable {
-                    case buffer(CheckedContinuation<Void, any Error>?)
-                    case demand(CheckedContinuation<Void, any Error>)
-                    case done(HTTPFields?)
-                }
-
-                var state: State = .buffer(nil)
-
-                init() {
-
-                }
-
-            }
-
-            let stateMutex = Mutex(StateMachine())
-
-            nonisolated(nonsending) func write<Result, Failure>(
-                _ body: nonisolated(nonsending) (inout OutputSpan<UInt8>) async throws(Failure) -> Result) async throws(AsyncStreaming.EitherError<any Error, Failure>
-            ) -> Result where Failure : Error {
-
-                fatalError()
-//                do {
-//
-//                    self.stateMutex.withLock { state in
-//                        
-//                    }
-//
-//                    let updated = try await self.buffer.edit { (outputSpan) async throws(Failure) -> Result in
-//                        try await body(&outputSpan)
-//                    }
-//
-//
-//
-//                    return updated
-//                } catch {
-//                    throw .first(error)
-//                }
-            }
-
-            func next() -> ByteBuffer {
-                fatalError()
-            }
-        }
-
-        let storage: Storage
-
-        init() {
-            self.storage = .init()
-        }
-
-        public consuming func produceAndConclude<Return>(
-            body: nonisolated(nonsending) (consuming sending HTTPClient.RequestBodyWriter) async throws -> (Return, HTTPFields?)
-        ) async throws -> Return {
-            let bodyWriter = RequestBodyWriter(storage: self.storage)
-            do {
-                let (ret, fields) = try await body(bodyWriter)
-                return ret
-            } catch {
-                throw error
-            }
-        }
+    public struct RequestOptions: HTTPClientCapability.RequestOptions {
+        public init() {}
     }
 
     public struct RequestBodyWriter: AsyncWriter, ~Copyable {
         public typealias WriteElement = UInt8
         public typealias WriteFailure = any Error
 
-        let storage: RequestWriter.Storage
+        let transaction: Transaction
 
         public mutating func write<Result, Failure>(
             _ body: nonisolated(nonsending) (inout OutputSpan<UInt8>) async throws(Failure) -> Result) async throws(AsyncStreaming.EitherError<any Error, Failure>
         ) -> Result where Failure : Error {
-            try await self.storage.write(body)
+//            try await self.storage.write(body)
+            fatalError()
         }
     }
 
@@ -126,7 +61,27 @@ extension AsyncHTTPClient.HTTPClient: HTTPAPIs.HTTPClient {
             let iterator = self.underlying.makeAsyncIterator()
             let reader = ResponseBodyReader(underlying: iterator)
             let returnValue = try await body(reader)
-            return (returnValue, nil)
+
+            let trailers: HTTPFields?
+            switch underlying.storage {
+            case .transaction(_, let transaction, _):
+                if let t = transaction.trailers {
+                    let sequence = t.lazy.compactMap({
+                        if let name = HTTPField.Name($0.name) {
+                            HTTPField(name: name, value: $0.value)
+                        } else {
+                            nil
+                        }
+                    })
+                    trailers = HTTPFields(sequence)
+                } else {
+                    trailers = nil
+                }
+
+            case .anyAsyncSequence:
+                trailers = nil
+            }
+            return (returnValue, trailers)
         }
 
     }
@@ -164,11 +119,10 @@ extension AsyncHTTPClient.HTTPClient: HTTPAPIs.HTTPClient {
         }
     }
 
-    public func perform<Return>(
+    public func perform<Return: ~Copyable>(
         request: HTTPRequest,
-        body: consuming HTTPClientRequestBody<RequestWriter>?,
-        configuration: HTTPClientConfiguration,
-        eventHandler: borrowing some HTTPClientEventHandler & ~Copyable & ~Escapable,
+        body: consuming HTTPClientRequestBody<RequestBodyWriter>?,
+        options: HTTPClient.RequestOptions,
         responseHandler: nonisolated(nonsending) (HTTPResponse, consuming ResponseReader) async throws -> Return
     ) async throws -> Return {
         guard let url = request.url else {
@@ -181,46 +135,33 @@ extension AsyncHTTPClient.HTTPClient: HTTPAPIs.HTTPClient {
             let sequence = request.headerFields.lazy.map({ ($0.name.rawName, $0.value) })
             ahcRequest.headers.add(contentsOf: sequence)
         }
-
-        let result = try await withThrowingTaskGroup { taskGroup in
-            switch body {
-            case .none:
-                break
-
-            case .restartable(let handler):
-                taskGroup.addTask {
-                    let writer = RequestWriter()
-                    try await handler(writer)
-                }
-            case .some(.seekable(_)):
-                fatalError()
-            }
-
-            let ahcResponse = try await self.execute(ahcRequest, timeout: .seconds(30))
-
-            var responseFields = HTTPFields()
-            for (name, value) in ahcResponse.headers {
-                if let name = HTTPField.Name(name) {
-                    responseFields[name] = value
-                }
-            }
-
-            let response = HTTPResponse(
-                status: .init(code: Int(ahcResponse.status.code)),
-                headerFields: responseFields
-            )
-
-            return try await responseHandler(response, .init(underlying: ahcResponse.body))
-
+        if let body {
+            ahcRequest.body = .init(.httpClientRequestBody(body))
         }
 
-        return result
+        let ahcResponse = try await self.execute(ahcRequest, timeout: .seconds(30))
+
+        var responseFields = HTTPFields()
+        for (name, value) in ahcResponse.headers {
+            if let name = HTTPField.Name(name) {
+                responseFields[name] = value
+            }
+        }
+
+        let response = HTTPResponse(
+            status: .init(code: Int(ahcResponse.status.code)),
+            headerFields: responseFields
+        )
+
+        let result: Result<Return, any Error>
+        do {
+            result = .success(try await responseHandler(response, .init(underlying: ahcResponse.body)))
+        } catch {
+            result = .failure(error)
+        }
+
+        return try result.get()
     }
 }
-
-//private struct ClosureAsyncSequence: AsyncSequence {
-//    var body:
-//
-//}
 
 #endif
