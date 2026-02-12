@@ -57,11 +57,13 @@ struct AbstractHTTPClientTest {
             body: .restartable { (writer: consuming AsyncHTTPClient.HTTPClient.RequestWriter) in
                 var mwriter = writer
 
-                try await mwriter.write { outputSpan in
-                    outputSpan.append(repeating: UInt8(ascii: "X"), count: 10)
+                for i in 0..<100 {
+                    try await mwriter.write { outputSpan in
+                        outputSpan.append("\(i)\n".utf8)
+                    }
                 }
 
-                return [.init("foo")!: "bar"]
+                return [HTTPField.Name("foo")!: "bar"]
             },
             options: .init(),
         ) { response, responseReader in
@@ -70,13 +72,30 @@ struct AbstractHTTPClientTest {
                 print("\(header.name): \(header.value)")
             }
 
-            let trailers = try await responseReader.collect(upTo: 1024) { span in
-                span.withUnsafeBufferPointer { buffer in
-                    print(String(decoding: buffer, as: Unicode.UTF8.self))
+            let trailers = try await responseReader.consumeAndConclude { bodyReader in
+                var bodyReader = bodyReader
+                var `continue` = true
+                while `continue` {
+                    try await bodyReader.read(maximumCount: 1024) { span in
+                        if span.count == 0 { `continue` = false }
+
+                        span.withUnsafeBufferPointer { buffer in
+                            print(String(decoding: buffer, as: Unicode.UTF8.self), terminator: "")
+                        }
+                    }
                 }
             }
 
             print(trailers)
+        }
+    }
+}
+
+extension OutputSpan<UInt8> {
+
+    mutating func append(_ sequence: some Sequence<UInt8>) {
+        for element in sequence {
+            self.append(element)
         }
     }
 

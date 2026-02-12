@@ -50,6 +50,7 @@ extension AsyncHTTPClient.HTTPClient: HTTPAPIs.HTTPClient {
         ) async throws(AsyncStreaming.EitherError<WriteFailure, Failure>) -> Result where Failure : Error {
             let result: Result
             do {
+                self.rigidArray.removeAll()
                 self.rigidArray.reserveCapacity(1024)
                 result = try await self.rigidArray.append(count: 1024) { (span) async throws(Failure) -> Result in
                     try await body(&span)
