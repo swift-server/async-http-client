@@ -50,6 +50,7 @@ extension AsyncHTTPClient.HTTPClient: HTTPAPIs.HTTPClient {
         ) async throws(AsyncStreaming.EitherError<WriteFailure, Failure>) -> Result where Failure : Error {
             let result: Result
             do {
+                // TODO: rigidArray needs a clear all
                 self.rigidArray.removeAll()
                 self.rigidArray.reserveCapacity(1024)
                 result = try await self.rigidArray.append(count: 1024) { (span) async throws(Failure) -> Result in
@@ -178,6 +179,7 @@ extension AsyncHTTPClient.HTTPClient: HTTPAPIs.HTTPClient {
                 let sequence = request.headerFields.lazy.map({ ($0.name.rawName, $0.value) })
                 ahcRequest.headers.add(contentsOf: sequence)
             }
+
             if let body {
                 let length = body.knownLength.map { RequestBodyLength.known($0) } ?? .unknown
                 let (asyncStream, startUploadContinuation) = AsyncStream.makeStream(of: Transaction.self)
@@ -196,8 +198,10 @@ extension AsyncHTTPClient.HTTPClient: HTTPAPIs.HTTPClient {
                             }
                             transaction.requestBodyStreamFinished(trailers: trailers)
                             break // the loop
-                        } catch {
-                            fatalError("TODO: Better error handling here: \(error)")
+                        } catch let error {
+                            // if we fail because the user throws in upload, we have to cancel the
+                            // upload and fail the request I guess.
+                            transaction.fail(error)
                         }
                     }
                 }
