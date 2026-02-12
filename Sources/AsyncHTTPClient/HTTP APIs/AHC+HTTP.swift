@@ -35,14 +35,53 @@ extension AsyncHTTPClient.HTTPClient: HTTPAPIs.HTTPClient {
         public typealias WriteFailure = any Error
 
         let transaction: Transaction
+        var byteBuffer: ByteBuffer
+        var rigidArray: RigidArray<UInt8>
+
+        init(transaction: Transaction) {
+            self.transaction = transaction
+            self.byteBuffer = ByteBuffer()
+            self.byteBuffer.reserveCapacity(2^16)
+            self.rigidArray = RigidArray(capacity: 2^16) // ~ 65k bytes
+        }
 
         public mutating func write<Result, Failure>(
-            _ body: nonisolated(nonsending) (inout OutputSpan<UInt8>) async throws(Failure) -> Result) async throws(AsyncStreaming.EitherError<any Error, Failure>
-        ) -> Result where Failure : Error {
-//            try await self.storage.write(body)
-            fatalError()
+            _ body: nonisolated(nonsending) (inout OutputSpan<UInt8>) async throws(Failure) -> Result
+        ) async throws(AsyncStreaming.EitherError<WriteFailure, Failure>) -> Result where Failure : Error {
+            let result: Result
+            do {
+                self.rigidArray.reserveCapacity(1024)
+                result = try await self.rigidArray.append(count: 1024) { (span) async throws(Failure) -> Result in
+                    try await body(&span)
+                }
+            } catch {
+                throw .second(error)
+            }
+
+            do {
+                self.byteBuffer.clear()
+
+                // we need to use an uninitilized helper rigidarray here to make the compiler happy
+                // with regards overlapping memory access.
+                var localArray = RigidArray<UInt8>(capacity: 0)
+                swap(&localArray, &self.rigidArray)
+                localArray.span.withUnsafeBufferPointer { bufferPtr in
+                    self.byteBuffer.withUnsafeMutableWritableBytes { byteBufferPtr in
+                        byteBufferPtr.copyBytes(from: bufferPtr)
+                    }
+                    self.byteBuffer.moveWriterIndex(forwardBy: bufferPtr.count)
+                }
+
+                swap(&localArray, &self.rigidArray)
+                try await self.transaction.writeRequestBodyPart(self.byteBuffer)
+            } catch {
+                throw .first(error)
+            }
+
+            return result
         }
     }
+
 
     public struct ResponseReader: ConcludingAsyncReader {
         public typealias Underlying = ResponseBodyReader
@@ -129,38 +168,64 @@ extension AsyncHTTPClient.HTTPClient: HTTPAPIs.HTTPClient {
             fatalError()
         }
 
-        var ahcRequest = HTTPClientRequest(url: url.absoluteString)
-        ahcRequest.method = .init(rawValue: request.method.rawValue)
-        if !request.headerFields.isEmpty {
-            let sequence = request.headerFields.lazy.map({ ($0.name.rawName, $0.value) })
-            ahcRequest.headers.add(contentsOf: sequence)
-        }
-        if let body {
-            ahcRequest.body = .init(.httpClientRequestBody(body))
-        }
+        var result: Result<Return, any Error>?
+        await withTaskGroup(of: Void.self) { taskGroup in
 
-        let ahcResponse = try await self.execute(ahcRequest, timeout: .seconds(30))
+            var ahcRequest = HTTPClientRequest(url: url.absoluteString)
+            ahcRequest.method = .init(rawValue: request.method.rawValue)
+            if !request.headerFields.isEmpty {
+                let sequence = request.headerFields.lazy.map({ ($0.name.rawName, $0.value) })
+                ahcRequest.headers.add(contentsOf: sequence)
+            }
+            if let body {
+                let length = body.knownLength.map { RequestBodyLength.known($0) } ?? .unknown
+                let (asyncStream, startUploadContinuation) = AsyncStream.makeStream(of: Transaction.self)
 
-        var responseFields = HTTPFields()
-        for (name, value) in ahcResponse.headers {
-            if let name = HTTPField.Name(name) {
-                responseFields[name] = value
+                taskGroup.addTask {
+                    // TODO: We might want to allow multiple body restarts here.
+
+                    for await transaction in asyncStream {
+                        do {
+                            let writer = RequestWriter(transaction: transaction)
+                            let maybeTrailers = try await body.produce(into: writer)
+                            let trailers: HTTPHeaders? = if let trailers = maybeTrailers {
+                                HTTPHeaders(.init(trailers.lazy.map({ ($0.name.rawName, $0.value) })))
+                            } else {
+                                nil
+                            }
+                            transaction.requestBodyStreamFinished(trailers: trailers)
+                            break // the loop
+                        } catch {
+                            fatalError("TODO: Better error handling here: \(error)")
+                        }
+                    }
+                }
+
+                ahcRequest.body = .init(.httpClientRequestBody(length: length, startUpload: startUploadContinuation))
+            }
+
+            do {
+                let ahcResponse = try await self.execute(ahcRequest, timeout: .seconds(30))
+
+                var responseFields = HTTPFields()
+                for (name, value) in ahcResponse.headers {
+                    if let name = HTTPField.Name(name) {
+                        responseFields[name] = value
+                    }
+                }
+
+                let response = HTTPResponse(
+                    status: .init(code: Int(ahcResponse.status.code)),
+                    headerFields: responseFields
+                )
+
+                result = .success(try await responseHandler(response, .init(underlying: ahcResponse.body)))
+            } catch {
+                result = .failure(error)
             }
         }
 
-        let response = HTTPResponse(
-            status: .init(code: Int(ahcResponse.status.code)),
-            headerFields: responseFields
-        )
-
-        let result: Result<Return, any Error>
-        do {
-            result = .success(try await responseHandler(response, .init(underlying: ahcResponse.body)))
-        } catch {
-            result = .failure(error)
-        }
-
-        return try result.get()
+        return try result!.get()
     }
 }
 

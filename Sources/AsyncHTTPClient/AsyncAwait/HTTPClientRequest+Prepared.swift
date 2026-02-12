@@ -17,6 +17,9 @@ import NIOCore
 import NIOHTTP1
 import NIOSSL
 import ServiceContextModule
+#if canImport(HTTPAPIs)
+import HTTPAPIs
+#endif
 
 import struct Foundation.URL
 
@@ -34,6 +37,10 @@ extension HTTPClientRequest {
                 makeCompleteBody: @Sendable (ByteBufferAllocator) -> ByteBuffer
             )
             case byteBuffer(ByteBuffer)
+
+            #if canImport(HTTPAPIs)
+            case httpClientRequestBody(RequestBodyLength, AsyncStream<Transaction>.Continuation)
+            #endif
         }
 
         var url: URL
@@ -102,8 +109,8 @@ extension HTTPClientRequest.Prepared.Body {
         case .byteBuffer(let byteBuffer):
             self = .byteBuffer(byteBuffer)
         #if canImport(HTTPAPIs)
-        case .httpClientRequestBody:
-            fatalError("Unimplemented")
+        case .httpClientRequestBody(let lenght, let requestBody):
+            self = .httpClientRequestBody(lenght, requestBody)
         #endif
         }
     }
@@ -120,8 +127,8 @@ extension RequestBodyLength {
         case .sequence(let length, _, _), .asyncSequence(let length, _):
             self = length
         #if canImport(HTTPAPIs)
-        case .httpClientRequestBody:
-            fatalError("Unimplemented")
+        case .httpClientRequestBody(let length, _):
+            self = length
         #endif
         }
     }

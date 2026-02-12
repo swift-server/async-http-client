@@ -1470,8 +1470,8 @@ class HTTPEchoHandler: ChannelInboundHandler {
             )
         case .body(let bytes):
             context.writeAndFlush(self.wrapOutboundOut(.body(.byteBuffer(bytes))), promise: nil)
-        case .end:
-            context.writeAndFlush(self.wrapOutboundOut(.end(nil))).assumeIsolated().whenSuccess {
+        case .end(let trailers):
+            context.writeAndFlush(self.wrapOutboundOut(.end(trailers))).assumeIsolated().whenSuccess {
                 context.close(promise: nil)
             }
         }

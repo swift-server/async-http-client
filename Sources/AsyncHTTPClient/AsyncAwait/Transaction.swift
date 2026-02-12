@@ -74,7 +74,7 @@ final class Transaction:
             return
         }
 
-        self.requestBodyStreamFinished()
+        self.requestBodyStreamFinished(trailers: nil)
     }
 
     private func continueRequestBodyStream(
@@ -95,7 +95,7 @@ final class Transaction:
                     }
                 }
 
-                self.requestBodyStreamFinished()
+                self.requestBodyStreamFinished(trailers: nil)
             } catch {
                 // The only chance of reaching this catch block, is an error thrown in the `next`
                 // call above.
@@ -106,7 +106,7 @@ final class Transaction:
 
     struct BreakTheWriteLoopError: Swift.Error {}
 
-    private func writeRequestBodyPart(_ part: ByteBuffer) async throws {
+    func writeRequestBodyPart(_ part: ByteBuffer) async throws {
         let action = self.state.withLockedValue { state in
             state.writeNextRequestPart()
         }
@@ -147,7 +147,7 @@ final class Transaction:
         }
     }
 
-    private func requestBodyStreamFinished() {
+    func requestBodyStreamFinished(trailers: HTTPHeaders?) {
         let finishAction = self.state.withLockedValue { state in
             state.finishRequestBodyStream()
         }
@@ -158,7 +158,7 @@ final class Transaction:
             break
 
         case .forwardStreamFinished(let executor):
-            executor.finishRequestBodyStream(trailers: nil, request: self, promise: nil)
+            executor.finishRequestBodyStream(trailers: trailers, request: self, promise: nil)
         }
         return
     }
@@ -229,12 +229,17 @@ extension Transaction: HTTPExecutableRequest {
             case .byteBuffer(let byteBuffer):
                 self.writeOnceAndOneTimeOnly(byteBuffer: byteBuffer)
 
-            case .none:
-                break
-
             case .sequence(_, _, let create):
                 let byteBuffer = create(allocator)
                 self.writeOnceAndOneTimeOnly(byteBuffer: byteBuffer)
+
+            #if canImport(HTTPAPIs)
+            case .httpClientRequestBody(_, let continuation):
+                continuation.yield(self)
+            #endif
+
+            case .none:
+                break
             }
 
         case .resumeStream(let continuation):

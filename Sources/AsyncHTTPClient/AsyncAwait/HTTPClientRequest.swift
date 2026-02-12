@@ -97,7 +97,10 @@ extension HTTPClientRequest {
             case byteBuffer(ByteBuffer)
 
             #if canImport(HTTPAPIs)
-            case httpClientRequestBody(Sendable /* HTTPClientRequestBody<HTTPClient.RequestBodyWriter> */)
+            case httpClientRequestBody(
+                length: RequestBodyLength,
+                startUpload: AsyncStream<Transaction>.Continuation
+            )
             #endif
         }
 
