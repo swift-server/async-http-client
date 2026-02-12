@@ -45,7 +45,7 @@ struct AbstractHTTPClientTest {
     }
 
     @available(macOS 26.2, iOS 26.2, watchOS 26.2, tvOS 26.2, visionOS 26.2, *)
-    @Test func testPost() async throws {
+    @Test func testEcho() async throws {
 
         let bin = HTTPBin(.http1_1(ssl: false)) { _ in HTTPEchoHandler() }
         defer { try! bin.shutdown() }
@@ -57,13 +57,18 @@ struct AbstractHTTPClientTest {
             body: .restartable { (writer: consuming AsyncHTTPClient.HTTPClient.RequestWriter) in
                 var mwriter = writer
 
-                for i in 0..<100 {
+                for i in 1...10 {
                     try await mwriter.write { outputSpan in
-                        outputSpan.append("\(i)\n".utf8)
+                        if i == 1 {
+                            outputSpan.append("\(i) car\n".utf8)
+                        } else {
+                            outputSpan.append("\(i) cars\n".utf8)
+                        }
                     }
+                    try await Task.sleep(for: .milliseconds(400))
                 }
 
-                return [HTTPField.Name("foo")!: "bar"]
+                return [HTTPField.Name("status")!: "Look Mum, I am done counting!"]
             },
             options: .init(),
         ) { response, responseReader in
@@ -79,14 +84,15 @@ struct AbstractHTTPClientTest {
                     try await bodyReader.read(maximumCount: 1024) { span in
                         if span.count == 0 { `continue` = false }
 
+                        // Span<UInt8> does not conform to Collection
                         span.withUnsafeBufferPointer { buffer in
-                            print(String(decoding: buffer, as: Unicode.UTF8.self), terminator: "")
+                            print(String(decoding: buffer, as: Unicode.UTF8.self))
                         }
                     }
                 }
             }
 
-            print(trailers)
+            print("Trailers: \(trailers)")
         }
     }
 }
