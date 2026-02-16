@@ -29,6 +29,7 @@ struct HTTPClientConfigurationPropsTests {
             "redirect.mode": "follow",
             "redirect.maxRedirects": 10,
             "redirect.allowCycles": true,
+            "redirect.convertPostToGET": false,
 
             "timeout.connectionMs": 5000,
             "timeout.readMs": 30000,
@@ -51,9 +52,10 @@ struct HTTPClientConfigurationPropsTests {
         #expect(config.dnsOverride["example.com"] == "192.168.1.1")
 
         switch config.redirectConfiguration.mode {
-        case .follow(let max, let allowCycles):
-            #expect(max == 10)
-            #expect(allowCycles)
+        case .follow(let follow):
+            #expect(follow.max == 10)
+            #expect(follow.allowCycles)
+            #expect(!follow.convertPostToGET)
         case .disallow:
             Issue.record("Unexpected value")
         }
@@ -245,7 +247,7 @@ struct HTTPClientConfigurationPropsTests {
 
         let configReader = ConfigReader(provider: testProvider)
         let config = try HTTPClient.Configuration(configReader: configReader)
-        #expect(config.redirectConfiguration.mode == .follow(max: 5, allowCycles: false))
+        #expect(config.redirectConfiguration.mode == .follow(.init(max: 5, allowCycles: false, convertPostToGET: true)))
     }
 
     @Test
@@ -255,13 +257,16 @@ struct HTTPClientConfigurationPropsTests {
             "redirect.mode": "follow",
             "redirect.maxRedirects": 3,
             "redirect.allowCycles": true,
+            "redirect.convertPostToGET": false,
         ])
 
         let configReader = ConfigReader(provider: testProvider)
 
         let config = try HTTPClient.Configuration(configReader: configReader)
 
-        #expect(config.redirectConfiguration.mode == .follow(max: 3, allowCycles: true))
+        #expect(
+            config.redirectConfiguration.mode == .follow(.init(max: 5, allowCycles: false, convertPostToGET: false))
+        )
     }
 
     @Test

@@ -77,7 +77,10 @@ extension HTTPClient.Configuration.RedirectConfiguration {
         if mode == "follow" {
             let maxRedirects = configReader.int(forKey: "maxRedirects", default: 5)
             let allowCycles = configReader.bool(forKey: "allowCycles", default: false)
-            self = .follow(max: maxRedirects, allowCycles: allowCycles)
+            let convertToGet = configReader.bool(forKey: "convertToGet", default: true)
+            self = .follow(
+                configuration: .init(max: maxRedirects, allowCycles: allowCycles, convertToGet: convertToGet)
+            )
         } else if mode == "disallow" {
             self = .disallow
         } else {

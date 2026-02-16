@@ -1269,13 +1269,35 @@ extension HTTPClient.Configuration {
             /// Redirects are not followed.
             case disallow
             /// Redirects are followed with a specified limit.
-            case follow(max: Int, allowCycles: Bool)
+            case follow(FollowConfiguration)
+        }
+
+        /// Configuration for following redirects.
+        public struct FollowConfiguration: Hashable, Sendable {
+            /// The maximum number of allowed redirects.
+            public var max: Int
+            /// Whether cycles are allowed.
+            public var allowCycles: Bool
+            /// Whether to convert POST requests into GET requests when following a 301, 302 or 303 redirect.
+            /// This does not apply to 307 or 308. Those always retain the original method.
+            public var convertToGet: Bool
+
+            /// Create a new ``FollowConfiguration``
+            /// - Parameters:
+            ///   - max: The maximum number of allowed redirects.
+            ///   - allowCycles: Whether cycles are allowed.
+            ///   - convertToGet: Whether to convert POST requests into GET requests when following a 301, 302 or 303 redirect. This does not apply to 307 or 308. Those always retain the original method.
+            public init(max: Int, allowCycles: Bool, convertToGet: Bool) {
+                self.max = max
+                self.allowCycles = allowCycles
+                self.convertToGet = convertToGet
+            }
         }
 
         var mode: Mode
 
         init() {
-            self.mode = .follow(max: 5, allowCycles: false)
+            self.mode = .follow(.init(max: 5, allowCycles: false, convertToGet: true))
         }
 
         init(configuration: Mode) {
@@ -1293,7 +1315,16 @@ extension HTTPClient.Configuration {
         ///
         /// - warning: Cycle detection will keep all visited URLs in memory which means a malicious server could use this as a denial-of-service vector.
         public static func follow(max: Int, allowCycles: Bool) -> RedirectConfiguration {
-            .init(configuration: .follow(max: max, allowCycles: allowCycles))
+            .follow(configuration: .init(max: max, allowCycles: allowCycles, convertToGet: true))
+        }
+
+        /// Redirects are followed with a specified limit.
+        ///
+        /// - parameters
+        ///
+        /// - warning: Cycle detection will keep all visited URLs in memory which means a malicious server could use this as a denial-of-service vector.
+        public static func follow(configuration: FollowConfiguration) -> RedirectConfiguration {
+            .init(configuration: .follow(configuration))
         }
     }
 
