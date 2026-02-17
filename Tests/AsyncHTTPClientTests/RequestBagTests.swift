@@ -731,7 +731,15 @@ final class RequestBagTests: XCTestCase {
                 redirectHandler: .init(
                     request: request,
                     redirectState: RedirectState(
-                        .follow(.init(max: 5, allowCycles: false, convertToGetOn301: true, convertToGetOn302: true, convertToGetOn303: true)),
+                        .follow(
+                            .init(
+                                max: 5,
+                                allowCycles: false,
+                                convertToGetOn301: true,
+                                convertToGetOn302: true,
+                                convertToGetOn303: true
+                            )
+                        ),
                         initialURL: request.url.absoluteString
                     )!,
                     execute: { request, _ in
@@ -819,7 +827,15 @@ final class RequestBagTests: XCTestCase {
                 redirectHandler: .init(
                     request: request,
                     redirectState: RedirectState(
-                        .follow(.init(max: 5, allowCycles: false, convertToGetOn301: true, convertToGetOn302: true, convertToGetOn303: true)),
+                        .follow(
+                            .init(
+                                max: 5,
+                                allowCycles: false,
+                                convertToGetOn301: true,
+                                convertToGetOn302: true,
+                                convertToGetOn303: true
+                            )
+                        ),
                         initialURL: request.url.absoluteString
                     )!,
                     execute: { request, _ in
@@ -881,7 +897,15 @@ final class RequestBagTests: XCTestCase {
                 redirectHandler: .init(
                     request: request,
                     redirectState: RedirectState(
-                        .follow(.init(max: 5, allowCycles: false, convertToGetOn301: true, convertToGetOn302: true, convertToGetOn303: true)),
+                        .follow(
+                            .init(
+                                max: 5,
+                                allowCycles: false,
+                                convertToGetOn301: true,
+                                convertToGetOn302: true,
+                                convertToGetOn303: true
+                            )
+                        ),
                         initialURL: request.url.absoluteString
                     )!,
                     execute: { request, _ in

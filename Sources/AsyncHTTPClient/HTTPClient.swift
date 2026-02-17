@@ -1295,7 +1295,13 @@ extension HTTPClient.Configuration {
             ///   - convertToGetOn301: Whether to convert POST requests into GET requests when following a 301 redirect.
             ///   - convertToGetOn302: Whether to convert POST requests into GET requests when following a 302 redirect.
             ///   - convertToGetOn303: Whether to convert POST requests into GET requests when following a 303 redirect.
-            public init(max: Int, allowCycles: Bool, convertToGetOn301: Bool, convertToGetOn302: Bool, convertToGetOn303: Bool) {
+            public init(
+                max: Int,
+                allowCycles: Bool,
+                convertToGetOn301: Bool,
+                convertToGetOn302: Bool,
+                convertToGetOn303: Bool
+            ) {
                 self.max = max
                 self.allowCycles = allowCycles
                 self.convertToGetOn301 = convertToGetOn301
@@ -1307,7 +1313,15 @@ extension HTTPClient.Configuration {
         var mode: Mode
 
         init() {
-            self.mode = .follow(.init(max: 5, allowCycles: false, convertToGetOn301: true, convertToGetOn302: true, convertToGetOn303: true))
+            self.mode = .follow(
+                .init(
+                    max: 5,
+                    allowCycles: false,
+                    convertToGetOn301: true,
+                    convertToGetOn302: true,
+                    convertToGetOn303: true
+                )
+            )
         }
 
         init(configuration: Mode) {
@@ -1325,14 +1339,20 @@ extension HTTPClient.Configuration {
         ///
         /// - warning: Cycle detection will keep all visited URLs in memory which means a malicious server could use this as a denial-of-service vector.
         public static func follow(max: Int, allowCycles: Bool) -> RedirectConfiguration {
-            .follow(configuration: .init(max: max, allowCycles: allowCycles, convertToGetOn301: true, convertToGetOn302: true, convertToGetOn303: true))
+            .follow(
+                configuration: .init(
+                    max: max,
+                    allowCycles: allowCycles,
+                    convertToGetOn301: true,
+                    convertToGetOn302: true,
+                    convertToGetOn303: true
+                )
+            )
         }
 
-        /// Redirects are followed with a specified limit.
+        /// Redirects are followed.
         ///
-        /// - parameters
-        ///
-        /// - warning: Cycle detection will keep all visited URLs in memory which means a malicious server could use this as a denial-of-service vector.
+        /// - Parameter: configuration: Configure how redirects are followed.
         public static func follow(configuration: FollowConfiguration) -> RedirectConfiguration {
             .init(configuration: .follow(configuration))
         }

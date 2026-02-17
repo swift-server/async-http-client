@@ -251,7 +251,18 @@ struct HTTPClientConfigurationPropsTests {
 
         let configReader = ConfigReader(provider: testProvider)
         let config = try HTTPClient.Configuration(configReader: configReader)
-        #expect(config.redirectConfiguration.mode == .follow(.init(max: 5, allowCycles: false, convertToGetOn301: true, convertToGetOn302: true, convertToGetOn303: true)))
+        #expect(
+            config.redirectConfiguration.mode
+                == .follow(
+                    .init(
+                        max: 5,
+                        allowCycles: false,
+                        convertToGetOn301: true,
+                        convertToGetOn302: true,
+                        convertToGetOn303: true
+                    )
+                )
+        )
     }
 
     @Test
@@ -271,15 +282,16 @@ struct HTTPClientConfigurationPropsTests {
         let config = try HTTPClient.Configuration(configReader: configReader)
 
         #expect(
-            config.redirectConfiguration.mode == .follow(
-                .init(
-                    max: 3,
-                    allowCycles: true,
-                    convertToGetOn301: false,
-                    convertToGetOn302: true ,
-                    convertToGetOn303: false
+            config.redirectConfiguration.mode
+                == .follow(
+                    .init(
+                        max: 3,
+                        allowCycles: true,
+                        convertToGetOn301: false,
+                        convertToGetOn302: true,
+                        convertToGetOn303: false
+                    )
                 )
-            )
         )
     }
 
