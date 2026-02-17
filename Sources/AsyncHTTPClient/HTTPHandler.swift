@@ -1077,9 +1077,7 @@ internal struct RedirectHandler<ResponseType: Sendable> {
                 body: self.request.body,
                 to: redirectURL,
                 status: status,
-                convertToGetOn301: self.redirectState.convertToGetOn301,
-                convertToGetOn302: self.redirectState.convertToGetOn302,
-                convertToGetOn303: self.redirectState.convertToGetOn303
+                config: self.redirectState.config
             )
 
             let newRequest = try HTTPClient.Request(

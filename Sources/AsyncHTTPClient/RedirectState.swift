@@ -19,23 +19,10 @@ import struct Foundation.URL
 typealias RedirectMode = HTTPClient.Configuration.RedirectConfiguration.Mode
 
 struct RedirectState {
-    /// number of redirects we are allowed to follow.
-    private var limit: Int
+    var config: HTTPClient.Configuration.RedirectConfiguration.FollowConfiguration
 
     /// All visited URLs.
     private var visited: [String]
-
-    /// if true, `redirect(to:)` will throw an error if a cycle is detected.
-    private let allowCycles: Bool
-
-    /// If true, POST requests are converted to GET for 301
-    let convertToGetOn301: Bool
-
-    /// If true, POST requests are converted to GET for 302
-    let convertToGetOn302: Bool
-
-    /// If true, POST requests are converted to GET for 303
-    let convertToGetOn303: Bool
 }
 
 extension RedirectState {
@@ -50,14 +37,7 @@ extension RedirectState {
         case .disallow:
             return nil
         case .follow(let config):
-            self.init(
-                limit: config.max,
-                visited: [initialURL],
-                allowCycles: config.allowCycles,
-                convertToGetOn301: config.convertToGetOn301,
-                convertToGetOn302: config.convertToGetOn302,
-                convertToGetOn303: config.convertToGetOn303
-            )
+            self.init(config: config, visited: [initialURL])
         }
     }
 }
@@ -68,11 +48,11 @@ extension RedirectState {
     /// - Parameter redirectURL: the new URL to redirect the request to
     /// - Throws: if it reaches the redirect limit or detects a redirect cycle if and `allowCycles` is false
     mutating func redirect(to redirectURL: String) throws {
-        guard self.visited.count <= limit else {
+        guard self.visited.count <= config.max else {
             throw HTTPClientError.redirectLimitReached
         }
 
-        guard allowCycles || !self.visited.contains(redirectURL) else {
+        guard config.allowCycles || !self.visited.contains(redirectURL) else {
             throw HTTPClientError.redirectCycleDetected
         }
         self.visited.append(redirectURL)
@@ -128,17 +108,15 @@ func transformRequestForRedirect<Body>(
     body requestBody: Body?,
     to redirectURL: URL,
     status responseStatus: HTTPResponseStatus,
-    convertToGetOn301: Bool,
-    convertToGetOn302: Bool,
-    convertToGetOn303: Bool
+    config: HTTPClient.Configuration.RedirectConfiguration.FollowConfiguration
 ) -> (HTTPMethod, HTTPHeaders, Body?) {
     let convertToGet: Bool
     if responseStatus == .seeOther, requestMethod != .HEAD {
-        convertToGet = convertToGetOn303
+        convertToGet = config.convertToGetOn303
     } else if responseStatus == .movedPermanently, requestMethod == .POST {
-        convertToGet = convertToGetOn301
+        convertToGet = config.convertToGetOn301
     } else if responseStatus == .found, requestMethod == .POST {
-        convertToGet = convertToGetOn302
+        convertToGet = config.convertToGetOn302
     } else {
         convertToGet = false
     }
