@@ -66,6 +66,9 @@ extension HTTPClient.Configuration.RedirectConfiguration {
     /// - `mode` (string, optional, default: "follow"): Redirect handling mode ("follow" or "disallow").
     /// - `maxRedirects` (int, optional, default: 5): Maximum allowed redirects when mode is "follow".
     /// - `allowCycles` (bool, optional, default: false): Allow cyclic redirects when mode is "follow".
+    /// - `convertToGetOn301` (bool, optional, default: true): Convert to GET on 301 redirect when mode is "follow".
+    /// - `convertToGetOn302` (bool, optional, default: true): Convert to GET on 302 redirect when mode is "follow".
+    /// - `convertToGetOn303` (bool, optional, default: true): Convert to GET on 303 redirect when mode is "follow".
     ///
     /// - Throws: `HTTPClientError.invalidRedirectConfiguration` if mode is specified but invalid.
     public init(configReader: ConfigReader) throws {
@@ -77,9 +80,17 @@ extension HTTPClient.Configuration.RedirectConfiguration {
         if mode == "follow" {
             let maxRedirects = configReader.int(forKey: "maxRedirects", default: 5)
             let allowCycles = configReader.bool(forKey: "allowCycles", default: false)
-            let convertToGet = configReader.bool(forKey: "convertToGet", default: true)
+            let convertToGetOn301 = configReader.bool(forKey: "convertToGetOn301", default: true)
+            let convertToGetOn302 = configReader.bool(forKey: "convertToGetOn302", default: true)
+            let convertToGetOn303 = configReader.bool(forKey: "convertToGetOn303", default: true)
             self = .follow(
-                configuration: .init(max: maxRedirects, allowCycles: allowCycles, convertToGet: convertToGet)
+                configuration: .init(
+                    max: maxRedirects,
+                    allowCycles: allowCycles,
+                    convertToGetOn301: convertToGetOn301,
+                    convertToGetOn302: convertToGetOn302,
+                    convertToGetOn303: convertToGetOn303
+                )
             )
         } else if mode == "disallow" {
             self = .disallow

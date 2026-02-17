@@ -1278,26 +1278,36 @@ extension HTTPClient.Configuration {
             public var max: Int
             /// Whether cycles are allowed.
             public var allowCycles: Bool
-            /// Whether to convert POST requests into GET requests when following a 301, 302 or 303 redirect.
-            /// This does not apply to 307 or 308. Those always retain the original method.
-            public var convertToGet: Bool
+            /// Whether to convert POST requests into GET requests when following a 301 redirect.
+            /// This should be true as per the HTTP spec. Only change this if you know what you're doing.
+            public var convertToGetOn301: Bool
+            /// Whether to convert POST requests into GET requests when following a 302 redirect.
+            /// This should be true as per the HTTP spec. Only change this if you know what you're doing.
+            public var convertToGetOn302: Bool
+            /// Whether to convert POST requests into GET requests when following a 303 redirect.
+            /// This should be true as per the HTTP spec. Only change this if you know what you're doing.
+            public var convertToGetOn303: Bool
 
             /// Create a new ``FollowConfiguration``
             /// - Parameters:
             ///   - max: The maximum number of allowed redirects.
             ///   - allowCycles: Whether cycles are allowed.
-            ///   - convertToGet: Whether to convert POST requests into GET requests when following a 301, 302 or 303 redirect. This does not apply to 307 or 308. Those always retain the original method.
-            public init(max: Int, allowCycles: Bool, convertToGet: Bool) {
+            ///   - convertToGetOn301: Whether to convert POST requests into GET requests when following a 301 redirect.
+            ///   - convertToGetOn302: Whether to convert POST requests into GET requests when following a 302 redirect.
+            ///   - convertToGetOn303: Whether to convert POST requests into GET requests when following a 303 redirect.
+            public init(max: Int, allowCycles: Bool, convertToGetOn301: Bool, convertToGetOn302: Bool, convertToGetOn303: Bool) {
                 self.max = max
                 self.allowCycles = allowCycles
-                self.convertToGet = convertToGet
+                self.convertToGetOn301 = convertToGetOn301
+                self.convertToGetOn302 = convertToGetOn302
+                self.convertToGetOn303 = convertToGetOn303
             }
         }
 
         var mode: Mode
 
         init() {
-            self.mode = .follow(.init(max: 5, allowCycles: false, convertToGet: true))
+            self.mode = .follow(.init(max: 5, allowCycles: false, convertToGetOn301: true, convertToGetOn302: true, convertToGetOn303: true))
         }
 
         init(configuration: Mode) {
@@ -1315,7 +1325,7 @@ extension HTTPClient.Configuration {
         ///
         /// - warning: Cycle detection will keep all visited URLs in memory which means a malicious server could use this as a denial-of-service vector.
         public static func follow(max: Int, allowCycles: Bool) -> RedirectConfiguration {
-            .follow(configuration: .init(max: max, allowCycles: allowCycles, convertToGet: true))
+            .follow(configuration: .init(max: max, allowCycles: allowCycles, convertToGetOn301: true, convertToGetOn302: true, convertToGetOn303: true))
         }
 
         /// Redirects are followed with a specified limit.

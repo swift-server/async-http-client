@@ -28,8 +28,14 @@ struct RedirectState {
     /// if true, `redirect(to:)` will throw an error if a cycle is detected.
     private let allowCycles: Bool
 
-    /// If true, POST requests are converted to GET for 301, 302, 303
-    let convertToGet: Bool
+    /// If true, POST requests are converted to GET for 301
+    let convertToGetOn301: Bool
+
+    /// If true, POST requests are converted to GET for 302
+    let convertToGetOn302: Bool
+
+    /// If true, POST requests are converted to GET for 303
+    let convertToGetOn303: Bool
 }
 
 extension RedirectState {
@@ -48,7 +54,9 @@ extension RedirectState {
                 limit: config.max,
                 visited: [initialURL],
                 allowCycles: config.allowCycles,
-                convertToGet: config.convertToGet
+                convertToGetOn301: config.convertToGetOn301,
+                convertToGetOn302: config.convertToGetOn302,
+                convertToGetOn303: config.convertToGetOn303
             )
         }
     }
@@ -120,15 +128,17 @@ func transformRequestForRedirect<Body>(
     body requestBody: Body?,
     to redirectURL: URL,
     status responseStatus: HTTPResponseStatus,
-    convertToGet: Bool
+    convertToGetOn301: Bool,
+    convertToGetOn302: Bool,
+    convertToGetOn303: Bool
 ) -> (HTTPMethod, HTTPHeaders, Body?) {
     let convertToGet: Bool
-    if !convertToGet {
-        convertToGet = false
-    } else if responseStatus == .seeOther, requestMethod != .HEAD {
-        convertToGet = true
-    } else if responseStatus == .movedPermanently || responseStatus == .found, requestMethod == .POST {
-        convertToGet = true
+    if responseStatus == .seeOther, requestMethod != .HEAD {
+        convertToGet = convertToGetOn303
+    } else if responseStatus == .movedPermanently, requestMethod == .POST {
+        convertToGet = convertToGetOn301
+    } else if responseStatus == .found, requestMethod == .POST {
+        convertToGet = convertToGetOn302
     } else {
         convertToGet = false
     }

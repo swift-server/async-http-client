@@ -141,7 +141,9 @@ extension HTTPClient {
                 from: preparedRequest.url,
                 to: redirectURL,
                 status: response.status,
-                convertToGet: redirectState.convertToGet
+                convertToGetOn301: redirectState.convertToGetOn301,
+                convertToGetOn302: redirectState.convertToGetOn302,
+                convertToGetOn303: redirectState.convertToGetOn303
             )
 
             guard newRequest.body.canBeConsumedMultipleTimes else {

@@ -4579,7 +4579,10 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
     private func _testPostConvertedToGetOnRedirect(
         statusPath: String,
         expectedStatus: HTTPResponseStatus,
-        convertPostToGET: Bool
+        convertToGetOn301: Bool,
+        convertToGetOn302: Bool,
+        convertToGetOn303: Bool,
+        expectConvert: Bool
     ) throws {
         let bin = HTTPBin(.http1_1())
         defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -4588,7 +4591,13 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             eventLoopGroupProvider: .shared(self.clientGroup),
             configuration: HTTPClient.Configuration(
                 redirectConfiguration: .follow(
-                    configuration: .init(max: 10, allowCycles: false, convertPostToGET: convertPostToGET)
+                    configuration: .init(
+                        max: 10,
+                        allowCycles: false,
+                        convertToGetOn301: convertToGetOn301,
+                        convertToGetOn302: convertToGetOn302,
+                        convertToGetOn303: convertToGetOn303
+                    )
                 )
             )
         )
@@ -4606,7 +4615,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             return XCTFail("Expected 2 entries in history for \(statusPath)")
         }
         XCTAssertEqual(response.history[0].request.method, .POST)
-        if convertPostToGET {
+        if expectConvert {
             XCTAssertEqual(response.history[1].request.method, .GET)
         } else {
             XCTAssertEqual(response.history[1].request.method, .POST)
@@ -4615,31 +4624,40 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
     }
 
     func testPostConvertedToGetOn301Redirect() throws {
-        for convertPostToGET in [true, false] {
+        for convertToGet in [true, false] {
             try _testPostConvertedToGetOnRedirect(
                 statusPath: "/redirect/301",
                 expectedStatus: .movedPermanently,
-                convertPostToGET: convertPostToGET
+                convertToGetOn301: convertToGet,
+                convertToGetOn302: true,
+                convertToGetOn303: true,
+                expectConvert: convertToGet
             )
         }
     }
 
     func testPostConvertedToGetOn302Redirect() throws {
-        for convertPostToGET in [true, false] {
+        for convertToGet in [true, false] {
             try _testPostConvertedToGetOnRedirect(
                 statusPath: "/redirect/302",
                 expectedStatus: .found,
-                convertPostToGET: convertPostToGET
+                convertToGetOn301: true,
+                convertToGetOn302: convertToGet,
+                convertToGetOn303: true,
+                                                       expectConvert: convertToGet
             )
         }
     }
 
     func testPostConvertedToGetOn303Redirect() throws {
-        for convertPostToGET in [true, false] {
+        for convertToGet in [true, false] {
             try _testPostConvertedToGetOnRedirect(
                 statusPath: "/redirect/303",
                 expectedStatus: .seeOther,
-                convertPostToGET: convertPostToGET
+                convertToGetOn301: true,
+                convertToGetOn302: true,
+                convertToGetOn303: convertToGet,
+                                                               expectConvert: convertToGet
             )
         }
     }

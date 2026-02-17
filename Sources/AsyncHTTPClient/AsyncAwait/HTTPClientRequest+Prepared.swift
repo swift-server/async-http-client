@@ -125,7 +125,9 @@ extension HTTPClientRequest {
         from originalURL: URL,
         to redirectURL: URL,
         status: HTTPResponseStatus,
-        convertToGet: Bool
+        convertToGetOn301: Bool,
+        convertToGetOn302: Bool,
+        convertToGetOn303: Bool
     ) -> HTTPClientRequest {
         let (method, headers, body) = transformRequestForRedirect(
             from: originalURL,
@@ -134,7 +136,9 @@ extension HTTPClientRequest {
             body: self.body,
             to: redirectURL,
             status: status,
-            convertToGet: convertToGet
+            convertToGetOn301: convertToGetOn301,
+            convertToGetOn302: convertToGetOn302,
+            convertToGetOn303: convertToGetOn303
         )
         var newRequest = HTTPClientRequest(url: redirectURL.absoluteString)
         newRequest.method = method
