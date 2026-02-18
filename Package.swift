@@ -43,7 +43,7 @@ let package = Package(
             description: """
                 Enables conformance to the HTTPAPIs HTTPClient protocol. This is potentially source breaking.
                 """
-        ),
+        )
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.81.0"),
