@@ -16,8 +16,8 @@ import AsyncHTTPClient
 import HTTPAPIs
 import HTTPClient
 import HTTPClientConformance
-import Testing
 internal import NIOPosix
+import Testing
 
 @Suite struct AsyncHTTPClientTests {
     @available(macOS 26.2, iOS 26.2, watchOS 26.2, tvOS 26.2, visionOS 26.2, *)
@@ -29,7 +29,7 @@ internal import NIOPosix
         defer { Task { try await httpClient.shutdown() } }
 
         try await runAllConformanceTests {
-            return httpClient
+            httpClient
         }
     }
 }

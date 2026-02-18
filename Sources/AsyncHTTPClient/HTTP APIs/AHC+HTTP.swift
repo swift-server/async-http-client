@@ -41,13 +41,13 @@ extension AsyncHTTPClient.HTTPClient: HTTPAPIs.HTTPClient {
         init(transaction: Transaction) {
             self.transaction = transaction
             self.byteBuffer = ByteBuffer()
-            self.byteBuffer.reserveCapacity(2^16)
-            self.rigidArray = RigidArray(capacity: 2^16) // ~ 65k bytes
+            self.byteBuffer.reserveCapacity(2 ^ 16)
+            self.rigidArray = RigidArray(capacity: 2 ^ 16)  // ~ 65k bytes
         }
 
         public mutating func write<Result, Failure>(
             _ body: nonisolated(nonsending) (inout OutputSpan<UInt8>) async throws(Failure) -> Result
-        ) async throws(AsyncStreaming.EitherError<WriteFailure, Failure>) -> Result where Failure : Error {
+        ) async throws(AsyncStreaming.EitherError<WriteFailure, Failure>) -> Result where Failure: Error {
             let result: Result
             do {
                 // TODO: rigidArray needs a clear all
@@ -84,7 +84,6 @@ extension AsyncHTTPClient.HTTPClient: HTTPAPIs.HTTPClient {
         }
     }
 
-
     public struct ResponseReader: ConcludingAsyncReader {
         public typealias Underlying = ResponseBodyReader
 
@@ -97,8 +96,10 @@ extension AsyncHTTPClient.HTTPClient: HTTPAPIs.HTTPClient {
         }
 
         public consuming func consumeAndConclude<Return, Failure>(
-            body: nonisolated(nonsending) (consuming sending HTTPClient.ResponseBodyReader) async throws(Failure) -> Return
-        ) async throws(Failure) -> (Return, HTTPFields?) where Failure : Error {
+            body:
+                nonisolated(nonsending) (consuming sending HTTPClient.ResponseBodyReader) async throws(Failure) ->
+                Return
+        ) async throws(Failure) -> (Return, HTTPFields?) where Failure: Error {
             let iterator = self.underlying.makeAsyncIterator()
             let reader = ResponseBodyReader(underlying: iterator)
             let returnValue = try await body(reader)
@@ -136,7 +137,7 @@ extension AsyncHTTPClient.HTTPClient: HTTPAPIs.HTTPClient {
         public mutating func read<Return, Failure>(
             maximumCount: Int?,
             body: nonisolated(nonsending) (consuming Span<UInt8>) async throws(Failure) -> Return
-        ) async throws(AsyncStreaming.EitherError<ReadFailure, Failure>) -> Return where Failure : Error {
+        ) async throws(AsyncStreaming.EitherError<ReadFailure, Failure>) -> Return where Failure: Error {
 
             do {
                 let buffer = try await self.underlying.next(isolation: #isolation)
@@ -191,13 +192,14 @@ extension AsyncHTTPClient.HTTPClient: HTTPAPIs.HTTPClient {
                         do {
                             let writer = RequestWriter(transaction: transaction)
                             let maybeTrailers = try await body.produce(into: writer)
-                            let trailers: HTTPHeaders? = if let trailers = maybeTrailers {
-                                HTTPHeaders(.init(trailers.lazy.map({ ($0.name.rawName, $0.value) })))
-                            } else {
-                                nil
-                            }
+                            let trailers: HTTPHeaders? =
+                                if let trailers = maybeTrailers {
+                                    HTTPHeaders(.init(trailers.lazy.map({ ($0.name.rawName, $0.value) })))
+                                } else {
+                                    nil
+                                }
                             transaction.requestBodyStreamFinished(trailers: trailers)
-                            break // the loop
+                            break  // the loop
                         } catch let error {
                             // if we fail because the user throws in upload, we have to cancel the
                             // upload and fail the request I guess.

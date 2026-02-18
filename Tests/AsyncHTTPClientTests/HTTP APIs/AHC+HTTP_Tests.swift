@@ -1,9 +1,16 @@
+//===----------------------------------------------------------------------===//
 //
-//  AHC+HTTP_Tests.swift
-//  async-http-client
+// This source file is part of the AsyncHTTPClient open source project
 //
-//  Created by Fabian Fett on 02.12.25.
+// Copyright (c) 2026 Apple Inc. and the AsyncHTTPClient project authors
+// Licensed under Apache License v2.0
 //
+// See LICENSE.txt for license information
+// See CONTRIBUTORS.txt for the list of AsyncHTTPClient project authors
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+//===----------------------------------------------------------------------===//
 
 #if compiler(>=6.2) && $ExperimentalHTTPAPIsSupport
 import NIOCore

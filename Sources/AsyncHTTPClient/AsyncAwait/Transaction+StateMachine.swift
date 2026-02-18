@@ -511,7 +511,10 @@ extension Transaction {
             case none
         }
 
-        mutating func receiveResponseEnd(_ newChunks: CircularBuffer<ByteBuffer>?, trailers: HTTPHeaders?) -> ReceiveResponseEndAction {
+        mutating func receiveResponseEnd(
+            _ newChunks: CircularBuffer<ByteBuffer>?,
+            trailers: HTTPHeaders?
+        ) -> ReceiveResponseEndAction {
             switch self.state {
             case .initialized,
                 .queued,

@@ -1139,7 +1139,8 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                     return
                 }
 
-                context.writeAndFlush(self.wrapOutboundOut(.end(response.trailers))).assumeIsolated().whenComplete { result in
+                context.writeAndFlush(self.wrapOutboundOut(.end(response.trailers))).assumeIsolated().whenComplete {
+                    result in
                     self.isServingRequest = false
                     switch result {
                     case .success:

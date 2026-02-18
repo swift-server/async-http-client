@@ -16,6 +16,7 @@ import Algorithms
 import NIOCore
 import NIOHTTP1
 import NIOSSL
+
 #if canImport(HTTPAPIs)
 import HTTPAPIs
 #endif
@@ -356,7 +357,7 @@ extension Optional where Wrapped == HTTPClientRequest.Body {
         case .sequence(_, let canBeConsumedMultipleTimes, _): return canBeConsumedMultipleTimes
         case .asyncSequence: return false
         #if canImport(HTTPAPIs)
-        case .httpClientRequestBody: return false // TODO: I think this should be TRUE
+        case .httpClientRequestBody: return false  // TODO: I think this should be TRUE
         #endif
         }
     }

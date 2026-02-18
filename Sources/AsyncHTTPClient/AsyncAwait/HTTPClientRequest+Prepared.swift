@@ -17,11 +17,12 @@ import NIOCore
 import NIOHTTP1
 import NIOSSL
 import ServiceContextModule
+
+import struct Foundation.URL
+
 #if canImport(HTTPAPIs)
 import HTTPAPIs
 #endif
-
-import struct Foundation.URL
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest {
