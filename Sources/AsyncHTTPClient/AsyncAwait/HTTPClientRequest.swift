@@ -399,7 +399,7 @@ extension HTTPClientRequest.Body: AsyncSequence {
         case .byteBuffer(let byteBuffer):
             return .init(storage: .byteBuffer(byteBuffer))
         #if canImport(HTTPAPIs)
-        case .httpClientRequestBody(let body):
+        case .httpClientRequestBody:
             fatalError("Unimplemented")
         #endif
         }
