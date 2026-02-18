@@ -5,7 +5,7 @@
 //  Created by Fabian Fett on 02.12.25.
 //
 
-#if compiler(>=6.2)
+#if compiler(>=6.2) && $ExperimentalHTTPAPIsSupport
 import NIOCore
 import HTTPTypes
 import HTTPAPIs
@@ -72,11 +72,6 @@ struct AbstractHTTPClientTest {
             },
             options: .init(),
         ) { response, responseReader in
-            print("status: \(response.status)")
-            for header in response.headerFields {
-                print("\(header.name): \(header.value)")
-            }
-
             let trailers = try await responseReader.consumeAndConclude { bodyReader in
                 var bodyReader = bodyReader
                 var `continue` = true
@@ -91,20 +86,16 @@ struct AbstractHTTPClientTest {
                     }
                 }
             }
-
-            print("Trailers: \(trailers)")
         }
     }
 }
 
 extension OutputSpan<UInt8> {
-
     mutating func append(_ sequence: some Sequence<UInt8>) {
         for element in sequence {
             self.append(element)
         }
     }
-
 }
 
 #endif
