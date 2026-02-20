@@ -984,10 +984,20 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                 }
                 self.resps.append(HTTPResponseBuilder(status: .ok, responseBodyIsRequestBodyByteCount: true))
                 return
+            case "/redirect/301":
+                var headers = self.responseHeaders
+                headers.add(name: "location", value: "/ok")
+                self.resps.append(HTTPResponseBuilder(status: .movedPermanently, headers: headers))
+                return
             case "/redirect/302":
                 var headers = self.responseHeaders
                 headers.add(name: "location", value: "/ok")
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
+                return
+            case "/redirect/303":
+                var headers = self.responseHeaders
+                headers.add(name: "location", value: "/ok")
+                self.resps.append(HTTPResponseBuilder(status: .seeOther, headers: headers))
                 return
             case "/redirect/https":
                 let port = self.value(for: "port", from: urlComponents.query!)

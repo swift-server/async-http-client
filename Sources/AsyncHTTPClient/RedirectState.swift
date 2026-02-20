@@ -19,14 +19,10 @@ import struct Foundation.URL
 typealias RedirectMode = HTTPClient.Configuration.RedirectConfiguration.Mode
 
 struct RedirectState {
-    /// number of redirects we are allowed to follow.
-    private var limit: Int
+    var config: HTTPClient.Configuration.RedirectConfiguration.FollowConfiguration
 
     /// All visited URLs.
     private var visited: [String]
-
-    /// if true, `redirect(to:)` will throw an error if a cycle is detected.
-    private let allowCycles: Bool
 }
 
 extension RedirectState {
@@ -40,8 +36,8 @@ extension RedirectState {
         switch configuration {
         case .disallow:
             return nil
-        case .follow(let maxRedirects, let allowCycles):
-            self.init(limit: maxRedirects, visited: [initialURL], allowCycles: allowCycles)
+        case .follow(let config):
+            self.init(config: config, visited: [initialURL])
         }
     }
 }
@@ -52,11 +48,11 @@ extension RedirectState {
     /// - Parameter redirectURL: the new URL to redirect the request to
     /// - Throws: if it reaches the redirect limit or detects a redirect cycle if and `allowCycles` is false
     mutating func redirect(to redirectURL: String) throws {
-        guard self.visited.count <= limit else {
+        guard self.visited.count <= config.max else {
             throw HTTPClientError.redirectLimitReached
         }
 
-        guard allowCycles || !self.visited.contains(redirectURL) else {
+        guard config.allowCycles || !self.visited.contains(redirectURL) else {
             throw HTTPClientError.redirectCycleDetected
         }
         self.visited.append(redirectURL)
@@ -111,13 +107,16 @@ func transformRequestForRedirect<Body>(
     headers requestHeaders: HTTPHeaders,
     body requestBody: Body?,
     to redirectURL: URL,
-    status responseStatus: HTTPResponseStatus
+    status responseStatus: HTTPResponseStatus,
+    config: HTTPClient.Configuration.RedirectConfiguration.FollowConfiguration
 ) -> (HTTPMethod, HTTPHeaders, Body?) {
     let convertToGet: Bool
     if responseStatus == .seeOther, requestMethod != .HEAD {
         convertToGet = true
-    } else if responseStatus == .movedPermanently || responseStatus == .found, requestMethod == .POST {
-        convertToGet = true
+    } else if responseStatus == .movedPermanently, requestMethod == .POST {
+        convertToGet = !config.retainHTTPMethodAndBodyOn301
+    } else if responseStatus == .found, requestMethod == .POST {
+        convertToGet = !config.retainHTTPMethodAndBodyOn302
     } else {
         convertToGet = false
     }
