@@ -4581,7 +4581,6 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         expectedStatus: HTTPResponseStatus,
         convertToGetOn301: Bool,
         convertToGetOn302: Bool,
-        convertToGetOn303: Bool,
         expectConvert: Bool
     ) throws {
         let bin = HTTPBin(.http1_1())
@@ -4595,8 +4594,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                         max: 10,
                         allowCycles: false,
                         convertToGetOn301: convertToGetOn301,
-                        convertToGetOn302: convertToGetOn302,
-                        convertToGetOn303: convertToGetOn303
+                        convertToGetOn302: convertToGetOn302
                     )
                 )
             )
@@ -4630,7 +4628,6 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                 expectedStatus: .movedPermanently,
                 convertToGetOn301: convertToGet,
                 convertToGetOn302: true,
-                convertToGetOn303: true,
                 expectConvert: convertToGet
             )
         }
@@ -4643,20 +4640,6 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                 expectedStatus: .found,
                 convertToGetOn301: true,
                 convertToGetOn302: convertToGet,
-                convertToGetOn303: true,
-                expectConvert: convertToGet
-            )
-        }
-    }
-
-    func testPostConvertedToGetOn303Redirect() throws {
-        for convertToGet in [true, false] {
-            try _testPostConvertedToGetOnRedirect(
-                statusPath: "/redirect/303",
-                expectedStatus: .seeOther,
-                convertToGetOn301: true,
-                convertToGetOn302: true,
-                convertToGetOn303: convertToGet,
                 expectConvert: convertToGet
             )
         }

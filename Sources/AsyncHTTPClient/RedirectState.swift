@@ -112,7 +112,7 @@ func transformRequestForRedirect<Body>(
 ) -> (HTTPMethod, HTTPHeaders, Body?) {
     let convertToGet: Bool
     if responseStatus == .seeOther, requestMethod != .HEAD {
-        convertToGet = config.convertToGetOn303
+        convertToGet = true
     } else if responseStatus == .movedPermanently, requestMethod == .POST {
         convertToGet = config.convertToGetOn301
     } else if responseStatus == .found, requestMethod == .POST {

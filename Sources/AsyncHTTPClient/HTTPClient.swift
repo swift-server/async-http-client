@@ -1284,9 +1284,6 @@ extension HTTPClient.Configuration {
             /// Whether to convert POST requests into GET requests when following a 302 redirect.
             /// This should be true as per the HTTP spec. Only change this if you know what you're doing.
             public var convertToGetOn302: Bool
-            /// Whether to convert POST requests into GET requests when following a 303 redirect.
-            /// This should be true as per the HTTP spec. Only change this if you know what you're doing.
-            public var convertToGetOn303: Bool
 
             /// Create a new ``FollowConfiguration``
             /// - Parameters:
@@ -1294,19 +1291,16 @@ extension HTTPClient.Configuration {
             ///   - allowCycles: Whether cycles are allowed.
             ///   - convertToGetOn301: Whether to convert POST requests into GET requests when following a 301 redirect.
             ///   - convertToGetOn302: Whether to convert POST requests into GET requests when following a 302 redirect.
-            ///   - convertToGetOn303: Whether to convert POST requests into GET requests when following a 303 redirect.
             public init(
                 max: Int,
                 allowCycles: Bool,
                 convertToGetOn301: Bool,
-                convertToGetOn302: Bool,
-                convertToGetOn303: Bool
+                convertToGetOn302: Bool
             ) {
                 self.max = max
                 self.allowCycles = allowCycles
                 self.convertToGetOn301 = convertToGetOn301
                 self.convertToGetOn302 = convertToGetOn302
-                self.convertToGetOn303 = convertToGetOn303
             }
         }
 
@@ -1318,8 +1312,7 @@ extension HTTPClient.Configuration {
                     max: 5,
                     allowCycles: false,
                     convertToGetOn301: true,
-                    convertToGetOn302: true,
-                    convertToGetOn303: true
+                    convertToGetOn302: true
                 )
             )
         }
@@ -1344,8 +1337,7 @@ extension HTTPClient.Configuration {
                     max: max,
                     allowCycles: allowCycles,
                     convertToGetOn301: true,
-                    convertToGetOn302: true,
-                    convertToGetOn303: true
+                    convertToGetOn302: true
                 )
             )
         }

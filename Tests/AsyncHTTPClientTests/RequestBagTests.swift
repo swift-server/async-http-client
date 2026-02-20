@@ -736,8 +736,7 @@ final class RequestBagTests: XCTestCase {
                                 max: 5,
                                 allowCycles: false,
                                 convertToGetOn301: true,
-                                convertToGetOn302: true,
-                                convertToGetOn303: true
+                                convertToGetOn302: true
                             )
                         ),
                         initialURL: request.url.absoluteString
@@ -832,8 +831,7 @@ final class RequestBagTests: XCTestCase {
                                 max: 5,
                                 allowCycles: false,
                                 convertToGetOn301: true,
-                                convertToGetOn302: true,
-                                convertToGetOn303: true
+                                convertToGetOn302: true
                             )
                         ),
                         initialURL: request.url.absoluteString
@@ -902,8 +900,7 @@ final class RequestBagTests: XCTestCase {
                                 max: 5,
                                 allowCycles: false,
                                 convertToGetOn301: true,
-                                convertToGetOn302: true,
-                                convertToGetOn303: true
+                                convertToGetOn302: true
                             )
                         ),
                         initialURL: request.url.absoluteString

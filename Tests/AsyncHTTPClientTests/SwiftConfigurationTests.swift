@@ -31,7 +31,6 @@ struct HTTPClientConfigurationPropsTests {
             "redirect.allowCycles": true,
             "redirect.convertToGetOn301": false,
             "redirect.convertToGetOn302": false,
-            "redirect.convertToGetOn303": false,
 
             "timeout.connectionMs": 5000,
             "timeout.readMs": 30000,
@@ -59,7 +58,6 @@ struct HTTPClientConfigurationPropsTests {
             #expect(follow.allowCycles)
             #expect(!follow.convertToGetOn301)
             #expect(!follow.convertToGetOn302)
-            #expect(!follow.convertToGetOn303)
         case .disallow:
             Issue.record("Unexpected value")
         }
@@ -258,8 +256,7 @@ struct HTTPClientConfigurationPropsTests {
                         max: 5,
                         allowCycles: false,
                         convertToGetOn301: true,
-                        convertToGetOn302: true,
-                        convertToGetOn303: true
+                        convertToGetOn302: true
                     )
                 )
         )
@@ -274,7 +271,6 @@ struct HTTPClientConfigurationPropsTests {
             "redirect.allowCycles": true,
             "redirect.convertToGetOn301": false,
             "redirect.convertToGetOn302": true,
-            "redirect.convertToGetOn303": false,
         ])
 
         let configReader = ConfigReader(provider: testProvider)
@@ -288,8 +284,7 @@ struct HTTPClientConfigurationPropsTests {
                         max: 3,
                         allowCycles: true,
                         convertToGetOn301: false,
-                        convertToGetOn302: true,
-                        convertToGetOn303: false
+                        convertToGetOn302: true
                     )
                 )
         )
