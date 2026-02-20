@@ -66,8 +66,8 @@ extension HTTPClient.Configuration.RedirectConfiguration {
     /// - `mode` (string, optional, default: "follow"): Redirect handling mode ("follow" or "disallow").
     /// - `maxRedirects` (int, optional, default: 5): Maximum allowed redirects when mode is "follow".
     /// - `allowCycles` (bool, optional, default: false): Allow cyclic redirects when mode is "follow".
-    /// - `retainHTTPMethodAndBodyOn301` (bool, optional, default: false): Retain the original HTTP method and body on 301 redirect when mode is "follow". This is contrary to the fetch specification, but is allowed by RFC 9110.
-    /// - `retainHTTPMethodAndBodyOn302` (bool, optional, default: false): Retain the original HTTP method and body on 302 redirect when mode is "follow". This is contrary to the fetch specification, but is allowed by RFC 9110.
+    /// - `retainHTTPMethodAndBodyOn301` (bool, optional, default: false): Whether to retain the HTTP method and body when following a 301 redirect on a POST request. This should be false as per the fetch spec, but may be true according to RFC 9110. This does not affect non-POST requests.
+    /// - `retainHTTPMethodAndBodyOn302` (bool, optional, default: false): Whether to retain the HTTP method and body when following a 302 redirect on a POST request. This should be false as per the fetch spec, but may be true according to RFC 9110. This does not affect non-POST requests.
     ///
     /// - Throws: `HTTPClientError.invalidRedirectConfiguration` if mode is specified but invalid.
     public init(configReader: ConfigReader) throws {

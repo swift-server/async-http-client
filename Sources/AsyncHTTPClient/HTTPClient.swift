@@ -1278,19 +1278,21 @@ extension HTTPClient.Configuration {
             public var max: Int
             /// Whether cycles are allowed.
             public var allowCycles: Bool
-            /// Whether to retain the HTTP method and body when following a 301 redirect.
+            /// Whether to retain the HTTP method and body when following a 301 redirect on a POST request.
             /// This should be false as per the fetch spec, but may be true according to RFC 9110.
+            /// This does not affect non-POST requests.
             public var retainHTTPMethodAndBodyOn301: Bool
-            /// Whether to retain the HTTP method and body when following a 302 redirect.
+            /// Whether to retain the HTTP method and body when following a 302 redirect on a POST request.
             /// This should be false as per the fetch spec, but may be true according to RFC 9110.
+            /// This does not affect non-POST requests.
             public var retainHTTPMethodAndBodyOn302: Bool
 
             /// Create a new ``FollowConfiguration``
             /// - Parameters:
             ///   - max: The maximum number of allowed redirects.
             ///   - allowCycles: Whether cycles are allowed.
-            ///   - retainHTTPMethodAndBodyOn301: Whether to retain the HTTP method and body when following a 301 redirect. This should be false as per the fetch spec, but may be true according to RFC 9110.
-            ///   - retainHTTPMethodAndBodyOn302: Whether to retain the HTTP method and body when following a 302 redirect. This should be false as per the fetch spec, but may be true according to RFC 9110.
+            ///   - retainHTTPMethodAndBodyOn301: Whether to retain the HTTP method and body when following a 301 redirect on a POST request. This should be false as per the fetch spec, but may be true according to RFC 9110. This does not affect non-POST requests.
+            ///   - retainHTTPMethodAndBodyOn302: Whether to retain the HTTP method and body when following a 302 redirect on a POST request. This should be false as per the fetch spec, but may be true according to RFC 9110. This does not affect non-POST requests.
             public init(
                 max: Int,
                 allowCycles: Bool,
