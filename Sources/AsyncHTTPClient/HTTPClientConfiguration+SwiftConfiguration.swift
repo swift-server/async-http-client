@@ -66,8 +66,8 @@ extension HTTPClient.Configuration.RedirectConfiguration {
     /// - `mode` (string, optional, default: "follow"): Redirect handling mode ("follow" or "disallow").
     /// - `maxRedirects` (int, optional, default: 5): Maximum allowed redirects when mode is "follow".
     /// - `allowCycles` (bool, optional, default: false): Allow cyclic redirects when mode is "follow".
-    /// - `convertToGetOn301` (bool, optional, default: true): Convert to GET on 301 redirect when mode is "follow".
-    /// - `convertToGetOn302` (bool, optional, default: true): Convert to GET on 302 redirect when mode is "follow".
+    /// - `retainHTTPMethodAndBodyOn301` (bool, optional, default: false): Retain the original HTTP method and body on 301 redirect when mode is "follow". This is contrary to the fetch specification, but is allowed by RFC 9110.
+    /// - `retainHTTPMethodAndBodyOn302` (bool, optional, default: false): Retain the original HTTP method and body on 302 redirect when mode is "follow". This is contrary to the fetch specification, but is allowed by RFC 9110.
     ///
     /// - Throws: `HTTPClientError.invalidRedirectConfiguration` if mode is specified but invalid.
     public init(configReader: ConfigReader) throws {
@@ -79,14 +79,14 @@ extension HTTPClient.Configuration.RedirectConfiguration {
         if mode == "follow" {
             let maxRedirects = configReader.int(forKey: "maxRedirects", default: 5)
             let allowCycles = configReader.bool(forKey: "allowCycles", default: false)
-            let convertToGetOn301 = configReader.bool(forKey: "convertToGetOn301", default: true)
-            let convertToGetOn302 = configReader.bool(forKey: "convertToGetOn302", default: true)
+            let retainHTTPMethodAndBodyOn301 = configReader.bool(forKey: "retainHTTPMethodAndBodyOn301", default: false)
+            let retainHTTPMethodAndBodyOn302 = configReader.bool(forKey: "retainHTTPMethodAndBodyOn302", default: false)
             self = .follow(
                 configuration: .init(
                     max: maxRedirects,
                     allowCycles: allowCycles,
-                    convertToGetOn301: convertToGetOn301,
-                    convertToGetOn302: convertToGetOn302
+                    retainHTTPMethodAndBodyOn301: retainHTTPMethodAndBodyOn301,
+                    retainHTTPMethodAndBodyOn302: retainHTTPMethodAndBodyOn302
                 )
             )
         } else if mode == "disallow" {

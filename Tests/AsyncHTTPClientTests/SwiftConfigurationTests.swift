@@ -29,8 +29,8 @@ struct HTTPClientConfigurationPropsTests {
             "redirect.mode": "follow",
             "redirect.maxRedirects": 10,
             "redirect.allowCycles": true,
-            "redirect.convertToGetOn301": false,
-            "redirect.convertToGetOn302": false,
+            "redirect.retainHTTPMethodAndBodyOn301": true,
+            "redirect.retainHTTPMethodAndBodyOn302": true,
 
             "timeout.connectionMs": 5000,
             "timeout.readMs": 30000,
@@ -56,8 +56,8 @@ struct HTTPClientConfigurationPropsTests {
         case .follow(let follow):
             #expect(follow.max == 10)
             #expect(follow.allowCycles)
-            #expect(!follow.convertToGetOn301)
-            #expect(!follow.convertToGetOn302)
+            #expect(follow.retainHTTPMethodAndBodyOn301)
+            #expect(follow.retainHTTPMethodAndBodyOn302)
         case .disallow:
             Issue.record("Unexpected value")
         }
@@ -255,8 +255,8 @@ struct HTTPClientConfigurationPropsTests {
                     .init(
                         max: 5,
                         allowCycles: false,
-                        convertToGetOn301: true,
-                        convertToGetOn302: true
+                        retainHTTPMethodAndBodyOn301: false,
+                        retainHTTPMethodAndBodyOn302: false
                     )
                 )
         )
@@ -269,8 +269,8 @@ struct HTTPClientConfigurationPropsTests {
             "redirect.mode": "follow",
             "redirect.maxRedirects": 3,
             "redirect.allowCycles": true,
-            "redirect.convertToGetOn301": false,
-            "redirect.convertToGetOn302": true,
+            "redirect.retainHTTPMethodAndBodyOn301": true,
+            "redirect.retainHTTPMethodAndBodyOn302": false,
         ])
 
         let configReader = ConfigReader(provider: testProvider)
@@ -283,8 +283,8 @@ struct HTTPClientConfigurationPropsTests {
                     .init(
                         max: 3,
                         allowCycles: true,
-                        convertToGetOn301: false,
-                        convertToGetOn302: true
+                        retainHTTPMethodAndBodyOn301: true,
+                        retainHTTPMethodAndBodyOn302: false
                     )
                 )
         )

@@ -114,9 +114,9 @@ func transformRequestForRedirect<Body>(
     if responseStatus == .seeOther, requestMethod != .HEAD {
         convertToGet = true
     } else if responseStatus == .movedPermanently, requestMethod == .POST {
-        convertToGet = config.convertToGetOn301
+        convertToGet = !config.retainHTTPMethodAndBodyOn301
     } else if responseStatus == .found, requestMethod == .POST {
-        convertToGet = config.convertToGetOn302
+        convertToGet = !config.retainHTTPMethodAndBodyOn302
     } else {
         convertToGet = false
     }

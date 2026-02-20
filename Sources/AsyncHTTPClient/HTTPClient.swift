@@ -1278,29 +1278,29 @@ extension HTTPClient.Configuration {
             public var max: Int
             /// Whether cycles are allowed.
             public var allowCycles: Bool
-            /// Whether to convert POST requests into GET requests when following a 301 redirect.
-            /// This should be true as per the HTTP spec. Only change this if you know what you're doing.
-            public var convertToGetOn301: Bool
-            /// Whether to convert POST requests into GET requests when following a 302 redirect.
-            /// This should be true as per the HTTP spec. Only change this if you know what you're doing.
-            public var convertToGetOn302: Bool
+            /// Whether to retain the HTTP method and body when following a 301 redirect.
+            /// This should be false as per the fetch spec, but may be true according to RFC 9110.
+            public var retainHTTPMethodAndBodyOn301: Bool
+            /// Whether to retain the HTTP method and body when following a 302 redirect.
+            /// This should be false as per the fetch spec, but may be true according to RFC 9110.
+            public var retainHTTPMethodAndBodyOn302: Bool
 
             /// Create a new ``FollowConfiguration``
             /// - Parameters:
             ///   - max: The maximum number of allowed redirects.
             ///   - allowCycles: Whether cycles are allowed.
-            ///   - convertToGetOn301: Whether to convert POST requests into GET requests when following a 301 redirect.
-            ///   - convertToGetOn302: Whether to convert POST requests into GET requests when following a 302 redirect.
+            ///   - retainHTTPMethodAndBodyOn301: Whether to retain the HTTP method and body when following a 301 redirect. This should be false as per the fetch spec, but may be true according to RFC 9110.
+            ///   - retainHTTPMethodAndBodyOn302: Whether to retain the HTTP method and body when following a 302 redirect. This should be false as per the fetch spec, but may be true according to RFC 9110.
             public init(
                 max: Int,
                 allowCycles: Bool,
-                convertToGetOn301: Bool,
-                convertToGetOn302: Bool
+                retainHTTPMethodAndBodyOn301: Bool,
+                retainHTTPMethodAndBodyOn302: Bool
             ) {
                 self.max = max
                 self.allowCycles = allowCycles
-                self.convertToGetOn301 = convertToGetOn301
-                self.convertToGetOn302 = convertToGetOn302
+                self.retainHTTPMethodAndBodyOn301 = retainHTTPMethodAndBodyOn301
+                self.retainHTTPMethodAndBodyOn302 = retainHTTPMethodAndBodyOn302
             }
         }
 
@@ -1311,8 +1311,8 @@ extension HTTPClient.Configuration {
                 .init(
                     max: 5,
                     allowCycles: false,
-                    convertToGetOn301: true,
-                    convertToGetOn302: true
+                    retainHTTPMethodAndBodyOn301: false,
+                    retainHTTPMethodAndBodyOn302: false
                 )
             )
         }
@@ -1336,8 +1336,8 @@ extension HTTPClient.Configuration {
                 configuration: .init(
                     max: max,
                     allowCycles: allowCycles,
-                    convertToGetOn301: true,
-                    convertToGetOn302: true
+                    retainHTTPMethodAndBodyOn301: false,
+                    retainHTTPMethodAndBodyOn302: false
                 )
             )
         }

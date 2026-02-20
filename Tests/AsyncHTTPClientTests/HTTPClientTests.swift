@@ -4579,9 +4579,9 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
     private func _testPostConvertedToGetOnRedirect(
         statusPath: String,
         expectedStatus: HTTPResponseStatus,
-        convertToGetOn301: Bool,
-        convertToGetOn302: Bool,
-        expectConvert: Bool
+        retainHTTPMethodAndBodyOn301: Bool,
+        retainHTTPMethodAndBodyOn302: Bool,
+        expectRetain: Bool
     ) throws {
         let bin = HTTPBin(.http1_1())
         defer { XCTAssertNoThrow(try bin.shutdown()) }
@@ -4593,8 +4593,8 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                     configuration: .init(
                         max: 10,
                         allowCycles: false,
-                        convertToGetOn301: convertToGetOn301,
-                        convertToGetOn302: convertToGetOn302
+                        retainHTTPMethodAndBodyOn301: retainHTTPMethodAndBodyOn301,
+                        retainHTTPMethodAndBodyOn302: retainHTTPMethodAndBodyOn302
                     )
                 )
             )
@@ -4613,34 +4613,34 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             return XCTFail("Expected 2 entries in history for \(statusPath)")
         }
         XCTAssertEqual(response.history[0].request.method, .POST)
-        if expectConvert {
-            XCTAssertEqual(response.history[1].request.method, .GET)
-        } else {
+        if expectRetain {
             XCTAssertEqual(response.history[1].request.method, .POST)
+        } else {
+            XCTAssertEqual(response.history[1].request.method, .GET)
         }
         XCTAssertEqual(response.history[0].responseHead.status, expectedStatus)
     }
 
     func testPostConvertedToGetOn301Redirect() throws {
-        for convertToGet in [true, false] {
+        for retainHTTPMethodAndBody in [true, false] {
             try _testPostConvertedToGetOnRedirect(
                 statusPath: "/redirect/301",
                 expectedStatus: .movedPermanently,
-                convertToGetOn301: convertToGet,
-                convertToGetOn302: true,
-                expectConvert: convertToGet
+                retainHTTPMethodAndBodyOn301: retainHTTPMethodAndBody,
+                retainHTTPMethodAndBodyOn302: false,
+                expectRetain: retainHTTPMethodAndBody
             )
         }
     }
 
     func testPostConvertedToGetOn302Redirect() throws {
-        for convertToGet in [true, false] {
+        for retainHTTPMethodAndBody in [true, false] {
             try _testPostConvertedToGetOnRedirect(
                 statusPath: "/redirect/302",
                 expectedStatus: .found,
-                convertToGetOn301: true,
-                convertToGetOn302: convertToGet,
-                expectConvert: convertToGet
+                retainHTTPMethodAndBodyOn301: false,
+                retainHTTPMethodAndBodyOn302: retainHTTPMethodAndBody,
+                expectRetain: retainHTTPMethodAndBody
             )
         }
     }
