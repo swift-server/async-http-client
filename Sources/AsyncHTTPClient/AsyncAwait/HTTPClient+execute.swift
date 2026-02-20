@@ -141,7 +141,7 @@ extension HTTPClient {
                 from: preparedRequest.url,
                 to: redirectURL,
                 status: response.status,
-                config: redirectState.config,
+                config: redirectState.config
             )
 
             guard newRequest.body.canBeConsumedMultipleTimes else {

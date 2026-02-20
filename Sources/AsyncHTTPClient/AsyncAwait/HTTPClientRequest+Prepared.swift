@@ -134,7 +134,7 @@ extension HTTPClientRequest {
             body: self.body,
             to: redirectURL,
             status: status,
-            config: config,
+            config: config
         )
         var newRequest = HTTPClientRequest(url: redirectURL.absoluteString)
         newRequest.method = method
