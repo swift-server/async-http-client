@@ -126,7 +126,8 @@ extension HTTPClientRequest {
     func followingRedirect(
         from originalURL: URL,
         to redirectURL: URL,
-        status: HTTPResponseStatus
+        status: HTTPResponseStatus,
+        config: HTTPClient.Configuration.RedirectConfiguration.FollowConfiguration
     ) -> HTTPClientRequest {
         let (method, headers, body) = transformRequestForRedirect(
             from: originalURL,
@@ -134,7 +135,8 @@ extension HTTPClientRequest {
             headers: self.headers,
             body: self.body,
             to: redirectURL,
-            status: status
+            status: status,
+            config: config
         )
         var newRequest = HTTPClientRequest(url: redirectURL.absoluteString)
         newRequest.method = method

@@ -1302,13 +1302,54 @@ extension HTTPClient.Configuration {
             /// Redirects are not followed.
             case disallow
             /// Redirects are followed with a specified limit.
-            case follow(max: Int, allowCycles: Bool)
+            case follow(FollowConfiguration)
+        }
+
+        /// Configuration for following redirects.
+        public struct FollowConfiguration: Hashable, Sendable {
+            /// The maximum number of allowed redirects.
+            public var max: Int
+            /// Whether cycles are allowed.
+            public var allowCycles: Bool
+            /// Whether to retain the HTTP method and body when following a 301 redirect on a POST request.
+            /// This should be false as per the fetch spec, but may be true according to RFC 9110.
+            /// This does not affect non-POST requests.
+            public var retainHTTPMethodAndBodyOn301: Bool
+            /// Whether to retain the HTTP method and body when following a 302 redirect on a POST request.
+            /// This should be false as per the fetch spec, but may be true according to RFC 9110.
+            /// This does not affect non-POST requests.
+            public var retainHTTPMethodAndBodyOn302: Bool
+
+            /// Create a new ``FollowConfiguration``
+            /// - Parameters:
+            ///   - max: The maximum number of allowed redirects.
+            ///   - allowCycles: Whether cycles are allowed.
+            ///   - retainHTTPMethodAndBodyOn301: Whether to retain the HTTP method and body when following a 301 redirect on a POST request. This should be false as per the fetch spec, but may be true according to RFC 9110. This does not affect non-POST requests.
+            ///   - retainHTTPMethodAndBodyOn302: Whether to retain the HTTP method and body when following a 302 redirect on a POST request. This should be false as per the fetch spec, but may be true according to RFC 9110. This does not affect non-POST requests.
+            public init(
+                max: Int,
+                allowCycles: Bool,
+                retainHTTPMethodAndBodyOn301: Bool,
+                retainHTTPMethodAndBodyOn302: Bool
+            ) {
+                self.max = max
+                self.allowCycles = allowCycles
+                self.retainHTTPMethodAndBodyOn301 = retainHTTPMethodAndBodyOn301
+                self.retainHTTPMethodAndBodyOn302 = retainHTTPMethodAndBodyOn302
+            }
         }
 
         var mode: Mode
 
         init() {
-            self.mode = .follow(max: 5, allowCycles: false)
+            self.mode = .follow(
+                .init(
+                    max: 5,
+                    allowCycles: false,
+                    retainHTTPMethodAndBodyOn301: false,
+                    retainHTTPMethodAndBodyOn302: false
+                )
+            )
         }
 
         init(configuration: Mode) {
@@ -1326,7 +1367,21 @@ extension HTTPClient.Configuration {
         ///
         /// - warning: Cycle detection will keep all visited URLs in memory which means a malicious server could use this as a denial-of-service vector.
         public static func follow(max: Int, allowCycles: Bool) -> RedirectConfiguration {
-            .init(configuration: .follow(max: max, allowCycles: allowCycles))
+            .follow(
+                configuration: .init(
+                    max: max,
+                    allowCycles: allowCycles,
+                    retainHTTPMethodAndBodyOn301: false,
+                    retainHTTPMethodAndBodyOn302: false
+                )
+            )
+        }
+
+        /// Redirects are followed.
+        ///
+        /// - Parameter: configuration: Configure how redirects are followed.
+        public static func follow(configuration: FollowConfiguration) -> RedirectConfiguration {
+            .init(configuration: .follow(configuration))
         }
     }
 
