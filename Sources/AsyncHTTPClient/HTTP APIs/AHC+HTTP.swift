@@ -217,7 +217,8 @@ extension AsyncHTTPClient.HTTPClient: HTTPAPIs.HTTPClient {
                 var responseFields = HTTPFields()
                 for (name, value) in ahcResponse.headers {
                     if let name = HTTPField.Name(name) {
-                        responseFields[name] = value
+                        // Add a new header field
+                        responseFields.append(.init(name: name, value: value))
                     }
                 }
 
