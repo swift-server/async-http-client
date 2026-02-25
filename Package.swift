@@ -57,6 +57,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-distributed-tracing.git", from: "1.3.0"),
         .package(url: "https://github.com/apple/swift-configuration.git", from: "1.0.0"),
+        .package(url: "https://github.com/apple/swift-service-context.git", from: "1.1.0"),
         .package(
             url: "https://github.com/apple/swift-http-api-proposal.git",
             revision: "79028bea099d390935790d5d8884a61eabf448a5",
@@ -90,6 +91,7 @@ let package = Package(
                 // Observability support
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Tracing", package: "swift-distributed-tracing"),
+                .product(name: "ServiceContextModule", package: "swift-service-context"),
 
                 // HTTP APIs
                 .product(name: "HTTPAPIs", package: "swift-http-api-proposal"),
@@ -116,6 +118,7 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "InMemoryLogging", package: "swift-log"),
                 .product(name: "Tracing", package: "swift-distributed-tracing"),
+                .product(name: "ServiceContextModule", package: "swift-service-context"),
                 .product(name: "InMemoryTracing", package: "swift-distributed-tracing"),
             ],
             resources: [

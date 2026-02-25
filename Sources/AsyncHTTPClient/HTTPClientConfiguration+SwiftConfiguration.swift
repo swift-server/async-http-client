@@ -66,6 +66,8 @@ extension HTTPClient.Configuration.RedirectConfiguration {
     /// - `mode` (string, optional, default: "follow"): Redirect handling mode ("follow" or "disallow").
     /// - `maxRedirects` (int, optional, default: 5): Maximum allowed redirects when mode is "follow".
     /// - `allowCycles` (bool, optional, default: false): Allow cyclic redirects when mode is "follow".
+    /// - `retainHTTPMethodAndBodyOn301` (bool, optional, default: false): Whether to retain the HTTP method and body when following a 301 redirect on a POST request. This should be false as per the fetch spec, but may be true according to RFC 9110. This does not affect non-POST requests.
+    /// - `retainHTTPMethodAndBodyOn302` (bool, optional, default: false): Whether to retain the HTTP method and body when following a 302 redirect on a POST request. This should be false as per the fetch spec, but may be true according to RFC 9110. This does not affect non-POST requests.
     ///
     /// - Throws: `HTTPClientError.invalidRedirectConfiguration` if mode is specified but invalid.
     public init(configReader: ConfigReader) throws {
@@ -77,7 +79,16 @@ extension HTTPClient.Configuration.RedirectConfiguration {
         if mode == "follow" {
             let maxRedirects = configReader.int(forKey: "maxRedirects", default: 5)
             let allowCycles = configReader.bool(forKey: "allowCycles", default: false)
-            self = .follow(max: maxRedirects, allowCycles: allowCycles)
+            let retainHTTPMethodAndBodyOn301 = configReader.bool(forKey: "retainHTTPMethodAndBodyOn301", default: false)
+            let retainHTTPMethodAndBodyOn302 = configReader.bool(forKey: "retainHTTPMethodAndBodyOn302", default: false)
+            self = .follow(
+                configuration: .init(
+                    max: maxRedirects,
+                    allowCycles: allowCycles,
+                    retainHTTPMethodAndBodyOn301: retainHTTPMethodAndBodyOn301,
+                    retainHTTPMethodAndBodyOn302: retainHTTPMethodAndBodyOn302
+                )
+            )
         } else if mode == "disallow" {
             self = .disallow
         } else {
