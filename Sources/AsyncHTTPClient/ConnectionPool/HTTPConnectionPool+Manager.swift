@@ -64,6 +64,7 @@ extension HTTPConnectionPool {
                         eventLoopGroup: self.eventLoopGroup,
                         sslContextCache: self.sslContextCache,
                         tlsConfiguration: request.tlsConfiguration,
+                        tlsPinning: request.tlsPinning,
                         clientConfiguration: self.configuration,
                         key: poolKey,
                         delegate: self,

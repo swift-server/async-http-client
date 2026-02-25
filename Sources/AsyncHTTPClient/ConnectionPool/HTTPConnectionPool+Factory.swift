@@ -30,12 +30,14 @@ extension HTTPConnectionPool {
     struct ConnectionFactory {
         let key: ConnectionPool.Key
         let clientConfiguration: HTTPClient.Configuration
+        let tlsPinning: SPKIPinningConfiguration?
         let tlsConfiguration: TLSConfiguration
         let sslContextCache: SSLContextCache
 
         init(
             key: ConnectionPool.Key,
             tlsConfiguration: TLSConfiguration?,
+            tlsPinning: SPKIPinningConfiguration?,
             clientConfiguration: HTTPClient.Configuration,
             sslContextCache: SSLContextCache
         ) {
@@ -44,6 +46,7 @@ extension HTTPConnectionPool {
             self.sslContextCache = sslContextCache
             self.tlsConfiguration =
                 tlsConfiguration ?? clientConfiguration.tlsConfiguration ?? .makeClientConfiguration()
+            self.tlsPinning = tlsPinning ?? clientConfiguration.tlsPinning
         }
     }
 }
@@ -393,6 +396,19 @@ extension HTTPConnectionPool.ConnectionFactory {
                         serverHostname: sslServerHostname
                     )
                     try channel.pipeline.syncOperations.addHandler(sslHandler)
+
+                    if let tlsPinning {
+                        if #available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *) {
+                            let pinningHandler = SPKIPinningHandler(
+                                tlsPinning: tlsPinning,
+                                logger: logger
+                            )
+                            try channel.pipeline.syncOperations.addHandler(pinningHandler)
+                        } else {
+                            fatalError("SPKI pinning requires minimum OS version 10.15/13.0. Cannot proceed with pinning disabled.")
+                        }
+                    }
+
                     let tlsEventHandler = TLSEventsHandler(deadline: deadline)
                     try channel.pipeline.syncOperations.addHandler(tlsEventHandler)
 
@@ -596,7 +612,21 @@ extension HTTPConnectionPool.ConnectionFactory {
                             let tlsEventHandler = TLSEventsHandler(deadline: deadline)
 
                             try sync.addHandler(sslHandler)
+
+                            if let tlsPinning {
+                                if #available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *) {
+                                    let pinningHandler = SPKIPinningHandler(
+                                        tlsPinning: tlsPinning,
+                                        logger: logger
+                                    )
+                                    try sync.addHandler(pinningHandler)
+                                } else {
+                                    fatalError("SPKI pinning requires minimum OS version 10.15/13.0. Cannot proceed with pinning disabled.")
+                                }
+                            }
+
                             try sync.addHandler(tlsEventHandler)
+
                             return channel.eventLoop.makeSucceededVoidFuture()
                         } catch {
                             return channel.eventLoop.makeFailedFuture(error)

@@ -42,6 +42,7 @@ extension HTTPClientRequest {
         var head: HTTPRequestHead
         var body: Body?
         var tlsConfiguration: TLSConfiguration?
+        var tlsPinning: SPKIPinningConfiguration?
     }
 }
 
@@ -82,7 +83,8 @@ extension HTTPClientRequest.Prepared {
                 headers: headers
             ),
             body: request.body.map { .init($0) },
-            tlsConfiguration: request.tlsConfiguration
+            tlsConfiguration: request.tlsConfiguration,
+            tlsPinning: request.tlsPinning
         )
     }
 }

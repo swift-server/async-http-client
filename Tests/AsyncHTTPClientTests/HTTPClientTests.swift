@@ -4044,7 +4044,8 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let firstRequest = try HTTPClient.Request(
             url: "https://localhost:\(localHTTPBin.port)/get",
             method: .GET,
-            tlsConfiguration: tlsConfig
+            tlsConfiguration: tlsConfig,
+            tlsPinning: nil
         )
         let firstResponse = try localClient.execute(request: firstRequest).wait()
         guard let firstBody = firstResponse.body else {
@@ -4056,7 +4057,8 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         let secondRequest = try HTTPClient.Request(
             url: "https://localhost:\(localHTTPBin.port)/get",
             method: .GET,
-            tlsConfiguration: tlsConfig
+            tlsConfiguration: tlsConfig,
+            tlsPinning: nil
         )
         let secondResponse = try localClient.execute(request: secondRequest).wait()
         guard let secondBody = secondResponse.body else {
@@ -4065,14 +4067,15 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         }
         let secondConnectionNumber = try decoder.decode(RequestInfo.self, from: secondBody).connectionNumber
 
-        // Uses a differrent TLS config.
+        // Uses a different TLS config.
         var tlsConfig2 = TLSConfiguration.makeClientConfiguration()
         tlsConfig2.certificateVerification = .none
         tlsConfig2.maximumTLSVersion = .tlsv1
         let thirdRequest = try HTTPClient.Request(
             url: "https://localhost:\(localHTTPBin.port)/get",
             method: .GET,
-            tlsConfiguration: tlsConfig2
+            tlsConfiguration: tlsConfig2,
+            tlsPinning: nil
         )
         let thirdResponse = try localClient.execute(request: thirdRequest).wait()
         guard let thirdBody = thirdResponse.body else {
