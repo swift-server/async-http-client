@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if compiler(>=6.2)
+#if compiler(>=6.2) && canImport(HTTPAPIs)
 import HTTPAPIs
 import HTTPTypes
 import NIOHTTP1

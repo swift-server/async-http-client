@@ -731,7 +731,14 @@ final class RequestBagTests: XCTestCase {
                 redirectHandler: .init(
                     request: request,
                     redirectState: RedirectState(
-                        .follow(max: 5, allowCycles: false),
+                        .follow(
+                            .init(
+                                max: 5,
+                                allowCycles: false,
+                                retainHTTPMethodAndBodyOn301: false,
+                                retainHTTPMethodAndBodyOn302: false
+                            )
+                        ),
                         initialURL: request.url.absoluteString
                     )!,
                     execute: { request, _ in
@@ -819,7 +826,14 @@ final class RequestBagTests: XCTestCase {
                 redirectHandler: .init(
                     request: request,
                     redirectState: RedirectState(
-                        .follow(max: 5, allowCycles: false),
+                        .follow(
+                            .init(
+                                max: 5,
+                                allowCycles: false,
+                                retainHTTPMethodAndBodyOn301: false,
+                                retainHTTPMethodAndBodyOn302: false
+                            )
+                        ),
                         initialURL: request.url.absoluteString
                     )!,
                     execute: { request, _ in
@@ -881,7 +895,14 @@ final class RequestBagTests: XCTestCase {
                 redirectHandler: .init(
                     request: request,
                     redirectState: RedirectState(
-                        .follow(max: 5, allowCycles: false),
+                        .follow(
+                            .init(
+                                max: 5,
+                                allowCycles: false,
+                                retainHTTPMethodAndBodyOn301: false,
+                                retainHTTPMethodAndBodyOn302: false
+                            )
+                        ),
                         initialURL: request.url.absoluteString
                     )!,
                     execute: { request, _ in
