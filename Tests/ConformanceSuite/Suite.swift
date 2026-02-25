@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if $ExperimentalHTTPAPIsSupport
 import AsyncHTTPClient
 import HTTPAPIs
 import HTTPClient
@@ -46,3 +47,4 @@ extension AsyncHTTPClient.HTTPClient.RequestOptions: HTTPClientCapability.Redire
         }
     }
 }
+#endif
