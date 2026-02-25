@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if compiler(>=6.2) && $ExperimentalHTTPAPIsSupport
+#if compiler(>=6.2) && ExperimentalHTTPAPIsSupport
 import NIOCore
 import HTTPTypes
 import HTTPAPIs
