@@ -24,6 +24,9 @@ let strictConcurrencySettings: [SwiftSetting] = {
         // -warnings-as-errors here is a workaround so that IDE-based development can
         // get tripped up on -require-explicit-sendable.
         initialSettings.append(.unsafeFlags(["-Xfrontend", "-require-explicit-sendable", "-warnings-as-errors"]))
+        initialSettings.append(.enableExperimentalFeature("LifetimeDependence"))
+        initialSettings.append(.enableExperimentalFeature("Lifetimes"))
+        initialSettings.append(.enableUpcomingFeature("LifetimeDependence"))
     }
 
     return initialSettings
@@ -33,6 +36,15 @@ let package = Package(
     name: "async-http-client",
     products: [
         .library(name: "AsyncHTTPClient", targets: ["AsyncHTTPClient"])
+    ],
+    traits: [
+        .trait(
+            name: "ExperimentalHTTPAPIsSupport",
+            description: """
+                Enables conformance to the HTTPAPIs HTTPClient protocol. This is potentially source breaking.
+                """
+        ),
+        .default(enabledTraits: ["ExperimentalHTTPAPIsSupport"]), // remove before MERGE!
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.81.0"),
@@ -46,6 +58,10 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-distributed-tracing.git", from: "1.3.0"),
         .package(url: "https://github.com/apple/swift-configuration.git", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-service-context.git", from: "1.1.0"),
+        .package(
+            url: "https://github.com/apple/swift-http-api-proposal.git",
+            revision: "79028bea099d390935790d5d8884a61eabf448a5",
+        ),
     ],
     targets: [
         .target(
@@ -76,6 +92,9 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Tracing", package: "swift-distributed-tracing"),
                 .product(name: "ServiceContextModule", package: "swift-service-context"),
+
+                // HTTP APIs
+                .product(name: "HTTPAPIs", package: "swift-http-api-proposal"),
             ],
             swiftSettings: strictConcurrencySettings
         ),
@@ -109,6 +128,17 @@ let package = Package(
                 .copy("Resources/example.com.private-key.pem"),
             ],
             swiftSettings: strictConcurrencySettings
+        ),
+        .testTarget(
+            name: "ConformanceSuite",
+            dependencies: [
+                "AsyncHTTPClient",
+                .product(
+                    name: "HTTPClientConformance",
+                    package: "swift-http-api-proposal",
+                    condition: .when(traits: ["ExperimentalHTTPAPIsSupport"])
+                ),
+            ]
         ),
     ]
 )

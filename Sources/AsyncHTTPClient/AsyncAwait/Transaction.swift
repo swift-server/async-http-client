@@ -17,6 +17,7 @@ import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
 import NIOSSL
+import Synchronization
 import Tracing
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
@@ -73,7 +74,7 @@ final class Transaction:
             return
         }
 
-        self.requestBodyStreamFinished()
+        self.requestBodyStreamFinished(trailers: nil)
     }
 
     private func continueRequestBodyStream(
@@ -94,7 +95,7 @@ final class Transaction:
                     }
                 }
 
-                self.requestBodyStreamFinished()
+                self.requestBodyStreamFinished(trailers: nil)
             } catch {
                 // The only chance of reaching this catch block, is an error thrown in the `next`
                 // call above.
@@ -105,7 +106,7 @@ final class Transaction:
 
     struct BreakTheWriteLoopError: Swift.Error {}
 
-    private func writeRequestBodyPart(_ part: ByteBuffer) async throws {
+    func writeRequestBodyPart(_ part: ByteBuffer) async throws {
         let action = self.state.withLockedValue { state in
             state.writeNextRequestPart()
         }
@@ -146,7 +147,7 @@ final class Transaction:
         }
     }
 
-    private func requestBodyStreamFinished() {
+    func requestBodyStreamFinished(trailers: HTTPHeaders?) {
         let finishAction = self.state.withLockedValue { state in
             state.finishRequestBodyStream()
         }
@@ -157,7 +158,7 @@ final class Transaction:
             break
 
         case .forwardStreamFinished(let executor):
-            executor.finishRequestBodyStream(trailers: nil, request: self, promise: nil)
+            executor.finishRequestBodyStream(trailers: trailers, request: self, promise: nil)
         }
         return
     }
@@ -228,12 +229,17 @@ extension Transaction: HTTPExecutableRequest {
             case .byteBuffer(let byteBuffer):
                 self.writeOnceAndOneTimeOnly(byteBuffer: byteBuffer)
 
-            case .none:
-                break
-
             case .sequence(_, _, let create):
                 let byteBuffer = create(allocator)
                 self.writeOnceAndOneTimeOnly(byteBuffer: byteBuffer)
+
+            #if canImport(HTTPAPIs)
+            case .httpClientRequestBody(_, let continuation):
+                continuation.yield(self)
+            #endif
+
+            case .none:
+                break
             }
 
         case .resumeStream(let continuation):
@@ -277,6 +283,7 @@ extension Transaction: HTTPExecutableRequest {
                 version: head.version,
                 status: head.status,
                 headers: head.headers,
+                transaction: self,
                 body: body,
                 history: []
             )
@@ -303,7 +310,7 @@ extension Transaction: HTTPExecutableRequest {
 
     func receiveResponseEnd(_ buffer: CircularBuffer<ByteBuffer>?, trailers: HTTPHeaders?) {
         let receiveResponseEndAction = self.state.withLockedValue { state in
-            state.receiveResponseEnd(buffer)
+            state.receiveResponseEnd(buffer, trailers: trailers)
         }
         switch receiveResponseEndAction {
         case .finishResponseStream(let source, let finalResponse):
@@ -314,6 +321,12 @@ extension Transaction: HTTPExecutableRequest {
 
         case .none:
             break
+        }
+    }
+
+    var trailers: HTTPHeaders? {
+        self.state.withLockedValue {
+            $0.trailers
         }
     }
 
