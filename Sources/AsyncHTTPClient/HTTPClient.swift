@@ -1070,6 +1070,15 @@ public final class HTTPClient: Sendable {
         @usableFromInline
         var _tracer: Optional<any Sendable>  // erasure trick so we don't have to make Configuration @available
 
+        public var allowedHeaders: Set<String> = []
+        public var sensitivePathComponents: Set<String> = []
+        public var sensitiveQueryComponents: Set<String> = [
+            "AWSAccessKeyId",
+            "Signature",
+            "sig",
+            "X-Goog-Signature"
+        ]
+
         /// Tracer that should be used by the HTTPClient.
         ///
         /// This is selected at configuration creation time, and if no tracer is passed explicitly,
@@ -1109,11 +1118,21 @@ public final class HTTPClient: Sendable {
         package struct AttributeKeys: Sendable {
             @usableFromInline package var requestMethod: String = "http.request.method"
             @usableFromInline package var requestBodySize: String = "http.request.body.size"
-
+            @usableFromInline package var requestHeader: String = "http.request.header"
+            @usableFromInline package var responseHeader: String = "http.response.header"
             @usableFromInline package var responseBodySize: String = "http.response.body.size"
-            @usableFromInline package var responseStatusCode: String = "http.status_code"
-
+            @usableFromInline package var responseStatusCode: String = "http.response.status_code"
             @usableFromInline package var httpFlavor: String = "http.flavor"
+
+            @usableFromInline package var networkProtocolVersion: String = "network.protocol.version"
+    
+            @usableFromInline package var urlPath: String = "url.path"
+            @usableFromInline package var urlScheme: String = "url.scheme"
+            @usableFromInline package var urlQuery: String = "url.query"
+            @usableFromInline package var urlFragment: String = "url.fragment"
+    
+            @usableFromInline package var serverHostname: String = "server.hostname"
+            @usableFromInline package var serverPort: String = "server.port"
 
             @usableFromInline package init() {}
         }
