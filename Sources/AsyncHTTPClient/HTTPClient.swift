@@ -1118,18 +1118,21 @@ public final class HTTPClient: Sendable {
         package struct AttributeKeys: Sendable {
             @usableFromInline package var requestMethod: String = "http.request.method"
             @usableFromInline package var requestBodySize: String = "http.request.body.size"
-            @usableFromInline package var responseBodySize: String = "http.response.body.size"
-            @usableFromInline package var responseStatusCode: String = "http.response.status_code"
-            @usableFromInline package var networkProtocolVersion: String = "network.protocol.version"
             @usableFromInline package var requestHeader: String = "http.request.header"
             @usableFromInline package var responseHeader: String = "http.response.header"
+            @usableFromInline package var responseBodySize: String = "http.response.body.size"
+            @usableFromInline package var responseStatusCode: String = "http.response.status_code"
+            @usableFromInline package var httpFlavor: String = "http.flavor"
+
+            @usableFromInline package var networkProtocolVersion: String = "network.protocol.version"
+    
             @usableFromInline package var urlPath: String = "url.path"
             @usableFromInline package var urlScheme: String = "url.scheme"
             @usableFromInline package var urlQuery: String = "url.query"
             @usableFromInline package var urlFragment: String = "url.fragment"
+    
             @usableFromInline package var serverHostname: String = "server.hostname"
             @usableFromInline package var serverPort: String = "server.port"
-            @usableFromInline package var httpFlavor: String = "http.flavor"
 
             @usableFromInline package init() {}
         }
