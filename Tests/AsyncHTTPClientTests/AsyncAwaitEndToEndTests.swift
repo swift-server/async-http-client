@@ -1019,6 +1019,95 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - POST to GET conversion on redirects
+
+    @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+    private func _testPostConvertedToGetOnRedirect(
+        statusPath: String,
+        expectedStatus: HTTPResponseStatus
+    ) {
+        XCTAsyncTest {
+            let bin = HTTPBin(.http2(compress: false))
+            defer { XCTAssertNoThrow(try bin.shutdown()) }
+            let client = makeDefaultHTTPClient()
+            defer { XCTAssertNoThrow(try client.syncShutdown()) }
+            let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+
+            var request = HTTPClientRequest(url: "https://localhost:\(bin.port)\(statusPath)")
+            request.method = .POST
+            request.body = .bytes(ByteBuffer(string: "test body"))
+
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else { return }
+
+            XCTAssertEqual(response.status, .ok)
+            XCTAssertEqual(response.history.count, 2, "Expected 2 entries in history for \(statusPath)")
+            XCTAssertEqual(
+                response.history[0].request.method,
+                .POST,
+                "Original request should be POST for \(statusPath)"
+            )
+            XCTAssertEqual(
+                response.history[1].request.method,
+                .GET,
+                "Redirected request should be converted to GET for \(statusPath)"
+            )
+            XCTAssertEqual(
+                response.history[0].responseHead.status,
+                expectedStatus,
+                "Expected \(expectedStatus) for \(statusPath)"
+            )
+        }
+    }
+
+    func testPostConvertedToGetOn301Redirect() {
+        self._testPostConvertedToGetOnRedirect(
+            statusPath: "/redirect/301",
+            expectedStatus: .movedPermanently
+        )
+    }
+
+    func testPostConvertedToGetOn302Redirect() {
+        self._testPostConvertedToGetOnRedirect(
+            statusPath: "/redirect/302",
+            expectedStatus: .found
+        )
+    }
+
+    func testPostConvertedToGetOn303Redirect() {
+        self._testPostConvertedToGetOnRedirect(
+            statusPath: "/redirect/303",
+            expectedStatus: .seeOther
+        )
+    }
+
+    func testGetMethodUnchangedOnRedirect() {
+        XCTAsyncTest {
+            let bin = HTTPBin(.http2(compress: false))
+            defer { XCTAssertNoThrow(try bin.shutdown()) }
+            let client = makeDefaultHTTPClient()
+            defer { XCTAssertNoThrow(try client.syncShutdown()) }
+            let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+
+            // Test that non-POST methods remain unchanged
+            let requestGet = HTTPClientRequest(url: "https://localhost:\(bin.port)/redirect/302")
+
+            guard
+                let responseGet = await XCTAssertNoThrowWithResult(
+                    try await client.execute(requestGet, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else { return }
+
+            XCTAssertEqual(responseGet.status, .ok)
+            XCTAssertEqual(responseGet.history.count, 2)
+            XCTAssertEqual(responseGet.history[0].request.method, .GET, "Original request should be GET")
+            XCTAssertEqual(responseGet.history[1].request.method, .GET, "Redirected request should remain GET")
+        }
+    }
 }
 
 struct AnySendableSequence<Element>: @unchecked Sendable {

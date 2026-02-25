@@ -140,7 +140,8 @@ extension HTTPClient {
             let newRequest = currentRequest.followingRedirect(
                 from: preparedRequest.url,
                 to: redirectURL,
-                status: response.status
+                status: response.status,
+                config: redirectState.config
             )
 
             guard newRequest.body.canBeConsumedMultipleTimes else {

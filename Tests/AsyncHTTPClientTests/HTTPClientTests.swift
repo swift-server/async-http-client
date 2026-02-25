@@ -4575,6 +4575,75 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
         }
     }
+
+    private func _testPostConvertedToGetOnRedirect(
+        statusPath: String,
+        expectedStatus: HTTPResponseStatus,
+        retainHTTPMethodAndBodyOn301: Bool,
+        retainHTTPMethodAndBodyOn302: Bool,
+        expectRetain: Bool
+    ) throws {
+        let bin = HTTPBin(.http1_1())
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: HTTPClient.Configuration(
+                redirectConfiguration: .follow(
+                    configuration: .init(
+                        max: 10,
+                        allowCycles: false,
+                        retainHTTPMethodAndBodyOn301: retainHTTPMethodAndBodyOn301,
+                        retainHTTPMethodAndBodyOn302: retainHTTPMethodAndBodyOn302
+                    )
+                )
+            )
+        )
+        defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+
+        let request = try HTTPClient.Request(
+            url: "http://localhost:\(bin.port)\(statusPath)",
+            method: .POST,
+            headers: HTTPHeaders(),
+            body: .string("test body")
+        )
+        let response = try localClient.execute(request: request).wait()
+        XCTAssertEqual(response.status, .ok)
+        guard response.history.count == 2 else {
+            return XCTFail("Expected 2 entries in history for \(statusPath)")
+        }
+        XCTAssertEqual(response.history[0].request.method, .POST)
+        if expectRetain {
+            XCTAssertEqual(response.history[1].request.method, .POST)
+        } else {
+            XCTAssertEqual(response.history[1].request.method, .GET)
+        }
+        XCTAssertEqual(response.history[0].responseHead.status, expectedStatus)
+    }
+
+    func testPostConvertedToGetOn301Redirect() throws {
+        for retainHTTPMethodAndBody in [true, false] {
+            try _testPostConvertedToGetOnRedirect(
+                statusPath: "/redirect/301",
+                expectedStatus: .movedPermanently,
+                retainHTTPMethodAndBodyOn301: retainHTTPMethodAndBody,
+                retainHTTPMethodAndBodyOn302: false,
+                expectRetain: retainHTTPMethodAndBody
+            )
+        }
+    }
+
+    func testPostConvertedToGetOn302Redirect() throws {
+        for retainHTTPMethodAndBody in [true, false] {
+            try _testPostConvertedToGetOnRedirect(
+                statusPath: "/redirect/302",
+                expectedStatus: .found,
+                retainHTTPMethodAndBodyOn301: false,
+                retainHTTPMethodAndBodyOn302: retainHTTPMethodAndBody,
+                expectRetain: retainHTTPMethodAndBody
+            )
+        }
+    }
 }
 
 final class CountingDebugInitializerUtil: Sendable {
