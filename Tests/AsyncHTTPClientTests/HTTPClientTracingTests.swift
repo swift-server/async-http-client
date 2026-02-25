@@ -26,7 +26,6 @@ import NIOPosix
 import NIOSSL
 import NIOTestUtils
 import NIOTransportServices
-import OTelSemanticConventions
 import Tracing
 import XCTest
 
@@ -110,7 +109,7 @@ final class HTTPClientTracingTests: XCTestCaseHTTPClientTestsBaseClass {
 
         XCTAssertEqual(span.operationName, "POST")
         XCTAssertTrue(span.errors.isEmpty, "Should have recorded error")
-        XCTAssertEqual(span.attributes.get(OTelAttribute.http.response.statusCode), 404)
+        XCTAssertEqual(span.attributes.get(client.tracing.attributeKeys.responseStatusCode), 404)
     }
 
     func testTrace_execute_async() async throws {
@@ -146,6 +145,6 @@ final class HTTPClientTracingTests: XCTestCaseHTTPClientTestsBaseClass {
 
         XCTAssertEqual(span.operationName, "GET")
         XCTAssertTrue(span.errors.isEmpty, "Should have recorded error")
-        XCTAssertEqual(span.attributes.get(OTelAttribute.http.response.statusCode), 404)
+        XCTAssertEqual(span.attributes.get(client.tracing.attributeKeys.responseStatusCode), 404)
     }
 }

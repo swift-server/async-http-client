@@ -13,7 +13,6 @@
 //===----------------------------------------------------------------------===//
 
 import NIOHTTP1
-import OTelSemanticConventions
 import Tracing
 import struct Foundation.URL
 
@@ -29,7 +28,8 @@ extension HTTPClient {
         }
 
         return try await tracer.withSpan(request.method.rawValue, ofKind: .client) { span in
-            span.attributes.http.request.method = .init(rawValue: request.method.rawValue)
+            let keys = self.configuration.tracing.attributeKeys
+            span.attributes[keys.requestMethod] = request.method.rawValue
 
             // set explicitly allowed request headers
             let allowedRequestHeaderNames = Set(request.headers.map(\.name)).intersection(configuration.tracing.allowedHeaders)
@@ -38,41 +38,41 @@ extension HTTPClient {
                 let values = request.headers[headerName]
 
                 if !values.isEmpty {
-                    span.attributes.http.request.header.set(headerName, to: values)
+                    span.attributes["\(keys.requestHeader).\(headerName)"] = values
                 }
             }
 
             // set url attributes
             if let url = URL(string: request.url) {
-                span.attributes.url.path = TracingSupport.sanitizePath(
+                span.attributes[keys.urlPath] = TracingSupport.sanitizePath(
                     url.path,
                     redactionComponents: self.configuration.tracing.sensitivePathComponents
                 )
 
                 if let scheme = url.scheme {
-                    span.attributes.url.scheme = scheme
+                    span.attributes[keys.urlScheme] = scheme
                 }
                 if let query = url.query {
-                    span.attributes.url.query = TracingSupport.sanitizeQuery(
+                    span.attributes[keys.urlQuery] = TracingSupport.sanitizeQuery(
                         query,
                         redactionComponents: self.configuration.tracing.sensitiveQueryComponents
                     )
                 }
                 if let fragment = url.fragment {
-                    span.attributes.url.fragment = fragment
+                    span.attributes[keys.urlFragment] = fragment
                 }
                 if let host = url.host {
-                    span.attributes.server.address = host
+                    span.attributes[keys.serverHostname] = host
                 }
                 if let port = url.port {
-                    span.attributes.server.port = port
+                    span.attributes[keys.serverPort] = port
                 }
             }
 
             let response = try await body()
 
             // set response span attributes
-            TracingSupport.handleResponseStatusCode(span, response.status)
+            TracingSupport.handleResponseStatusCode(span, response.status, keys: tracing.attributeKeys)
 
             // set explicitly allowed response headers
             let allowedResponseHeaderNames = Set(response.headers.map(\.name)).intersection(configuration.tracing.allowedHeaders)
@@ -81,12 +81,12 @@ extension HTTPClient {
                 let values = response.headers[headerName]
 
                 if !values.isEmpty {
-                    span.attributes.http.response.header.set(headerName, to: values)
+                    span.attributes["\(keys.responseHeader).\(headerName)"] = values
                 }
             }
             
             // set network protocol version
-            span.attributes.network.protocol.version = "\(response.version.major).\(response.version.minor)"
+            span.attributes[keys.networkProtocolVersion] = "\(response.version.major).\(response.version.minor)"
 
             return response
         }

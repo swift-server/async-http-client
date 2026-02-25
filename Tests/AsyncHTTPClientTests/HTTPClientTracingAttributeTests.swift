@@ -26,7 +26,6 @@ import NIOPosix
 import NIOSSL
 import NIOTestUtils
 import NIOTransportServices
-import OTelSemanticConventions
 import Tracing
 import XCTest
 
@@ -64,9 +63,11 @@ final class HTTPClientTracingAttributeTests: XCTestCaseHTTPClientTestsBaseClass 
             return
         }
 
-        XCTAssertEqual(span.attributes.get(OTelAttribute.url.path), "/echo-method")
-        XCTAssertEqual(span.attributes.get(OTelAttribute.url.scheme), "http")
-        XCTAssertEqual(span.attributes.get(OTelAttribute.url.query), "foo=bar&Signature=REDACTED")
+        let keys = HTTPClient.TracingConfiguration.AttributeKeys()
+
+        XCTAssertEqual(span.attributes.get(keys.urlPath), "/echo-method")
+        XCTAssertEqual(span.attributes.get(keys.urlScheme), "http")
+        XCTAssertEqual(span.attributes.get(keys.urlQuery), "foo=bar&Signature=REDACTED")
 
         XCTAssertNoThrow(try client.syncShutdown()) 
     }
@@ -103,8 +104,10 @@ final class HTTPClientTracingAttributeTests: XCTestCaseHTTPClientTestsBaseClass 
             return
         }
 
-        XCTAssertEqual(span.attributes.get(OTelAttribute.server.address), .string(defaultHTTPBinAddress.description))
-        XCTAssertEqual(span.attributes.get(OTelAttribute.server.port), .int64(Int64(defaultHTTPBinPort)))
+        let keys = HTTPClient.TracingConfiguration.AttributeKeys()
+
+        XCTAssertEqual(span.attributes.get(keys.serverHostname), .string(defaultHTTPBinAddress.description))
+        XCTAssertEqual(span.attributes.get(keys.serverPort), .int64(Int64(defaultHTTPBinPort)))
 
         XCTAssertNoThrow(try client.syncShutdown()) 
     }
@@ -140,10 +143,12 @@ final class HTTPClientTracingAttributeTests: XCTestCaseHTTPClientTestsBaseClass 
             return
         }
 
-        XCTAssertEqual(span.attributes.get(OTelAttribute.http.request.method), "GET")
-        XCTAssertEqual(span.attributes.get("\(OTelAttribute.http.request.header).authorization"), .stringArray(["Bearer secret"]))
-        XCTAssertNil(span.attributes.get("\(OTelAttribute.http.request.header).password"))
-        XCTAssertEqual(span.attributes.get(OTelAttribute.http.response.statusCode), 200)
+        let keys = HTTPClient.TracingConfiguration.AttributeKeys()
+
+        XCTAssertEqual(span.attributes.get(keys.requestMethod), "GET")
+        XCTAssertEqual(span.attributes.get("\(keys.requestHeader).authorization"), .stringArray(["Bearer secret"]))
+        XCTAssertNil(span.attributes.get("\(keys.requestHeader).password"))
+        XCTAssertEqual(span.attributes.get(keys.responseStatusCode), 200)
 
         XCTAssertNoThrow(try client.syncShutdown()) 
     }
@@ -177,7 +182,9 @@ final class HTTPClientTracingAttributeTests: XCTestCaseHTTPClientTestsBaseClass 
             return
         }
 
-        XCTAssertEqual(span.attributes.get(OTelAttribute.url.path), "/echo-method/REDACTED")
+        let keys = HTTPClient.TracingConfiguration.AttributeKeys()
+
+        XCTAssertEqual(span.attributes.get(keys.urlPath), "/echo-method/REDACTED")
 
         XCTAssertNoThrow(try client.syncShutdown()) 
     }
@@ -213,7 +220,9 @@ final class HTTPClientTracingAttributeTests: XCTestCaseHTTPClientTestsBaseClass 
             return
         }
 
-        XCTAssertEqual(span.attributes.get(OTelAttribute.url.query), "foo=REDACTED&Signature=REDACTED&bar=bar")
+        let keys = HTTPClient.TracingConfiguration.AttributeKeys()
+
+        XCTAssertEqual(span.attributes.get(keys.urlQuery), "foo=REDACTED&Signature=REDACTED&bar=bar")
 
         XCTAssertNoThrow(try client.syncShutdown()) 
     }
@@ -249,8 +258,8 @@ final class HTTPClientTracingAttributeTests: XCTestCaseHTTPClientTestsBaseClass 
 
         XCTAssertEqual(span.operationName, "GET")
 
-        XCTAssertNil(span.attributes.get("\(OTelAttribute.http.request.header).authorization"))
-        XCTAssertNil(span.attributes.get("\(OTelAttribute.http.request.header).password"))
+        XCTAssertNil(span.attributes.get("http.request.header.authorization"))
+        XCTAssertNil(span.attributes.get("http.request.header.password"))
 
         XCTAssertNoThrow(try client.syncShutdown()) 
     }
@@ -287,9 +296,9 @@ final class HTTPClientTracingAttributeTests: XCTestCaseHTTPClientTestsBaseClass 
         }
 
         XCTAssertEqual(span.operationName, "GET")
-        XCTAssertEqual(span.attributes.get("\(OTelAttribute.http.request.header).authorization"), .stringArray(["Bearer secret"]))
-        XCTAssertEqual(span.attributes.get("\(OTelAttribute.http.request.header).password"), .stringArray(["SuperSecretPassword"]))
-        XCTAssertEqual(span.attributes.get("\(OTelAttribute.http.response.header).x_method_used"), .stringArray(["GET"]))
+        XCTAssertEqual(span.attributes.get("http.request.header.authorization"), .stringArray(["Bearer secret"]))
+        XCTAssertEqual(span.attributes.get("http.request.header.password"), .stringArray(["SuperSecretPassword"]))
+        XCTAssertEqual(span.attributes.get("http.response.header.x_method_used"), .stringArray(["GET"]))
 
         XCTAssertNoThrow(try client.syncShutdown()) 
     }

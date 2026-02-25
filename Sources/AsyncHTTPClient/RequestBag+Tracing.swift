@@ -65,7 +65,7 @@ extension RequestBag.LoopBoundState {
             return
         }
 
-        TracingSupport.handleResponseStatusCode(span, response.status)
+        TracingSupport.handleResponseStatusCode(span, response.status, keys: tracing.attributeKeys)
 
         span.end()
         self.activeSpan = nil

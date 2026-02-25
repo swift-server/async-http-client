@@ -1098,12 +1098,40 @@ public final class HTTPClient: Sendable {
             }
         }
 
+        // TODO: Open up customization of keys we use?
+        /// Configuration for tracing attributes set by the HTTPClient.
+        @usableFromInline
+        package var attributeKeys: AttributeKeys
+
         public init() {
             if #available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *) {
                 self._tracer = InstrumentationSystem.tracer
             } else {
                 self._tracer = nil
             }
+            self.attributeKeys = .init()
+        }
+
+        /// Span attribute keys that the HTTPClient should set automatically.
+        /// This struct allows the configuration of the attribute names (keys) which will be used for the apropriate values.
+        @usableFromInline
+        package struct AttributeKeys: Sendable {
+            @usableFromInline package var requestMethod: String = "http.request.method"
+            @usableFromInline package var requestBodySize: String = "http.request.body.size"
+            @usableFromInline package var responseBodySize: String = "http.response.body.size"
+            @usableFromInline package var responseStatusCode: String = "http.response.status_code"
+            @usableFromInline package var networkProtocolVersion: String = "network.protocol.version"
+            @usableFromInline package var requestHeader: String = "http.request.header"
+            @usableFromInline package var responseHeader: String = "http.response.header"
+            @usableFromInline package var urlPath: String = "url.path"
+            @usableFromInline package var urlScheme: String = "url.scheme"
+            @usableFromInline package var urlQuery: String = "url.query"
+            @usableFromInline package var urlFragment: String = "url.fragment"
+            @usableFromInline package var serverHostname: String = "server.hostname"
+            @usableFromInline package var serverPort: String = "server.port"
+            @usableFromInline package var httpFlavor: String = "http.flavor"
+
+            @usableFromInline package init() {}
         }
     }
 

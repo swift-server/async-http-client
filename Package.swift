@@ -44,7 +44,6 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-atomics.git", from: "1.0.2"),
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-distributed-tracing.git", from: "1.3.0"),
-        .package(url: "https://github.com/swift-otel/swift-otel-semantic-conventions.git", from: "1.39.0"),
     ],
     targets: [
         .target(
@@ -73,7 +72,6 @@ let package = Package(
                 // Observability support
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Tracing", package: "swift-distributed-tracing"),
-                .product(name: "OTelSemanticConventions", package: "swift-otel-semantic-conventions"),
             ],
             swiftSettings: strictConcurrencySettings
         ),
@@ -96,7 +94,6 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "InMemoryLogging", package: "swift-log"),
                 .product(name: "Tracing", package: "swift-distributed-tracing"),
-                .product(name: "OTelSemanticConventions", package: "swift-otel-semantic-conventions"),
                 .product(name: "InMemoryTracing", package: "swift-distributed-tracing"),
             ],
             resources: [

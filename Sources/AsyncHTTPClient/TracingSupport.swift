@@ -18,7 +18,6 @@ import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
 import NIOSSL
-import OTelSemanticConventions
 import Tracing
 
 // MARK: - Centralized span attribute handling
@@ -28,13 +27,14 @@ struct TracingSupport {
     @inlinable
     static func handleResponseStatusCode(
         _ span: Span,
-        _ status: HTTPResponseStatus
+        _ status: HTTPResponseStatus,
+        keys: HTTPClient.TracingConfiguration.AttributeKeys
     ) {
         if status.code >= 400 {
             span.setStatus(.init(code: .error))
         }
 
-        span.attributes.http.response.statusCode = Int(status.code)
+        span.attributes[keys.responseStatusCode] = SpanAttribute.int64(Int64(status.code))
     }
 
     @inlinable
