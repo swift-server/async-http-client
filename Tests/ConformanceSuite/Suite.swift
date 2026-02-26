@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if $ExperimentalHTTPAPIsSupport
+#if ExperimentalHTTPAPIsSupport
 import AsyncHTTPClient
 import HTTPAPIs
 import HTTPClient
