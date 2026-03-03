@@ -48,17 +48,17 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@v6
               with:
-                persist-credentials: false
+                  persist-credentials: false
             - id: generate-matrix
               run: echo "linkage-test-matrix=$(curl -s https://raw.githubusercontent.com/apple/swift-nio/main/scripts/generate_matrix.sh | bash)" >> "$GITHUB_OUTPUT"
               env:
-                MATRIX_LINUX_SETUP_COMMAND: apt-get update -y && apt-get install -yq jq && git config --global --add safe.directory /async-http-client
-                MATRIX_LINUX_COMMAND: ./scripts/run-linkage-test.sh
-                MATRIX_LINUX_5_10_ENABLED: false
-                MATRIX_LINUX_6_0_ENABLED: false
-                MATRIX_LINUX_6_1_ENABLED: false
-                MATRIX_LINUX_NIGHTLY_NEXT_ENABLED: false
-                MATRIX_LINUX_NIGHTLY_MAIN_ENABLED: false
+                  MATRIX_LINUX_SETUP_COMMAND: apt-get update -y && apt-get install -yq jq && git config --global --add safe.directory /async-http-client
+                  MATRIX_LINUX_COMMAND: ./scripts/run-linkage-test.sh
+                  MATRIX_LINUX_5_10_ENABLED: false
+                  MATRIX_LINUX_6_0_ENABLED: false
+                  MATRIX_LINUX_6_1_ENABLED: false
+                  MATRIX_LINUX_NIGHTLY_NEXT_ENABLED: false
+                  MATRIX_LINUX_NIGHTLY_MAIN_ENABLED: false
 
     linkage-test:
         name: Linkage test
