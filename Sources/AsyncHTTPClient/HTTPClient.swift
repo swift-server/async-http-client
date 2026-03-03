@@ -13,7 +13,12 @@
 //===----------------------------------------------------------------------===//
 
 import Atomics
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
+import Dispatch
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
