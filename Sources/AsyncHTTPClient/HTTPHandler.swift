@@ -885,13 +885,7 @@ extension URL {
     ///   - socketPath: The path to the unix domain socket to connect to.
     ///   - uri: The URI path and query that will be sent to the server.
     public init?(httpURLWithSocketPath socketPath: String, uri: String = "/") {
-        #if canImport(FoundationEssentials)
-        guard let urlComponents = URLComponents(string: socketPath), let host = urlComponents.encodedHost else {
-            return nil
-        }
-        #else
-        guard let host = socketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) else { return nil }
-        #endif
+        guard let host = Self.percentEncodedHost(from: socketPath) else { return nil }
         var urlString: String
         if uri.hasPrefix("/") {
             urlString = "http+unix://\(host)\(uri)"
@@ -906,13 +900,7 @@ extension URL {
     ///   - socketPath: The path to the unix domain socket to connect to.
     ///   - uri: The URI path and query that will be sent to the server.
     public init?(httpsURLWithSocketPath socketPath: String, uri: String = "/") {
-        #if canImport(FoundationEssentials)
-        guard let urlComponents = URLComponents(string: socketPath), let host = urlComponents.encodedHost else {
-            return nil
-        }
-        #else
-        guard let host = socketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) else { return nil }
-        #endif
+        guard let host = Self.percentEncodedHost(from: socketPath) else { return nil }
         var urlString: String
         if uri.hasPrefix("/") {
             urlString = "https+unix://\(host)\(uri)"
@@ -920,6 +908,18 @@ extension URL {
             urlString = "https+unix://\(host)/\(uri)"
         }
         self.init(string: urlString)
+    }
+
+    private static func percentEncodedHost(from socketPath: String) -> String? {
+        #if canImport(FoundationEssentials)
+        return URLComponents(string: socketPath)?.encodedHost
+        #else
+        if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
+            return URLComponents(string: socketPath)?.encodedHost
+        } else {
+            return socketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
+        }
+        #endif
     }
 }
 
