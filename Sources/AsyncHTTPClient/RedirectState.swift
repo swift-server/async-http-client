@@ -14,7 +14,11 @@
 
 import NIOHTTP1
 
+#if canImport(FoundationEssentials)
+import struct FoundationEssentials.URL
+#else
 import struct Foundation.URL
+#endif
 
 typealias RedirectMode = HTTPClient.Configuration.RedirectConfiguration.Mode
 
