@@ -27,8 +27,12 @@ import NIOHTTPCompression
 import NIOPosix
 import NIOSSL
 import NIOTLS
-import NIOTransportServices
 import XCTest
+
+#if canImport(Network)
+import Network
+import NIOTransportServices
+#endif
 
 @testable import AsyncHTTPClient
 
