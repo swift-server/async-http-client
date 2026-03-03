@@ -97,12 +97,10 @@ extension HTTPClientRequest {
             )
             case byteBuffer(ByteBuffer)
 
-            #if canImport(HTTPAPIs)
             case httpClientRequestBody(
                 length: RequestBodyLength,
-                startUpload: AsyncStream<Transaction>.Continuation
+                startUpload: RequestWriterContinuation
             )
-            #endif
         }
 
         @usableFromInline
@@ -111,6 +109,42 @@ extension HTTPClientRequest {
         @inlinable
         internal init(_ mode: Mode) {
             self.mode = mode
+        }
+
+        @_spi(ExperimentalHTTPAPIsSupport)
+        public init(length: Int64?, startUpload: AsyncStream<RequestWriter>.Continuation) {
+            let length = length.map { RequestBodyLength.known($0) } ?? .unknown
+            self.init(.httpClientRequestBody(length: length, startUpload: RequestWriterContinuation(continuation: startUpload)))
+        }
+
+        @usableFromInline
+        struct RequestWriterContinuation: Sendable {
+            var continuation: AsyncStream<RequestWriter>.Continuation
+        }
+
+        @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+        @_spi(ExperimentalHTTPAPIsSupport)
+        public struct RequestWriter: Sendable {
+            @usableFromInline
+            let transaction: Transaction
+
+            @inlinable
+            @_spi(ExperimentalHTTPAPIsSupport)
+            public func writeRequestBodyPart(_ buffer: ByteBuffer) async throws {
+                try await self.transaction.writeRequestBodyPart(buffer)
+            }
+
+            @inlinable
+            @_spi(ExperimentalHTTPAPIsSupport)
+            public func requestBodyStreamFinished(trailers: HTTPHeaders?) {
+                self.transaction.requestBodyStreamFinished(trailers: trailers)
+            }
+
+            @inlinable
+            @_spi(ExperimentalHTTPAPIsSupport)
+            public func fail(_ error: any Error) {
+                self.transaction.fail(error)
+            }
         }
     }
 }
@@ -356,9 +390,7 @@ extension Optional where Wrapped == HTTPClientRequest.Body {
         case .byteBuffer: return true
         case .sequence(_, let canBeConsumedMultipleTimes, _): return canBeConsumedMultipleTimes
         case .asyncSequence: return false
-        #if canImport(HTTPAPIs)
         case .httpClientRequestBody: return false  // TODO: I think this should be TRUE
-        #endif
         }
     }
 }

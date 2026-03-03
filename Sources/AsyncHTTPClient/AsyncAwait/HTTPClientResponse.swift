@@ -168,6 +168,17 @@ extension HTTPClientResponse {
             }
             return try await collect(self, maxBytes: maxBytes)
         }
+
+        @_spi(ExperimentalHTTPAPIsSupport)
+        public var trailers: HTTPHeaders? {
+            switch self.storage {
+            case .transaction(_, let transaction, _):
+                return transaction.trailers
+                
+            case .anyAsyncSequence:
+                return nil
+            }
+        }
     }
 }
 

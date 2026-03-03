@@ -106,6 +106,7 @@ final class Transaction:
 
     struct BreakTheWriteLoopError: Swift.Error {}
 
+    @usableFromInline
     func writeRequestBodyPart(_ part: ByteBuffer) async throws {
         let action = self.state.withLockedValue { state in
             state.writeNextRequestPart()
@@ -147,6 +148,7 @@ final class Transaction:
         }
     }
 
+    @usableFromInline
     func requestBodyStreamFinished(trailers: HTTPHeaders?) {
         let finishAction = self.state.withLockedValue { state in
             state.finishRequestBodyStream()
@@ -235,7 +237,7 @@ extension Transaction: HTTPExecutableRequest {
 
             #if canImport(HTTPAPIs)
             case .httpClientRequestBody(_, let continuation):
-                continuation.yield(self)
+                continuation.continuation.yield(HTTPClientRequest.Body.RequestWriter(transaction: self))
             #endif
 
             case .none:
@@ -337,6 +339,7 @@ extension Transaction: HTTPExecutableRequest {
         self.performFailAction(action)
     }
 
+    @usableFromInline
     func fail(_ error: Error) {
         let action = self.state.withLockedValue { state in
             state.fail(error)
@@ -411,3 +414,4 @@ extension Transaction: NIOAsyncSequenceProducerDelegate {
         self.httpResponseStreamTerminated()
     }
 }
+

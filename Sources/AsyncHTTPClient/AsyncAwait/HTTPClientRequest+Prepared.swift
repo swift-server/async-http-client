@@ -20,10 +20,6 @@ import ServiceContextModule
 
 import struct Foundation.URL
 
-#if canImport(HTTPAPIs)
-import HTTPAPIs
-#endif
-
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest {
     struct Prepared: Sendable {
@@ -39,9 +35,7 @@ extension HTTPClientRequest {
             )
             case byteBuffer(ByteBuffer)
 
-            #if canImport(HTTPAPIs)
-            case httpClientRequestBody(RequestBodyLength, AsyncStream<Transaction>.Continuation)
-            #endif
+            case httpClientRequestBody(RequestBodyLength, HTTPClientRequest.Body.RequestWriterContinuation)
         }
 
         var url: URL
@@ -109,10 +103,9 @@ extension HTTPClientRequest.Prepared.Body {
             )
         case .byteBuffer(let byteBuffer):
             self = .byteBuffer(byteBuffer)
-        #if canImport(HTTPAPIs)
+
         case .httpClientRequestBody(let lenght, let requestBody):
             self = .httpClientRequestBody(lenght, requestBody)
-        #endif
         }
     }
 }
@@ -127,10 +120,8 @@ extension RequestBodyLength {
             self = .known(Int64(buffer.readableBytes))
         case .sequence(let length, _, _), .asyncSequence(let length, _):
             self = length
-        #if canImport(HTTPAPIs)
         case .httpClientRequestBody(let length, _):
             self = length
-        #endif
         }
     }
 }
