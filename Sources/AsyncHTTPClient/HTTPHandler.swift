@@ -885,12 +885,12 @@ extension URL {
     ///   - socketPath: The path to the unix domain socket to connect to.
     ///   - uri: The URI path and query that will be sent to the server.
     public init?(httpURLWithSocketPath socketPath: String, uri: String = "/") {
-        #if canImport(Darwin)
-        guard let host = socketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) else { return nil }
-        #else
+        #if canImport(FoundationEssentials)
         guard let urlComponents = URLComponents(string: socketPath), let host = urlComponents.encodedHost else {
             return nil
         }
+        #else
+        guard let host = socketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) else { return nil }
         #endif
         var urlString: String
         if uri.hasPrefix("/") {
@@ -906,12 +906,12 @@ extension URL {
     ///   - socketPath: The path to the unix domain socket to connect to.
     ///   - uri: The URI path and query that will be sent to the server.
     public init?(httpsURLWithSocketPath socketPath: String, uri: String = "/") {
-        #if canImport(Darwin)
-        guard let host = socketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) else { return nil }
-        #else
+        #if canImport(FoundationEssentials)
         guard let urlComponents = URLComponents(string: socketPath), let host = urlComponents.encodedHost else {
             return nil
         }
+        #else
+        guard let host = socketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) else { return nil }
         #endif
         var urlString: String
         if uri.hasPrefix("/") {
