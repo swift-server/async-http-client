@@ -26,31 +26,24 @@ echo "Running on Linux - proceeding with linkage test..."
 echo "Building linkage test package..."
 swift build --package-path Tests/LinkageTest
 
-# Check the architecture and build path
-ARCH=$(uname -m)
-if [[ "$ARCH" == "x86_64" ]]; then
-    BUILD_PATH="Tests/LinkageTest/.build/x86_64-unknown-linux-gnu/debug/linkageTest"
-elif [[ "$ARCH" == "aarch64" ]]; then
-    BUILD_PATH="Tests/LinkageTest/.build/aarch64-unknown-linux-gnu/debug/linkageTest"
-else
-    echo "Error: Unsupported architecture: $ARCH" >&2
-    exit 1
-fi
+# Construct build path
+build_path=$(swift build --package-path Tests/LinkageTest --show-bin-path)
+binary_path=$build_path/linkageTest
 
 # Verify the binary exists
-if [[ ! -f "$BUILD_PATH" ]]; then
-    echo "Error: Built binary not found at $BUILD_PATH" >&2
+if [[ ! -f "$binary_path" ]]; then
+    echo "Error: Built binary not found at $binary_path" >&2
     exit 1
 fi
 
-echo "Checking linkage for binary: $BUILD_PATH"
+echo "Checking linkage for binary: $binary_path"
 
 # Run ldd and check if libFoundation.so is linked
-LDD_OUTPUT=$(ldd "$BUILD_PATH")
+ldd_output=$(ldd "$binary_path")
 echo "LDD output:"
-echo "$LDD_OUTPUT"
+echo "$ldd_output"
 
-if echo "$LDD_OUTPUT" | grep -q "libFoundation.so"; then
+if echo "$ldd_output" | grep -q "libFoundation.so"; then
     echo "Error: Binary is linked against libFoundation.so - this indicates incorrect linkage. Ensure the full Foundation is not linked on Linux when default traits are disabled." >&2
     exit 1
 else
