@@ -12,12 +12,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+import NIOHTTP1
+
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #else
 import Foundation
 #endif
-import NIOHTTP1
 
 /// Generates base64 encoded username + password for http basic auth.
 ///
