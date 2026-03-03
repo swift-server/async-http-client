@@ -417,6 +417,7 @@ final class TestConnectionCreator {
         let factory = HTTPConnectionPool.ConnectionFactory(
             key: .init(request),
             tlsConfiguration: tlsConfiguration,
+            tlsPinning: nil,
             clientConfiguration: config,
             sslContextCache: .init()
         )
@@ -460,6 +461,7 @@ final class TestConnectionCreator {
         let factory = HTTPConnectionPool.ConnectionFactory(
             key: .init(request),
             tlsConfiguration: tlsConfiguration,
+            tlsPinning: nil,
             clientConfiguration: config,
             sslContextCache: .init()
         )
