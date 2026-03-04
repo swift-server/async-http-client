@@ -912,13 +912,9 @@ extension URL {
 
     private static func percentEncodedHost(from socketPath: String) -> String? {
         #if canImport(FoundationEssentials)
-        return URLComponents(string: socketPath)?.encodedHost
+        socketPath.addingPercentEncodingAllowingURLHost()
         #else
-        if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
-            return URLComponents(string: socketPath)?.encodedHost
-        } else {
-            return socketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
-        }
+        socketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
         #endif
     }
 }

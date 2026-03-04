@@ -77,3 +77,75 @@ extension HTTPClient.Body {
         self.bytes(data)
     }
 }
+
+extension StringProtocol {
+    func addingPercentEncodingAllowingURLHost() -> String {
+        guard !self.isEmpty else { return String(self) }
+
+        let percent = UInt8(ascii: "%")
+        let utf8Buffer = self.utf8
+        let maxLength = utf8Buffer.count * 3
+        return withUnsafeTemporaryAllocation(of: UInt8.self, capacity: maxLength) { outputBuffer in
+            var i = 0
+            for byte in utf8Buffer {
+                if byte.isURLHostAllowed {
+                    outputBuffer[i] = byte
+                    i += 1
+                } else {
+                    outputBuffer[i] = percent
+                    outputBuffer[i + 1] = hexToAscii(byte >> 4)
+                    outputBuffer[i + 2] = hexToAscii(byte & 0xF)
+                    i += 3
+                }
+            }
+            return String(decoding: outputBuffer[..<i], as: UTF8.self)
+        }
+    }
+}
+
+private func asciiToHex(_ ascii: UInt8) -> UInt8? {
+    switch ascii {
+    case UInt8(ascii: "0")...UInt8(ascii: "9"): return ascii - UInt8(ascii: "0")
+    case UInt8(ascii: "A")...UInt8(ascii: "F"): return ascii - UInt8(ascii: "A") + 10
+    case UInt8(ascii: "a")...UInt8(ascii: "f"): return ascii - UInt8(ascii: "a") + 10
+    default: return nil
+    }
+}
+
+private func hexToAscii(_ hex: UInt8) -> UInt8 {
+    switch hex {
+    case 0x0: return UInt8(ascii: "0")
+    case 0x1: return UInt8(ascii: "1")
+    case 0x2: return UInt8(ascii: "2")
+    case 0x3: return UInt8(ascii: "3")
+    case 0x4: return UInt8(ascii: "4")
+    case 0x5: return UInt8(ascii: "5")
+    case 0x6: return UInt8(ascii: "6")
+    case 0x7: return UInt8(ascii: "7")
+    case 0x8: return UInt8(ascii: "8")
+    case 0x9: return UInt8(ascii: "9")
+    case 0xA: return UInt8(ascii: "A")
+    case 0xB: return UInt8(ascii: "B")
+    case 0xC: return UInt8(ascii: "C")
+    case 0xD: return UInt8(ascii: "D")
+    case 0xE: return UInt8(ascii: "E")
+    case 0xF: return UInt8(ascii: "F")
+    default: fatalError("Invalid hex digit: \(hex)")
+    }
+}
+
+extension UInt8 {
+    fileprivate var isURLHostAllowed: Bool {
+        switch self {
+        case UInt8(ascii: "0")...UInt8(ascii: "9"),
+            UInt8(ascii: "A")...UInt8(ascii: "Z"),
+            UInt8(ascii: "a")...UInt8(ascii: "z"),
+            UInt8(ascii: "!"), UInt8(ascii: "$"), UInt8(ascii: "&"), UInt8(ascii: "'"),
+            UInt8(ascii: "("), UInt8(ascii: ")"), UInt8(ascii: "*"), UInt8(ascii: "+"),
+            UInt8(ascii: ","), UInt8(ascii: "-"), UInt8(ascii: "."), UInt8(ascii: ";"),
+            UInt8(ascii: "="), UInt8(ascii: "_"), UInt8(ascii: "~"):
+            return true
+        default: return false
+        }
+    }
+}
