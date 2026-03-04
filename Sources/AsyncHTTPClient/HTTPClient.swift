@@ -22,11 +22,11 @@ import NIOHTTPCompression
 import NIOPosix
 import NIOSSL
 import NIOTLS
+import Tracing
 
 #if canImport(Network)
 import NIOTransportServices
 #endif
-import Tracing
 
 #if canImport(FoundationEssentials)
 import FoundationEssentials

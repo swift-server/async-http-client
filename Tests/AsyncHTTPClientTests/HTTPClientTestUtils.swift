@@ -29,12 +29,12 @@ import NIOSSL
 import NIOTLS
 import XCTest
 
+@testable import AsyncHTTPClient
+
 #if canImport(Network)
 import Network
 import NIOTransportServices
 #endif
-
-@testable import AsyncHTTPClient
 
 #if canImport(xlocale)
 import xlocale
