@@ -14,10 +14,10 @@
 
 import NIOCore
 import NIOHTTP1
-import NIOTransportServices
 
 #if canImport(Network)
 import Network
+import NIOTransportServices
 #endif
 
 extension HTTPClient {

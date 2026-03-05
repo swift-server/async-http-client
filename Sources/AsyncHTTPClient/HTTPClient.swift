@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Atomics
-import Foundation
+import Dispatch
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -22,8 +22,17 @@ import NIOHTTPCompression
 import NIOPosix
 import NIOSSL
 import NIOTLS
-import NIOTransportServices
 import Tracing
+
+#if canImport(Network)
+import NIOTransportServices
+#endif
+
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 
 extension Logger {
     private func requestInfo(_ request: HTTPClient.Request) -> Logger.Metadata.Value {

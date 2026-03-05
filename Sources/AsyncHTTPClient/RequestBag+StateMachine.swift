@@ -15,7 +15,11 @@
 import NIOCore
 import NIOHTTP1
 
+#if canImport(FoundationEssentials)
+import struct FoundationEssentials.URL
+#else
 import struct Foundation.URL
+#endif
 
 extension HTTPClient {
     /// The maximum body size allowed, before a redirect response is cancelled. 3KB.
