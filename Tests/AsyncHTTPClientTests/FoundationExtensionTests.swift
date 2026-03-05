@@ -30,7 +30,8 @@ struct FoundationExtensionTests {
         "",  // Empty string
         "100% coverage",  // '%' symbol itself (Must be encoded to %25)
         "sub.domain_test~1.com",  // Mix of allowed characters
-        "path/to/api?query=1#frag",  // Invalid host chars like '/', '?', and '#' (Should be encoded), '=' is a valid sub-delimiter
+        // Invalid host chars like '/', '?', and '#' (Should be encoded), '=' is a valid sub-delimiter
+        "path/to/api?query=1#frag",
     ])
     func addingPercentEncodingAllowingURLHost(input: String) {
         let foundationResult = input.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
