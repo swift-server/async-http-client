@@ -646,7 +646,8 @@ extension HTTPConnectionPool.ConnectionFactory {
                     throw HTTPClientError.invalidLocalAddress
                 }
             }
-            return bootstrap
+            return
+                bootstrap
                 .channelInitializer { channel in
                     sslContextFuture.flatMap { sslContext -> EventLoopFuture<Void> in
                         do {

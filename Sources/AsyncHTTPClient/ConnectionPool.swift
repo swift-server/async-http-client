@@ -104,7 +104,12 @@ extension DeconstructedURL {
 }
 
 extension ConnectionPool.Key {
-    init(url: DeconstructedURL, tlsConfiguration: TLSConfiguration?, dnsOverride: [String: String], localAddress: String? = nil) {
+    init(
+        url: DeconstructedURL,
+        tlsConfiguration: TLSConfiguration?,
+        dnsOverride: [String: String],
+        localAddress: String? = nil
+    ) {
         let (connectionTarget, serverNameIndicatorOverride) = url.applyDNSOverride(dnsOverride)
         self.init(
             scheme: url.scheme,

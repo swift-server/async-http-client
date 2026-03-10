@@ -1243,9 +1243,11 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
             XCTAssertEqual(response.status, .ok)
 
-            guard var body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(upTo: 1024)
-            ) else { return }
+            guard
+                var body = await XCTAssertNoThrowWithResult(
+                    try await response.body.collect(upTo: 1024)
+                )
+            else { return }
             let readableBytes = body.readableBytes
             let requestInfo = try? body.readJSONDecodable(RequestInfo.self, length: readableBytes)
             XCTAssertEqual(requestInfo?.data, "127.0.0.1")
@@ -1274,9 +1276,11 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
             XCTAssertEqual(response.status, .ok)
 
-            guard var body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(upTo: 1024)
-            ) else { return }
+            guard
+                var body = await XCTAssertNoThrowWithResult(
+                    try await response.body.collect(upTo: 1024)
+                )
+            else { return }
             let readableBytes = body.readableBytes
             let requestInfo = try? body.readJSONDecodable(RequestInfo.self, length: readableBytes)
             XCTAssertEqual(requestInfo?.data, "127.0.0.1")
@@ -1328,9 +1332,11 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
             XCTAssertEqual(response.status, .ok)
 
-            guard var body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(upTo: 1024)
-            ) else { return }
+            guard
+                var body = await XCTAssertNoThrowWithResult(
+                    try await response.body.collect(upTo: 1024)
+                )
+            else { return }
             let readableBytes = body.readableBytes
             let requestInfo = try? body.readJSONDecodable(RequestInfo.self, length: readableBytes)
             XCTAssertEqual(requestInfo?.data, "127.0.0.1")
@@ -1364,11 +1370,14 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
             XCTAssertEqual(response.status, .ok)
 
-            guard var body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(upTo: 1024)
-            ) else { return }
+            guard
+                var body = await XCTAssertNoThrowWithResult(
+                    try await response.body.collect(upTo: 1024)
+                )
+            else { return }
             let requestInfo = try? body.readJSONDecodable(
-                RequestInfo.self, length: body.readableBytes
+                RequestInfo.self,
+                length: body.readableBytes
             )
             XCTAssertEqual(requestInfo?.data, "127.0.0.127")
         }
@@ -1400,11 +1409,14 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
             XCTAssertEqual(response.status, .ok)
 
-            guard var body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(upTo: 1024)
-            ) else { return }
+            guard
+                var body = await XCTAssertNoThrowWithResult(
+                    try await response.body.collect(upTo: 1024)
+                )
+            else { return }
             let requestInfo = try? body.readJSONDecodable(
-                RequestInfo.self, length: body.readableBytes
+                RequestInfo.self,
+                length: body.readableBytes
             )
             XCTAssertEqual(requestInfo?.data, "127.0.0.127")
         }
@@ -1437,11 +1449,14 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
             XCTAssertEqual(response.status, .ok)
 
-            guard var body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(upTo: 1024)
-            ) else { return }
+            guard
+                var body = await XCTAssertNoThrowWithResult(
+                    try await response.body.collect(upTo: 1024)
+                )
+            else { return }
             let requestInfo = try? body.readJSONDecodable(
-                RequestInfo.self, length: body.readableBytes
+                RequestInfo.self,
+                length: body.readableBytes
             )
             XCTAssertEqual(requestInfo?.data, "127.0.0.127")
         }
@@ -1474,11 +1489,14 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
             XCTAssertEqual(response.status, .ok)
 
-            guard var body = await XCTAssertNoThrowWithResult(
-                try await response.body.collect(upTo: 1024)
-            ) else { return }
+            guard
+                var body = await XCTAssertNoThrowWithResult(
+                    try await response.body.collect(upTo: 1024)
+                )
+            else { return }
             let requestInfo = try? body.readJSONDecodable(
-                RequestInfo.self, length: body.readableBytes
+                RequestInfo.self,
+                length: body.readableBytes
             )
             XCTAssertEqual(requestInfo?.data, "127.0.0.127")
         }
