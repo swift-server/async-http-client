@@ -885,7 +885,7 @@ extension URL {
     ///   - socketPath: The path to the unix domain socket to connect to.
     ///   - uri: The URI path and query that will be sent to the server.
     public init?(httpURLWithSocketPath socketPath: String, uri: String = "/") {
-        guard let host = Self.percentEncodedHost(from: socketPath) else { return nil }
+        let host = socketPath.addingPercentEncodingAllowingURLHost()
         var urlString: String
         if uri.hasPrefix("/") {
             urlString = "http+unix://\(host)\(uri)"
@@ -900,7 +900,7 @@ extension URL {
     ///   - socketPath: The path to the unix domain socket to connect to.
     ///   - uri: The URI path and query that will be sent to the server.
     public init?(httpsURLWithSocketPath socketPath: String, uri: String = "/") {
-        guard let host = Self.percentEncodedHost(from: socketPath) else { return nil }
+        let host = socketPath.addingPercentEncodingAllowingURLHost()
         var urlString: String
         if uri.hasPrefix("/") {
             urlString = "https+unix://\(host)\(uri)"
@@ -908,14 +908,6 @@ extension URL {
             urlString = "https+unix://\(host)/\(uri)"
         }
         self.init(string: urlString)
-    }
-
-    private static func percentEncodedHost(from socketPath: String) -> String? {
-        #if canImport(FoundationEssentials)
-        socketPath.addingPercentEncodingAllowingURLHost()
-        #else
-        socketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
-        #endif
     }
 }
 

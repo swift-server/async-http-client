@@ -103,15 +103,6 @@ extension StringProtocol {
     }
 }
 
-private func asciiToHex(_ ascii: UInt8) -> UInt8? {
-    switch ascii {
-    case UInt8(ascii: "0")...UInt8(ascii: "9"): return ascii - UInt8(ascii: "0")
-    case UInt8(ascii: "A")...UInt8(ascii: "F"): return ascii - UInt8(ascii: "A") + 10
-    case UInt8(ascii: "a")...UInt8(ascii: "f"): return ascii - UInt8(ascii: "a") + 10
-    default: return nil
-    }
-}
-
 private func hexToAscii(_ hex: UInt8) -> UInt8 {
     switch hex {
     case 0x0: return UInt8(ascii: "0")
