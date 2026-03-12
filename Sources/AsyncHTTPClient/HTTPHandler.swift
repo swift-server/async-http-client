@@ -310,7 +310,7 @@ extension HTTPClient {
         ///     - method: HTTP method.
         ///     - headers: Custom HTTP headers.
         ///     - body: Request body.
-        ///     - tlsConfiguration: Request TLS configuration.
+        ///     - tlsConfiguration: Request TLS configuration
         /// - throws:
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
         ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
