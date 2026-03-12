@@ -266,7 +266,7 @@ extension HTTPClient {
         ///     - method: HTTP method.
         ///     - headers: Custom HTTP headers.
         ///     - body: Request body.
-        ///     - tlsConfiguration: Request TLS configuration.
+        ///     - tlsConfiguration: Request TLS configuration
         /// - throws:
         ///     - `invalidURL` if URL cannot be parsed.
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
