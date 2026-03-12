@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Crypto
 import Logging
 import NIOCore
 import NIOFoundationCompat
@@ -19,7 +20,6 @@ import NIOHTTP1
 import NIOPosix
 import NIOSSL
 import XCTest
-import Crypto
 
 @testable import AsyncHTTPClient
 
@@ -1058,9 +1058,11 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
             let request = HTTPClientRequest(url: "https://localhost:\(bin.port)/get")
 
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await localClient.execute(request, deadline: .now() + .seconds(10))
-            ) else { return }
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await localClient.execute(request, deadline: .now() + .seconds(10))
+                )
+            else { return }
 
             XCTAssertEqual(response.status, .ok)
             XCTAssertEqual(response.version, .http2)
@@ -1109,8 +1111,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
                     return XCTFail("Expecting HTTPClientError, received: \(type(of: error))")
                 }
                 XCTAssertTrue(
-                    httpClientError.description.contains("pinning") ||
-                    httpClientError.description.contains("SPKI"),
+                    httpClientError.description.contains("pinning") || httpClientError.description.contains("SPKI"),
                     "Unexpected error: \(httpClientError.description)"
                 )
             }
@@ -1143,7 +1144,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
             config.tlsPinning = SPKIPinningConfiguration(
                 pins: [try SPKIHash(algorithm: SHA256.self, base64: pinBase64)],
-                policy: .audit // <-- AUDIT MODE
+                policy: .audit  // <-- AUDIT MODE
             )
 
             let localClient = HTTPClient(
@@ -1154,9 +1155,11 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
             let request = HTTPClientRequest(url: "https://localhost:\(bin.port)/get")
 
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await localClient.execute(request, deadline: .now() + .seconds(10))
-            ) else { return }
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await localClient.execute(request, deadline: .now() + .seconds(10))
+                )
+            else { return }
 
             XCTAssertEqual(response.status, .ok)
             XCTAssertEqual(response.version, .http2)
@@ -1187,7 +1190,7 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
             config.tlsPinning = SPKIPinningConfiguration(
                 pins: [try SPKIHash(algorithm: SHA256.self, base64: pinBase64)],
-                policy: .audit // <-- AUDIT MODE
+                policy: .audit  // <-- AUDIT MODE
             )
 
             let localClient = HTTPClient(
@@ -1198,9 +1201,11 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
 
             let request = HTTPClientRequest(url: "https://localhost:\(bin.port)/get")
 
-            guard let response = await XCTAssertNoThrowWithResult(
-                try await localClient.execute(request, deadline: .now() + .seconds(10))
-            ) else { return }
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await localClient.execute(request, deadline: .now() + .seconds(10))
+                )
+            else { return }
 
             XCTAssertEqual(response.status, .ok)
             XCTAssertEqual(response.version, .http2)

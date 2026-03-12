@@ -12,13 +12,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Foundation
-import NIOCore
-import NIOTLS
-import NIOSSL
-import Logging
-import Crypto
 import Algorithms
+import Crypto
+import Foundation
+import Logging
+import NIOCore
+import NIOSSL
+import NIOTLS
 
 /// SPKI hash for certificate pinning validation.
 ///
@@ -71,7 +71,7 @@ public struct SPKIHash: Sendable, Hashable {
 
     // MARK: - Equality and Hashing
 
-    public static func ==(lhs: Self, rhs: Self) -> Bool {
+    public static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.bytes == rhs.bytes && lhs.algorithmID == rhs.algorithmID
     }
 
@@ -111,7 +111,7 @@ internal func constantTimeAnyMatch(_ target: Data, _ candidates: [SPKIHash]) -> 
         )
 
         var diff: UInt8 = 0
-        for i in 0 ..< expectedLength {
+        for i in 0..<expectedLength {
             diff |= target[i] ^ candidate.bytes[i]
         }
         anyMatch |= (diff == 0) ? 1 : 0
@@ -200,7 +200,7 @@ public struct SPKIPinningPolicy: Sendable, Hashable {
         self.rawValue = rawValue
     }
 
-    public static func ==(lhs: Self, rhs: Self) -> Bool {
+    public static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.rawValue == rhs.rawValue
     }
 
@@ -233,7 +233,7 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
                 "SPKIPinningHandler deployed with < 2 pins in strict mode — catastrophic lockout risk on certificate rotation!",
                 metadata: [
                     "current_pin_count": .stringConvertible(tlsPinning.pins.count),
-                    "recommendation": .string("Deploy multiple pins to enable safe certificate rotation")
+                    "recommendation": .string("Deploy multiple pins to enable safe certificate rotation"),
                 ]
             )
         }
@@ -246,9 +246,11 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
         }
 
         // ⚠️ Security-critical: handshake propagation is delayed until validation completes
-        let result = self.validatePinning(for: Result {
-            try context.pipeline.syncOperations.handler(type: NIOSSLHandler.self).peerCertificate
-        })
+        let result = self.validatePinning(
+            for: Result {
+                try context.pipeline.syncOperations.handler(type: NIOSSLHandler.self).peerCertificate
+            }
+        )
 
         switch result {
         case .accepted:
@@ -259,7 +261,7 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
                 "SPKI pinning failed — connection allowed for audit purposes",
                 metadata: [
                     "error": .string(String(describing: error)),
-                    "policy": .string(tlsPinning.policy.description)
+                    "policy": .string(tlsPinning.policy.description),
                 ]
             )
             context.fireUserInboundEventTriggered(event)
@@ -269,7 +271,7 @@ final class SPKIPinningHandler: ChannelInboundHandler, RemovableChannelHandler {
                 "policy": .string(tlsPinning.policy.description),
                 "expected_pins": .string(
                     tlsPinning.pins.map { $0.bytes.base64EncodedString() }.joined(separator: ", ")
-                )
+                ),
             ]
 
             logger.error("SPKI pinning failed — connection blocked", metadata: metadata)

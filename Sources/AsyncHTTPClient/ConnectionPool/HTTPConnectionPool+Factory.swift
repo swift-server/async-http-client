@@ -405,7 +405,9 @@ extension HTTPConnectionPool.ConnectionFactory {
                             )
                             try channel.pipeline.syncOperations.addHandler(pinningHandler)
                         } else {
-                            fatalError("SPKI pinning requires minimum OS version 10.15/13.0. Cannot proceed with pinning disabled.")
+                            fatalError(
+                                "SPKI pinning requires minimum OS version 10.15/13.0. Cannot proceed with pinning disabled."
+                            )
                         }
                     }
 
@@ -621,7 +623,9 @@ extension HTTPConnectionPool.ConnectionFactory {
                                     )
                                     try sync.addHandler(pinningHandler)
                                 } else {
-                                    fatalError("SPKI pinning requires minimum OS version 10.15/13.0. Cannot proceed with pinning disabled.")
+                                    fatalError(
+                                        "SPKI pinning requires minimum OS version 10.15/13.0. Cannot proceed with pinning disabled."
+                                    )
                                 }
                             }
 

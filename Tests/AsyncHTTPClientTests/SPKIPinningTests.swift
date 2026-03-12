@@ -13,12 +13,12 @@
 //===----------------------------------------------------------------------===//
 
 import Crypto
-import XCTest
-import NIOSSL
-import NIOTLS
 import Logging
 import NIOCore
 import NIOEmbedded
+import NIOSSL
+import NIOTLS
+import XCTest
 
 @testable import AsyncHTTPClient
 
