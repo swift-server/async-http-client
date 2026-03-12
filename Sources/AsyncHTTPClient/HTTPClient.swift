@@ -828,6 +828,9 @@ public final class HTTPClient: Sendable {
         /// TLS configuration, defaults to `TLSConfiguration.makeClientConfiguration()`.
         public var tlsConfiguration: Optional<TLSConfiguration>
 
+        /// Optional SPKI pinning configuration for TLS certificate validation.
+        public var tlsPinning: SPKIPinningConfiguration?
+
         /// Sometimes it can be useful to connect to one host e.g. `x.example.com` but
         /// request and validate the certificate chain as if we would connect to `y.example.com`.
         /// ``dnsOverride`` allows to do just that by mapping host names which we will request and validate the certificate chain, to a different
@@ -917,6 +920,7 @@ public final class HTTPClient: Sendable {
             decompression: Decompression = .disabled
         ) {
             self.tlsConfiguration = tlsConfiguration
+            self.tlsPinning = nil
             self.redirectConfiguration = redirectConfiguration ?? RedirectConfiguration()
             self.timeout = timeout
             self.connectionPool = connectionPool
@@ -1062,6 +1066,35 @@ public final class HTTPClient: Sendable {
             self.http2ConnectionDebugInitializer = http2ConnectionDebugInitializer
             self.http2StreamChannelDebugInitializer = http2StreamChannelDebugInitializer
             self.tracing = tracing
+        }
+
+        public init(
+            tlsConfiguration: TLSConfiguration? = nil,
+            tlsPinning: SPKIPinningConfiguration?,
+            redirectConfiguration: RedirectConfiguration? = nil,
+            timeout: Timeout = Timeout(),
+            connectionPool: ConnectionPool = ConnectionPool(),
+            proxy: Proxy? = nil,
+            decompression: Decompression = .disabled,
+            http1_1ConnectionDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2ConnectionDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            http2StreamChannelDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)? = nil,
+            tracing: TracingConfiguration = .init()
+        ) {
+            self.init(
+                tlsConfiguration: tlsConfiguration,
+                redirectConfiguration: redirectConfiguration,
+                timeout: timeout,
+                connectionPool: connectionPool,
+                proxy: proxy,
+                ignoreUncleanSSLShutdown: false,
+                decompression: decompression,
+                http1_1ConnectionDebugInitializer: http1_1ConnectionDebugInitializer,
+                http2ConnectionDebugInitializer: http2ConnectionDebugInitializer,
+                http2StreamChannelDebugInitializer: http2StreamChannelDebugInitializer,
+                tracing: tracing
+            )
+            self.tlsPinning = tlsPinning
         }
     }
 
@@ -1443,6 +1476,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case socksHandshakeTimeout
         case httpProxyHandshakeTimeout
         case tlsHandshakeTimeout
+        case invalidDigestLength
+        case invalidCertificatePinning(String)
         case serverOfferedUnsupportedApplicationProtocol(String)
         case requestStreamCancelled
         case getConnectionFromPoolTimeout
@@ -1526,6 +1561,10 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
             return "HTTP proxy handshake timeout"
         case .tlsHandshakeTimeout:
             return "TLS handshake timeout"
+        case .invalidDigestLength:
+            return "Invalid digest length"
+        case .invalidCertificatePinning:
+            return "Invalid certificate pinning"
         case .serverOfferedUnsupportedApplicationProtocol:
             return "Server offered unsupported application protocol"
         case .requestStreamCancelled:
@@ -1615,6 +1654,12 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let httpProxyHandshakeTimeout = HTTPClientError(code: .httpProxyHandshakeTimeout)
     /// The tls handshake timed out.
     public static let tlsHandshakeTimeout = HTTPClientError(code: .tlsHandshakeTimeout)
+    /// The hash digest length is invalid.
+    public static let invalidDigestLength = HTTPClientError(code: .invalidDigestLength)
+    /// The server's certificate did not match any pinned SPKI hash.
+    public static func invalidCertificatePinning(_ reason: String) -> HTTPClientError {
+        HTTPClientError(code: .invalidCertificatePinning(reason))
+    }
     /// The remote server only offered an unsupported application protocol
     public static func serverOfferedUnsupportedApplicationProtocol(_ proto: String) -> HTTPClientError {
         HTTPClientError(code: .serverOfferedUnsupportedApplicationProtocol(proto))
