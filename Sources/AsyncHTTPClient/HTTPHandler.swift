@@ -256,14 +256,7 @@ extension HTTPClient {
             headers: HTTPHeaders = HTTPHeaders(),
             body: Body? = nil
         ) throws {
-            try self.init(
-                url: url,
-                method: method,
-                headers: headers,
-                body: body,
-                tlsConfiguration: nil,
-                tlsPinning: nil
-            )
+            try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: nil)
         }
 
         /// Create HTTP request.
@@ -274,7 +267,6 @@ extension HTTPClient {
         ///     - headers: Custom HTTP headers.
         ///     - body: Request body.
         ///     - tlsConfiguration: Request TLS configuration.
-        ///     - tlsPinning: SPKI pinning configuration to validate server certificates.
         /// - throws:
         ///     - `invalidURL` if URL cannot be parsed.
         ///     - `emptyScheme` if URL does not contain HTTP scheme.
@@ -285,21 +277,13 @@ extension HTTPClient {
             method: HTTPMethod = .GET,
             headers: HTTPHeaders = HTTPHeaders(),
             body: Body? = nil,
-            tlsConfiguration: TLSConfiguration?,
-            tlsPinning: SPKIPinningConfiguration?
+            tlsConfiguration: TLSConfiguration?
         ) throws {
             guard let url = URL(string: url) else {
                 throw HTTPClientError.invalidURL
             }
 
-            try self.init(
-                url: url,
-                method: method,
-                headers: headers,
-                body: body,
-                tlsConfiguration: tlsConfiguration,
-                tlsPinning: tlsPinning
-            )
+            try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: tlsConfiguration)
         }
 
         /// Create an HTTP `Request`.
@@ -316,12 +300,35 @@ extension HTTPClient {
         ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
         public init(url: URL, method: HTTPMethod = .GET, headers: HTTPHeaders = HTTPHeaders(), body: Body? = nil) throws
         {
+            try self.init(url: url, method: method, headers: headers, body: body, tlsConfiguration: nil)
+        }
+
+        /// Create an HTTP `Request`.
+        ///
+        /// - parameters:
+        ///     - url: Remote `URL`.
+        ///     - method: HTTP method.
+        ///     - headers: Custom HTTP headers.
+        ///     - body: Request body.
+        ///     - tlsConfiguration: Request TLS configuration.
+        /// - throws:
+        ///     - `emptyScheme` if URL does not contain HTTP scheme.
+        ///     - `unsupportedScheme` if URL does contains unsupported HTTP scheme.
+        ///     - `emptyHost` if URL does not contains a host.
+        ///     - `missingSocketPath` if URL does not contains a socketPath as an encoded host.
+        public init(
+            url: URL,
+            method: HTTPMethod = .GET,
+            headers: HTTPHeaders = HTTPHeaders(),
+            body: Body? = nil,
+            tlsConfiguration: TLSConfiguration?
+        ) throws {
             try self.init(
                 url: url,
                 method: method,
                 headers: headers,
                 body: body,
-                tlsConfiguration: nil,
+                tlsConfiguration: tlsConfiguration,
                 tlsPinning: nil
             )
         }
