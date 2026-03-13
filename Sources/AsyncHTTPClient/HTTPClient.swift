@@ -904,6 +904,20 @@ public final class HTTPClient: Sendable {
         /// By default, don't use it
         public var enableMultipath: Bool
 
+        /// The local IP address to bind outgoing connections to.
+        ///
+        /// When set, all outgoing connections will bind to this address before connecting.
+        /// The value should be an IP address string (e.g. `"192.168.1.10"` or `"::1"`).
+        /// Port 0 (OS-assigned ephemeral port) is always used.
+        /// 
+        /// This is most commonly used on multi-NIC systems where you want traffic to take a
+        /// specific network path which is not the choice the routing table would make by
+        /// default.
+        ///
+        /// This can be overridden on a per-request basis using ``HTTPClientRequest/localAddress``.
+        /// Defaults to `nil` (OS default interface selection).
+        public var localAddress: String?
+
         /// A method with access to the HTTP/1 connection channel that is called when creating the connection.
         public var http1_1ConnectionDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)?
 
@@ -934,6 +948,7 @@ public final class HTTPClient: Sendable {
             self.httpVersion = .automatic
             self.networkFrameworkWaitForConnectivity = true
             self.enableMultipath = false
+            self.localAddress = nil
         }
 
         public init(
@@ -1461,6 +1476,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case invalidRedirectConfiguration
         case invalidHTTPVersionConfiguration
         case invalidDNSOverridesConfiguration
+        case invalidLocalAddress
         case internalStateFailure(file: String, line: UInt)
     }
 
@@ -1554,6 +1570,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case .invalidDNSOverridesConfiguration:
             return
                 "The DNS overrides specified in the configuration are not valid. Please specify in the format hostname1:ip1,hostname2:ip2"
+        case .invalidLocalAddress:
+            return "Invalid local address"
         case .internalStateFailure(let file, let line):
             return
                 "An internal state failure has occurred (File: \(file), line: \(line)). Please open an issue with a reproducer if possible"
@@ -1656,6 +1674,9 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
 
     /// The DNS overrides specified in the configuration are not valid.
     public static let invalidDNSOverridesConfiguration = HTTPClientError(code: .invalidDNSOverridesConfiguration)
+
+    /// The local address specified is not a valid IP address.
+    public static let invalidLocalAddress = HTTPClientError(code: .invalidLocalAddress)
 
     /// A state machine has reached an unsupported state, that wasn't considered when implementing.
     public static func internalStateFailure(file: String = #fileID, line: UInt = #line) -> HTTPClientError {

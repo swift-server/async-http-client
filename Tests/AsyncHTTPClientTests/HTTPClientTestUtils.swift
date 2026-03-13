@@ -1045,6 +1045,13 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                 }
                 self.resps.append(HTTPResponseBuilder(status: .ok))
                 return
+            case "/echo-client-ip":
+                var builder = HTTPResponseBuilder(status: .ok)
+                let clientIP = context.channel.remoteAddress?.ipAddress ?? "unknown"
+                let buf = context.channel.allocator.buffer(string: clientIP)
+                builder.add(buf)
+                self.resps.append(builder)
+                return
             case "/echohostheader":
                 var builder = HTTPResponseBuilder(status: .ok)
                 let hostValue = req.headers["Host"].first ?? ""
