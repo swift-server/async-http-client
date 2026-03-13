@@ -21,7 +21,8 @@ struct RequestOptions {
     var idleWriteTimeout: TimeAmount?
     /// DNS overrides.
     var dnsOverride: [String: String]
-    /// The local IP address to bind outgoing connections to.
+    /// The local IP address to bind outgoing connections to. This is typically used on multi-NIC
+    /// systems where we want to control where traffic goes.
     var localAddress: String?
 
     init(

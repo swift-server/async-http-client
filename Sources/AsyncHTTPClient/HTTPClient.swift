@@ -900,6 +900,10 @@ public final class HTTPClient: Sendable {
         /// When set, all outgoing connections will bind to this address before connecting.
         /// The value should be an IP address string (e.g. `"192.168.1.10"` or `"::1"`).
         /// Port 0 (OS-assigned ephemeral port) is always used.
+        /// 
+        /// This is most commonly used on multi-NIC systems where you want traffic to take a
+        /// specific network path which is not the choice the routing table would make by
+        /// default.
         ///
         /// This can be overridden on a per-request basis using ``HTTPClientRequest/localAddress``.
         /// Defaults to `nil` (OS default interface selection).
