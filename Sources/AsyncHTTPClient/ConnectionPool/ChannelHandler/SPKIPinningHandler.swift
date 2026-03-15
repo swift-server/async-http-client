@@ -14,11 +14,16 @@
 
 import Algorithms
 import Crypto
-import Foundation
 import Logging
 import NIOCore
 import NIOSSL
 import NIOTLS
+
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 
 /// SPKI hash for certificate pinning validation.
 ///
