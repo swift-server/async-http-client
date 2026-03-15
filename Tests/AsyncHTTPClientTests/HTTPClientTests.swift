@@ -26,11 +26,11 @@ import NIOHTTPCompression
 import NIOPosix
 import NIOSSL
 import NIOTestUtils
-import NIOTransportServices
 import XCTest
 
 #if canImport(Network)
 import Network
+import NIOTransportServices
 #endif
 
 final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {

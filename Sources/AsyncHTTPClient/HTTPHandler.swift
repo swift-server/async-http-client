@@ -13,7 +13,6 @@
 //===----------------------------------------------------------------------===//
 
 import Algorithms
-import Foundation
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -21,6 +20,12 @@ import NIOHTTP1
 import NIOPosix
 import NIOSSL
 import Tracing
+
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 
 extension HTTPClient {
     /// A request body.
@@ -952,7 +957,7 @@ extension URL {
     ///   - socketPath: The path to the unix domain socket to connect to.
     ///   - uri: The URI path and query that will be sent to the server.
     public init?(httpURLWithSocketPath socketPath: String, uri: String = "/") {
-        guard let host = socketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) else { return nil }
+        let host = socketPath.addingPercentEncodingAllowingURLHost()
         var urlString: String
         if uri.hasPrefix("/") {
             urlString = "http+unix://\(host)\(uri)"
@@ -967,7 +972,7 @@ extension URL {
     ///   - socketPath: The path to the unix domain socket to connect to.
     ///   - uri: The URI path and query that will be sent to the server.
     public init?(httpsURLWithSocketPath socketPath: String, uri: String = "/") {
-        guard let host = socketPath.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) else { return nil }
+        let host = socketPath.addingPercentEncodingAllowingURLHost()
         var urlString: String
         if uri.hasPrefix("/") {
             urlString = "https+unix://\(host)\(uri)"

@@ -12,7 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if canImport(FoundationEssentials)
+import struct FoundationEssentials.URL
+#else
 import struct Foundation.URL
+#endif
 
 struct DeconstructedURL {
     var scheme: Scheme
