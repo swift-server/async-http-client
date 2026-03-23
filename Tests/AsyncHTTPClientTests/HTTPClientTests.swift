@@ -4644,6 +4644,33 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
             )
         }
     }
+
+    func testLocalAddressBinding_configLevel() throws {
+        // On Linux, 127.0.0.0/8 all route to loopback, so we can use a
+        // non-default address to prove the bind actually happened.
+        #if os(Linux)
+        let localAddress = "127.0.0.127"
+        #else
+        let localAddress = "127.0.0.1"
+        #endif
+
+        let bin = HTTPBin(.http1_1(ssl: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        var config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+        config.localAddress = localAddress
+
+        let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        let response = try client.get(url: "http://127.0.0.1:\(bin.port)/echo-client-ip").wait()
+        XCTAssertEqual(response.status, .ok)
+
+        let bytes = response.body.flatMap { $0.getData(at: 0, length: $0.readableBytes) }
+        let data = try JSONDecoder().decode(RequestInfo.self, from: bytes!)
+        XCTAssertEqual(data.data, localAddress)
+    }
 }
 
 final class CountingDebugInitializerUtil: Sendable {
