@@ -100,6 +100,7 @@ extension HTTPClient {
                 try HTTPClientRequest.Prepared(
                     currentRequest,
                     dnsOverride: configuration.dnsOverride,
+                    localAddress: configuration.localAddress,
                     tracing: self.configuration.tracing
                 )
             let response = try await {
