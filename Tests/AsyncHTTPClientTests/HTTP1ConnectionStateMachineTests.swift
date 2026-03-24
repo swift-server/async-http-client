@@ -52,7 +52,10 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         // once we receive a writable event again, we can allow the producer to produce more data
         XCTAssertEqual(state.writabilityChanged(writable: true), .resumeRequestBodyStream)
         XCTAssertEqual(state.requestStreamPartReceived(part3, promise: nil), .sendBodyPart(part3, nil))
-        XCTAssertEqual(state.requestStreamFinished(promise: nil), .sendRequestEnd(nil))
+        XCTAssertEqual(
+            state.requestStreamFinished(trailers: nil, promise: nil),
+            .sendRequestEnd(trailers: nil, nil, .none)
+        )
 
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(
@@ -61,7 +64,10 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         )
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
         XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
-        XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.informConnectionIsIdle, .init([responseBody])))
+        XCTAssertEqual(
+            state.channelRead(.end(nil)),
+            .forwardResponseEnd(.informConnectionIsIdle, [responseBody], nil)
+        )
         XCTAssertEqual(state.channelReadComplete(), .wait)
     }
 
@@ -96,7 +102,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelReadComplete(), .forwardResponseBodyParts(.init([part2])))
         XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
         XCTAssertEqual(state.read(), .read)
-        XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.informConnectionIsIdle, .init()))
+        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.informConnectionIsIdle, [], nil))
         XCTAssertEqual(state.channelReadComplete(), .wait)
         XCTAssertEqual(state.read(), .read)
     }
@@ -140,7 +146,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         )
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
         XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
-        XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.close, .init([responseBody])))
+        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.close, [responseBody], nil))
         XCTAssertEqual(state.channelInactive(), .fireChannelInactive)
     }
 
@@ -163,7 +169,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         )
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
         XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
-        XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.close, .init([responseBody])))
+        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.close, [responseBody], nil))
         XCTAssertEqual(state.channelInactive(), .fireChannelInactive)
     }
 
@@ -190,7 +196,10 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         )
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
         XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
-        XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.informConnectionIsIdle, .init([responseBody])))
+        XCTAssertEqual(
+            state.channelRead(.end(nil)),
+            .forwardResponseEnd(.informConnectionIsIdle, [responseBody], nil)
+        )
         XCTAssertEqual(state.channelInactive(), .fireChannelInactive)
     }
 
@@ -214,7 +223,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
         )
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
         XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
-        XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.close, .init([responseBody])))
+        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.close, [responseBody], nil))
     }
 
     func testNIOTriggersChannelActiveTwice() {
@@ -367,7 +376,7 @@ class HTTP1ConnectionStateMachineTests: XCTestCase {
             state.channelRead(.head(responseHead)),
             .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
         )
-        XCTAssertEqual(state.channelRead(.end(nil)), .succeedRequest(.close, []))
+        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.close, [], nil))
     }
 
     func testWeDontCrashAfterEarlyHintsAndConnectionClose() {
@@ -445,10 +454,10 @@ extension HTTP1ConnectionStateMachine.Action: Equatable {
             return lhsData == rhsData
 
         case (
-            .succeedRequest(let lhsFinalAction, let lhsFinalBuffer),
-            .succeedRequest(let rhsFinalAction, let rhsFinalBuffer)
+            .forwardResponseEnd(let lhsFinalAction, let lhsFinalBuffer, let lhsTrailers),
+            .forwardResponseEnd(let rhsFinalAction, let rhsFinalBuffer, let rhsTrailers)
         ):
-            return lhsFinalAction == rhsFinalAction && lhsFinalBuffer == rhsFinalBuffer
+            return lhsFinalAction == rhsFinalAction && lhsFinalBuffer == rhsFinalBuffer && lhsTrailers == rhsTrailers
 
         case (.failRequest(_, let lhsFinalAction), .failRequest(_, let rhsFinalAction)):
             return lhsFinalAction == rhsFinalAction
@@ -462,24 +471,6 @@ extension HTTP1ConnectionStateMachine.Action: Equatable {
         case (.wait, .wait):
             return true
 
-        default:
-            return false
-        }
-    }
-}
-
-extension HTTP1ConnectionStateMachine.Action.FinalSuccessfulStreamAction: Equatable {
-    public static func == (
-        lhs: HTTP1ConnectionStateMachine.Action.FinalSuccessfulStreamAction,
-        rhs: HTTP1ConnectionStateMachine.Action.FinalSuccessfulStreamAction
-    ) -> Bool {
-        switch (lhs, rhs) {
-        case (.close, .close):
-            return true
-        case (sendRequestEnd(let lhsPromise, let lhsShouldClose), sendRequestEnd(let rhsPromise, let rhsShouldClose)):
-            return lhsPromise?.futureResult == rhsPromise?.futureResult && lhsShouldClose == rhsShouldClose
-        case (informConnectionIsIdle, informConnectionIsIdle):
-            return true
         default:
             return false
         }

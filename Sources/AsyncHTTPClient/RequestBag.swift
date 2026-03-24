@@ -96,13 +96,21 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
         requestOptions: RequestOptions,
         delegate: Delegate
     ) throws {
-        self.poolKey = .init(request, dnsOverride: requestOptions.dnsOverride)
+        self.poolKey = .init(
+            request,
+            dnsOverride: requestOptions.dnsOverride,
+            localAddress: requestOptions.localAddress
+        )
         self.eventLoopPreference = eventLoopPreference
         self.task = task
 
+        let (head, metadata) = try request.createRequestHead()
+        self.requestHead = head
+        self.requestFramingMetadata = metadata
+
         let loopBoundState = LoopBoundState(
             request: request,
-            state: StateMachine(redirectHandler: redirectHandler),
+            state: StateMachine(redirectHandler: redirectHandler, requestFramingMetadata: metadata),
             consumeBodyPartStackDepth: 0,
             tracing: task.tracing
         )
@@ -110,10 +118,6 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
         self.connectionDeadline = connectionDeadline
         self.requestOptions = requestOptions
         self.delegate = delegate
-
-        let (head, metadata) = try request.createRequestHead()
-        self.requestHead = head
-        self.requestFramingMetadata = metadata
 
         self.tlsConfiguration = request.tlsConfiguration
 
@@ -150,9 +154,11 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
     }
 
     private func requestHeadSent0() {
+        self.loopBoundState.value.state.requestHeadSent()
+
         self.delegate.didSendRequestHead(task: self.task, self.requestHead)
 
-        if self.loopBoundState.value.request.body == nil {
+        if self.requestFramingMetadata.body == .fixedSize(0) {
             self.delegate.didSendRequest(task: self.task)
         }
     }
@@ -185,6 +191,11 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
 
     private func pauseRequestBodyStream0() {
         self.loopBoundState.value.state.pauseRequestBodyStream()
+    }
+
+    private func requestBodyStreamSent0() {
+        // Intentionally empty: This hook is provided for consistency with the protocol
+        // but requires no action in this implementation.
     }
 
     private func writeNextRequestPart(_ part: IOData) -> EventLoopFuture<Void> {
@@ -230,7 +241,26 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
             promise.futureResult.whenSuccess {
                 self.delegate.didSendRequest(task: self.task)
             }
-            writer.finishRequestBodyStream(self, promise: promise)
+            writer.finishRequestBodyStream(trailers: nil, request: self, promise: promise)
+
+        case .forwardStreamFinishedAndSucceedTask(let writer, let writerPromise):
+            let promise = writerPromise ?? self.task.eventLoop.makePromise(of: Void.self)
+            promise.futureResult.whenComplete { result in
+                switch result {
+                case .success:
+                    self.delegate.didSendRequest(task: self.task)
+                    do {
+                        let response = try self.delegate.didFinishRequest(task: self.task)
+                        self.task.promise.succeed(response)
+                    } catch {
+                        self.task.promise.fail(error)
+                    }
+
+                case .failure(let error):
+                    self.task.promise.fail(error)
+                }
+            }
+            writer.finishRequestBodyStream(trailers: nil, request: self, promise: promise)
 
         case .forwardStreamFailureAndFailTask(let writer, let error, let promise):
             writer.cancelRequest(self)
@@ -514,6 +544,16 @@ extension RequestBag: HTTPExecutableRequest {
         } else {
             self.task.eventLoop.execute {
                 self.pauseRequestBodyStream0()
+            }
+        }
+    }
+
+    func requestBodyStreamSent() {
+        if self.task.eventLoop.inEventLoop {
+            self.requestBodyStreamSent0()
+        } else {
+            self.task.eventLoop.execute {
+                self.requestBodyStreamSent0()
             }
         }
     }

@@ -18,7 +18,11 @@ import NIOHTTP1
 import NIOSSL
 import ServiceContextModule
 
+#if canImport(FoundationEssentials)
+import struct FoundationEssentials.URL
+#else
 import struct Foundation.URL
+#endif
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest {
@@ -50,6 +54,7 @@ extension HTTPClientRequest.Prepared {
     init(
         _ request: HTTPClientRequest,
         dnsOverride: [String: String] = [:],
+        localAddress: String? = nil,
         tracing: HTTPClient.TracingConfiguration? = nil
     ) throws {
         guard !request.url.isEmpty, let url = URL(string: request.url) else {
@@ -73,7 +78,12 @@ extension HTTPClientRequest.Prepared {
 
         self.init(
             url: url,
-            poolKey: .init(url: deconstructedURL, tlsConfiguration: request.tlsConfiguration, dnsOverride: dnsOverride),
+            poolKey: .init(
+                url: deconstructedURL,
+                tlsConfiguration: request.tlsConfiguration,
+                dnsOverride: dnsOverride,
+                localAddress: request.localAddress ?? localAddress
+            ),
             requestFramingMetadata: metadata,
             head: .init(
                 version: .http1_1,
@@ -124,7 +134,8 @@ extension HTTPClientRequest {
     func followingRedirect(
         from originalURL: URL,
         to redirectURL: URL,
-        status: HTTPResponseStatus
+        status: HTTPResponseStatus,
+        config: HTTPClient.Configuration.RedirectConfiguration.FollowConfiguration
     ) -> HTTPClientRequest {
         let (method, headers, body) = transformRequestForRedirect(
             from: originalURL,
@@ -132,12 +143,14 @@ extension HTTPClientRequest {
             headers: self.headers,
             body: self.body,
             to: redirectURL,
-            status: status
+            status: status,
+            config: config
         )
         var newRequest = HTTPClientRequest(url: redirectURL.absoluteString)
         newRequest.method = method
         newRequest.headers = headers
         newRequest.body = body
+        newRequest.localAddress = self.localAddress
         return newRequest
     }
 }

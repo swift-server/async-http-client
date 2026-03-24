@@ -185,7 +185,11 @@ protocol HTTPRequestExecutor: Sendable {
     /// Signals that the request body stream has finished
     ///
     /// This method may be **called on any thread**. The executor needs to ensure thread safety.
-    func finishRequestBodyStream(_ task: HTTPExecutableRequest, promise: EventLoopPromise<Void>?)
+    func finishRequestBodyStream(
+        trailers: HTTPHeaders?,
+        request: HTTPExecutableRequest,
+        promise: EventLoopPromise<Void>?
+    )
 
     /// Signals that more bytes from response body stream can be consumed.
     ///
@@ -243,6 +247,11 @@ protocol HTTPExecutableRequest: AnyObject, Sendable {
     ///
     /// This will be called on the Channel's EventLoop. Do **not block** during your execution!
     func pauseRequestBodyStream()
+
+    /// Will be called by the ChannelHandler to indicate that the request body stream has been sent.
+    ///
+    /// This will be called on the Channel's EventLoop. Do **not block** during your execution!
+    func requestBodyStreamSent()
 
     /// Receive a response head.
     ///

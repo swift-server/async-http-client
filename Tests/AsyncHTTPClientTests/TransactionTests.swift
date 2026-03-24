@@ -98,7 +98,8 @@ final class TransactionTests: XCTestCase {
                 }
 
                 func finishRequestBodyStream(
-                    _ task: AsyncHTTPClient.HTTPExecutableRequest,
+                    trailers: HTTPHeaders?,
+                    request: AsyncHTTPClient.HTTPExecutableRequest,
                     promise: NIOCore.EventLoopPromise<Void>?
                 ) {
                     XCTFail()
