@@ -248,14 +248,19 @@ extension HTTPConnectionPool.ConnectionFactory {
         promise: EventLoopPromise<NegotiatedProtocol>
     ) {
         precondition(!self.key.scheme.usesTLS, "Unexpected scheme")
-        return self.makePlainBootstrap(
-            requester: requester,
-            connectionID: connectionID,
-            deadline: deadline,
-            eventLoop: eventLoop
-        ).connect(target: self.key.connectionTarget).map {
-            .http1_1($0)
-        }.cascade(to: promise)
+        do {
+            let bootstrap = try self.makePlainBootstrap(
+                requester: requester,
+                connectionID: connectionID,
+                deadline: deadline,
+                eventLoop: eventLoop
+            )
+            bootstrap.connect(target: self.key.connectionTarget).map {
+                .http1_1($0)
+            }.cascade(to: promise)
+        } catch {
+            promise.fail(error)
+        }
     }
 
     private func makeHTTPProxyChannel<Requester: HTTPConnectionRequester>(
@@ -270,12 +275,18 @@ extension HTTPConnectionPool.ConnectionFactory {
         // A proxy connection starts with a plain text connection to the proxy server. After
         // the connection has been established with the proxy server, the connection might be
         // upgraded to TLS before we send our first request.
-        let bootstrap = self.makePlainBootstrap(
-            requester: requester,
-            connectionID: connectionID,
-            deadline: deadline,
-            eventLoop: eventLoop
-        )
+        let bootstrap: NIOClientTCPBootstrapProtocol
+        do {
+            bootstrap = try self.makePlainBootstrap(
+                requester: requester,
+                connectionID: connectionID,
+                deadline: deadline,
+                eventLoop: eventLoop
+            )
+        } catch {
+            promise.fail(error)
+            return
+        }
         bootstrap.connect(host: proxy.host, port: proxy.port).whenComplete { result in
             switch result {
             case .success(let channel):
@@ -324,12 +335,18 @@ extension HTTPConnectionPool.ConnectionFactory {
         // A proxy connection starts with a plain text connection to the proxy server. After
         // the connection has been established with the proxy server, the connection might be
         // upgraded to TLS before we send our first request.
-        let bootstrap = self.makePlainBootstrap(
-            requester: requester,
-            connectionID: connectionID,
-            deadline: deadline,
-            eventLoop: eventLoop
-        )
+        let bootstrap: NIOClientTCPBootstrapProtocol
+        do {
+            bootstrap = try self.makePlainBootstrap(
+                requester: requester,
+                connectionID: connectionID,
+                deadline: deadline,
+                eventLoop: eventLoop
+            )
+        } catch {
+            promise.fail(error)
+            return
+        }
         bootstrap.connect(host: proxy.host, port: proxy.port).whenComplete { result in
             switch result {
             case .success(let channel):
@@ -439,12 +456,16 @@ extension HTTPConnectionPool.ConnectionFactory {
         connectionID: HTTPConnectionPool.Connection.ID,
         deadline: NIODeadline,
         eventLoop: EventLoop
-    ) -> NIOClientTCPBootstrapProtocol {
+    ) throws -> NIOClientTCPBootstrapProtocol {
+        if let localAddress = self.key.localAddress, !localAddress.isIPAddress {
+            throw HTTPClientError.invalidLocalAddress
+        }
+
         #if canImport(Network)
         if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *),
             let tsBootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoop)
         {
-            return
+            var bootstrap =
                 tsBootstrap
                 .channelOption(
                     NIOTSChannelOptions.waitForActivity,
@@ -466,14 +487,32 @@ extension HTTPConnectionPool.ConnectionFactory {
                         return channel.eventLoop.makeFailedFuture(error)
                     }
                 }
+            if let localAddress = self.key.localAddress {
+                bootstrap = bootstrap.configureNWParameters { params in
+                    params.requiredLocalEndpoint = NWEndpoint.hostPort(
+                        host: NWEndpoint.Host(localAddress),
+                        port: .any
+                    )
+                }
+            }
+            return bootstrap
         }
         #endif
 
         if let nioBootstrap = ClientBootstrap(validatingGroup: eventLoop) {
-            return
+            var bootstrap =
                 nioBootstrap
                 .connectTimeout(deadline - NIODeadline.now())
                 .enableMPTCP(clientConfiguration.enableMultipath)
+            if let localAddress = self.key.localAddress {
+                do {
+                    let socketAddress = try SocketAddress(ipAddress: localAddress, port: 0)
+                    bootstrap = bootstrap.bind(to: socketAddress)
+                } catch {
+                    throw HTTPClientError.invalidLocalAddress
+                }
+            }
+            return bootstrap
         }
 
         preconditionFailure("No matching bootstrap found")
@@ -541,6 +580,10 @@ extension HTTPConnectionPool.ConnectionFactory {
         eventLoop: EventLoop,
         logger: Logger
     ) -> EventLoopFuture<NIOClientTCPBootstrapProtocol> {
+        if let localAddress = self.key.localAddress, !localAddress.isIPAddress {
+            return eventLoop.makeFailedFuture(HTTPClientError.invalidLocalAddress)
+        }
+
         var tlsConfig = self.tlsConfiguration
         switch self.clientConfiguration.httpVersion.configuration {
         case .automatic:
@@ -556,13 +599,14 @@ extension HTTPConnectionPool.ConnectionFactory {
         #if canImport(Network)
         if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), eventLoop is QoSEventLoop {
             // create NIOClientTCPBootstrap with NIOTS TLS provider
+            let localAddr = self.key.localAddress
             let bootstrapFuture = tlsConfig.getNWProtocolTLSOptions(
                 on: eventLoop,
                 serverNameIndicatorOverride: key.serverNameIndicatorOverride
             ).map {
                 options -> NIOClientTCPBootstrapProtocol in
 
-                NIOTSConnectionBootstrap(group: eventLoop)  // validated above
+                var bootstrap = NIOTSConnectionBootstrap(group: eventLoop)  // validated above
                     .channelOption(
                         NIOTSChannelOptions.waitForActivity,
                         value: self.clientConfiguration.networkFrameworkWaitForConnectivity
@@ -587,7 +631,16 @@ extension HTTPConnectionPool.ConnectionFactory {
                         } catch {
                             return channel.eventLoop.makeFailedFuture(error)
                         }
-                    } as NIOClientTCPBootstrapProtocol
+                    }
+                if let localAddress = localAddr {
+                    bootstrap = bootstrap.configureNWParameters { params in
+                        params.requiredLocalEndpoint = NWEndpoint.hostPort(
+                            host: NWEndpoint.Host(localAddress),
+                            port: .any
+                        )
+                    }
+                }
+                return bootstrap as NIOClientTCPBootstrapProtocol
             }
             return bootstrapFuture
         }
@@ -599,10 +652,20 @@ extension HTTPConnectionPool.ConnectionFactory {
             logger: logger
         )
 
-        return eventLoop.submit {
-            ClientBootstrap(group: eventLoop)
+        return eventLoop.submit { [key] () throws -> NIOClientTCPBootstrapProtocol in
+            var bootstrap = ClientBootstrap(group: eventLoop)
                 .connectTimeout(deadline - NIODeadline.now())
                 .enableMPTCP(clientConfiguration.enableMultipath)
+            if let localAddress = key.localAddress {
+                do {
+                    let socketAddress = try SocketAddress(ipAddress: localAddress, port: 0)
+                    bootstrap = bootstrap.bind(to: socketAddress)
+                } catch {
+                    throw HTTPClientError.invalidLocalAddress
+                }
+            }
+            return
+                bootstrap
                 .channelInitializer { channel in
                     sslContextFuture.flatMap { sslContext -> EventLoopFuture<Void> in
                         do {

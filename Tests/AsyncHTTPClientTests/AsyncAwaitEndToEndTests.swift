@@ -1300,6 +1300,136 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
             XCTAssertEqual(responseGet.history[1].request.method, .GET, "Redirected request should remain GET")
         }
     }
+
+    // MARK: - Integration tests: local address binding
+
+    func testLocalAddressBinding_configLevel() async throws {
+        // On Linux, 127.0.0.0/8 all route to loopback, so we can use a
+        // non-default address to prove the bind actually happened.
+        #if os(Linux)
+        let localAddress = "127.0.0.127"
+        #else
+        let localAddress = "127.0.0.1"
+        #endif
+
+        let bin = HTTPBin(.http1_1(ssl: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        var config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+        config.localAddress = localAddress
+
+        let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        let request = HTTPClientRequest(url: "http://127.0.0.1:\(bin.port)/echo-client-ip")
+        let response = try await client.execute(request, deadline: .now() + .seconds(10))
+        XCTAssertEqual(response.status, .ok)
+
+        var body = try await response.body.collect(upTo: 1024)
+        let requestInfo = try body.readJSONDecodable(RequestInfo.self, length: body.readableBytes)
+        XCTAssertEqual(requestInfo?.data, localAddress)
+    }
+
+    func testLocalAddressBinding_perRequest() async throws {
+        #if os(Linux)
+        let localAddress = "127.0.0.127"
+        #else
+        let localAddress = "127.0.0.1"
+        #endif
+
+        let bin = HTTPBin(.http1_1(ssl: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        let config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+
+        let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        var request = HTTPClientRequest(url: "http://127.0.0.1:\(bin.port)/echo-client-ip")
+        request.localAddress = localAddress
+
+        let response = try await client.execute(request, deadline: .now() + .seconds(10))
+        XCTAssertEqual(response.status, .ok)
+
+        var body = try await response.body.collect(upTo: 1024)
+        let requestInfo = try body.readJSONDecodable(RequestInfo.self, length: body.readableBytes)
+        XCTAssertEqual(requestInfo?.data, localAddress)
+    }
+
+    func testLocalAddressBinding_perRequestOverridesConfig() async throws {
+        #if os(Linux)
+        let localAddress = "127.0.0.127"
+        #else
+        let localAddress = "127.0.0.1"
+        #endif
+
+        let bin = HTTPBin(.http1_1(ssl: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        var config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+        config.localAddress = "127.0.0.1"
+
+        let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        var request = HTTPClientRequest(url: "http://127.0.0.1:\(bin.port)/echo-client-ip")
+        request.localAddress = localAddress
+
+        let response = try await client.execute(request, deadline: .now() + .seconds(10))
+        XCTAssertEqual(response.status, .ok)
+
+        var body = try await response.body.collect(upTo: 1024)
+        let requestInfo = try body.readJSONDecodable(RequestInfo.self, length: body.readableBytes)
+        XCTAssertEqual(requestInfo?.data, localAddress)
+    }
+
+    func testLocalAddressBinding_invalidAddress() async throws {
+        var config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+        config.localAddress = "not-a-valid-ip"
+
+        let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        let request = HTTPClientRequest(url: "http://127.0.0.1/ok")
+        do {
+            _ = try await client.execute(request, deadline: .now() + .seconds(10))
+            XCTFail("Expected error to be thrown")
+        } catch {
+            XCTAssertEqual(error as? HTTPClientError, .invalidLocalAddress)
+        }
+    }
+
+    func testLocalAddressBinding_withTLS() async throws {
+        #if os(Linux)
+        let localAddress = "127.0.0.127"
+        #else
+        let localAddress = "127.0.0.1"
+        #endif
+
+        let bin = HTTPBin(.http2(compress: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        var config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+        config.tlsConfiguration = .clientDefault
+        config.tlsConfiguration?.certificateVerification = .none
+        config.localAddress = localAddress
+
+        let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        let request = HTTPClientRequest(url: "https://127.0.0.1:\(bin.port)/echo-client-ip")
+        let response = try await client.execute(request, deadline: .now() + .seconds(10))
+        XCTAssertEqual(response.status, .ok)
+
+        var body = try await response.body.collect(upTo: 1024)
+        let requestInfo = try body.readJSONDecodable(RequestInfo.self, length: body.readableBytes)
+        XCTAssertEqual(requestInfo?.data, localAddress)
+    }
 }
 
 struct AnySendableSequence<Element>: @unchecked Sendable {
