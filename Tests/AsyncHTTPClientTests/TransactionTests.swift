@@ -174,7 +174,7 @@ final class TransactionTests: XCTestCase {
             async let part = iterator.next()
             XCTAssertNoThrow(try executor.receiveResponseDemand())
             executor.resetResponseStreamDemandSignal()
-            transaction.succeedRequest([])
+            transaction.receiveResponseEnd([], trailers: nil)
             let result = try await part
             XCTAssertNil(result)
         }
@@ -225,7 +225,7 @@ final class TransactionTests: XCTestCase {
 
             // doesn't crash if receives more data because of race
             transaction.receiveResponseBodyParts([ByteBuffer(string: "foo bar")])
-            transaction.succeedRequest(nil)
+            transaction.receiveResponseEnd(nil, trailers: nil)
         }
     }
 
@@ -297,7 +297,7 @@ final class TransactionTests: XCTestCase {
 
             XCTAssertNoThrow(try executor.receiveResponseDemand())
             executor.resetResponseStreamDemandSignal()
-            transaction.succeedRequest([])
+            transaction.receiveResponseEnd([], trailers: nil)
             let result = try await part
             XCTAssertNil(result)
         }
@@ -391,7 +391,7 @@ final class TransactionTests: XCTestCase {
 
             let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["foo": "bar"])
             transaction.receiveResponseHead(responseHead)
-            transaction.succeedRequest(nil)
+            transaction.receiveResponseEnd(nil, trailers: nil)
 
             let response = try await responseTask.value
             XCTAssertEqual(response.status, .ok)

@@ -22,8 +22,8 @@ import struct Foundation.URL
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest {
-    struct Prepared {
-        enum Body {
+    struct Prepared: Sendable {
+        enum Body: Sendable {
             case asyncSequence(
                 length: RequestBodyLength,
                 makeAsyncIterator: @Sendable () -> ((ByteBufferAllocator) async throws -> ByteBuffer?)
@@ -31,7 +31,7 @@ extension HTTPClientRequest {
             case sequence(
                 length: RequestBodyLength,
                 canBeConsumedMultipleTimes: Bool,
-                makeCompleteBody: (ByteBufferAllocator) -> ByteBuffer
+                makeCompleteBody: @Sendable (ByteBufferAllocator) -> ByteBuffer
             )
             case byteBuffer(ByteBuffer)
         }

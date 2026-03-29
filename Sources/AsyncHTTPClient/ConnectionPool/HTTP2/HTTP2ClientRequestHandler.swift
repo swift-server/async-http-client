@@ -250,7 +250,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         case .succeedRequest(let finalAction, let finalParts):
             // We can force unwrap the request here, as we have just validated in the state machine,
             // that the request object is still present.
-            self.request!.succeedRequest(finalParts)
+            self.request!.receiveResponseEnd(finalParts, trailers: nil)
             self.request = nil
             self.runTimeoutAction(.clearIdleReadTimeoutTimer, context: context)
             self.runTimeoutAction(.clearIdleWriteTimeoutTimer, context: context)

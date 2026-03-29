@@ -171,7 +171,7 @@ final class RequestBagTests: XCTestCase {
         }
 
         XCTAssertEqual(delegate.hitDidReceiveResponse, 0)
-        bag.succeedRequest(nil)
+        bag.receiveResponseEnd(nil, trailers: nil)
         XCTAssertEqual(delegate.hitDidReceiveResponse, 1)
 
         XCTAssertNoThrow(try bag.task.futureResult.wait(), "The request has succeeded")
@@ -568,7 +568,7 @@ final class RequestBagTests: XCTestCase {
 
         bag.receiveResponseHead(.init(version: .http1_1, status: .ok))
 
-        bag.succeedRequest([ByteBuffer([1])])
+        bag.receiveResponseEnd([ByteBuffer([1])], trailers: nil)
 
         XCTAssertThrowsError(try delegate.didFinishPromise.futureResult.wait()) { error in
             XCTAssertEqualTypeAndValue(error, MyError())
@@ -640,7 +640,7 @@ final class RequestBagTests: XCTestCase {
         // receive a 301 response immediately.
         bag.receiveResponseHead(.init(version: .http1_1, status: .movedPermanently))
         XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
-        bag.succeedRequest(.init())
+        bag.receiveResponseEnd([], trailers: nil)
 
         // if we now write our second part of the response this should fail the backpressure promise
         writeSecondPartPromise.succeed(())
@@ -695,7 +695,7 @@ final class RequestBagTests: XCTestCase {
         XCTAssertEqual(delegate.hitDidReceiveBodyPart, 2)
 
         // the remote closes the connection, which leads to more data and a succeed of the request
-        bag.succeedRequest([ByteBuffer(string: "baz")])
+        bag.receiveResponseEnd([ByteBuffer(string: "baz")], trailers: nil)
         XCTAssertEqual(delegate.hitDidReceiveBodyPart, 2)
 
         XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
@@ -785,7 +785,7 @@ final class RequestBagTests: XCTestCase {
 
         XCTAssertEqual(delegate.hitDidReceiveBodyPart, 0)
         XCTAssertFalse(executor.signalledDemandForResponseBody)
-        bag.succeedRequest([ByteBuffer(repeating: 2, count: 1024)])
+        bag.receiveResponseEnd([ByteBuffer(repeating: 2, count: 1024)], trailers: nil)
         XCTAssertFalse(executor.signalledDemandForResponseBody)
         XCTAssertEqual(delegate.hitDidReceiveResponse, 0)
         XCTAssertNil(delegate.backpressurePromise)
