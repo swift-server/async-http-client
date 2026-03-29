@@ -32,14 +32,17 @@ extension HTTPClient {
             span.attributes[keys.requestMethod] = request.method.rawValue
 
             // set explicitly allowed request headers
-            let allowedRequestHeaderNames = Set(request.headers.map(\.name)).intersection(configuration.tracing.allowedHeaders)
+            var allowedRequestHeaders: [String: [String]] = [:]
 
-            for headerName in allowedRequestHeaderNames {
-                let values = request.headers[headerName]
-
-                if !values.isEmpty {
-                    span.attributes["\(keys.requestHeader).\(headerName)"] = values
+            for header in request.headers {
+                guard self.configuration.tracing.allowedHeaders.contains(header.name) else {
+                    continue
                 }
+                allowedRequestHeaders[header.name, default: []].append(header.value)
+            }
+
+            for (headerName, values) in allowedRequestHeaders {
+                span.attributes["\(keys.requestHeader).\(headerName)"] = values
             }
 
             // set url attributes
@@ -75,14 +78,17 @@ extension HTTPClient {
             TracingSupport.handleResponseStatusCode(span, response.status, keys: tracing.attributeKeys)
 
             // set explicitly allowed response headers
-            let allowedResponseHeaderNames = Set(response.headers.map(\.name)).intersection(configuration.tracing.allowedHeaders)
+            var allowedResponseHeaders: [String: [String]] = [:]
 
-            for headerName in allowedResponseHeaderNames {
-                let values = response.headers[headerName]
-
-                if !values.isEmpty {
-                    span.attributes["\(keys.responseHeader).\(headerName)"] = values
+            for header in response.headers {
+                guard self.configuration.tracing.allowedHeaders.contains(header.name) else {
+                    continue
                 }
+                allowedResponseHeaders[header.name, default: []].append(header.value)
+            }
+
+            for (headerName, values) in allowedResponseHeaders {
+                span.attributes["\(keys.responseHeader).\(headerName)"] = values
             }
             
             // set network protocol version
