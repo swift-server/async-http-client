@@ -196,8 +196,10 @@ final class HTTPBinForSSLUncleanShutdown {
         let context = try! NIOSSLContext(configuration: configuration)
 
         self.serverChannel = try! ServerBootstrap(group: self.group)
+            #if !os(Windows)
             .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
+            #endif
             .childChannelInitializer { channel in
                 do {
                     let requestDecoder = HTTPRequestDecoder()
