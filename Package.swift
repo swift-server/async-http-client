@@ -46,6 +46,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-distributed-tracing.git", from: "1.3.0"),
         // Disable all traits to prevent linking Foundation
         .package(url: "https://github.com/apple/swift-configuration.git", from: "1.0.0", traits: []),
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "4.3.1"),
         .package(url: "https://github.com/apple/swift-service-context.git", from: "1.1.0"),
     ],
     targets: [
@@ -76,6 +77,7 @@ let package = Package(
                 ),
                 .product(name: "Atomics", package: "swift-atomics"),
                 .product(name: "Algorithms", package: "swift-algorithms"),
+                .product(name: "Crypto", package: "swift-crypto"),
                 .product(name: "Configuration", package: "swift-configuration"),
                 // Observability support
                 .product(name: "Logging", package: "swift-log"),
