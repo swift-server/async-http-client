@@ -802,7 +802,7 @@ public protocol HTTPClientResponseDelegate: AnyObject, Sendable {
     ///
     /// - parameters:
     ///     - task: Current request context.
-    ///     - error: Error that occured during response processing.
+    ///     - error: Error that occurred during response processing.
     func didReceiveError(task: HTTPClient.Task<Response>, _ error: Error)
 
     /// Called when the complete HTTP request is finished. You must return an instance of your ``Response`` associated type. Will be called once, except if an error occurred.
