@@ -38,7 +38,7 @@ extension RequestBag {
             case queued(HTTPRequestScheduler, RedirectHandler<Delegate.Response>?)
             /// if the deadline was exceeded while in the `.queued(_:)` state,
             /// we wait until the request pool fails the request with a potential more descriptive error message,
-            /// if a connection failure has occured while the request was queued.
+            /// if a connection failure has occurred while the request was queued.
             case deadlineExceededWhileQueued
             case executing(HTTPRequestExecutor, RequestStreamState, ResponseStreamState)
             case finished(error: Error?)
@@ -545,7 +545,7 @@ extension RequestBag.StateMachine {
 
         case .finished(error: .none):
             preconditionFailure(
-                "Invalid state... If no error occured, this must not be called, after the request was finished"
+                "Invalid state... If no error occurred, this must not be called, after the request was finished"
             )
 
         case .modifying:

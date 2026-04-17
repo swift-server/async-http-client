@@ -163,7 +163,7 @@ extension Transaction {
                 }
 
             case .executing(let context, let requestStreamState, .finished):
-                // an error occured after full response received, but before the full request was sent
+                // an error occurred after full response received, but before the full request was sent
                 self.state = .finished(error: error)
                 switch requestStreamState {
                 case .paused(let bodyStreamContinuation):
