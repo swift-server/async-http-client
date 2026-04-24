@@ -17,7 +17,11 @@ import NIOCore
 import NIOHTTP1
 import Tracing
 
+#if canImport(FoundationEssentials)
+import struct FoundationEssentials.URL
+#else
 import struct Foundation.URL
+#endif
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClient {
@@ -96,6 +100,7 @@ extension HTTPClient {
                 try HTTPClientRequest.Prepared(
                     currentRequest,
                     dnsOverride: configuration.dnsOverride,
+                    localAddress: configuration.localAddress,
                     tracing: self.configuration.tracing
                 )
             let response = try await {

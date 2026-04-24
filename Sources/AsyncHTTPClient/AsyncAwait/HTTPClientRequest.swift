@@ -57,12 +57,20 @@ public struct HTTPClientRequest: Sendable {
     /// Request-specific TLS configuration, defaults to no request-specific TLS configuration.
     public var tlsConfiguration: TLSConfiguration?
 
+    /// The local IP address to bind this request's connection to.
+    ///
+    /// When set, overrides ``HTTPClient/Configuration/localAddress`` for this request.
+    /// The value should be an IP address string (e.g. `"192.168.1.10"` or `"::1"`).
+    /// Defaults to `nil` (use client configuration default).
+    public var localAddress: String?
+
     public init(url: String) {
         self.url = url
         self.method = .GET
         self.headers = .init()
         self.body = .none
         self.tlsConfiguration = nil
+        self.localAddress = nil
     }
 }
 

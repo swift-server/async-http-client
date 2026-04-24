@@ -27,10 +27,14 @@ import NIOHTTPCompression
 import NIOPosix
 import NIOSSL
 import NIOTLS
-import NIOTransportServices
 import XCTest
 
 @testable import AsyncHTTPClient
+
+#if canImport(Network)
+import Network
+import NIOTransportServices
+#endif
 
 #if canImport(xlocale)
 import xlocale
@@ -1046,6 +1050,13 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                     return
                 }
                 self.resps.append(HTTPResponseBuilder(status: .ok))
+                return
+            case "/echo-client-ip":
+                var builder = HTTPResponseBuilder(status: .ok)
+                let clientIP = context.channel.remoteAddress?.ipAddress ?? "unknown"
+                let buf = context.channel.allocator.buffer(string: clientIP)
+                builder.add(buf)
+                self.resps.append(builder)
                 return
             case "/echohostheader":
                 var builder = HTTPResponseBuilder(status: .ok)

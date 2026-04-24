@@ -56,7 +56,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-atomics.git", from: "1.0.2"),
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-distributed-tracing.git", from: "1.3.0"),
-        .package(url: "https://github.com/apple/swift-configuration.git", from: "1.0.0"),
+        // Disable all traits to prevent linking Foundation
+        .package(url: "https://github.com/apple/swift-configuration.git", from: "1.0.0", traits: []),
         .package(url: "https://github.com/apple/swift-service-context.git", from: "1.1.0"),
         .package(
             url: "https://github.com/apple/swift-http-api-proposal.git",
@@ -84,7 +85,11 @@ let package = Package(
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
                 .product(name: "NIOHTTPCompression", package: "swift-nio-extras"),
                 .product(name: "NIOSOCKS", package: "swift-nio-extras"),
-                .product(name: "NIOTransportServices", package: "swift-nio-transport-services"),
+                .product(
+                    name: "NIOTransportServices",
+                    package: "swift-nio-transport-services",
+                    condition: .when(platforms: [.macOS, .iOS, .tvOS, .watchOS, .macCatalyst, .visionOS])
+                ),
                 .product(name: "Atomics", package: "swift-atomics"),
                 .product(name: "Algorithms", package: "swift-algorithms"),
                 .product(name: "Configuration", package: "swift-configuration"),
