@@ -19,11 +19,6 @@ import struct Foundation.URL
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClient {
     @inlinable
-    static func normalizedTracingHeaderName(_ name: String) -> String {
-        name.lowercased().replacingOccurrences(of: "-", with: "_")
-    }
-
-    @inlinable
     func withRequestSpan(
         _ request: HTTPClientRequest,
         _ body: () async throws -> HTTPClientResponse
@@ -44,7 +39,7 @@ extension HTTPClient {
                 guard allowedHeaders.contains(header.name.lowercased()) else {
                     continue
                 }
-                let normalizedHeaderName = Self.normalizedTracingHeaderName(header.name)
+                let normalizedHeaderName = normalizedTracingHeaderName(header.name)
                 allowedRequestHeaders[normalizedHeaderName, default: []].append(header.value)
             }
 
@@ -91,7 +86,7 @@ extension HTTPClient {
                 guard allowedHeaders.contains(header.name.lowercased()) else {
                     continue
                 }
-                let normalizedHeaderName = Self.normalizedTracingHeaderName(header.name)
+                let normalizedHeaderName = normalizedTracingHeaderName(header.name)
                 allowedResponseHeaders[normalizedHeaderName, default: []].append(header.value)
             }
 
@@ -104,5 +99,10 @@ extension HTTPClient {
 
             return response
         }
+    }
+
+    @inlinable
+    func normalizedTracingHeaderName(_ name: String) -> String {
+        name.lowercased().replacingOccurrences(of: "-", with: "_")
     }
 }

@@ -12,13 +12,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Foundation
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
 import NIOSSL
 import Tracing
+
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 
 // MARK: - Centralized span attribute handling
 
