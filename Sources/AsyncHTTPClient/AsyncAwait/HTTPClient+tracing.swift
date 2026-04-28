@@ -29,13 +29,14 @@ extension HTTPClient {
 
         return try await tracer.withSpan(request.method.rawValue, ofKind: .client) { span in
             let keys = self.configuration.tracing.attributeKeys
+            let allowedHeaders = Set(self.configuration.tracing.allowedHeaders.map { $0.lowercased() })
             span.attributes[keys.requestMethod] = request.method.rawValue
 
             // set explicitly allowed request headers
             var allowedRequestHeaders: [String: [String]] = [:]
 
             for header in request.headers {
-                guard self.configuration.tracing.allowedHeaders.contains(header.name) else {
+                guard allowedHeaders.contains(header.name.lowercased()) else {
                     continue
                 }
                 allowedRequestHeaders[header.name, default: []].append(header.value)
@@ -81,7 +82,7 @@ extension HTTPClient {
             var allowedResponseHeaders: [String: [String]] = [:]
 
             for header in response.headers {
-                guard self.configuration.tracing.allowedHeaders.contains(header.name) else {
+                guard allowedHeaders.contains(header.name.lowercased()) else {
                     continue
                 }
                 allowedResponseHeaders[header.name, default: []].append(header.value)
