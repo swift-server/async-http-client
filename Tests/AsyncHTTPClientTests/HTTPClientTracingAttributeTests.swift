@@ -2,7 +2,7 @@
 //
 // This source file is part of the AsyncHTTPClient open source project
 //
-// Copyright (c) 2025 Apple Inc. and the AsyncHTTPClient project authors
+// Copyright (c) 2026 Apple Inc. and the AsyncHTTPClient project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -13,293 +13,200 @@
 //===----------------------------------------------------------------------===//
 
 @_spi(Tracing) import AsyncHTTPClient  // NOT @testable - tests that need @testable go into HTTPClientTracingInternalTests.swift
-import Atomics
 import InMemoryTracing
-import Logging
-import NIOConcurrencyHelpers
 import NIOCore
-import NIOEmbedded
-import NIOFoundationCompat
 import NIOHTTP1
-import NIOHTTPCompression
-import NIOPosix
-import NIOSSL
-import NIOTestUtils
-import NIOTransportServices
+import Testing
 import Tracing
-import XCTest
 
-#if canImport(Network)
-import Network
-#endif
+@Suite("HTTPClient tracing attributes")
+struct HTTPClientTracingAttributeTests {
+    @Test func traceAttributesURL() async throws {
+        let httpBin = HTTPBin()
+        defer { #expect(throws: Never.self) { try httpBin.shutdown() } }
 
-final class HTTPClientTracingAttributeTests: XCTestCaseHTTPClientTestsBaseClass {
-
-    func testTraceAttributes_url() async throws {
         let tracer = InMemoryTracer()
-        var config = HTTPClient.Configuration()
-        config.httpVersion = .automatic
-        config.tracing.tracer = tracer
-
-        let client = HTTPClient(
+        let httpClient = HTTPClient(
             eventLoopGroupProvider: .singleton,
-            configuration: config
+            configuration: makeConfiguration(tracer: tracer)
         )
+        defer { #expect(throws: Never.self) { try httpClient.syncShutdown() } }
 
-        let url = self.defaultHTTPBinURLPrefix + "echo-method?foo=bar&Signature=secretSignature"
-        var request = HTTPClientRequest(url: url)
+        let request = makeRequest(url: httpBin.baseURL + "echo-method?foo=bar&Signature=secretSignature")
+        _ = try await httpClient.execute(request, deadline: .distantFuture)
 
-        request.headers.add(name: "Authorization", value: "Bearer secret")
-        request.headers.add(name: "Password", value: "SuperSecretPassword")
-
-        let _ = try await client.execute(request, deadline: .distantFuture)
-
-        guard tracer.activeSpans.isEmpty else {
-            XCTFail("Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)")
-            return
-        }
-        guard let span = tracer.finishedSpans.first else {
-            XCTFail("No span was recorded!")
-            return
-        }
-
+        #expect(
+            tracer.activeSpans.isEmpty,
+            "Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)"
+        )
+        let span = try #require(tracer.finishedSpans.first)
         let keys = HTTPClient.TracingConfiguration.AttributeKeys()
 
-        XCTAssertEqual(span.attributes.get(keys.urlPath), "/echo-method")
-        XCTAssertEqual(span.attributes.get(keys.urlScheme), "http")
-        XCTAssertEqual(span.attributes.get(keys.urlQuery), "foo=bar&Signature=REDACTED")
-
-        XCTAssertNoThrow(try client.syncShutdown()) 
+        #expect(span.attributes.get(keys.urlPath) == "/echo-method")
+        #expect(span.attributes.get(keys.urlScheme) == "http")
+        #expect(span.attributes.get(keys.urlQuery) == "foo=bar&Signature=REDACTED")
     }
 
-    func testTraceAttributes_server() async throws {
+    @Test func traceAttributesServer() async throws {
+        let httpBin = HTTPBin()
+        defer { #expect(throws: Never.self) { try httpBin.shutdown() } }
+
         let tracer = InMemoryTracer()
-        var config = HTTPClient.Configuration()
-        config.httpVersion = .automatic
-        config.tracing.tracer = tracer
-
-        let client = HTTPClient(
+        let httpClient = HTTPClient(
             eventLoopGroupProvider: .singleton,
-            configuration: config
+            configuration: makeConfiguration(tracer: tracer)
         )
+        defer { #expect(throws: Never.self) { try httpClient.syncShutdown() } }
 
-        let url = self.defaultHTTPBinURLPrefix + "echo-method?foo=bar&Signature=secretSignature"
-        var request = HTTPClientRequest(url: url)
+        let request = makeRequest(url: httpBin.baseURL + "echo-method?foo=bar&Signature=secretSignature")
+        _ = try await httpClient.execute(request, deadline: .distantFuture)
 
-        request.headers.add(name: "Authorization", value: "Bearer secret")
-        request.headers.add(name: "Password", value: "SuperSecretPassword")
-
-        let _ = try await client.execute(request, deadline: .distantFuture)
-
-        guard tracer.activeSpans.isEmpty else {
-            XCTFail("Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)")
-            return
-        }
-        guard let span = tracer.finishedSpans.first else {
-            XCTFail("No span was recorded!")
-            return
-        }
-        guard let defaultHTTPBinPort = self.defaultHTTPBin.socketAddress.port, let defaultHTTPBinAddress = self.defaultHTTPBin.socketAddress.ipAddress else {
-            XCTFail("Default HTTPBin ip address or port is not set!")
-            return
-        }
-
+        #expect(
+            tracer.activeSpans.isEmpty,
+            "Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)"
+        )
+        let span = try #require(tracer.finishedSpans.first)
+        let defaultHTTPBinPort = try #require(httpBin.socketAddress.port)
+        let defaultHTTPBinAddress = try #require(httpBin.socketAddress.ipAddress)
         let keys = HTTPClient.TracingConfiguration.AttributeKeys()
 
-        XCTAssertEqual(span.attributes.get(keys.serverHostname), .string(defaultHTTPBinAddress.description))
-        XCTAssertEqual(span.attributes.get(keys.serverPort), .int64(Int64(defaultHTTPBinPort)))
-
-        XCTAssertNoThrow(try client.syncShutdown()) 
+        #expect(span.attributes.get(keys.serverHostname) == .string(defaultHTTPBinAddress.description))
+        #expect(span.attributes.get(keys.serverPort) == .int64(Int64(defaultHTTPBinPort)))
     }
 
-    func testTraceAttributes_http() async throws {
+    @Test func traceAttributesHTTP() async throws {
+        let httpBin = HTTPBin()
+        defer { #expect(throws: Never.self) { try httpBin.shutdown() } }
+
         let tracer = InMemoryTracer()
-        var config = HTTPClient.Configuration()
+        var configuration = makeConfiguration(tracer: tracer)
+        configuration.tracing.allowedHeaders = ["Authorization"]
+        let httpClient = HTTPClient(eventLoopGroupProvider: .singleton, configuration: configuration)
+        defer { #expect(throws: Never.self) { try httpClient.syncShutdown() } }
 
-        // By default no headers are allowed to be traced
-        config.tracing.allowedHeaders = ["Authorization"]
-        config.httpVersion = .automatic
-        config.tracing.tracer = tracer
+        let request = makeRequest(url: httpBin.baseURL + "echo-method?foo=bar&Signature=secretSignature")
+        _ = try await httpClient.execute(request, deadline: .distantFuture)
 
-        let client = HTTPClient(
-            eventLoopGroupProvider: .singleton,
-            configuration: config
+        #expect(
+            tracer.activeSpans.isEmpty,
+            "Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)"
         )
-
-        let url = self.defaultHTTPBinURLPrefix + "echo-method?foo=bar&Signature=secretSignature"
-        var request = HTTPClientRequest(url: url)
-
-        request.headers.add(name: "Authorization", value: "Bearer secret")
-        request.headers.add(name: "Password", value: "SuperSecretPassword")
-
-        let _ = try await client.execute(request, deadline: .distantFuture)
-
-        guard tracer.activeSpans.isEmpty else {
-            XCTFail("Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)")
-            return
-        }
-        guard let span = tracer.finishedSpans.first else {
-            XCTFail("No span was recorded!")
-            return
-        }
-
+        let span = try #require(tracer.finishedSpans.first)
         let keys = HTTPClient.TracingConfiguration.AttributeKeys()
 
-        XCTAssertEqual(span.attributes.get(keys.requestMethod), "GET")
-        XCTAssertEqual(span.attributes.get("\(keys.requestHeader).authorization"), .stringArray(["Bearer secret"]))
-        XCTAssertNil(span.attributes.get("\(keys.requestHeader).password"))
-        XCTAssertEqual(span.attributes.get(keys.responseStatusCode), 200)
-
-        XCTAssertNoThrow(try client.syncShutdown()) 
+        #expect(span.attributes.get(keys.requestMethod) == "GET")
+        #expect(span.attributes.get("\(keys.requestHeader).authorization") == .stringArray(["Bearer secret"]))
+        #expect(span.attributes.get("\(keys.requestHeader).password") == nil)
+        #expect(span.attributes.get(keys.responseStatusCode) == 200)
     }
 
-    func testTraceAttributes_pathRedaction() async throws {
+    @Test func traceAttributesPathRedaction() async throws {
+        let httpBin = HTTPBin()
+        defer { #expect(throws: Never.self) { try httpBin.shutdown() } }
+
         let tracer = InMemoryTracer()
-        var config = HTTPClient.Configuration()
-        config.httpVersion = .automatic
-        config.tracing.sensitivePathComponents = ["nested-path"]
-        config.tracing.tracer = tracer
+        var configuration = makeConfiguration(tracer: tracer)
+        configuration.tracing.sensitivePathComponents = ["nested-path"]
+        let httpClient = HTTPClient(eventLoopGroupProvider: .singleton, configuration: configuration)
+        defer { #expect(throws: Never.self) { try httpClient.syncShutdown() } }
 
-        let client = HTTPClient(
-            eventLoopGroupProvider: .singleton,
-            configuration: config
+        let request = makeRequest(url: httpBin.baseURL + "echo-method/nested-path")
+        _ = try await httpClient.execute(request, deadline: .distantFuture)
+
+        #expect(
+            tracer.activeSpans.isEmpty,
+            "Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)"
         )
-
-        let url = self.defaultHTTPBinURLPrefix + "echo-method/nested-path"
-        var request = HTTPClientRequest(url: url)
-
-        request.headers.add(name: "Authorization", value: "Bearer secret")
-        request.headers.add(name: "Password", value: "SuperSecretPassword")
-
-        let _ = try await client.execute(request, deadline: .distantFuture)
-
-        guard tracer.activeSpans.isEmpty else {
-            XCTFail("Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)")
-            return
-        }
-        guard let span = tracer.finishedSpans.first else {
-            XCTFail("No span was recorded!")
-            return
-        }
-
+        let span = try #require(tracer.finishedSpans.first)
         let keys = HTTPClient.TracingConfiguration.AttributeKeys()
 
-        XCTAssertEqual(span.attributes.get(keys.urlPath), "/echo-method/REDACTED")
-
-        XCTAssertNoThrow(try client.syncShutdown()) 
+        #expect(span.attributes.get(keys.urlPath) == "/echo-method/REDACTED")
     }
 
-    func testTraceAttributes_queryRedaction() async throws {
+    @Test func traceAttributesQueryRedaction() async throws {
+        let httpBin = HTTPBin()
+        defer { #expect(throws: Never.self) { try httpBin.shutdown() } }
+
         let tracer = InMemoryTracer()
-        var config = HTTPClient.Configuration()
-        config.httpVersion = .automatic
+        var configuration = makeConfiguration(tracer: tracer)
+        configuration.tracing.sensitiveQueryComponents.insert("foo")
+        let httpClient = HTTPClient(eventLoopGroupProvider: .singleton, configuration: configuration)
+        defer { #expect(throws: Never.self) { try httpClient.syncShutdown() } }
 
-        // Add foo to sensitive query components
-        config.tracing.sensitiveQueryComponents.insert("foo")
-        config.tracing.tracer = tracer
+        let request = makeRequest(url: httpBin.baseURL + "echo-method?foo=bar&Signature=secretSignature&bar=bar")
+        _ = try await httpClient.execute(request, deadline: .distantFuture)
 
-        let client = HTTPClient(
-            eventLoopGroupProvider: .singleton,
-            configuration: config
+        #expect(
+            tracer.activeSpans.isEmpty,
+            "Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)"
         )
-
-        let url = self.defaultHTTPBinURLPrefix + "echo-method?foo=bar&Signature=secretSignature&bar=bar"
-        var request = HTTPClientRequest(url: url)
-
-        request.headers.add(name: "Authorization", value: "Bearer secret")
-        request.headers.add(name: "Password", value: "SuperSecretPassword")
-
-        let _ = try await client.execute(request, deadline: .distantFuture)
-
-        guard tracer.activeSpans.isEmpty else {
-            XCTFail("Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)")
-            return
-        }
-        guard let span = tracer.finishedSpans.first else {
-            XCTFail("No span was recorded!")
-            return
-        }
-
+        let span = try #require(tracer.finishedSpans.first)
         let keys = HTTPClient.TracingConfiguration.AttributeKeys()
 
-        XCTAssertEqual(span.attributes.get(keys.urlQuery), "foo=REDACTED&Signature=REDACTED&bar=bar")
-
-        XCTAssertNoThrow(try client.syncShutdown()) 
+        #expect(span.attributes.get(keys.urlQuery) == "foo=REDACTED&Signature=REDACTED&bar=bar")
     }
 
-    func testTraceAttributes_httpHeadersDisallowedByDefault() async throws {
+    @Test func traceAttributesHTTPHeadersDisallowedByDefault() async throws {
+        let httpBin = HTTPBin()
+        defer { #expect(throws: Never.self) { try httpBin.shutdown() } }
+
         let tracer = InMemoryTracer()
-        var config = HTTPClient.Configuration()
-
-        config.httpVersion = .automatic
-        config.tracing.tracer = tracer
-
-        let client = HTTPClient(
+        let httpClient = HTTPClient(
             eventLoopGroupProvider: .singleton,
-            configuration: config
+            configuration: makeConfiguration(tracer: tracer)
         )
+        defer { #expect(throws: Never.self) { try httpClient.syncShutdown() } }
 
-        let url = self.defaultHTTPBinURLPrefix + "echo-method?foo=bar&Signature=secretSignature"
-        var request = HTTPClientRequest(url: url)
+        let request = makeRequest(url: httpBin.baseURL + "echo-method?foo=bar&Signature=secretSignature")
+        _ = try await httpClient.execute(request, deadline: .distantFuture)
 
-        request.headers.add(name: "Authorization", value: "Bearer secret")
-        request.headers.add(name: "Password", value: "SuperSecretPassword")
+        #expect(
+            tracer.activeSpans.isEmpty,
+            "Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)"
+        )
+        let span = try #require(tracer.finishedSpans.first)
 
-        let _ = try await client.execute(request, deadline: .distantFuture)
-
-        guard tracer.activeSpans.isEmpty else {
-            XCTFail("Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)")
-            return
-        }
-        guard let span = tracer.finishedSpans.first else {
-            XCTFail("No span was recorded!")
-            return
-        }
-
-        XCTAssertEqual(span.operationName, "GET")
-
-        XCTAssertNil(span.attributes.get("http.request.header.authorization"))
-        XCTAssertNil(span.attributes.get("http.request.header.password"))
-
-        XCTAssertNoThrow(try client.syncShutdown()) 
+        #expect(span.operationName == "GET")
+        #expect(span.attributes.get("http.request.header.authorization") == nil)
+        #expect(span.attributes.get("http.request.header.password") == nil)
     }
 
-    func testTraceAttributes_httpHeaders() async throws {
+    @Test func traceAttributesHTTPHeaders() async throws {
+        let httpBin = HTTPBin()
+        defer { #expect(throws: Never.self) { try httpBin.shutdown() } }
+
         let tracer = InMemoryTracer()
-        var config = HTTPClient.Configuration()
+        var configuration = makeConfiguration(tracer: tracer)
+        configuration.tracing.allowedHeaders = ["Authorization", "Password", "X-Method-Used"]
+        let httpClient = HTTPClient(eventLoopGroupProvider: .singleton, configuration: configuration)
+        defer { #expect(throws: Never.self) { try httpClient.syncShutdown() } }
 
-        config.tracing.allowedHeaders = ["Authorization", "Password", "X-Method-Used"]
+        let request = makeRequest(url: httpBin.baseURL + "echo-method?foo=bar&Signature=secretSignature")
+        _ = try await httpClient.execute(request, deadline: .distantFuture)
 
-        config.httpVersion = .automatic
-        config.tracing.tracer = tracer
-
-        let client = HTTPClient(
-            eventLoopGroupProvider: .singleton,
-            configuration: config
+        #expect(
+            tracer.activeSpans.isEmpty,
+            "Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)"
         )
+        let span = try #require(tracer.finishedSpans.first)
 
-        let url = self.defaultHTTPBinURLPrefix + "echo-method?foo=bar&Signature=secretSignature"
+        #expect(span.operationName == "GET")
+        #expect(span.attributes.get("http.request.header.authorization") == .stringArray(["Bearer secret"]))
+        #expect(span.attributes.get("http.request.header.password") == .stringArray(["SuperSecretPassword"]))
+        #expect(span.attributes.get("http.response.header.x_method_used") == .stringArray(["GET"]))
+    }
+
+    private func makeConfiguration(tracer: InMemoryTracer) -> HTTPClient.Configuration {
+        var configuration = HTTPClient.Configuration()
+        configuration.httpVersion = .automatic
+        configuration.tracing.tracer = tracer
+        return configuration
+    }
+
+    private func makeRequest(url: String) -> HTTPClientRequest {
         var request = HTTPClientRequest(url: url)
-
         request.headers.add(name: "Authorization", value: "Bearer secret")
         request.headers.add(name: "Password", value: "SuperSecretPassword")
-
-        let _ = try await client.execute(request, deadline: .distantFuture)
-
-        guard tracer.activeSpans.isEmpty else {
-            XCTFail("Still active spans which were not finished (\(tracer.activeSpans.count))! \(tracer.activeSpans)")
-            return
-        }
-        guard let span = tracer.finishedSpans.first else {
-            XCTFail("No span was recorded!")
-            return
-        }
-
-        XCTAssertEqual(span.operationName, "GET")
-        XCTAssertEqual(span.attributes.get("http.request.header.authorization"), .stringArray(["Bearer secret"]))
-        XCTAssertEqual(span.attributes.get("http.request.header.password"), .stringArray(["SuperSecretPassword"]))
-        XCTAssertEqual(span.attributes.get("http.response.header.x_method_used"), .stringArray(["GET"]))
-
-        XCTAssertNoThrow(try client.syncShutdown()) 
+        return request
     }
 }
