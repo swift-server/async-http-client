@@ -242,8 +242,54 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         case .sendBodyPart(let part, let writePromise):
             context.writeAndFlush(self.wrapOutboundOut(.body(part)), promise: writePromise)
 
-        case .sendRequestEnd(let writePromise):
-            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: writePromise)
+        case .sendRequestEnd(let trailers, let writePromise, let finalAction):
+            // We need to defer succeeding the old request to avoid ordering issues
+            let writePromise = writePromise ?? context.eventLoop.makePromise(of: Void.self)
+            // It is fine to bang the request here, as we have just verified with the state machine
+            // that the request is still ongoing.
+            // TODO: In the future, we should likely move the request into the state machine to
+            //       prevent diverging state.
+            let oldRequest = self.request!
+
+            switch finalAction {
+            case .none:
+                // we must not nil out the request here, as we are still uploading the request
+                // and therefore still need the reference to it.
+                break
+            case .informConnectionIsIdle:
+                self.request = nil
+            case .close:
+                self.request = nil
+            }
+
+            writePromise.futureResult.hop(to: context.eventLoop).assumeIsolated().whenComplete { result in
+                switch result {
+                case .success:
+                    // If our final action is not `none`, that means we've already received
+                    // the complete response. As a result, once we've uploaded all the body parts
+                    // we need to tell the pool that the connection is idle or, if we were asked to
+                    // close when we're done, send the close. Either way, we then succeed the request
+                    switch finalAction {
+                    case .none:
+                        // we must not nil out the request here, as we are still uploading the request
+                        // and therefore still need the reference to it.
+                        break
+
+                    case .informConnectionIsIdle:
+                        self.onConnectionIdle()
+
+                    case .close:
+                        context.close(promise: nil)
+                    }
+                    oldRequest.requestBodyStreamSent()
+
+                case .failure(let error):
+                    context.close(promise: nil)
+                    oldRequest.fail(error)
+                }
+            }
+
+            context.writeAndFlush(self.wrapOutboundOut(.end(trailers)), promise: writePromise)
 
             if let readTimeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
                 self.runTimeoutAction(readTimeoutAction, context: context)
@@ -300,7 +346,7 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             // that the request is neither failed nor finished yet
             self.request!.receiveResponseBodyParts(buffer)
 
-        case .succeedRequest(let finalAction, let buffer):
+        case .forwardResponseEnd(let finalAction, let buffer, let trailers):
             // We can force unwrap the request here, as we have just validated in the state machine,
             // that the request is neither failed nor finished yet
 
@@ -312,41 +358,22 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             // other way around.
 
             let oldRequest = self.request!
-            self.request = nil
             self.runTimeoutAction(.clearIdleReadTimeoutTimer, context: context)
             self.runTimeoutAction(.clearIdleWriteTimeoutTimer, context: context)
 
             switch finalAction {
             case .close:
+                self.request = nil
                 context.close(promise: nil)
-                oldRequest.receiveResponseEnd(buffer, trailers: nil)
-            case .sendRequestEnd(let writePromise, let shouldClose):
-                let writePromise = writePromise ?? context.eventLoop.makePromise(of: Void.self)
-                // We need to defer succeeding the old request to avoid ordering issues
-                writePromise.futureResult.hop(to: context.eventLoop).assumeIsolated().whenComplete { result in
-                    switch result {
-                    case .success:
-                        // If our final action was `sendRequestEnd`, that means we've already received
-                        // the complete response. As a result, once we've uploaded all the body parts
-                        // we need to tell the pool that the connection is idle or, if we were asked to
-                        // close when we're done, send the close. Either way, we then succeed the request
-                        if shouldClose {
-                            context.close(promise: nil)
-                        } else {
-                            self.onConnectionIdle()
-                        }
+                oldRequest.receiveResponseEnd(buffer, trailers: trailers)
 
-                        oldRequest.receiveResponseEnd(buffer, trailers: nil)
-                    case .failure(let error):
-                        context.close(promise: nil)
-                        oldRequest.fail(error)
-                    }
-                }
+            case .none:
+                oldRequest.receiveResponseEnd(buffer, trailers: trailers)
 
-                context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: writePromise)
             case .informConnectionIsIdle:
+                self.request = nil
                 self.onConnectionIdle()
-                oldRequest.receiveResponseEnd(buffer, trailers: nil)
+                oldRequest.receiveResponseEnd(buffer, trailers: trailers)
             }
 
         case .failRequest(let error, let finalAction):
@@ -484,14 +511,18 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         self.run(action, context: context)
     }
 
-    fileprivate func finishRequestBodyStream0(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
+    fileprivate func finishRequestBodyStream0(
+        trailers: HTTPHeaders?,
+        request: HTTPExecutableRequest,
+        promise: EventLoopPromise<Void>?
+    ) {
         guard self.request === request, let context = self.channelContext else {
             // See code comment in `writeRequestBodyPart0`
             promise?.fail(HTTPClientError.requestStreamCancelled)
             return
         }
 
-        let action = self.state.requestStreamFinished(promise: promise)
+        let action = self.state.requestStreamFinished(trailers: trailers, promise: promise)
         self.run(action, context: context)
     }
 
@@ -545,9 +576,13 @@ extension HTTP1ClientChannelHandler {
             }
         }
 
-        func finishRequestBodyStream(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
+        func finishRequestBodyStream(
+            trailers: HTTPHeaders?,
+            request: HTTPExecutableRequest,
+            promise: EventLoopPromise<Void>?
+        ) {
             self.loopBound.execute {
-                $0.finishRequestBodyStream0(request, promise: promise)
+                $0.finishRequestBodyStream0(trailers: trailers, request: request, promise: promise)
             }
         }
 

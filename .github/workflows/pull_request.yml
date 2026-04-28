@@ -10,7 +10,7 @@ on:
 jobs:
     soundness:
         name: Soundness
-        uses: swiftlang/github-workflows/.github/workflows/soundness.yml@main
+        uses: swiftlang/github-workflows/.github/workflows/soundness.yml@0.0.7
         with:
             license_header_check_project_name: "AsyncHTTPClient"
     unit-tests:
@@ -38,3 +38,32 @@ jobs:
     release-builds:
         name: Release builds
         uses: apple/swift-nio/.github/workflows/release_builds.yml@main
+
+    construct-linkage-test-matrix:
+        name: Construct linkage matrix
+        runs-on: ubuntu-latest
+        outputs:
+            linkage-test-matrix: '${{ steps.generate-matrix.outputs.linkage-test-matrix }}'
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+              with:
+                  persist-credentials: false
+            - id: generate-matrix
+              run: echo "linkage-test-matrix=$(curl -s https://raw.githubusercontent.com/apple/swift-nio/main/scripts/generate_matrix.sh | bash)" >> "$GITHUB_OUTPUT"
+              env:
+                  MATRIX_LINUX_SETUP_COMMAND: apt-get update -y && apt-get install -yq jq && git config --global --add safe.directory /async-http-client
+                  MATRIX_LINUX_COMMAND: ./scripts/run-linkage-test.sh
+                  MATRIX_LINUX_5_10_ENABLED: false
+                  MATRIX_LINUX_6_0_ENABLED: false
+                  MATRIX_LINUX_6_1_ENABLED: false
+                  MATRIX_LINUX_NIGHTLY_NEXT_ENABLED: false
+                  MATRIX_LINUX_NIGHTLY_MAIN_ENABLED: false
+
+    linkage-test:
+        name: Linkage test
+        needs: construct-linkage-test-matrix
+        uses: apple/swift-nio/.github/workflows/swift_test_matrix.yml@main
+        with:
+            name: "Linkage test"
+            matrix_string: '${{ needs.construct-linkage-test-matrix.outputs.linkage-test-matrix }}'

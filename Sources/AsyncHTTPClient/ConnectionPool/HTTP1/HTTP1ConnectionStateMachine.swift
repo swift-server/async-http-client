@@ -27,18 +27,12 @@ struct HTTP1ConnectionStateMachine {
     }
 
     enum Action {
-        /// A action to execute, when we consider a request "done".
+        /// An additional action to execute, when either the response or request stream has finished.
         enum FinalSuccessfulStreamAction {
+            /// Nothing todo
+            case none
             /// Close the connection
             case close
-            /// If the server has replied, with a status of 200...300 before all data was sent, a request is considered succeeded,
-            /// as soon as we wrote the request end onto the wire.
-            ///
-            /// The promise is an optional write promise.
-            ///
-            /// `shouldClose` records whether we have attached a Connection: close header to this request, and so the connection should
-            /// be terminated
-            case sendRequestEnd(EventLoopPromise<Void>?, shouldClose: Bool)
             /// Inform an observer that the connection has become idle
             case informConnectionIsIdle
         }
@@ -63,7 +57,7 @@ struct HTTP1ConnectionStateMachine {
             startIdleTimer: Bool
         )
         case sendBodyPart(IOData, EventLoopPromise<Void>?)
-        case sendRequestEnd(EventLoopPromise<Void>?)
+        case sendRequestEnd(trailers: HTTPHeaders?, EventLoopPromise<Void>?, FinalSuccessfulStreamAction)
         case failSendBodyPart(Error, EventLoopPromise<Void>?)
         case failSendStreamFinished(Error, EventLoopPromise<Void>?)
 
@@ -72,9 +66,9 @@ struct HTTP1ConnectionStateMachine {
 
         case forwardResponseHead(HTTPResponseHead, pauseRequestBodyStream: Bool)
         case forwardResponseBodyParts(CircularBuffer<ByteBuffer>)
+        case forwardResponseEnd(FinalSuccessfulStreamAction, CircularBuffer<ByteBuffer>, HTTPHeaders?)
 
         case failRequest(Error, FinalFailedStreamAction)
-        case succeedRequest(FinalSuccessfulStreamAction, CircularBuffer<ByteBuffer>)
 
         case read
         case close
@@ -224,13 +218,13 @@ struct HTTP1ConnectionStateMachine {
         }
     }
 
-    mutating func requestStreamFinished(promise: EventLoopPromise<Void>?) -> Action {
+    mutating func requestStreamFinished(trailers: HTTPHeaders?, promise: EventLoopPromise<Void>?) -> Action {
         guard case .inRequest(var requestStateMachine, let close) = self.state else {
             fatalError("Invalid state: \(self.state)")
         }
 
         return self.avoidingStateMachineCoW { state -> Action in
-            let action = requestStateMachine.requestStreamFinished(promise: promise)
+            let action = requestStateMachine.requestStreamFinished(trailers: trailers, promise: promise)
             state = .inRequest(requestStateMachine, close: close)
             return state.modify(with: action)
         }
@@ -433,15 +427,11 @@ extension HTTP1ConnectionStateMachine.State {
             return .resumeRequestBodyStream
         case .sendBodyPart(let part, let writePromise):
             return .sendBodyPart(part, writePromise)
-        case .sendRequestEnd(let writePromise):
-            return .sendRequestEnd(writePromise)
-        case .forwardResponseHead(let head, let pauseRequestBodyStream):
-            return .forwardResponseHead(head, pauseRequestBodyStream: pauseRequestBodyStream)
-        case .forwardResponseBodyParts(let parts):
-            return .forwardResponseBodyParts(parts)
-        case .succeedRequest(let finalAction, let finalParts):
+        case .sendRequestEnd(let trailers, let writePromise, let finalAction):
             guard case .inRequest(_, close: let close) = self else {
-                fatalError("Invalid state: \(self)")
+                assertionFailure("Invalid state: \(self)")
+                self = .closing
+                return .failRequest(HTTPClientError.internalStateFailure(), .close(writePromise))
             }
 
             let newFinalAction: HTTP1ConnectionStateMachine.Action.FinalSuccessfulStreamAction
@@ -449,14 +439,48 @@ extension HTTP1ConnectionStateMachine.State {
             case .close:
                 self = .closing
                 newFinalAction = .close
-            case .sendRequestEnd(let writePromise):
-                self = .idle
-                newFinalAction = .sendRequestEnd(writePromise, shouldClose: close)
+            case .requestDone:
+                if close {
+                    self = .closing
+                    newFinalAction = .close
+                } else {
+                    self = .idle
+                    newFinalAction = .informConnectionIsIdle
+                }
             case .none:
-                self = .idle
-                newFinalAction = close ? .close : .informConnectionIsIdle
+                newFinalAction = .none
             }
-            return .succeedRequest(newFinalAction, finalParts)
+            return .sendRequestEnd(trailers: trailers, writePromise, newFinalAction)
+
+        case .forwardResponseHead(let head, let pauseRequestBodyStream):
+            return .forwardResponseHead(head, pauseRequestBodyStream: pauseRequestBodyStream)
+        case .forwardResponseBodyParts(let parts):
+            return .forwardResponseBodyParts(parts)
+        case .forwardResponseEnd(let finalAction, let finalParts, let trailers):
+            guard case .inRequest(_, close: let close) = self else {
+                assertionFailure("Invalid state: \(self)")
+                self = .closing
+                return .failRequest(HTTPClientError.internalStateFailure(), .close(nil))
+            }
+
+            let newFinalAction: HTTP1ConnectionStateMachine.Action.FinalSuccessfulStreamAction
+            switch finalAction {
+            case .close:
+                self = .closing
+                newFinalAction = .close
+            case .requestDone:
+                if close {
+                    self = .closing
+                    newFinalAction = .close
+                } else {
+                    self = .idle
+                    newFinalAction = .informConnectionIsIdle
+                }
+            case .none:
+                // request is ongoing. request stream is still alive
+                newFinalAction = .none
+            }
+            return .forwardResponseEnd(newFinalAction, finalParts, trailers)
 
         case .failRequest(let error, let finalAction):
             switch self {

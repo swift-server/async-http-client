@@ -14,7 +14,12 @@
 
 #if canImport(Network)
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
+import Dispatch
 import Network
 import NIOCore
 import NIOSSL

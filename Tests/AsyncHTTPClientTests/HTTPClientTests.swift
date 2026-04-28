@@ -26,11 +26,11 @@ import NIOHTTPCompression
 import NIOPosix
 import NIOSSL
 import NIOTestUtils
-import NIOTransportServices
 import XCTest
 
 #if canImport(Network)
 import Network
+import NIOTransportServices
 #endif
 
 final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
@@ -4574,6 +4574,102 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         ) {
             XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
         }
+    }
+
+    private func _testPostConvertedToGetOnRedirect(
+        statusPath: String,
+        expectedStatus: HTTPResponseStatus,
+        retainHTTPMethodAndBodyOn301: Bool,
+        retainHTTPMethodAndBodyOn302: Bool,
+        expectRetain: Bool
+    ) throws {
+        let bin = HTTPBin(.http1_1())
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: HTTPClient.Configuration(
+                redirectConfiguration: .follow(
+                    configuration: .init(
+                        max: 10,
+                        allowCycles: false,
+                        retainHTTPMethodAndBodyOn301: retainHTTPMethodAndBodyOn301,
+                        retainHTTPMethodAndBodyOn302: retainHTTPMethodAndBodyOn302
+                    )
+                )
+            )
+        )
+        defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+
+        let request = try HTTPClient.Request(
+            url: "http://localhost:\(bin.port)\(statusPath)",
+            method: .POST,
+            headers: HTTPHeaders(),
+            body: .string("test body")
+        )
+        let response = try localClient.execute(request: request).wait()
+        XCTAssertEqual(response.status, .ok)
+        guard response.history.count == 2 else {
+            return XCTFail("Expected 2 entries in history for \(statusPath)")
+        }
+        XCTAssertEqual(response.history[0].request.method, .POST)
+        if expectRetain {
+            XCTAssertEqual(response.history[1].request.method, .POST)
+        } else {
+            XCTAssertEqual(response.history[1].request.method, .GET)
+        }
+        XCTAssertEqual(response.history[0].responseHead.status, expectedStatus)
+    }
+
+    func testPostConvertedToGetOn301Redirect() throws {
+        for retainHTTPMethodAndBody in [true, false] {
+            try _testPostConvertedToGetOnRedirect(
+                statusPath: "/redirect/301",
+                expectedStatus: .movedPermanently,
+                retainHTTPMethodAndBodyOn301: retainHTTPMethodAndBody,
+                retainHTTPMethodAndBodyOn302: false,
+                expectRetain: retainHTTPMethodAndBody
+            )
+        }
+    }
+
+    func testPostConvertedToGetOn302Redirect() throws {
+        for retainHTTPMethodAndBody in [true, false] {
+            try _testPostConvertedToGetOnRedirect(
+                statusPath: "/redirect/302",
+                expectedStatus: .found,
+                retainHTTPMethodAndBodyOn301: false,
+                retainHTTPMethodAndBodyOn302: retainHTTPMethodAndBody,
+                expectRetain: retainHTTPMethodAndBody
+            )
+        }
+    }
+
+    func testLocalAddressBinding_configLevel() throws {
+        // On Linux, 127.0.0.0/8 all route to loopback, so we can use a
+        // non-default address to prove the bind actually happened.
+        #if os(Linux)
+        let localAddress = "127.0.0.127"
+        #else
+        let localAddress = "127.0.0.1"
+        #endif
+
+        let bin = HTTPBin(.http1_1(ssl: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        var config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+        config.localAddress = localAddress
+
+        let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        let response = try client.get(url: "http://127.0.0.1:\(bin.port)/echo-client-ip").wait()
+        XCTAssertEqual(response.status, .ok)
+
+        let bytes = response.body.flatMap { $0.getData(at: 0, length: $0.readableBytes) }
+        let data = try JSONDecoder().decode(RequestInfo.self, from: bytes!)
+        XCTAssertEqual(data.data, localAddress)
     }
 }
 

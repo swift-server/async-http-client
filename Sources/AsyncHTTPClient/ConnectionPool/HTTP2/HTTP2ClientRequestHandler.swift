@@ -196,8 +196,16 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         case .sendBodyPart(let data, let writePromise):
             context.writeAndFlush(self.wrapOutboundOut(.body(data)), promise: writePromise)
 
-        case .sendRequestEnd(let writePromise):
-            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: writePromise)
+        case .sendRequestEnd(let trailers, let writePromise, let finalAction):
+            let promise = writePromise ?? context.eventLoop.makePromise(of: Void.self)
+            // We can force unwrap the request here, as we have just validated in the state machine,
+            // that the request is neither failed nor finished yet
+            let request = self.request!
+            promise.futureResult.whenSuccess {
+                request.requestBodyStreamSent()
+            }
+
+            context.writeAndFlush(self.wrapOutboundOut(.end(trailers)), promise: promise)
 
             if let readTimeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
                 self.runTimeoutAction(readTimeoutAction, context: context)
@@ -206,6 +214,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             if let writeTimeoutAction = self.idleWriteTimeoutStateMachine?.requestEndSent() {
                 self.runTimeoutAction(writeTimeoutAction, context: context)
             }
+            self.runSuccessfulFinalAction(finalAction, context: context)
 
         case .read:
             context.read()
@@ -247,10 +256,10 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             // the right result for HTTP/1). In the h2 case we MUST always close.
             self.runFailedFinalAction(finalAction, context: context, error: error)
 
-        case .succeedRequest(let finalAction, let finalParts):
+        case .forwardResponseEnd(let finalAction, let finalParts, let trailers):
             // We can force unwrap the request here, as we have just validated in the state machine,
             // that the request object is still present.
-            self.request!.receiveResponseEnd(finalParts, trailers: nil)
+            self.request!.receiveResponseEnd(finalParts, trailers: trailers)
             self.request = nil
             self.runTimeoutAction(.clearIdleReadTimeoutTimer, context: context)
             self.runTimeoutAction(.clearIdleWriteTimeoutTimer, context: context)
@@ -277,14 +286,11 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         context: ChannelHandlerContext
     ) {
         switch action {
-        case .close, .none:
+        case .close, .none, .requestDone:
             // The actions returned here come from an `HTTPRequestStateMachine` that assumes http/1.1
             // semantics. For this reason we can ignore the close here, since an h2 stream is closed
             // after every request anyway.
             break
-
-        case .sendRequestEnd(let writePromise):
-            context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: writePromise)
         }
     }
 
@@ -399,13 +405,17 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         self.run(action, context: context)
     }
 
-    private func finishRequestBodyStream0(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
+    private func finishRequestBodyStream0(
+        trailers: HTTPHeaders?,
+        request: HTTPExecutableRequest,
+        promise: EventLoopPromise<Void>?
+    ) {
         guard self.request === request, let context = self.channelContext else {
             // See code comment in `writeRequestBodyPart0`
             return
         }
 
-        let action = self.state.requestStreamFinished(promise: promise)
+        let action = self.state.requestStreamFinished(trailers: trailers, promise: promise)
         self.run(action, context: context)
     }
 
@@ -455,9 +465,13 @@ extension HTTP2ClientRequestHandler {
             }
         }
 
-        func finishRequestBodyStream(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
+        func finishRequestBodyStream(
+            trailers: HTTPHeaders?,
+            request: HTTPExecutableRequest,
+            promise: EventLoopPromise<Void>?
+        ) {
             self.loopBound.execute {
-                $0.finishRequestBodyStream0(request, promise: promise)
+                $0.finishRequestBodyStream0(trailers: trailers, request: request, promise: promise)
             }
         }
 

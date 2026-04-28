@@ -602,10 +602,13 @@ final class RequestBagTests: XCTestCase {
                     }.always { result in
                         XCTAssertTrue(firstWriteSuccess.withLockedValue { $0 })
 
-                        guard case .failure(let error) = result else {
-                            return XCTFail("Expected the second write to fail")
+                        switch result {
+                        case .success:
+                            // upload can now continue even after we have received the response end.
+                            break
+                        case .failure(let failure):
+                            XCTFail("Unexpected error: \(failure)")
                         }
-                        XCTAssertEqual(error as? HTTPClientError, .requestStreamCancelled)
                     }
                 }
             )
@@ -641,9 +644,11 @@ final class RequestBagTests: XCTestCase {
         bag.receiveResponseHead(.init(version: .http1_1, status: .movedPermanently))
         XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
         bag.receiveResponseEnd([], trailers: nil)
+        XCTAssertEqual(delegate.hitDidReceiveResponse, 0)
 
         // if we now write our second part of the response this should fail the backpressure promise
         writeSecondPartPromise.succeed(())
+        XCTAssertEqual(delegate.hitDidReceiveResponse, 1)
 
         XCTAssertEqual(delegate.receivedHead?.status, .movedPermanently)
         XCTAssertNoThrow(try bag.task.futureResult.wait())
@@ -726,7 +731,14 @@ final class RequestBagTests: XCTestCase {
                 redirectHandler: .init(
                     request: request,
                     redirectState: RedirectState(
-                        .follow(max: 5, allowCycles: false),
+                        .follow(
+                            .init(
+                                max: 5,
+                                allowCycles: false,
+                                retainHTTPMethodAndBodyOn301: false,
+                                retainHTTPMethodAndBodyOn302: false
+                            )
+                        ),
                         initialURL: request.url.absoluteString
                     )!,
                     execute: { request, _ in
@@ -814,7 +826,14 @@ final class RequestBagTests: XCTestCase {
                 redirectHandler: .init(
                     request: request,
                     redirectState: RedirectState(
-                        .follow(max: 5, allowCycles: false),
+                        .follow(
+                            .init(
+                                max: 5,
+                                allowCycles: false,
+                                retainHTTPMethodAndBodyOn301: false,
+                                retainHTTPMethodAndBodyOn302: false
+                            )
+                        ),
                         initialURL: request.url.absoluteString
                     )!,
                     execute: { request, _ in
@@ -876,7 +895,14 @@ final class RequestBagTests: XCTestCase {
                 redirectHandler: .init(
                     request: request,
                     redirectState: RedirectState(
-                        .follow(max: 5, allowCycles: false),
+                        .follow(
+                            .init(
+                                max: 5,
+                                allowCycles: false,
+                                retainHTTPMethodAndBodyOn301: false,
+                                retainHTTPMethodAndBodyOn302: false
+                            )
+                        ),
                         initialURL: request.url.absoluteString
                     )!,
                     execute: { request, _ in
@@ -986,6 +1012,40 @@ final class RequestBagTests: XCTestCase {
             print("HTTP done")
         }
         XCTAssertTrue(isKnownUniquelyReferenced(&leakDetector))
+    }
+
+    func testRequestBagPassesLocalAddressToPoolKey() throws {
+        let request = try HTTPClient.Request(url: "https://example.com/get")
+        let eventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try eventLoop.syncShutdownGracefully()) }
+        let task = HTTPClient.Task<HTTPClient.Response>(eventLoop: eventLoop, logger: .init(label: "test"))
+        let requestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .indifferent,
+            task: task,
+            redirectHandler: nil,
+            connectionDeadline: .distantFuture,
+            requestOptions: .forTests(localAddress: "10.0.0.1"),
+            delegate: ResponseAccumulator(request: request)
+        )
+        XCTAssertEqual(requestBag.poolKey.localAddress, "10.0.0.1")
+    }
+
+    func testRequestBagPoolKeyNilLocalAddressByDefault() throws {
+        let request = try HTTPClient.Request(url: "https://example.com/get")
+        let eventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try eventLoop.syncShutdownGracefully()) }
+        let task = HTTPClient.Task<HTTPClient.Response>(eventLoop: eventLoop, logger: .init(label: "test"))
+        let requestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .indifferent,
+            task: task,
+            redirectHandler: nil,
+            connectionDeadline: .distantFuture,
+            requestOptions: .forTests(),
+            delegate: ResponseAccumulator(request: request)
+        )
+        XCTAssertNil(requestBag.poolKey.localAddress)
     }
 }
 
@@ -1111,12 +1171,14 @@ extension RequestOptions {
     static func forTests(
         idleReadTimeout: TimeAmount? = nil,
         idleWriteTimeout: TimeAmount? = nil,
-        dnsOverride: [String: String] = [:]
+        dnsOverride: [String: String] = [:],
+        localAddress: String? = nil
     ) -> Self {
         RequestOptions(
             idleReadTimeout: idleReadTimeout,
             idleWriteTimeout: idleWriteTimeout,
-            dnsOverride: dnsOverride
+            dnsOverride: dnsOverride,
+            localAddress: localAddress
         )
     }
 }
