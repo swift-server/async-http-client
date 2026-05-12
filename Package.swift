@@ -34,6 +34,13 @@ let strictConcurrencySettings: [SwiftSetting] = {
 
 let package = Package(
     name: "async-http-client",
+    platforms: [
+        .macOS(.v15),
+        .iOS(.v18),
+        .watchOS(.v11),
+        .tvOS(.v18),
+        .visionOS(.v2),
+    ],
     products: [
         .library(name: "AsyncHTTPClient", targets: ["AsyncHTTPClient"])
     ],
