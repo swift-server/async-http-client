@@ -178,11 +178,13 @@ extension HTTPClient {
                 }
                 return try await withCheckedThrowingContinuation {
                     (continuation: CheckedContinuation<HTTPClientResponse, Swift.Error>) -> Void in
+                    var requestOptions = RequestOptions.fromClientConfiguration(self.configuration)
+                    requestOptions.apply(stallTimeout: request.stallTimeout)
                     let transaction = Transaction(
                         request: request,
-                        requestOptions: .fromClientConfiguration(self.configuration),
+                        requestOptions: requestOptions,
                         logger: logger,
-                        connectionDeadline: .now() + (self.configuration.timeout.connectionCreationTimeout),
+                        connectionDeadline: .now() + requestOptions.connectionCreationTimeout,
                         preferredEventLoop: eventLoop,
                         responseContinuation: continuation
                     )
