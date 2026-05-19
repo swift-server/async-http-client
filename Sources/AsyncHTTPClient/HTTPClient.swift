@@ -1477,6 +1477,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case invalidHTTPVersionConfiguration
         case invalidDNSOverridesConfiguration
         case invalidLocalAddress
+        case invalidProxyConfiguration
         case internalStateFailure(file: String, line: UInt)
     }
 
@@ -1572,6 +1573,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
                 "The DNS overrides specified in the configuration are not valid. Please specify in the format hostname1:ip1,hostname2:ip2"
         case .invalidLocalAddress:
             return "Invalid local address"
+        case .invalidProxyConfiguration:
+            return "The proxy configuration is not valid"
         case .internalStateFailure(let file, let line):
             return
                 "An internal state failure has occurred (File: \(file), line: \(line)). Please open an issue with a reproducer if possible"
@@ -1677,6 +1680,9 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
 
     /// The local address specified is not a valid IP address.
     public static let invalidLocalAddress = HTTPClientError(code: .invalidLocalAddress)
+
+    /// The proxy configuration is not valid.
+    public static let invalidProxyConfiguration = HTTPClientError(code: .invalidProxyConfiguration)
 
     /// A state machine has reached an unsupported state, that wasn't considered when implementing.
     public static func internalStateFailure(file: String = #fileID, line: UInt = #line) -> HTTPClientError {
