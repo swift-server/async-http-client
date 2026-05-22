@@ -34,6 +34,9 @@ extension RequestBag.LoopBoundState {
             "Unexpected active span when starting new request span! Was: \(String(describing: self.activeSpan))"
         )
         self.activeSpan = tracer.startSpan("\(request.method)", ofKind: .client)
+        if let activeSpan {
+            TracingSupport.handleRequestTracingAttributes(activeSpan, request, configuration: tracing)
+        }
     }
 
     /// Fails the active overall span given some internal error, e.g. timeout, pool shutdown etc.

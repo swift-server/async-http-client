@@ -27,9 +27,7 @@ extension HTTPClient {
         }
 
         return try await tracer.withSpan(request.method.rawValue, ofKind: .client) { span in
-            let keys = self.configuration.tracing.attributeKeys
-            span.attributes[keys.requestMethod] = request.method.rawValue
-            // TODO: set more attributes on the span
+            TracingSupport.handleRequestTracingAttributes(span, request, configuration: self.tracing)
             let response = try await body()
 
             // set response span attributes

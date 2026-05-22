@@ -18,7 +18,8 @@ import struct FoundationEssentials.URL
 import struct Foundation.URL
 #endif
 
-struct DeconstructedURL {
+@usableFromInline
+struct DeconstructedURL: Sendable {
     var scheme: Scheme
     var connectionTarget: ConnectionTarget
     var uri: String
@@ -42,6 +43,7 @@ extension DeconstructedURL {
         try self.init(url: url)
     }
 
+    @usableFromInline
     init(url: URL) throws {
         guard let schemeString = url.scheme else {
             throw HTTPClientError.emptyScheme

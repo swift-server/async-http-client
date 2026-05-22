@@ -238,6 +238,7 @@ extension HTTPClient {
         public var tlsConfiguration: TLSConfiguration?
 
         /// Parsed, validated and deconstructed URL.
+        @usableFromInline
         let deconstructedURL: DeconstructedURL
 
         /// Create HTTP request.

@@ -1143,7 +1143,7 @@ public final class HTTPClient: Sendable {
         }
 
         /// Span attribute keys that the HTTPClient should set automatically.
-        /// This struct allows the configuration of the attribute names (keys) which will be used for the apropriate values.
+        /// This struct allows the configuration of the attribute names (keys) which will be used for the appropriate values.
         @usableFromInline
         package struct AttributeKeys: Sendable {
             @usableFromInline package var requestMethod: String = "http.request.method"
@@ -1153,6 +1153,14 @@ public final class HTTPClient: Sendable {
             @usableFromInline package var responseStatusCode: String = "http.status_code"
 
             @usableFromInline package var httpFlavor: String = "http.flavor"
+
+            @usableFromInline package var serverAddress: String = "server.address"
+            @usableFromInline package var serverPort: String = "server.port"
+
+            @usableFromInline package var urlScheme: String = "url.scheme"
+            @usableFromInline package var urlPath: String = "url.path"
+            @usableFromInline package var urlQuery: String = "url.query"
+            @usableFromInline package var fullUrl: String = "url.full"
 
             @usableFromInline package init() {}
         }
