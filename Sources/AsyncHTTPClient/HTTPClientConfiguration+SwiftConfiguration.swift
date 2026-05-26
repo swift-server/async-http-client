@@ -167,7 +167,7 @@ extension HTTPClient.Configuration.Proxy {
     ///   Only supported for `http` proxies.
     ///
     /// - Throws: `HTTPClientError.invalidProxyConfiguration` if `enabled` is `true` but `host` is missing, `type` is unknown,
-    ///   `port` is missing for an HTTP proxy, or authorization is specified for a SOCKS proxy.
+    ///   `port` is missing for an HTTP proxy, or `authorization` is specified for a SOCKS proxy, or `authorization` is invalid (see ``HTTPClient/Authorization/init(configReader:)``)
     public init?(configReader: ConfigReader) throws {
         guard configReader.bool(forKey: "enabled", default: false) else {
             return nil
