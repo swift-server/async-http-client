@@ -47,11 +47,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         let request3 = try Request(url: "unix:///tmp/file")
         XCTAssertEqual(request3.host, "")
-        #if os(Linux) && compiler(<6.1)
-        XCTAssertEqual(request3.url.host, "")
-        #else
         XCTAssertNil(request3.url.host)
-        #endif
         XCTAssertEqual(request3.url.path, "/tmp/file")
         XCTAssertEqual(request3.port, 80)
         XCTAssertFalse(request3.useTLS)
