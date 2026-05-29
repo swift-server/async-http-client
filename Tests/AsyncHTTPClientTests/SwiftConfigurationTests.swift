@@ -427,7 +427,7 @@ struct HTTPClientConfigurationPropsTests {
             "proxy.port": 8080,
         ])
         let configReader = ConfigReader(provider: testProvider)
-        #expect(throws: HTTPClientError.invalidProxyConfiguration) {
+        #expect(throws: (any Error).self) {
             _ = try HTTPClient.Configuration(configReader: configReader)
         }
     }
@@ -440,7 +440,7 @@ struct HTTPClientConfigurationPropsTests {
             "proxy.host": "proxy.example.com",
         ])
         let configReader = ConfigReader(provider: testProvider)
-        #expect(throws: HTTPClientError.invalidProxyConfiguration) {
+        #expect(throws: (any Error).self) {
             _ = try HTTPClient.Configuration(configReader: configReader)
         }
     }
@@ -455,7 +455,7 @@ struct HTTPClientConfigurationPropsTests {
             "proxy.type": "unknown",
         ])
         let configReader = ConfigReader(provider: testProvider)
-        #expect(throws: HTTPClientError.invalidProxyConfiguration) {
+        #expect(throws: (any Error).self) {
             _ = try HTTPClient.Configuration(configReader: configReader)
         }
     }

@@ -172,16 +172,12 @@ extension HTTPClient.Configuration.Proxy {
         guard configReader.bool(forKey: "enabled", default: false) else {
             return nil
         }
-        guard let host = configReader.string(forKey: "host") else {
-            throw HTTPClientError.invalidProxyConfiguration
-        }
+        let host = try configReader.requiredString(forKey: "host")
         let type = configReader.string(forKey: "type", default: "http")
         let authorization = try HTTPClient.Authorization(configReader: configReader.scoped(to: "authorization"))
         switch type {
         case "http":
-            guard let port = configReader.int(forKey: "port") else {
-                throw HTTPClientError.invalidProxyConfiguration
-            }
+            let port = try configReader.requiredInt(forKey: "port")
             self = .server(host: host, port: port, authorization: authorization)
         case "socks":
             if authorization != nil {
