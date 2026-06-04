@@ -17,10 +17,6 @@ import NIOCore
 import NIOHTTP1
 import NIOSSL
 
-#if canImport(HTTPAPIs)
-import HTTPAPIs
-#endif
-
 @usableFromInline
 let bagOfBytesToByteBufferConversionChunkSize = 1024 * 1024 * 4
 
@@ -431,10 +427,8 @@ extension HTTPClientRequest.Body: AsyncSequence {
             return .init(storage: .byteBuffer(makeCompleteBody(AsyncIterator.allocator)))
         case .byteBuffer(let byteBuffer):
             return .init(storage: .byteBuffer(byteBuffer))
-        #if canImport(HTTPAPIs)
         case .httpClientRequestBody:
             fatalError("Unimplemented")
-        #endif
         }
     }
 }

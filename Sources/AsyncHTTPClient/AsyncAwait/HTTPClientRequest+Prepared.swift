@@ -104,8 +104,8 @@ extension HTTPClientRequest.Prepared.Body {
         case .byteBuffer(let byteBuffer):
             self = .byteBuffer(byteBuffer)
 
-        case .httpClientRequestBody(let lenght, let requestBody):
-            self = .httpClientRequestBody(lenght, requestBody)
+        case .httpClientRequestBody(let length, let requestBody):
+            self = .httpClientRequestBody(length, requestBody)
         }
     }
 }
