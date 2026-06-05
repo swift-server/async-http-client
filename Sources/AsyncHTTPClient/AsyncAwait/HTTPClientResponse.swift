@@ -174,7 +174,7 @@ extension HTTPClientResponse {
             switch self.storage {
             case .transaction(_, let transaction, _):
                 return transaction.trailers
-                
+
             case .anyAsyncSequence:
                 return nil
             }

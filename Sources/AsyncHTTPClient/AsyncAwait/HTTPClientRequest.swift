@@ -110,7 +110,12 @@ extension HTTPClientRequest {
         @_spi(ExperimentalHTTPAPIsSupport)
         public init(length: Int64?, startUpload: AsyncStream<RequestWriter>.Continuation) {
             let length = length.map { RequestBodyLength.known($0) } ?? .unknown
-            self.init(.httpClientRequestBody(length: length, startUpload: RequestWriterContinuation(continuation: startUpload)))
+            self.init(
+                .httpClientRequestBody(
+                    length: length,
+                    startUpload: RequestWriterContinuation(continuation: startUpload)
+                )
+            )
         }
 
         @usableFromInline

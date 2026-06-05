@@ -412,4 +412,3 @@ extension Transaction: NIOAsyncSequenceProducerDelegate {
         self.httpResponseStreamTerminated()
     }
 }
-
