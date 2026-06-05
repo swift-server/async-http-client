@@ -25,11 +25,13 @@ extension HTTPClient.Configuration {
     /// - `redirect` (scoped): Redirect handling configuration read by ``RedirectConfiguration/init(configReader:)``.
     /// - `timeout` (scoped): Timeout configuration read by ``Timeout/init(configReader:)``.
     /// - `connectionPool` (scoped): Connection pool configuration read by ``ConnectionPool/init(configReader:)``.
+    /// - `proxy` (scoped, optional): Proxy configuration read by ``Proxy/init(configReader:)``. Only applied if `proxy.enabled` is `true`.
     /// - `httpVersion` (string, optional, default: automatic): HTTP version to use ( "automatic" or  "http1Only").
     /// - `maximumUsesPerConnection` (int, optional, default: nil, no limit): Maximum uses per connection.
     ///
     /// - Throws: `HTTPClientError.invalidRedirectConfiguration` if redirect mode is invalid.
     /// - Throws: `HTTPClientError.invalidHTTPVersionConfiguration` if httpVersion is specified but invalid.
+    /// - Throws: `HTTPClientError.invalidProxyConfiguration` if proxy configuration is invalid.
     public init(configReader: ConfigReader) throws {
         self.init()
 
@@ -51,6 +53,9 @@ extension HTTPClient.Configuration {
         self.redirectConfiguration = try .init(configReader: configReader.scoped(to: "redirect"))
         self.timeout = .init(configReader: configReader.scoped(to: "timeout"))
         self.connectionPool = .init(configReader: configReader.scoped(to: "connectionPool"))
+        if let proxy = try Proxy(configReader: configReader.scoped(to: "proxy")) {
+            self.proxy = proxy
+        }
         if let version = try HTTPVersion(configReader: configReader) {
             self.httpVersion = version
         }
@@ -146,6 +151,81 @@ extension HTTPClient.Configuration.HTTPVersion {
             throw HTTPClientError.invalidHTTPVersionConfiguration
         }
         self = .init(configuration: base)
+    }
+}
+
+@available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+extension HTTPClient.Configuration.Proxy {
+    /// Initializes proxy configuration from a ConfigReader.
+    ///
+    /// ## Configuration keys:
+    /// - `enabled` (bool, optional, default: false): Whether proxy support is enabled. If `false`, the initializer returns `nil`.
+    /// - `host` (string): Proxy server host. Required when `enabled` is `true`.
+    /// - `port` (int): Proxy server port. Required for `http` proxies; defaults to `1080` for `socks` proxies.
+    /// - `type` (string, optional, default: "http"): Proxy type ("http" or "socks").
+    /// - `authorization` (scoped, optional): Authorization configuration read by ``HTTPClient/Authorization/init(configReader:)``.
+    ///   Only supported for `http` proxies.
+    ///
+    /// - Throws: `HTTPClientError.invalidProxyConfiguration` if `enabled` is `true` but `host` is missing, `type` is unknown,
+    ///   `port` is missing for an HTTP proxy, or `authorization` is specified for a SOCKS proxy, or `authorization` is invalid (see ``HTTPClient/Authorization/init(configReader:)``)
+    public init?(configReader: ConfigReader) throws {
+        guard configReader.bool(forKey: "enabled", default: false) else {
+            return nil
+        }
+        let host = try configReader.requiredString(forKey: "host")
+        let type = configReader.string(forKey: "type", default: "http")
+        let authorization = try HTTPClient.Authorization(configReader: configReader.scoped(to: "authorization"))
+        switch type {
+        case "http":
+            let port = try configReader.requiredInt(forKey: "port")
+            self = .server(host: host, port: port, authorization: authorization)
+        case "socks":
+            if authorization != nil {
+                throw HTTPClientError.invalidProxyConfiguration
+            }
+            let port = configReader.int(forKey: "port", default: 1080)
+            self = .socksServer(host: host, port: port)
+        default:
+            throw HTTPClientError.invalidProxyConfiguration
+        }
+    }
+}
+
+@available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+extension HTTPClient.Authorization {
+    /// Initializes HTTP authorization from a ConfigReader.
+    ///
+    /// ## Configuration keys:
+    /// - `scheme` (string, optional): Authorization scheme ("basic" or "bearer"). If absent, the initializer returns `nil`.
+    /// - `username` (string): Username for basic authentication. Required (alongside `password`) when `scheme` is "basic" and `credentials` is not set.
+    /// - `password` (string): Password for basic authentication. Required (alongside `username`) when `scheme` is "basic" and `credentials` is not set.
+    /// - `credentials` (string): Pre-encoded basic credentials. Used when `scheme` is "basic" and `username`/`password` are not both provided.
+    /// - `token` (string): Bearer token. Required when `scheme` is "bearer".
+    ///
+    /// - Throws: `HTTPClientError.invalidProxyConfiguration` if `scheme` is unknown or required keys are missing.
+    public init?(configReader: ConfigReader) throws {
+        guard let scheme = configReader.string(forKey: "scheme") else {
+            return nil
+        }
+        switch scheme {
+        case "basic":
+            if let username = configReader.string(forKey: "username"),
+                let password = configReader.string(forKey: "password")
+            {
+                self = .basic(username: username, password: password)
+            } else if let credentials = configReader.string(forKey: "credentials") {
+                self = .basic(credentials: credentials)
+            } else {
+                throw HTTPClientError.invalidProxyConfiguration
+            }
+        case "bearer":
+            guard let token = configReader.string(forKey: "token") else {
+                throw HTTPClientError.invalidProxyConfiguration
+            }
+            self = .bearer(tokens: token)
+        default:
+            throw HTTPClientError.invalidProxyConfiguration
+        }
     }
 }
 #endif

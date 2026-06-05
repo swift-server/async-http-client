@@ -1013,6 +1013,40 @@ final class RequestBagTests: XCTestCase {
         }
         XCTAssertTrue(isKnownUniquelyReferenced(&leakDetector))
     }
+
+    func testRequestBagPassesLocalAddressToPoolKey() throws {
+        let request = try HTTPClient.Request(url: "https://example.com/get")
+        let eventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try eventLoop.syncShutdownGracefully()) }
+        let task = HTTPClient.Task<HTTPClient.Response>(eventLoop: eventLoop, logger: .init(label: "test"))
+        let requestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .indifferent,
+            task: task,
+            redirectHandler: nil,
+            connectionDeadline: .distantFuture,
+            requestOptions: .forTests(localAddress: "10.0.0.1"),
+            delegate: ResponseAccumulator(request: request)
+        )
+        XCTAssertEqual(requestBag.poolKey.localAddress, "10.0.0.1")
+    }
+
+    func testRequestBagPoolKeyNilLocalAddressByDefault() throws {
+        let request = try HTTPClient.Request(url: "https://example.com/get")
+        let eventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try eventLoop.syncShutdownGracefully()) }
+        let task = HTTPClient.Task<HTTPClient.Response>(eventLoop: eventLoop, logger: .init(label: "test"))
+        let requestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .indifferent,
+            task: task,
+            redirectHandler: nil,
+            connectionDeadline: .distantFuture,
+            requestOptions: .forTests(),
+            delegate: ResponseAccumulator(request: request)
+        )
+        XCTAssertNil(requestBag.poolKey.localAddress)
+    }
 }
 
 extension HTTPClient.Task {
@@ -1137,12 +1171,14 @@ extension RequestOptions {
     static func forTests(
         idleReadTimeout: TimeAmount? = nil,
         idleWriteTimeout: TimeAmount? = nil,
-        dnsOverride: [String: String] = [:]
+        dnsOverride: [String: String] = [:],
+        localAddress: String? = nil
     ) -> Self {
         RequestOptions(
             idleReadTimeout: idleReadTimeout,
             idleWriteTimeout: idleWriteTimeout,
-            dnsOverride: dnsOverride
+            dnsOverride: dnsOverride,
+            localAddress: localAddress
         )
     }
 }

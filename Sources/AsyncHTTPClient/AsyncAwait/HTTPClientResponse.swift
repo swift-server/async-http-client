@@ -15,7 +15,11 @@
 import NIOCore
 import NIOHTTP1
 
+#if canImport(FoundationEssentials)
+import struct FoundationEssentials.URL
+#else
 import struct Foundation.URL
+#endif
 
 /// A representation of an HTTP response for the Swift Concurrency HTTPClient API.
 ///

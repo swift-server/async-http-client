@@ -21,15 +21,20 @@ struct RequestOptions {
     var idleWriteTimeout: TimeAmount?
     /// DNS overrides.
     var dnsOverride: [String: String]
+    /// The local IP address to bind outgoing connections to. This is typically used on multi-NIC
+    /// systems where we want to control where traffic goes.
+    var localAddress: String?
 
     init(
         idleReadTimeout: TimeAmount?,
         idleWriteTimeout: TimeAmount?,
-        dnsOverride: [String: String]
+        dnsOverride: [String: String],
+        localAddress: String? = nil
     ) {
         self.idleReadTimeout = idleReadTimeout
         self.idleWriteTimeout = idleWriteTimeout
         self.dnsOverride = dnsOverride
+        self.localAddress = localAddress
     }
 }
 
@@ -38,7 +43,8 @@ extension RequestOptions {
         RequestOptions(
             idleReadTimeout: configuration.timeout.read,
             idleWriteTimeout: configuration.timeout.write,
-            dnsOverride: configuration.dnsOverride
+            dnsOverride: configuration.dnsOverride,
+            localAddress: configuration.localAddress
         )
     }
 }

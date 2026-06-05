@@ -25,12 +25,12 @@ import NIOHTTPCompression
 import NIOPosix
 import NIOSSL
 import NIOTestUtils
-import NIOTransportServices
 import Tracing
 import XCTest
 
 #if canImport(Network)
 import Network
+import NIOTransportServices
 #endif
 
 private func makeTracedHTTPClient(tracer: InMemoryTracer) -> HTTPClient {
