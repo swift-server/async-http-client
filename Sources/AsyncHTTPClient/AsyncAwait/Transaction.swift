@@ -235,10 +235,8 @@ extension Transaction: HTTPExecutableRequest {
                 let byteBuffer = create(allocator)
                 self.writeOnceAndOneTimeOnly(byteBuffer: byteBuffer)
 
-            #if canImport(HTTPAPIs)
             case .httpClientRequestBody(_, let continuation):
                 continuation.continuation.yield(HTTPClientRequest.Body.RequestWriter(transaction: self))
-            #endif
 
             case .none:
                 break
@@ -414,4 +412,3 @@ extension Transaction: NIOAsyncSequenceProducerDelegate {
         self.httpResponseStreamTerminated()
     }
 }
-

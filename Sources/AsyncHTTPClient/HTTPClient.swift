@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Atomics
-import Foundation
+import Dispatch
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -22,8 +22,17 @@ import NIOHTTPCompression
 import NIOPosix
 import NIOSSL
 import NIOTLS
-import NIOTransportServices
 import Tracing
+
+#if canImport(Network)
+import NIOTransportServices
+#endif
+
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 
 extension Logger {
     private func requestInfo(_ request: HTTPClient.Request) -> Logger.Metadata.Value {
@@ -838,6 +847,21 @@ public final class HTTPClient: Sendable {
         /// ``HTTPClient`` will still request certificates from the server for `example.com` and validate them as if we would connect to `example.com`.
         public var dnsOverride: [String: String] = [:]
 
+        /// Controls which DNS resolver is used for hostname resolution.
+        ///
+        /// By default, the system resolver (`getaddrinfo`) is used, which returns addresses
+        /// in the order produced by the platform's `getaddrinfo` (typically following
+        /// RFC 6724 destination-address selection). Set to ``DNSResolver/randomized`` to
+        /// shuffle addresses for DNS-based load balancing with services that have multiple
+        /// A/AAAA records (e.g. Kubernetes headless services).
+        ///
+        /// - Note: This setting has no effect when connections run on an `NIOTSEventLoopGroup`,
+        ///   which is the default on Apple platforms (macOS 10.14+, iOS/tvOS 12+, watchOS 6+).
+        ///   Network.framework performs its own DNS resolution and does not expose a resolver hook.
+        ///   To use the randomized resolver there, pass a `MultiThreadedEventLoopGroup` via
+        ///   ``HTTPClient/EventLoopGroupProvider/shared(_:)``.
+        public var dnsResolver: DNSResolver = .system
+
         /// Enables following 3xx redirects automatically.
         ///
         /// Following redirects are supported:
@@ -895,6 +919,20 @@ public final class HTTPClient: Sendable {
         /// By default, don't use it
         public var enableMultipath: Bool
 
+        /// The local IP address to bind outgoing connections to.
+        ///
+        /// When set, all outgoing connections will bind to this address before connecting.
+        /// The value should be an IP address string (e.g. `"192.168.1.10"` or `"::1"`).
+        /// Port 0 (OS-assigned ephemeral port) is always used.
+        ///
+        /// This is most commonly used on multi-NIC systems where you want traffic to take a
+        /// specific network path which is not the choice the routing table would make by
+        /// default.
+        ///
+        /// This can be overridden on a per-request basis using ``HTTPClientRequest/localAddress``.
+        /// Defaults to `nil` (OS default interface selection).
+        public var localAddress: String?
+
         /// A method with access to the HTTP/1 connection channel that is called when creating the connection.
         public var http1_1ConnectionDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)?
 
@@ -925,6 +963,7 @@ public final class HTTPClient: Sendable {
             self.httpVersion = .automatic
             self.networkFrameworkWaitForConnectivity = true
             self.enableMultipath = false
+            self.localAddress = nil
         }
 
         public init(
@@ -1394,6 +1433,30 @@ extension HTTPClient.Configuration {
         }
     }
 
+    /// Controls which DNS resolver is used for hostname resolution.
+    public struct DNSResolver: Sendable, Hashable {
+        enum Backing: Sendable, Hashable {
+            case system
+            case randomized
+        }
+
+        let backing: Backing
+
+        private init(backing: Backing) {
+            self.backing = backing
+        }
+
+        /// Use the system's default DNS resolver (`getaddrinfo`).
+        /// Addresses are returned in the order produced by the platform's `getaddrinfo`,
+        /// typically following RFC 6724 destination-address selection.
+        public static let system: Self = .init(backing: .system)
+
+        /// Use a randomized DNS resolver that shuffles the addresses
+        /// returned by `getaddrinfo`. This enables DNS-based load balancing
+        /// for services with multiple A/AAAA records (e.g. Kubernetes headless services).
+        public static let randomized: Self = .init(backing: .randomized)
+    }
+
     public struct HTTPVersion: Sendable, Hashable {
         enum Configuration: String {
             case http1Only
@@ -1452,6 +1515,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case invalidRedirectConfiguration
         case invalidHTTPVersionConfiguration
         case invalidDNSOverridesConfiguration
+        case invalidLocalAddress
+        case invalidProxyConfiguration
         case internalStateFailure(file: String, line: UInt)
     }
 
@@ -1545,6 +1610,10 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case .invalidDNSOverridesConfiguration:
             return
                 "The DNS overrides specified in the configuration are not valid. Please specify in the format hostname1:ip1,hostname2:ip2"
+        case .invalidLocalAddress:
+            return "Invalid local address"
+        case .invalidProxyConfiguration:
+            return "The proxy configuration is not valid"
         case .internalStateFailure(let file, let line):
             return
                 "An internal state failure has occurred (File: \(file), line: \(line)). Please open an issue with a reproducer if possible"
@@ -1647,6 +1716,12 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
 
     /// The DNS overrides specified in the configuration are not valid.
     public static let invalidDNSOverridesConfiguration = HTTPClientError(code: .invalidDNSOverridesConfiguration)
+
+    /// The local address specified is not a valid IP address.
+    public static let invalidLocalAddress = HTTPClientError(code: .invalidLocalAddress)
+
+    /// The proxy configuration is not valid.
+    public static let invalidProxyConfiguration = HTTPClientError(code: .invalidProxyConfiguration)
 
     /// A state machine has reached an unsupported state, that wasn't considered when implementing.
     public static func internalStateFailure(file: String = #fileID, line: UInt = #line) -> HTTPClientError {

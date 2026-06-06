@@ -18,7 +18,11 @@ import NIOHTTP1
 import NIOSSL
 import ServiceContextModule
 
+#if canImport(FoundationEssentials)
+import struct FoundationEssentials.URL
+#else
 import struct Foundation.URL
+#endif
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientRequest {
@@ -52,6 +56,7 @@ extension HTTPClientRequest.Prepared {
     init(
         _ request: HTTPClientRequest,
         dnsOverride: [String: String] = [:],
+        localAddress: String? = nil,
         tracing: HTTPClient.TracingConfiguration? = nil
     ) throws {
         guard !request.url.isEmpty, let url = URL(string: request.url) else {
@@ -75,7 +80,12 @@ extension HTTPClientRequest.Prepared {
 
         self.init(
             url: url,
-            poolKey: .init(url: deconstructedURL, tlsConfiguration: request.tlsConfiguration, dnsOverride: dnsOverride),
+            poolKey: .init(
+                url: deconstructedURL,
+                tlsConfiguration: request.tlsConfiguration,
+                dnsOverride: dnsOverride,
+                localAddress: request.localAddress ?? localAddress
+            ),
             requestFramingMetadata: metadata,
             head: .init(
                 version: .http1_1,
@@ -104,8 +114,8 @@ extension HTTPClientRequest.Prepared.Body {
         case .byteBuffer(let byteBuffer):
             self = .byteBuffer(byteBuffer)
 
-        case .httpClientRequestBody(let lenght, let requestBody):
-            self = .httpClientRequestBody(lenght, requestBody)
+        case .httpClientRequestBody(let length, let requestBody):
+            self = .httpClientRequestBody(length, requestBody)
         }
     }
 }
@@ -147,6 +157,7 @@ extension HTTPClientRequest {
         newRequest.method = method
         newRequest.headers = headers
         newRequest.body = body
+        newRequest.localAddress = self.localAddress
         return newRequest
     }
 }

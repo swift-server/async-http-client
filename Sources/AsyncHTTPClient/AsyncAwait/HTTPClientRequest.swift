@@ -17,10 +17,6 @@ import NIOCore
 import NIOHTTP1
 import NIOSSL
 
-#if canImport(HTTPAPIs)
-import HTTPAPIs
-#endif
-
 @usableFromInline
 let bagOfBytesToByteBufferConversionChunkSize = 1024 * 1024 * 4
 
@@ -57,12 +53,20 @@ public struct HTTPClientRequest: Sendable {
     /// Request-specific TLS configuration, defaults to no request-specific TLS configuration.
     public var tlsConfiguration: TLSConfiguration?
 
+    /// The local IP address to bind this request's connection to.
+    ///
+    /// When set, overrides ``HTTPClient/Configuration/localAddress`` for this request.
+    /// The value should be an IP address string (e.g. `"192.168.1.10"` or `"::1"`).
+    /// Defaults to `nil` (use client configuration default).
+    public var localAddress: String?
+
     public init(url: String) {
         self.url = url
         self.method = .GET
         self.headers = .init()
         self.body = .none
         self.tlsConfiguration = nil
+        self.localAddress = nil
     }
 }
 
@@ -114,7 +118,12 @@ extension HTTPClientRequest {
         @_spi(ExperimentalHTTPAPIsSupport)
         public init(length: Int64?, startUpload: AsyncStream<RequestWriter>.Continuation) {
             let length = length.map { RequestBodyLength.known($0) } ?? .unknown
-            self.init(.httpClientRequestBody(length: length, startUpload: RequestWriterContinuation(continuation: startUpload)))
+            self.init(
+                .httpClientRequestBody(
+                    length: length,
+                    startUpload: RequestWriterContinuation(continuation: startUpload)
+                )
+            )
         }
 
         @usableFromInline
@@ -431,10 +440,8 @@ extension HTTPClientRequest.Body: AsyncSequence {
             return .init(storage: .byteBuffer(makeCompleteBody(AsyncIterator.allocator)))
         case .byteBuffer(let byteBuffer):
             return .init(storage: .byteBuffer(byteBuffer))
-        #if canImport(HTTPAPIs)
         case .httpClientRequestBody:
             fatalError("Unimplemented")
-        #endif
         }
     }
 }

@@ -43,6 +43,14 @@ struct HTTPClientConfigurationPropsTests {
 
             "httpVersion": "http1Only",
             "maximumUsesPerConnection": 100,
+
+            "proxy.enabled": true,
+            "proxy.host": "proxy.example.com",
+            "proxy.port": 8080,
+            "proxy.type": "http",
+            "proxy.authorization.scheme": "basic",
+            "proxy.authorization.username": "user",
+            "proxy.authorization.password": "pass",
         ])
 
         let configReader = ConfigReader(provider: testProvider)
@@ -74,6 +82,15 @@ struct HTTPClientConfigurationPropsTests {
         #expect(config.httpVersion == .http1Only)
 
         #expect(config.maximumUsesPerConnection == 100)
+
+        #expect(
+            config.proxy
+                == .server(
+                    host: "proxy.example.com",
+                    port: 8080,
+                    authorization: .basic(username: "user", password: "pass")
+                )
+        )
     }
 
     @Test
@@ -98,6 +115,8 @@ struct HTTPClientConfigurationPropsTests {
         #expect(config.httpVersion == .automatic)
 
         #expect(config.maximumUsesPerConnection == nil)
+
+        #expect(config.proxy == nil)
     }
 
     @Test
@@ -300,6 +319,207 @@ struct HTTPClientConfigurationPropsTests {
         let config = try HTTPClient.Configuration(configReader: configReader)
 
         #expect(config.dnsOverride.isEmpty)
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func proxyHTTPWithoutAuthorization() throws {
+        let testProvider = InMemoryProvider(values: [
+            "proxy.enabled": true,
+            "proxy.host": "proxy.example.com",
+            "proxy.port": 8080,
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        let config = try HTTPClient.Configuration(configReader: configReader)
+
+        #expect(config.proxy == .server(host: "proxy.example.com", port: 8080))
+        #expect(config.proxy?.authorization == nil)
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func proxyHTTPWithBasicAuthCredentials() throws {
+        let testProvider = InMemoryProvider(values: [
+            "proxy.enabled": true,
+            "proxy.host": "proxy.example.com",
+            "proxy.port": 8080,
+            "proxy.authorization.scheme": "basic",
+            "proxy.authorization.credentials": "dXNlcjpwYXNz",
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        let config = try HTTPClient.Configuration(configReader: configReader)
+
+        #expect(
+            config.proxy
+                == .server(host: "proxy.example.com", port: 8080, authorization: .basic(credentials: "dXNlcjpwYXNz"))
+        )
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func proxyHTTPWithBearerAuth() throws {
+        let testProvider = InMemoryProvider(values: [
+            "proxy.enabled": true,
+            "proxy.host": "proxy.example.com",
+            "proxy.port": 8080,
+            "proxy.type": "http",
+            "proxy.authorization.scheme": "bearer",
+            "proxy.authorization.token": "abc123",
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        let config = try HTTPClient.Configuration(configReader: configReader)
+
+        #expect(
+            config.proxy
+                == .server(host: "proxy.example.com", port: 8080, authorization: .bearer(tokens: "abc123"))
+        )
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func proxySOCKSWithDefaultPort() throws {
+        let testProvider = InMemoryProvider(values: [
+            "proxy.enabled": true,
+            "proxy.host": "socks.example.com",
+            "proxy.type": "socks",
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        let config = try HTTPClient.Configuration(configReader: configReader)
+
+        #expect(config.proxy == .socksServer(host: "socks.example.com"))
+        #expect(config.proxy?.port == 1080)
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func proxySOCKSWithCustomPort() throws {
+        let testProvider = InMemoryProvider(values: [
+            "proxy.enabled": true,
+            "proxy.host": "socks.example.com",
+            "proxy.port": 9050,
+            "proxy.type": "socks",
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        let config = try HTTPClient.Configuration(configReader: configReader)
+
+        #expect(config.proxy == .socksServer(host: "socks.example.com", port: 9050))
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func proxyDisabledIgnoresOtherKeys() throws {
+        let testProvider = InMemoryProvider(values: [
+            "proxy.enabled": false,
+            "proxy.host": "proxy.example.com",
+            "proxy.port": 8080,
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        let config = try HTTPClient.Configuration(configReader: configReader)
+
+        #expect(config.proxy == nil)
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func proxyEnabledWithoutHostThrowsError() throws {
+        let testProvider = InMemoryProvider(values: [
+            "proxy.enabled": true,
+            "proxy.port": 8080,
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        #expect(throws: (any Error).self) {
+            _ = try HTTPClient.Configuration(configReader: configReader)
+        }
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func proxyHTTPMissingPortThrowsError() throws {
+        let testProvider = InMemoryProvider(values: [
+            "proxy.enabled": true,
+            "proxy.host": "proxy.example.com",
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        #expect(throws: (any Error).self) {
+            _ = try HTTPClient.Configuration(configReader: configReader)
+        }
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func proxyUnknownTypeThrowsError() throws {
+        let testProvider = InMemoryProvider(values: [
+            "proxy.enabled": true,
+            "proxy.host": "proxy.example.com",
+            "proxy.port": 8080,
+            "proxy.type": "unknown",
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        #expect(throws: (any Error).self) {
+            _ = try HTTPClient.Configuration(configReader: configReader)
+        }
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func proxySOCKSWithAuthorizationThrowsError() throws {
+        let testProvider = InMemoryProvider(values: [
+            "proxy.enabled": true,
+            "proxy.host": "socks.example.com",
+            "proxy.type": "socks",
+            "proxy.authorization.scheme": "basic",
+            "proxy.authorization.username": "user",
+            "proxy.authorization.password": "pass",
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        #expect(throws: HTTPClientError.invalidProxyConfiguration) {
+            _ = try HTTPClient.Configuration(configReader: configReader)
+        }
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func proxyBasicAuthWithoutCredentialsThrowsError() throws {
+        let testProvider = InMemoryProvider(values: [
+            "proxy.enabled": true,
+            "proxy.host": "proxy.example.com",
+            "proxy.port": 8080,
+            "proxy.authorization.scheme": "basic",
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        #expect(throws: HTTPClientError.invalidProxyConfiguration) {
+            _ = try HTTPClient.Configuration(configReader: configReader)
+        }
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func proxyBearerAuthWithoutTokenThrowsError() throws {
+        let testProvider = InMemoryProvider(values: [
+            "proxy.enabled": true,
+            "proxy.host": "proxy.example.com",
+            "proxy.port": 8080,
+            "proxy.authorization.scheme": "bearer",
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        #expect(throws: HTTPClientError.invalidProxyConfiguration) {
+            _ = try HTTPClient.Configuration(configReader: configReader)
+        }
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func proxyUnknownAuthSchemeThrowsError() throws {
+        let testProvider = InMemoryProvider(values: [
+            "proxy.enabled": true,
+            "proxy.host": "proxy.example.com",
+            "proxy.port": 8080,
+            "proxy.authorization.scheme": "digest",
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        #expect(throws: HTTPClientError.invalidProxyConfiguration) {
+            _ = try HTTPClient.Configuration(configReader: configReader)
+        }
     }
 }
 #endif
