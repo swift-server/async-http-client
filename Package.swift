@@ -37,7 +37,7 @@ let package = Package(
     traits: [
         .default(enabledTraits: []),
         .trait(
-            name: "ExperimentalHTTPAPIsSupport",
+            name: "UnstableHTTPAPIsSupport",
             description: """
                 Enables source unstable SPIs to support the swift-http-api-proposal
                 AHC backend. Do not rely on this module in API stable packages.

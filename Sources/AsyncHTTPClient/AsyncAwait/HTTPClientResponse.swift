@@ -173,7 +173,7 @@ extension HTTPClientResponse {
             return try await collect(self, maxBytes: maxBytes)
         }
 
-        #if ExperimentalHTTPAPIsSupport
+        #if UnstableHTTPAPIsSupport
         public var trailers: HTTPHeaders? {
             switch self.storage {
             case .transaction(_, let transaction, _):

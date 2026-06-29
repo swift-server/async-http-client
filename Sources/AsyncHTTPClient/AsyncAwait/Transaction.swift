@@ -235,7 +235,7 @@ extension Transaction: HTTPExecutableRequest {
                 let byteBuffer = create(allocator)
                 self.writeOnceAndOneTimeOnly(byteBuffer: byteBuffer)
 
-            #if ExperimentalHTTPAPIsSupport
+            #if UnstableHTTPAPIsSupport
             case .httpClientRequestBody(_, let continuation):
                 continuation.continuation.yield(HTTPClientRequest.Body.RequestWriter(transaction: self))
             #endif

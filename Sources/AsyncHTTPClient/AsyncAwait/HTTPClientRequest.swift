@@ -101,7 +101,7 @@ extension HTTPClientRequest {
             )
             case byteBuffer(ByteBuffer)
 
-            #if ExperimentalHTTPAPIsSupport
+            #if UnstableHTTPAPIsSupport
             case httpClientRequestBody(
                 length: RequestBodyLength,
                 startUpload: RequestWriterContinuation
@@ -117,7 +117,7 @@ extension HTTPClientRequest {
             self.mode = mode
         }
 
-        #if ExperimentalHTTPAPIsSupport
+        #if UnstableHTTPAPIsSupport
         public init(length: Int64?, startUpload: AsyncStream<RequestWriter>.Continuation) {
             let length = length.map { RequestBodyLength.known($0) } ?? .unknown
             self.init(
@@ -398,7 +398,7 @@ extension Optional where Wrapped == HTTPClientRequest.Body {
         case .byteBuffer: return true
         case .sequence(_, let canBeConsumedMultipleTimes, _): return canBeConsumedMultipleTimes
         case .asyncSequence: return false
-        #if ExperimentalHTTPAPIsSupport
+        #if UnstableHTTPAPIsSupport
         case .httpClientRequestBody: return false  // TODO: I think this should be TRUE
         #endif
         }
@@ -441,7 +441,7 @@ extension HTTPClientRequest.Body: AsyncSequence {
             return .init(storage: .byteBuffer(makeCompleteBody(AsyncIterator.allocator)))
         case .byteBuffer(let byteBuffer):
             return .init(storage: .byteBuffer(byteBuffer))
-        #if ExperimentalHTTPAPIsSupport
+        #if UnstableHTTPAPIsSupport
         case .httpClientRequestBody:
             fatalError("Unimplemented")
         #endif
