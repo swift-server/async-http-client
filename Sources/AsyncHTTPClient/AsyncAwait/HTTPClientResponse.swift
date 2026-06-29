@@ -82,6 +82,7 @@ public struct HTTPClientResponse: Sendable {
         version: HTTPVersion,
         status: HTTPResponseStatus,
         headers: HTTPHeaders,
+        transaction: Transaction,
         body: TransactionBody,
         history: [HTTPClientRequestResponse]
     ) {
@@ -92,6 +93,7 @@ public struct HTTPClientResponse: Sendable {
             body: .init(
                 .transaction(
                     body,
+                    transaction,
                     expectedContentLength: HTTPClientResponse.expectedContentLength(
                         requestMethod: requestMethod,
                         headers: headers,
@@ -153,7 +155,7 @@ extension HTTPClientResponse {
         /// - Returns: the number of bytes collected over time
         @inlinable public func collect(upTo maxBytes: Int) async throws -> ByteBuffer {
             switch self.storage {
-            case .transaction(_, let expectedContentLength):
+            case .transaction(_, _, let expectedContentLength):
                 if let contentLength = expectedContentLength {
                     if contentLength > maxBytes {
                         throw NIOTooManyBytesError(maxBytes: maxBytes)
@@ -170,6 +172,18 @@ extension HTTPClientResponse {
             }
             return try await collect(self, maxBytes: maxBytes)
         }
+
+        #if ExperimentalHTTPAPIsSupport
+        public var trailers: HTTPHeaders? {
+            switch self.storage {
+            case .transaction(_, let transaction, _):
+                return transaction.trailers
+
+            case .anyAsyncSequence:
+                return nil
+            }
+        }
+        #endif
     }
 }
 
@@ -203,7 +217,7 @@ typealias TransactionBody = NIOThrowingAsyncSequenceProducer<
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension HTTPClientResponse.Body {
     @usableFromInline enum Storage: Sendable {
-        case transaction(TransactionBody, expectedContentLength: Int?)
+        case transaction(TransactionBody, Transaction, expectedContentLength: Int?)
         case anyAsyncSequence(AnyAsyncSequence<ByteBuffer>)
     }
 }
@@ -214,7 +228,7 @@ extension HTTPClientResponse.Body.Storage: AsyncSequence {
 
     @inlinable func makeAsyncIterator() -> AsyncIterator {
         switch self {
-        case .transaction(let transaction, _):
+        case .transaction(let transaction, _, _):
             return .transaction(transaction.makeAsyncIterator())
         case .anyAsyncSequence(let anyAsyncSequence):
             return .anyAsyncSequence(anyAsyncSequence.makeAsyncIterator())

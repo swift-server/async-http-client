@@ -782,6 +782,10 @@ extension Optional where Wrapped == HTTPClientRequest.Prepared.Body {
                 )
             }
             return accumulatedBuffer
+        #if ExperimentalHTTPAPIsSupport
+        case .httpClientRequestBody:
+            fatalError("TODO: Unimplemented")
+        #endif
         }
     }
 }

@@ -34,6 +34,16 @@ let package = Package(
     products: [
         .library(name: "AsyncHTTPClient", targets: ["AsyncHTTPClient"])
     ],
+    traits: [
+        .default(enabledTraits: []),
+        .trait(
+            name: "ExperimentalHTTPAPIsSupport",
+            description: """
+                Enables source unstable SPIs to support the swift-http-api-proposal
+                AHC backend. Do not rely on this module in API stable packages.
+                """
+        ),
+    ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.100.0"),
         .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.30.0"),

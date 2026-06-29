@@ -100,6 +100,13 @@ extension HTTPClientRequest {
                 makeCompleteBody: @Sendable (ByteBufferAllocator) -> ByteBuffer
             )
             case byteBuffer(ByteBuffer)
+
+            #if ExperimentalHTTPAPIsSupport
+            case httpClientRequestBody(
+                length: RequestBodyLength,
+                startUpload: RequestWriterContinuation
+            )
+            #endif
         }
 
         @usableFromInline
@@ -109,6 +116,44 @@ extension HTTPClientRequest {
         internal init(_ mode: Mode) {
             self.mode = mode
         }
+
+        #if ExperimentalHTTPAPIsSupport
+        public init(length: Int64?, startUpload: AsyncStream<RequestWriter>.Continuation) {
+            let length = length.map { RequestBodyLength.known($0) } ?? .unknown
+            self.init(
+                .httpClientRequestBody(
+                    length: length,
+                    startUpload: RequestWriterContinuation(continuation: startUpload)
+                )
+            )
+        }
+
+        @usableFromInline
+        struct RequestWriterContinuation: Sendable {
+            var continuation: AsyncStream<RequestWriter>.Continuation
+        }
+
+        @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+        public struct RequestWriter: Sendable {
+            @usableFromInline
+            let transaction: Transaction
+
+            @inlinable
+            public func writeRequestBodyPart(_ buffer: ByteBuffer) async throws {
+                try await self.transaction.writeRequestBodyPart(buffer)
+            }
+
+            @inlinable
+            public func requestBodyStreamFinished(trailers: HTTPHeaders?) {
+                self.transaction.requestBodyStreamFinished(trailers: trailers)
+            }
+
+            @inlinable
+            public func fail(_ error: any Error) {
+                self.transaction.fail(error)
+            }
+        }
+        #endif
     }
 }
 
@@ -353,6 +398,9 @@ extension Optional where Wrapped == HTTPClientRequest.Body {
         case .byteBuffer: return true
         case .sequence(_, let canBeConsumedMultipleTimes, _): return canBeConsumedMultipleTimes
         case .asyncSequence: return false
+        #if ExperimentalHTTPAPIsSupport
+        case .httpClientRequestBody: return false  // TODO: I think this should be TRUE
+        #endif
         }
     }
 }
@@ -393,6 +441,10 @@ extension HTTPClientRequest.Body: AsyncSequence {
             return .init(storage: .byteBuffer(makeCompleteBody(AsyncIterator.allocator)))
         case .byteBuffer(let byteBuffer):
             return .init(storage: .byteBuffer(byteBuffer))
+        #if ExperimentalHTTPAPIsSupport
+        case .httpClientRequestBody:
+            fatalError("Unimplemented")
+        #endif
         }
     }
 }
