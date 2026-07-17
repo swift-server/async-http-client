@@ -126,6 +126,10 @@ final private class MockScheduledRequest: HTTPSchedulableRequest {
         preconditionFailure("Unimplemented")
     }
 
+    func requestBodyStreamSent() {
+        preconditionFailure("Unimplemented")
+    }
+
     func receiveResponseHead(_: HTTPResponseHead) {
         preconditionFailure("Unimplemented")
     }
@@ -134,7 +138,7 @@ final private class MockScheduledRequest: HTTPSchedulableRequest {
         preconditionFailure("Unimplemented")
     }
 
-    func succeedRequest(_: CircularBuffer<ByteBuffer>?) {
+    func receiveResponseEnd(_ buffer: CircularBuffer<ByteBuffer>?, trailers: HTTPHeaders?) {
         preconditionFailure("Unimplemented")
     }
 }

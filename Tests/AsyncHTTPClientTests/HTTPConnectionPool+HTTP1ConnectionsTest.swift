@@ -384,6 +384,8 @@ class HTTPConnectionPool_HTTP1ConnectionsTests: XCTestCase {
         XCTAssertEqual(connections.closeConnection(at: releaseIndex), lease)
         XCTAssertFalse(connections.isEmpty)
 
+        let backoffEL = connections.backoffNextConnectionAttempt(startingID)
+        XCTAssertIdentical(backoffEL, el2)
         guard let (failIndex, _) = connections.failConnection(startingID) else {
             return XCTFail("Expected that the connection is remembered")
         }

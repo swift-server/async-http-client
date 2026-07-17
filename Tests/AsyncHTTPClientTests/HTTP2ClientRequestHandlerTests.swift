@@ -576,4 +576,50 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
         channel.writeAndFlush(request, promise: nil)
         XCTAssertEqual(request.events.map(\.kind), [.willExecuteRequest, .requestHeadSent])
     }
+
+    func testSendingAndReceivingTrailers() async throws {
+        let eventLoop = EmbeddedEventLoop()
+        let handler = HTTP2ClientRequestHandler(eventLoop: eventLoop)
+        let channel = EmbeddedChannel(handlers: [handler], loop: eventLoop)
+        XCTAssertNoThrow(try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).wait())
+
+        // non empty body is important to trigger this bug as we otherwise finish the request in a single flush
+        let request = MockHTTPExecutableRequest(
+            head: .init(version: .http1_1, method: .POST, uri: "http://localhost/"),
+            framingMetadata: RequestFramingMetadata(connectionClose: false, body: .stream),
+            raiseErrorIfUnimplementedMethodIsCalled: false
+        )
+
+        let executor = handler.requestExecutor
+        request.resumeRequestBodyStreamCallback = {
+            executor.writeRequestBodyPart(.byteBuffer(.init(string: "Hello World")), request: request, promise: nil)
+            executor.finishRequestBodyStream(trailers: ["trailer": "foo"], request: request, promise: nil)
+        }
+
+        request.receiveResponseEndCallback = { (_, trailers) in
+            XCTAssertEqual(trailers, ["trailer": "bar"])
+        }
+
+        channel.write(request, promise: nil)
+
+        XCTAssertEqual(try channel.readOutbound(as: HTTPClientRequestPart.self), .head(request.requestHead))
+        XCTAssertEqual(
+            try channel.readOutbound(as: HTTPClientRequestPart.self),
+            .body(.byteBuffer(.init(string: "Hello World")))
+        )
+        XCTAssertEqual(try channel.readOutbound(as: HTTPClientRequestPart.self), .end(["trailer": "foo"]))
+
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.head(.init(version: .http1_1, status: .ok))))
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.body(.init(string: "Foo Bar"))))
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.end(["trailer": "bar"])))
+
+        XCTAssertEqual(
+            request.events.map(\.kind),
+            [
+                .willExecuteRequest, .requestHeadSent, .resumeRequestBodyStream, .requestBodySent, .receiveResponseHead,
+                .receiveResponseEnd,
+            ]
+        )
+    }
+
 }

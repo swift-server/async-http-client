@@ -22,7 +22,7 @@ import Tracing
 extension RequestBag.LoopBoundState {
 
     /// Starts the "overall" Span that encompases the beginning of a request until receipt of the head part of the response.
-    mutating func startRequestSpan<T>(tracer: T?) {
+    mutating func startRequestSpan(tracer: (any Sendable)?) {
         guard #available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *),
             let tracer = tracer as! (any Tracer)?
         else {

@@ -14,6 +14,7 @@
 
 import AsyncHTTPClient  // NOT @testable - tests that need @testable go into HTTPClientInternalTests.swift
 import Atomics
+import InMemoryLogging
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -25,11 +26,11 @@ import NIOHTTPCompression
 import NIOPosix
 import NIOSSL
 import NIOTestUtils
-import NIOTransportServices
 import XCTest
 
 #if canImport(Network)
 import Network
+import NIOTransportServices
 #endif
 
 final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
@@ -46,11 +47,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         let request3 = try Request(url: "unix:///tmp/file")
         XCTAssertEqual(request3.host, "")
-        #if os(Linux) && compiler(>=6.0) && compiler(<6.1)
-        XCTAssertEqual(request3.url.host, "")
-        #else
         XCTAssertNil(request3.url.host)
-        #endif
         XCTAssertEqual(request3.url.path, "/tmp/file")
         XCTAssertEqual(request3.port, 80)
         XCTAssertFalse(request3.useTLS)
@@ -2757,15 +2754,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
     }
 
     func testLoggingCorrectlyAttachesRequestInformationEvenAfterDuringRedirect() {
-        let logStore = CollectEverythingLogHandler.LogStore()
-
-        var logger = Logger(
-            label: "\(#function)",
-            factory: { _ in
-                CollectEverythingLogHandler(logStore: logStore)
-            }
-        )
-        logger.logLevel = .trace
+        var (logStore, logger) = InMemoryLogHandler.makeLogger(logLevel: .trace)
         logger[metadataKey: "custom-request-id"] = "abcd"
 
         var maybeRequest: HTTPClient.Request?
@@ -2788,7 +2777,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                 logger: logger
             ).wait()
         )
-        let logs = logStore.allEntries
+        let logs = logStore.entries
 
         XCTAssertTrue(logs.allSatisfy { $0.metadata["custom-request-id"] == "abcd" })
 
@@ -2810,12 +2799,12 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
     }
 
     func testLoggingCorrectlyAttachesRequestInformation() {
-        let logStore = CollectEverythingLogHandler.LogStore()
+        let logStore = InMemoryLogHandler()
 
         var loggerYolo001 = Logger(
             label: "\(#function)",
             factory: { _ in
-                CollectEverythingLogHandler(logStore: logStore)
+                logStore
             }
         )
         loggerYolo001.logLevel = .trace
@@ -2823,7 +2812,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         var loggerACME002 = Logger(
             label: "\(#function)",
             factory: { _ in
-                CollectEverythingLogHandler(logStore: logStore)
+                logStore
             }
         )
         loggerACME002.logLevel = .trace
@@ -2846,8 +2835,8 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                 logger: loggerYolo001
             ).wait()
         )
-        let logsAfterReq1 = logStore.allEntries
-        logStore.allEntries = []
+        let logsAfterReq1 = logStore.entries
+        logStore.clear()
 
         // === Request 2 (Yolo001)
         XCTAssertNoThrow(
@@ -2858,8 +2847,8 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                 logger: loggerYolo001
             ).wait()
         )
-        let logsAfterReq2 = logStore.allEntries
-        logStore.allEntries = []
+        let logsAfterReq2 = logStore.entries
+        logStore.clear()
 
         // === Request 3 (ACME002)
         XCTAssertNoThrow(
@@ -2870,8 +2859,8 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                 logger: loggerACME002
             ).wait()
         )
-        let logsAfterReq3 = logStore.allEntries
-        logStore.allEntries = []
+        let logsAfterReq3 = logStore.entries
+        logStore.clear()
 
         // === Assertions
         XCTAssertGreaterThan(logsAfterReq1.count, 0)
@@ -2885,7 +2874,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                 {
                     XCTAssertNil(entry.metadata["acme-request-id"])
                     XCTAssertEqual("yolo-001", yoloRequestID)
-                    XCTAssertNotNil(Int(httpRequestMetadata))
+                    XCTAssertNotNil(Int("\(httpRequestMetadata)"))
                     return true
                 } else {
                     XCTFail("log message doesn't contain the right IDs: \(entry)")
@@ -2918,7 +2907,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                 {
                     XCTAssertNil(entry.metadata["acme-request-id"])
                     XCTAssertEqual("yolo-001", yoloRequestID)
-                    XCTAssertNotNil(Int(httpRequestMetadata))
+                    XCTAssertNotNil(Int("\(httpRequestMetadata)"))
                     return true
                 } else {
                     XCTFail("log message doesn't contain the right IDs: \(entry)")
@@ -2946,7 +2935,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                 {
                     XCTAssertNil(entry.metadata["yolo-request-id"])
                     XCTAssertEqual("acme-002", acmeRequestID)
-                    XCTAssertNotNil(Int(httpRequestMetadata))
+                    XCTAssertNotNil(Int("\(httpRequestMetadata)"))
                     return true
                 } else {
                     XCTFail("log message doesn't contain the right IDs: \(entry)")
@@ -2969,15 +2958,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
     }
 
     func testNothingIsLoggedAtInfoOrHigher() {
-        let logStore = CollectEverythingLogHandler.LogStore()
-
-        var logger = Logger(
-            label: "\(#function)",
-            factory: { _ in
-                CollectEverythingLogHandler(logStore: logStore)
-            }
-        )
-        logger.logLevel = .info
+        let (logStore, logger) = InMemoryLogHandler.makeLogger(logLevel: .info)
 
         guard let request1 = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "get"),
             let request2 = try? HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "stats")
@@ -2995,7 +2976,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                 logger: logger
             ).wait()
         )
-        XCTAssertEqual(0, logStore.allEntries.count)
+        XCTAssertEqual(0, logStore.entries.count)
 
         // === Request 2
         XCTAssertNoThrow(
@@ -3006,7 +2987,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                 logger: logger
             ).wait()
         )
-        XCTAssertEqual(0, logStore.allEntries.count)
+        XCTAssertEqual(0, logStore.entries.count)
 
         // === Synthesized Request
         XCTAssertNoThrow(
@@ -3018,21 +2999,14 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                 logger: logger
             ).wait()
         )
-        XCTAssertEqual(0, logStore.allEntries.count)
+        XCTAssertEqual(0, logStore.entries.count)
 
-        XCTAssertEqual(0, self.backgroundLogStore.allEntries.filter { $0.level >= .info }.count)
+        XCTAssertEqual(0, self.backgroundLogStore.entries.filter { $0.level >= .info }.count)
 
         // === Synthesized Socket Path Request
         XCTAssertNoThrow(
             try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
-                let backgroundLogStore = CollectEverythingLogHandler.LogStore()
-                var backgroundLogger = Logger(
-                    label: "\(#function)",
-                    factory: { _ in
-                        CollectEverythingLogHandler(logStore: backgroundLogStore)
-                    }
-                )
-                backgroundLogger.logLevel = .trace
+                let (backgroundLogStore, backgroundLogger) = InMemoryLogHandler.makeLogger(logLevel: .trace)
 
                 let localSocketPathHTTPBin = HTTPBin(bindTarget: .unixDomainSocket(path))
                 let localClient = HTTPClient(
@@ -3054,23 +3028,16 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                         logger: logger
                     ).wait()
                 )
-                XCTAssertEqual(0, logStore.allEntries.count)
+                XCTAssertEqual(0, logStore.entries.count)
 
-                XCTAssertEqual(0, backgroundLogStore.allEntries.filter { $0.level >= .info }.count)
+                XCTAssertEqual(0, backgroundLogStore.entries.filter { $0.level >= .info }.count)
             }
         )
 
         // === Synthesized Secure Socket Path Request
         XCTAssertNoThrow(
             try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
-                let backgroundLogStore = CollectEverythingLogHandler.LogStore()
-                var backgroundLogger = Logger(
-                    label: "\(#function)",
-                    factory: { _ in
-                        CollectEverythingLogHandler(logStore: backgroundLogStore)
-                    }
-                )
-                backgroundLogger.logLevel = .trace
+                let (backgroundLogStore, backgroundLogger) = InMemoryLogHandler.makeLogger(logLevel: .trace)
 
                 let localSocketPathHTTPBin = HTTPBin(.http1_1(ssl: true), bindTarget: .unixDomainSocket(path))
                 let localClient = HTTPClient(
@@ -3093,33 +3060,25 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                         logger: logger
                     ).wait()
                 )
-                XCTAssertEqual(0, logStore.allEntries.count)
+                XCTAssertEqual(0, logStore.entries.count)
 
-                XCTAssertEqual(0, backgroundLogStore.allEntries.filter { $0.level >= .info }.count)
+                XCTAssertEqual(0, backgroundLogStore.entries.filter { $0.level >= .info }.count)
             }
         )
     }
 
     func testAllMethodsLog() {
         func checkExpectationsWithLogger<T>(type: String, _ body: (Logger, String) throws -> T) throws -> T {
-            let logStore = CollectEverythingLogHandler.LogStore()
-
-            var logger = Logger(
-                label: "\(#function)",
-                factory: { _ in
-                    CollectEverythingLogHandler(logStore: logStore)
-                }
-            )
-            logger.logLevel = .trace
+            var (logStore, logger) = InMemoryLogHandler.makeLogger(logLevel: .trace)
             logger[metadataKey: "req"] = "yo-\(type)"
 
             let url = "not-found/request/\(type))"
             let result = try body(logger, url)
 
-            XCTAssertGreaterThan(logStore.allEntries.count, 0)
-            for entry in logStore.allEntries {
+            XCTAssertGreaterThan(logStore.entries.count, 0)
+            for entry in logStore.entries {
                 XCTAssertEqual("yo-\(type)", entry.metadata["req"] ?? "n/a")
-                XCTAssertNotNil(Int(entry.metadata["ahc-request-id"] ?? "n/a"))
+                XCTAssertNotNil(Int(entry.metadata["ahc-request-id"]?.description ?? "n/a"))
             }
             return result
         }
@@ -3168,18 +3127,11 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         )
 
         // No background activity expected here.
-        XCTAssertEqual(0, self.backgroundLogStore.allEntries.filter { $0.level >= .debug }.count)
+        XCTAssertEqual(0, self.backgroundLogStore.entries.filter { $0.level >= .debug }.count)
 
         XCTAssertNoThrow(
             try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
-                let backgroundLogStore = CollectEverythingLogHandler.LogStore()
-                var backgroundLogger = Logger(
-                    label: "\(#function)",
-                    factory: { _ in
-                        CollectEverythingLogHandler(logStore: backgroundLogStore)
-                    }
-                )
-                backgroundLogger.logLevel = .trace
+                let (backgroundLogStore, backgroundLogger) = InMemoryLogHandler.makeLogger(logLevel: .trace)
 
                 let localSocketPathHTTPBin = HTTPBin(bindTarget: .unixDomainSocket(path))
                 let localClient = HTTPClient(
@@ -3199,20 +3151,13 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                 )
 
                 // No background activity expected here.
-                XCTAssertEqual(0, backgroundLogStore.allEntries.filter { $0.level >= .debug }.count)
+                XCTAssertEqual(0, backgroundLogStore.entries.filter { $0.level >= .debug }.count)
             }
         )
 
         XCTAssertNoThrow(
             try TemporaryFileHelpers.withTemporaryUnixDomainSocketPathName { path in
-                let backgroundLogStore = CollectEverythingLogHandler.LogStore()
-                var backgroundLogger = Logger(
-                    label: "\(#function)",
-                    factory: { _ in
-                        CollectEverythingLogHandler(logStore: backgroundLogStore)
-                    }
-                )
-                backgroundLogger.logLevel = .trace
+                let (backgroundLogStore, backgroundLogger) = InMemoryLogHandler.makeLogger(logLevel: .trace)
 
                 let localSocketPathHTTPBin = HTTPBin(.http1_1(ssl: true), bindTarget: .unixDomainSocket(path))
                 let localClient = HTTPClient(
@@ -3233,7 +3178,7 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                 )
 
                 // No background activity expected here.
-                XCTAssertEqual(0, backgroundLogStore.allEntries.filter { $0.level >= .debug }.count)
+                XCTAssertEqual(0, backgroundLogStore.entries.filter { $0.level >= .debug }.count)
             }
         )
     }
@@ -3243,14 +3188,14 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
 
         XCTAssertNoThrow(try self.defaultClient.syncShutdown())
 
-        XCTAssertGreaterThanOrEqual(self.backgroundLogStore.allEntries.count, 0)
+        XCTAssertGreaterThanOrEqual(self.backgroundLogStore.entries.count, 0)
         XCTAssert(
-            self.backgroundLogStore.allEntries.contains { entry in
+            self.backgroundLogStore.entries.contains { entry in
                 entry.message == "Shutting down connection pool"
             }
         )
         XCTAssert(
-            self.backgroundLogStore.allEntries.allSatisfy { entry in
+            self.backgroundLogStore.entries.allSatisfy { entry in
                 entry.metadata["ahc-request-id"] == nil && entry.metadata["ahc-request"] == nil
                     && entry.metadata["ahc-pool-key"] != nil
             }
@@ -4631,6 +4576,102 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         ) {
             XCTAssertEqual($0 as? HTTPClientError, .connectTimeout)
         }
+    }
+
+    private func _testPostConvertedToGetOnRedirect(
+        statusPath: String,
+        expectedStatus: HTTPResponseStatus,
+        retainHTTPMethodAndBodyOn301: Bool,
+        retainHTTPMethodAndBodyOn302: Bool,
+        expectRetain: Bool
+    ) throws {
+        let bin = HTTPBin(.http1_1())
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: HTTPClient.Configuration(
+                redirectConfiguration: .follow(
+                    configuration: .init(
+                        max: 10,
+                        allowCycles: false,
+                        retainHTTPMethodAndBodyOn301: retainHTTPMethodAndBodyOn301,
+                        retainHTTPMethodAndBodyOn302: retainHTTPMethodAndBodyOn302
+                    )
+                )
+            )
+        )
+        defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+
+        let request = try HTTPClient.Request(
+            url: "http://localhost:\(bin.port)\(statusPath)",
+            method: .POST,
+            headers: HTTPHeaders(),
+            body: .string("test body")
+        )
+        let response = try localClient.execute(request: request).wait()
+        XCTAssertEqual(response.status, .ok)
+        guard response.history.count == 2 else {
+            return XCTFail("Expected 2 entries in history for \(statusPath)")
+        }
+        XCTAssertEqual(response.history[0].request.method, .POST)
+        if expectRetain {
+            XCTAssertEqual(response.history[1].request.method, .POST)
+        } else {
+            XCTAssertEqual(response.history[1].request.method, .GET)
+        }
+        XCTAssertEqual(response.history[0].responseHead.status, expectedStatus)
+    }
+
+    func testPostConvertedToGetOn301Redirect() throws {
+        for retainHTTPMethodAndBody in [true, false] {
+            try _testPostConvertedToGetOnRedirect(
+                statusPath: "/redirect/301",
+                expectedStatus: .movedPermanently,
+                retainHTTPMethodAndBodyOn301: retainHTTPMethodAndBody,
+                retainHTTPMethodAndBodyOn302: false,
+                expectRetain: retainHTTPMethodAndBody
+            )
+        }
+    }
+
+    func testPostConvertedToGetOn302Redirect() throws {
+        for retainHTTPMethodAndBody in [true, false] {
+            try _testPostConvertedToGetOnRedirect(
+                statusPath: "/redirect/302",
+                expectedStatus: .found,
+                retainHTTPMethodAndBodyOn301: false,
+                retainHTTPMethodAndBodyOn302: retainHTTPMethodAndBody,
+                expectRetain: retainHTTPMethodAndBody
+            )
+        }
+    }
+
+    func testLocalAddressBinding_configLevel() throws {
+        // On Linux, 127.0.0.0/8 all route to loopback, so we can use a
+        // non-default address to prove the bind actually happened.
+        #if os(Linux)
+        let localAddress = "127.0.0.127"
+        #else
+        let localAddress = "127.0.0.1"
+        #endif
+
+        let bin = HTTPBin(.http1_1(ssl: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        var config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+        config.localAddress = localAddress
+
+        let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        let response = try client.get(url: "http://127.0.0.1:\(bin.port)/echo-client-ip").wait()
+        XCTAssertEqual(response.status, .ok)
+
+        let bytes = response.body.flatMap { $0.getData(at: 0, length: $0.readableBytes) }
+        let data = try JSONDecoder().decode(RequestInfo.self, from: bytes!)
+        XCTAssertEqual(data.data, localAddress)
     }
 }
 

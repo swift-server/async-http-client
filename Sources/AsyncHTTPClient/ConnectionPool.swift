@@ -52,17 +52,20 @@ enum ConnectionPool {
         var connectionTarget: ConnectionTarget
         private var tlsConfiguration: BestEffortHashableTLSConfiguration?
         var serverNameIndicatorOverride: String?
+        var localAddress: String?
 
         init(
             scheme: Scheme,
             connectionTarget: ConnectionTarget,
             tlsConfiguration: BestEffortHashableTLSConfiguration? = nil,
-            serverNameIndicatorOverride: String?
+            serverNameIndicatorOverride: String?,
+            localAddress: String? = nil
         ) {
             self.scheme = scheme
             self.connectionTarget = connectionTarget
             self.tlsConfiguration = tlsConfiguration
             self.serverNameIndicatorOverride = serverNameIndicatorOverride
+            self.localAddress = localAddress
         }
 
         var description: String {
@@ -78,8 +81,12 @@ enum ConnectionPool {
             case .unixSocket(let socketPath):
                 hostDescription = socketPath
             }
-            return
+            var result =
                 "\(self.scheme)://\(hostDescription)\(self.serverNameIndicatorOverride.map { " SNI: \($0)" } ?? "") TLS-hash: \(hash)"
+            if let addr = self.localAddress {
+                result += " bind: \(addr)"
+            }
+            return result
         }
     }
 }
@@ -100,7 +107,12 @@ extension DeconstructedURL {
 }
 
 extension ConnectionPool.Key {
-    init(url: DeconstructedURL, tlsConfiguration: TLSConfiguration?, dnsOverride: [String: String]) {
+    init(
+        url: DeconstructedURL,
+        tlsConfiguration: TLSConfiguration?,
+        dnsOverride: [String: String],
+        localAddress: String? = nil
+    ) {
         let (connectionTarget, serverNameIndicatorOverride) = url.applyDNSOverride(dnsOverride)
         self.init(
             scheme: url.scheme,
@@ -108,15 +120,17 @@ extension ConnectionPool.Key {
             tlsConfiguration: tlsConfiguration.map {
                 BestEffortHashableTLSConfiguration(wrapping: $0)
             },
-            serverNameIndicatorOverride: serverNameIndicatorOverride
+            serverNameIndicatorOverride: serverNameIndicatorOverride,
+            localAddress: localAddress
         )
     }
 
-    init(_ request: HTTPClient.Request, dnsOverride: [String: String] = [:]) {
+    init(_ request: HTTPClient.Request, dnsOverride: [String: String] = [:], localAddress: String? = nil) {
         self.init(
             url: request.deconstructedURL,
             tlsConfiguration: request.tlsConfiguration,
-            dnsOverride: dnsOverride
+            dnsOverride: dnsOverride,
+            localAddress: localAddress
         )
     }
 }

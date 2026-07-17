@@ -14,6 +14,7 @@
 
 import NIOConcurrencyHelpers
 import NIOCore
+import NIOHTTP1
 
 @testable import AsyncHTTPClient
 
@@ -212,7 +213,11 @@ extension MockRequestExecutor: HTTPRequestExecutor {
         promise?.succeed(())
     }
 
-    func finishRequestBodyStream(_ request: HTTPExecutableRequest, promise: EventLoopPromise<Void>?) {
+    func finishRequestBodyStream(
+        trailers: HTTPHeaders?,
+        request: HTTPExecutableRequest,
+        promise: EventLoopPromise<Void>?
+    ) {
         self.writeNextRequestPart(.endOfStream, request: request)
         promise?.succeed(())
     }

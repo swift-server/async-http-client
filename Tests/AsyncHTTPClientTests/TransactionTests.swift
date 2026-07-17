@@ -98,7 +98,8 @@ final class TransactionTests: XCTestCase {
                 }
 
                 func finishRequestBodyStream(
-                    _ task: AsyncHTTPClient.HTTPExecutableRequest,
+                    trailers: HTTPHeaders?,
+                    request: AsyncHTTPClient.HTTPExecutableRequest,
                     promise: NIOCore.EventLoopPromise<Void>?
                 ) {
                     XCTFail()
@@ -174,7 +175,7 @@ final class TransactionTests: XCTestCase {
             async let part = iterator.next()
             XCTAssertNoThrow(try executor.receiveResponseDemand())
             executor.resetResponseStreamDemandSignal()
-            transaction.succeedRequest([])
+            transaction.receiveResponseEnd([], trailers: nil)
             let result = try await part
             XCTAssertNil(result)
         }
@@ -225,7 +226,7 @@ final class TransactionTests: XCTestCase {
 
             // doesn't crash if receives more data because of race
             transaction.receiveResponseBodyParts([ByteBuffer(string: "foo bar")])
-            transaction.succeedRequest(nil)
+            transaction.receiveResponseEnd(nil, trailers: nil)
         }
     }
 
@@ -297,7 +298,7 @@ final class TransactionTests: XCTestCase {
 
             XCTAssertNoThrow(try executor.receiveResponseDemand())
             executor.resetResponseStreamDemandSignal()
-            transaction.succeedRequest([])
+            transaction.receiveResponseEnd([], trailers: nil)
             let result = try await part
             XCTAssertNil(result)
         }
@@ -391,7 +392,7 @@ final class TransactionTests: XCTestCase {
 
             let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["foo": "bar"])
             transaction.receiveResponseHead(responseHead)
-            transaction.succeedRequest(nil)
+            transaction.receiveResponseEnd(nil, trailers: nil)
 
             let response = try await responseTask.value
             XCTAssertEqual(response.status, .ok)
@@ -657,7 +658,6 @@ private actor Promise<Value: Sendable> {
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension Transaction {
-    #if compiler(>=6.0)
     fileprivate static func makeWithResultTask(
         request: sending PreparedRequest,
         requestOptions: RequestOptions = .forTests(),
@@ -685,40 +685,4 @@ extension Transaction {
 
         return (await transactionPromise.value, task)
     }
-    #else
-    fileprivate static func makeWithResultTask(
-        request: PreparedRequest,
-        requestOptions: RequestOptions = .forTests(),
-        logger: Logger = Logger(label: "test"),
-        connectionDeadline: NIODeadline = .distantFuture,
-        preferredEventLoop: EventLoop
-    ) async -> (Transaction, _Concurrency.Task<HTTPClientResponse, Error>) {
-        // It isn't sendable ... but on 6.0 and later we use 'sending'.
-        struct UnsafePrepareRequest: @unchecked Sendable {
-            var value: PreparedRequest
-        }
-
-        let transactionPromise = Promise<Transaction>()
-        let unsafe = UnsafePrepareRequest(value: request)
-        let task = Task {
-            try await withCheckedThrowingContinuation {
-                (continuation: CheckedContinuation<HTTPClientResponse, Error>) in
-                let request = unsafe.value
-                let transaction = Transaction(
-                    request: request,
-                    requestOptions: requestOptions,
-                    logger: logger,
-                    connectionDeadline: connectionDeadline,
-                    preferredEventLoop: preferredEventLoop,
-                    responseContinuation: continuation
-                )
-                Task {
-                    await transactionPromise.fulfil(transaction)
-                }
-            }
-        }
-
-        return (await transactionPromise.value, task)
-    }
-    #endif
 }

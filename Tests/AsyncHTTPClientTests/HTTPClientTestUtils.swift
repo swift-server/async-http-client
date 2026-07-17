@@ -14,6 +14,7 @@
 
 import Atomics
 import Foundation
+import InMemoryLogging
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -26,10 +27,14 @@ import NIOHTTPCompression
 import NIOPosix
 import NIOSSL
 import NIOTLS
-import NIOTransportServices
 import XCTest
 
 @testable import AsyncHTTPClient
+
+#if canImport(Network)
+import Network
+import NIOTransportServices
+#endif
 
 #if canImport(xlocale)
 import xlocale
@@ -799,16 +804,19 @@ internal struct HTTPResponseBuilder {
     var body: ByteBuffer?
     var requestBodyByteCount: Int
     let responseBodyIsRequestBodyByteCount: Bool
+    let trailers: HTTPHeaders?
 
     init(
         _ version: HTTPVersion = HTTPVersion(major: 1, minor: 1),
         status: HTTPResponseStatus,
         headers: HTTPHeaders = HTTPHeaders(),
-        responseBodyIsRequestBodyByteCount: Bool = false
+        responseBodyIsRequestBodyByteCount: Bool = false,
+        trailers: HTTPHeaders? = nil
     ) {
         self.head = HTTPResponseHead(version: version, status: status, headers: headers)
         self.requestBodyByteCount = 0
         self.responseBodyIsRequestBodyByteCount = responseBodyIsRequestBodyByteCount
+        self.trailers = trailers
     }
 
     mutating func add(_ part: ByteBuffer) {
@@ -976,6 +984,9 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                 }
                 self.resps.append(HTTPResponseBuilder(status: .ok))
                 return
+            case "/trailers":
+                self.resps.append(HTTPResponseBuilder(status: .ok, trailers: ["hello": "world"]))
+                return
             case "/stats":
                 var body = context.channel.allocator.buffer(capacity: 1)
                 body.writeString("Just some stats mate.")
@@ -997,10 +1008,20 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                 }
                 self.resps.append(HTTPResponseBuilder(status: .ok, responseBodyIsRequestBodyByteCount: true))
                 return
+            case "/redirect/301":
+                var headers = self.responseHeaders
+                headers.add(name: "location", value: "/ok")
+                self.resps.append(HTTPResponseBuilder(status: .movedPermanently, headers: headers))
+                return
             case "/redirect/302":
                 var headers = self.responseHeaders
                 headers.add(name: "location", value: "/ok")
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
+                return
+            case "/redirect/303":
+                var headers = self.responseHeaders
+                headers.add(name: "location", value: "/ok")
+                self.resps.append(HTTPResponseBuilder(status: .seeOther, headers: headers))
                 return
             case "/redirect/https":
                 let port = self.value(for: "port", from: urlComponents.query!)
@@ -1043,6 +1064,13 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                     return
                 }
                 self.resps.append(HTTPResponseBuilder(status: .ok))
+                return
+            case "/echo-client-ip":
+                var builder = HTTPResponseBuilder(status: .ok)
+                let clientIP = context.channel.remoteAddress?.ipAddress ?? "unknown"
+                let buf = context.channel.allocator.buffer(string: clientIP)
+                builder.add(buf)
+                self.resps.append(builder)
                 return
             case "/echohostheader":
                 var builder = HTTPResponseBuilder(status: .ok)
@@ -1146,7 +1174,8 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                     return
                 }
 
-                context.writeAndFlush(self.wrapOutboundOut(.end(nil))).assumeIsolated().whenComplete { result in
+                context.writeAndFlush(self.wrapOutboundOut(.end(response.trailers))).assumeIsolated().whenComplete {
+                    result in
                     self.isServingRequest = false
                     switch result {
                     case .success:
@@ -1304,65 +1333,21 @@ extension EventLoopFuture where Value: Sendable {
     }
 }
 
-struct CollectEverythingLogHandler: LogHandler {
-    var metadata: Logger.Metadata = [:]
-    var logLevel: Logger.Level = .info
-    let logStore: LogStore
+extension InMemoryLogHandler {
+    static func makeLogger(
+        logLevel: Logger.Level = .info,
+        function: String = #function
+    ) -> (InMemoryLogHandler, Logger) {
+        let handler = InMemoryLogHandler()
 
-    final class LogStore: Sendable {
-        struct Entry {
-            var level: Logger.Level
-            var message: String
-            var metadata: [String: String]
-        }
-
-        private let logs = NIOLockedValueBox<[Entry]>([])
-
-        var allEntries: [Entry] {
-            get {
-                self.logs.withLockedValue { $0 }
+        var logger = Logger(
+            label: "\(function)",
+            factory: { _ in
+                handler
             }
-            set {
-                self.logs.withLockedValue { $0 = newValue }
-            }
-        }
-
-        func append(level: Logger.Level, message: Logger.Message, metadata: Logger.Metadata?) {
-            self.logs.withLockedValue {
-                $0.append(
-                    Entry(
-                        level: level,
-                        message: message.description,
-                        metadata: metadata?.mapValues { $0.description } ?? [:]
-                    )
-                )
-            }
-        }
-    }
-
-    init(logStore: LogStore) {
-        self.logStore = logStore
-    }
-
-    func log(
-        level: Logger.Level,
-        message: Logger.Message,
-        metadata: Logger.Metadata?,
-        source: String,
-        file: String,
-        function: String,
-        line: UInt
-    ) {
-        self.logStore.append(level: level, message: message, metadata: self.metadata.merging(metadata ?? [:]) { $1 })
-    }
-
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-        get {
-            self.metadata[key]
-        }
-        set {
-            self.metadata[key] = newValue
-        }
+        )
+        logger.logLevel = logLevel
+        return (handler, logger)
     }
 }
 
@@ -1521,8 +1506,8 @@ class HTTPEchoHandler: ChannelInboundHandler {
             )
         case .body(let bytes):
             context.writeAndFlush(self.wrapOutboundOut(.body(.byteBuffer(bytes))), promise: nil)
-        case .end:
-            context.writeAndFlush(self.wrapOutboundOut(.end(nil))).assumeIsolated().whenSuccess {
+        case .end(let trailers):
+            context.writeAndFlush(self.wrapOutboundOut(.end(trailers))).assumeIsolated().whenSuccess {
                 context.close(promise: nil)
             }
         }

@@ -14,6 +14,7 @@
 
 import AsyncHTTPClient
 import Atomics
+import InMemoryLogging
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -23,11 +24,11 @@ import NIOHTTPCompression
 import NIOPosix
 import NIOSSL
 import NIOTestUtils
-import NIOTransportServices
 import XCTest
 
 #if canImport(Network)
 import Network
+import NIOTransportServices
 #endif
 
 class XCTestCaseHTTPClientTestsBaseClass: XCTestCase {
@@ -37,7 +38,7 @@ class XCTestCaseHTTPClientTestsBaseClass: XCTestCase {
     var serverGroup: EventLoopGroup!
     var defaultHTTPBin: HTTPBin<HTTPBinHandler>!
     var defaultClient: HTTPClient!
-    var backgroundLogStore: CollectEverythingLogHandler.LogStore!
+    var backgroundLogStore: InMemoryLogHandler!
 
     var defaultHTTPBinURLPrefix: String {
         self.defaultHTTPBin.baseURL
@@ -53,14 +54,8 @@ class XCTestCaseHTTPClientTestsBaseClass: XCTestCase {
         self.clientGroup = getDefaultEventLoopGroup(numberOfThreads: 1)
         self.serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         self.defaultHTTPBin = HTTPBin()
-        self.backgroundLogStore = CollectEverythingLogHandler.LogStore()
-        var backgroundLogger = Logger(
-            label: "\(#function)",
-            factory: { _ in
-                CollectEverythingLogHandler(logStore: self.backgroundLogStore!)
-            }
-        )
-        backgroundLogger.logLevel = .trace
+        let (backgroundLogStore, backgroundLogger) = InMemoryLogHandler.makeLogger(logLevel: .trace)
+        self.backgroundLogStore = backgroundLogStore
 
         self.defaultClient = HTTPClient(
             eventLoopGroupProvider: .shared(self.clientGroup),

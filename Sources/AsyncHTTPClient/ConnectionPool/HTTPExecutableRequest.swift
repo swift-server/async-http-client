@@ -185,7 +185,11 @@ protocol HTTPRequestExecutor: Sendable {
     /// Signals that the request body stream has finished
     ///
     /// This method may be **called on any thread**. The executor needs to ensure thread safety.
-    func finishRequestBodyStream(_ task: HTTPExecutableRequest, promise: EventLoopPromise<Void>?)
+    func finishRequestBodyStream(
+        trailers: HTTPHeaders?,
+        request: HTTPExecutableRequest,
+        promise: EventLoopPromise<Void>?
+    )
 
     /// Signals that more bytes from response body stream can be consumed.
     ///
@@ -244,6 +248,11 @@ protocol HTTPExecutableRequest: AnyObject, Sendable {
     /// This will be called on the Channel's EventLoop. Do **not block** during your execution!
     func pauseRequestBodyStream()
 
+    /// Will be called by the ChannelHandler to indicate that the request body stream has been sent.
+    ///
+    /// This will be called on the Channel's EventLoop. Do **not block** during your execution!
+    func requestBodyStreamSent()
+
     /// Receive a response head.
     ///
     /// Please note that `receiveResponseHead` and `receiveResponseBodyPart` may
@@ -260,10 +269,12 @@ protocol HTTPExecutableRequest: AnyObject, Sendable {
     /// to ask for more data.
     func receiveResponseBodyParts(_ buffer: CircularBuffer<ByteBuffer>)
 
-    /// Succeeds the executing request. The executor will not call any further methods on the request after this method.
+    /// Finishes the server response.
     ///
-    /// - Parameter buffer: The remaining response body parts, that were received before the request end
-    func succeedRequest(_ buffer: CircularBuffer<ByteBuffer>?)
+    /// - Parameters:
+    ///   - buffer: The remaining response body parts, that were received before the response end
+    ///   - trailers: The response trailers if any where received. Nil means no trailers were received.
+    func receiveResponseEnd(_ buffer: CircularBuffer<ByteBuffer>?, trailers: HTTPHeaders?)
 
     /// Fails the executing request, with an error.
     func fail(_ error: Error)

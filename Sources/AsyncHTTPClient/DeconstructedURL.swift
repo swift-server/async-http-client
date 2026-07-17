@@ -12,7 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if canImport(FoundationEssentials)
+import struct FoundationEssentials.URL
+#else
 import struct Foundation.URL
+#endif
 
 struct DeconstructedURL {
     var scheme: Scheme
@@ -48,7 +52,7 @@ extension DeconstructedURL {
 
         switch scheme {
         case .http, .https:
-            #if !canImport(Darwin) && compiler(>=6.0)
+            #if !canImport(Darwin)
             guard let urlHost = url.host, !urlHost.isEmpty else {
                 throw HTTPClientError.emptyHost
             }
@@ -89,7 +93,7 @@ extension DeconstructedURL {
     }
 }
 
-#if !canImport(Darwin) && compiler(>=6.0)
+#if !canImport(Darwin)
 extension String {
     @inlinable internal func trimIPv6Brackets() -> String {
         var utf8View = self.utf8[...]
