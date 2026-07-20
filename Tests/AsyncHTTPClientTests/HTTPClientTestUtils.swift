@@ -77,7 +77,7 @@ let canBindIPv6Loopback: Bool = {
     defer { try! elg.syncShutdownGracefully() }
     let serverChannel = try? ServerBootstrap(group: elg)
         #if !os(Windows)
-        .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+    .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
         #endif
         .bind(host: "::1", port: 0)
         .wait()
@@ -529,11 +529,11 @@ where
 
         let serverChannel = try! ServerBootstrap(group: self.group)
             #if !os(Windows)
-            .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
-            .serverChannelOption(
-                ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT),
-                value: reusePort ? 1 : 0
-            )
+        .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+        .serverChannelOption(
+            ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT),
+            value: reusePort ? 1 : 0
+        )
             #endif
             .serverChannelInitializer { [activeConnCounterHandler] channel in
                 channel.pipeline.addHandler(activeConnCounterHandler)

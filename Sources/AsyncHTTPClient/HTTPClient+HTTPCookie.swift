@@ -229,7 +229,7 @@ nonisolated(unsafe) private let posixLocale: UnsafeMutableRawPointer = {
 #else
 nonisolated(unsafe) private let posixLocale: UnsafeMutableRawPointer = {
     // FIXME: This can be cleaner. But the Windows shim doesn't need a locale pointer
-    return UnsafeMutableRawPointer(bitPattern: 0)!
+    UnsafeMutableRawPointer(bitPattern: 0)!
 }()
 #endif
 

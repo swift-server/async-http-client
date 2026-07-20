@@ -52,7 +52,7 @@ class MockSOCKSServer {
         if misbehave {
             bootstrap = ServerBootstrap(group: elg)
                 #if !os(Windows)
-                .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+            .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
                 #endif
                 .childChannelInitializer { channel in
                     channel.eventLoop.makeCompletedFuture {
@@ -62,7 +62,7 @@ class MockSOCKSServer {
         } else {
             bootstrap = ServerBootstrap(group: elg)
                 #if !os(Windows)
-                .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+            .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
                 #endif
                 .childChannelInitializer { channel in
                     channel.eventLoop.makeCompletedFuture {
