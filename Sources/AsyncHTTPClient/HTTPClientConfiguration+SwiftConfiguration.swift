@@ -15,6 +15,7 @@
 #if compiler(>=6.2)
 import Configuration
 import NIOCore
+import NIOHTTP1
 
 @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 extension HTTPClient.Configuration {
@@ -38,11 +39,9 @@ extension HTTPClient.Configuration {
         // Each entry in the list should be a colon separated pair e.g. localhost:127.0.0.1 or localhost:::1
         if let dnsOverridesList = configReader.stringArray(forKey: "dnsOverrides") {
             for entry in dnsOverridesList {
-                guard let separatorIndex = entry.firstIndex(of: ":") else {
+                guard let (key, value) = entry.splitOnFirstColon() else {
                     throw HTTPClientError.invalidDNSOverridesConfiguration
                 }
-                let key = entry.prefix(upTo: separatorIndex)
-                let value = entry.suffix(from: entry.index(after: separatorIndex))
                 if key.isEmpty || value.isEmpty {
                     throw HTTPClientError.invalidDNSOverridesConfiguration
                 }
@@ -165,9 +164,12 @@ extension HTTPClient.Configuration.Proxy {
     /// - `type` (string, optional, default: "http"): Proxy type ("http" or "socks").
     /// - `authorization` (scoped, optional): Authorization configuration read by ``HTTPClient/Authorization/init(configReader:)``.
     ///   Only supported for `http` proxies.
+    /// - `connectHeaders` (string array, optional): Extra headers sent only on the `CONNECT` request to the proxy.
+    ///   Each entry is a colon-separated `Name: value` pair (e.g., "X-Foo: bar"). Only supported for `http` proxies.
     ///
     /// - Throws: `HTTPClientError.invalidProxyConfiguration` if `enabled` is `true` but `host` is missing, `type` is unknown,
-    ///   `port` is missing for an HTTP proxy, or `authorization` is specified for a SOCKS proxy, or `authorization` is invalid (see ``HTTPClient/Authorization/init(configReader:)``)
+    ///   `port` is missing for an HTTP proxy, `authorization` or `connectHeaders` is specified for a SOCKS proxy,
+    ///   a `connectHeaders` entry is malformed, or `authorization` is invalid (see ``HTTPClient/Authorization/init(configReader:)``)
     public init?(configReader: ConfigReader) throws {
         guard configReader.bool(forKey: "enabled", default: false) else {
             return nil
@@ -175,12 +177,13 @@ extension HTTPClient.Configuration.Proxy {
         let host = try configReader.requiredString(forKey: "host")
         let type = configReader.string(forKey: "type", default: "http")
         let authorization = try HTTPClient.Authorization(configReader: configReader.scoped(to: "authorization"))
+        let connectHeaders = try Self.parseConnectHeaders(configReader: configReader)
         switch type {
         case "http":
             let port = try configReader.requiredInt(forKey: "port")
-            self = .server(host: host, port: port, authorization: authorization)
+            self = .server(host: host, port: port, authorization: authorization, connectHeaders: connectHeaders)
         case "socks":
-            if authorization != nil {
+            if authorization != nil || !connectHeaders.isEmpty {
                 throw HTTPClientError.invalidProxyConfiguration
             }
             let port = configReader.int(forKey: "port", default: 1080)
@@ -188,6 +191,47 @@ extension HTTPClient.Configuration.Proxy {
         default:
             throw HTTPClientError.invalidProxyConfiguration
         }
+    }
+
+    /// Each entry is a colon separated `key: value` pair. Example: "X-Foo: bar".
+    /// RFC 9110
+    ///   §5.1: header field names are tokens, §5.6.2: tokens can not contain delimiters (e.g., colon)
+    ///   §5.5: field values can colons, but leading/trailing whitespace must be stripped
+    private static func parseConnectHeaders(configReader: ConfigReader) throws -> HTTPHeaders {
+        guard let entries = configReader.stringArray(forKey: "connectHeaders") else {
+            return [:]
+        }
+        var headers = HTTPHeaders()
+        headers.reserveCapacity(entries.count)
+        for entry in entries {
+            guard let (name, value) = entry.splitOnFirstColon() else {
+                throw HTTPClientError.invalidProxyConfiguration
+            }
+            let trimmedName = name.trimmingASCIIWhitespace()
+            if trimmedName.isEmpty {
+                throw HTTPClientError.invalidProxyConfiguration
+            }
+            headers.add(name: String(trimmedName), value: String(value.trimmingASCIIWhitespace()))
+        }
+        return headers
+    }
+}
+
+extension StringProtocol {
+    fileprivate func splitOnFirstColon() -> (SubSequence, SubSequence)? {
+        guard let index = self.firstIndex(of: ":") else {
+            return nil
+        }
+        return (self[..<index], self[self.index(after: index)...])
+    }
+
+    fileprivate func trimmingASCIIWhitespace() -> SubSequence {
+        guard let start = self.firstIndex(where: { $0 != " " && $0 != "\t" }),
+            let end = self.lastIndex(where: { $0 != " " && $0 != "\t" })
+        else {
+            return self[self.endIndex..<self.endIndex]
+        }
+        return self[start...end]
     }
 }
 

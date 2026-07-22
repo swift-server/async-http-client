@@ -16,6 +16,7 @@
 import Configuration
 import Foundation
 import NIOCore
+import NIOHTTP1
 import Testing
 
 @testable import AsyncHTTPClient
@@ -515,6 +516,58 @@ struct HTTPClientConfigurationPropsTests {
             "proxy.host": "proxy.example.com",
             "proxy.port": 8080,
             "proxy.authorization.scheme": "digest",
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        #expect(throws: HTTPClientError.invalidProxyConfiguration) {
+            _ = try HTTPClient.Configuration(configReader: configReader)
+        }
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func proxyHTTPWithConnectHeaders() throws {
+        let testProvider = InMemoryProvider(values: [
+            "proxy.enabled": true,
+            "proxy.host": "proxy.example.com",
+            "proxy.port": 8080,
+            "proxy.connectHeaders": .init(
+                .stringArray(["X-Proxy-Token: first", "X-Proxy-Token: second", "X-Other:no-space"]),
+                isSecret: false
+            ),
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        let config = try HTTPClient.Configuration(configReader: configReader)
+
+        var expectedHeaders = HTTPHeaders()
+        expectedHeaders.add(name: "X-Proxy-Token", value: "first")
+        expectedHeaders.add(name: "X-Proxy-Token", value: "second")
+        expectedHeaders.add(name: "X-Other", value: "no-space")
+        #expect(config.proxy?.connectHeaders == expectedHeaders)
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func proxyMalformedConnectHeaderThrowsError() throws {
+        let testProvider = InMemoryProvider(values: [
+            "proxy.enabled": true,
+            "proxy.host": "proxy.example.com",
+            "proxy.port": 8080,
+            "proxy.connectHeaders": .init(.stringArray(["no-colon-here"]), isSecret: false),
+        ])
+        let configReader = ConfigReader(provider: testProvider)
+        #expect(throws: HTTPClientError.invalidProxyConfiguration) {
+            _ = try HTTPClient.Configuration(configReader: configReader)
+        }
+    }
+
+    @Test
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    func proxySOCKSWithConnectHeadersThrowsError() throws {
+        let testProvider = InMemoryProvider(values: [
+            "proxy.enabled": true,
+            "proxy.host": "socks.example.com",
+            "proxy.type": "socks",
+            "proxy.connectHeaders": .init(.stringArray(["X-Foo: bar"]), isSecret: false),
         ])
         let configReader = ConfigReader(provider: testProvider)
         #expect(throws: HTTPClientError.invalidProxyConfiguration) {

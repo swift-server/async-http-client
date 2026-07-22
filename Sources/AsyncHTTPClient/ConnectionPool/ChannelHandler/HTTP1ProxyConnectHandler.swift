@@ -35,9 +35,12 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
 
     private var state: State = .initialized
 
+    private static let reservedConnectHeaders: Set<String> = ["host", "proxy-authorization"]
+
     private let targetHost: String
     private let targetPort: Int
     private let proxyAuthorization: HTTPClient.Authorization?
+    private let connectHeaders: HTTPHeaders
     private let deadline: NIODeadline
 
     private var proxyEstablishedPromise: EventLoopPromise<Void>?
@@ -48,6 +51,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
     convenience init(
         target: ConnectionTarget,
         proxyAuthorization: HTTPClient.Authorization?,
+        connectHeaders: HTTPHeaders,
         deadline: NIODeadline
     ) {
         let targetHost: String
@@ -66,6 +70,7 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
             targetHost: targetHost,
             targetPort: targetPort,
             proxyAuthorization: proxyAuthorization,
+            connectHeaders: connectHeaders,
             deadline: deadline
         )
     }
@@ -74,11 +79,13 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
         targetHost: String,
         targetPort: Int,
         proxyAuthorization: HTTPClient.Authorization?,
+        connectHeaders: HTTPHeaders,
         deadline: NIODeadline
     ) {
         self.targetHost = targetHost
         self.targetPort = targetPort
         self.proxyAuthorization = proxyAuthorization
+        self.connectHeaders = connectHeaders
         self.deadline = deadline
     }
 
@@ -157,9 +164,12 @@ final class HTTP1ProxyConnectHandler: ChannelDuplexHandler, RemovableChannelHand
             method: .CONNECT,
             uri: "\(self.targetHost):\(self.targetPort)"
         )
-        head.headers.replaceOrAdd(name: "host", value: "\(self.targetHost)")
+        for (name, value) in self.connectHeaders where !Self.reservedConnectHeaders.contains(name.lowercased()) {
+            head.headers.add(name: name, value: value)
+        }
+        head.headers.add(name: "host", value: "\(self.targetHost)")
         if let authorization = self.proxyAuthorization {
-            head.headers.replaceOrAdd(name: "proxy-authorization", value: authorization.headerValue)
+            head.headers.add(name: "proxy-authorization", value: authorization.headerValue)
         }
         context.write(self.wrapOutboundOut(.head(head)), promise: nil)
         context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
