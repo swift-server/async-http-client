@@ -63,7 +63,7 @@ extension HTTPClient.Configuration {
         /// These headers are not sent to the
         /// destination server, and are ignored for SOCKS proxies.
         /// The `host` and `proxy-authorization` headers cannot be overridden through this property
-        /// Note: Excluded from equality / hash, because HTTPHeaders are not hashable.
+        /// Note: Excluded from hash, because HTTPHeaders are not hashable.
         public var connectHeaders: HTTPHeaders = [:]
 
         /// Create an HTTP proxy configuration.
