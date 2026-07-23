@@ -63,9 +63,10 @@ extension HTTPClient.Configuration {
         /// These headers are not sent to the
         /// destination server, and are ignored for SOCKS proxies.
         /// The `host` and `proxy-authorization` headers cannot be overridden through this property
+        /// Note: Excluded from equality / hash, because HTTPHeaders are not hashable.
         public var connectHeaders: HTTPHeaders = [:]
 
-        /// Create a HTTP proxy.
+        /// Create a HTTP proxy configuration.
         ///
         /// - parameters:
         ///     - host: proxy server host.
@@ -74,7 +75,7 @@ extension HTTPClient.Configuration {
             .init(host: host, port: port, type: .http(nil))
         }
 
-        /// Create a HTTP proxy.
+        /// Create a HTTP proxy configuration.
         ///
         /// - parameters:
         ///     - host: proxy server host.
@@ -84,7 +85,7 @@ extension HTTPClient.Configuration {
             .init(host: host, port: port, type: .http(authorization))
         }
 
-        /// Create a HTTP proxy.
+        /// Create a HTTP proxy configuration.
         ///
         /// - parameters:
         ///     - host: proxy server host.
@@ -102,7 +103,7 @@ extension HTTPClient.Configuration {
             return proxy
         }
 
-        /// Create a SOCKSv5 proxy.
+        /// Create a SOCKSv5 proxy configuration.
         /// - parameter host: The SOCKSv5 proxy address.
         /// - parameter port: The SOCKSv5 proxy port, defaults to 1080.
         /// - returns: A new instance of `Proxy` configured to connect to a `SOCKSv5` server.
