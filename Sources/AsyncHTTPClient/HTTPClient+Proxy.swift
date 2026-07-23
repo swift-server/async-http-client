@@ -66,7 +66,7 @@ extension HTTPClient.Configuration {
         /// Note: Excluded from equality / hash, because HTTPHeaders are not hashable.
         public var connectHeaders: HTTPHeaders = [:]
 
-        /// Create a HTTP proxy configuration.
+        /// Create an HTTP proxy configuration.
         ///
         /// - parameters:
         ///     - host: proxy server host.
@@ -75,7 +75,7 @@ extension HTTPClient.Configuration {
             .init(host: host, port: port, type: .http(nil))
         }
 
-        /// Create a HTTP proxy configuration.
+        /// Create an HTTP proxy configuration.
         ///
         /// - parameters:
         ///     - host: proxy server host.
@@ -85,7 +85,7 @@ extension HTTPClient.Configuration {
             .init(host: host, port: port, type: .http(authorization))
         }
 
-        /// Create a HTTP proxy configuration.
+        /// Create an HTTP proxy configuration.
         ///
         /// - parameters:
         ///     - host: proxy server host.
