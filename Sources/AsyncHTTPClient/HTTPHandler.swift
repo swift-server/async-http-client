@@ -628,20 +628,20 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
         }
     }
 
-    public func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ part: ByteBuffer) -> EventLoopFuture<Void> {
+    public func didReceiveBodyPart(task: HTTPClient.Task<Response>, _ buffer: ByteBuffer) -> EventLoopFuture<Void> {
         self.state.withLockedValue {
             switch $0.state {
             case .idle:
                 preconditionFailure("no head received before body")
             case .head(let head):
-                guard part.readableBytes <= self.maxBodySize else {
+                guard buffer.readableBytes <= self.maxBodySize else {
                     let error = ResponseTooBigError(maxBodySize: self.maxBodySize)
                     $0.state = .error(error)
                     return task.eventLoop.makeFailedFuture(error)
                 }
-                $0.state = .body(head, part)
+                $0.state = .body(head, buffer)
             case .body(let head, var body):
-                let newBufferSize = body.writerIndex + part.readableBytes
+                let newBufferSize = body.writerIndex + buffer.readableBytes
                 guard newBufferSize <= self.maxBodySize else {
                     let error = ResponseTooBigError(maxBodySize: self.maxBodySize)
                     $0.state = .error(error)
@@ -653,8 +653,8 @@ public final class ResponseAccumulator: HTTPClientResponseDelegate {
                 // `self.state` or we'll get a CoW. To fix that we temporarily set the state to `.end` (which
                 // has no associated data). We'll fix it at the bottom of this block.
                 $0.state = .end
-                var part = part
-                body.writeBuffer(&part)
+                var buffer = buffer
+                body.writeBuffer(&buffer)
                 $0.state = .body(head, body)
             case .end:
                 preconditionFailure("request already processed")

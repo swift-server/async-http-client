@@ -32,7 +32,7 @@ extension HTTPClient {
 
         /// Initialise a NWPOSIXError
         /// - Parameters:
-        ///   - errorType: posix error type
+        ///   - errorCode: posix error code
         ///   - reason: String describing reason for error
         public init(_ errorCode: POSIXErrorCode, reason: String) {
             self.errorCode = errorCode

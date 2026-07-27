@@ -32,6 +32,9 @@ public final class HTTPClientCopyingDelegate: HTTPClientResponseDelegate, Sendab
         self.chunkHandler(buffer)
     }
 
+    /// Called when the complete HTTP request is finished.
+    ///
+    /// The body was already handed to the `chunkHandler` as it arrived, so there is nothing to return.
     public func didFinishRequest(task: HTTPClient.Task<Void>) throws {
         ()
     }
