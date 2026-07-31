@@ -99,7 +99,8 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
         self.poolKey = .init(
             request,
             dnsOverride: requestOptions.dnsOverride,
-            localAddress: requestOptions.localAddress
+            localAddress: requestOptions.localAddress,
+            localPort: requestOptions.localPort
         )
         self.eventLoopPreference = eventLoopPreference
         self.task = task

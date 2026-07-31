@@ -58,6 +58,7 @@ extension HTTPClientRequest.Prepared {
         _ request: HTTPClientRequest,
         dnsOverride: [String: String] = [:],
         localAddress: String? = nil,
+        localPort: Int = 0,
         tracing: HTTPClient.TracingConfiguration? = nil
     ) throws {
         guard !request.url.isEmpty, let url = URL(string: request.url) else {
@@ -85,7 +86,8 @@ extension HTTPClientRequest.Prepared {
                 url: deconstructedURL,
                 tlsConfiguration: request.tlsConfiguration,
                 dnsOverride: dnsOverride,
-                localAddress: request.localAddress ?? localAddress
+                localAddress: request.localAddress ?? localAddress,
+                localPort: request.localPort ?? localPort
             ),
             requestFramingMetadata: metadata,
             head: .init(
@@ -162,6 +164,7 @@ extension HTTPClientRequest {
         newRequest.headers = headers
         newRequest.body = body
         newRequest.localAddress = self.localAddress
+        newRequest.localPort = self.localPort
         return newRequest
     }
 }
