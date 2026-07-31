@@ -471,10 +471,11 @@ extension HTTPConnectionPool.ConnectionFactory {
                     }
                 }
             if let localAddress = self.key.localAddress {
+                let localPort = self.key.localPort
                 bootstrap = bootstrap.configureNWParameters { params in
                     params.requiredLocalEndpoint = NWEndpoint.hostPort(
                         host: NWEndpoint.Host(localAddress),
-                        port: .any
+                        port: localPort == 0 ? .any : .init(integerLiteral: UInt16(localPort))
                     )
                 }
             }
@@ -495,7 +496,7 @@ extension HTTPConnectionPool.ConnectionFactory {
             }
             if let localAddress = self.key.localAddress {
                 do {
-                    let socketAddress = try SocketAddress(ipAddress: localAddress, port: 0)
+                    let socketAddress = try SocketAddress(ipAddress: localAddress, port: self.key.localPort)
                     bootstrap = bootstrap.bind(to: socketAddress)
                 } catch {
                     throw HTTPClientError.invalidLocalAddress
@@ -589,6 +590,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), eventLoop is QoSEventLoop {
             // create NIOClientTCPBootstrap with NIOTS TLS provider
             let localAddr = self.key.localAddress
+            let localPort = self.key.localPort
             let bootstrapFuture = tlsConfig.getNWProtocolTLSOptions(
                 on: eventLoop,
                 serverNameIndicatorOverride: key.serverNameIndicatorOverride
@@ -625,7 +627,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                     bootstrap = bootstrap.configureNWParameters { params in
                         params.requiredLocalEndpoint = NWEndpoint.hostPort(
                             host: NWEndpoint.Host(localAddress),
-                            port: .any
+                            port: localPort == 0 ? .any : .init(integerLiteral: UInt16(localPort))
                         )
                     }
                 }
@@ -653,7 +655,7 @@ extension HTTPConnectionPool.ConnectionFactory {
             }
             if let localAddress = key.localAddress {
                 do {
-                    let socketAddress = try SocketAddress(ipAddress: localAddress, port: 0)
+                    let socketAddress = try SocketAddress(ipAddress: localAddress, port: key.localPort)
                     bootstrap = bootstrap.bind(to: socketAddress)
                 } catch {
                     throw HTTPClientError.invalidLocalAddress
