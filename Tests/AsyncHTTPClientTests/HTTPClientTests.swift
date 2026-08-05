@@ -1370,7 +1370,9 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         var server: Channel?
         XCTAssertNoThrow(
             server = try ServerBootstrap(group: group)
-                .serverChannelOption(ChannelOptions.socket(.init(SOL_SOCKET), .init(SO_REUSEADDR)), value: 1)
+                #if !os(Windows)
+            .serverChannelOption(ChannelOptions.socket(.init(SOL_SOCKET), .init(SO_REUSEADDR)), value: 1)
+                #endif
                 .serverChannelOption(ChannelOptions.backlog, value: .init(numberOfParallelWorkers))
                 .childChannelInitializer { channel in
                     channel.pipeline.configureHTTPServerPipeline(
@@ -2306,7 +2308,9 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         var maybeServer: Channel?
         XCTAssertNoThrow(
             maybeServer = try ServerBootstrap(group: self.serverGroup)
-                .serverChannelOption(ChannelOptions.socket(.init(SOL_SOCKET), .init(SO_REUSEADDR)), value: 1)
+                #if !os(Windows)
+            .serverChannelOption(ChannelOptions.socket(.init(SOL_SOCKET), .init(SO_REUSEADDR)), value: 1)
+                #endif
                 .childChannelInitializer { channel in
                     channel.pipeline.configureHTTPServerPipeline().flatMap {
                         // We're deliberately adding a handler which is shared between multiple channels. This is normally
@@ -2523,7 +2527,9 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
                         )
                     }
                 }
-                .serverChannelOption(ChannelOptions.socket(.init(SOL_SOCKET), .init(SO_REUSEADDR)), value: 1)
+                #if !os(Windows)
+            .serverChannelOption(ChannelOptions.socket(.init(SOL_SOCKET), .init(SO_REUSEADDR)), value: 1)
+                #endif
                 .bind(host: "127.0.0.1", port: 0)
                 .wait()
         }
