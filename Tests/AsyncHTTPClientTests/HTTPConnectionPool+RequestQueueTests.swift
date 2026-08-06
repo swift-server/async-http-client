@@ -92,6 +92,7 @@ final private class MockScheduledRequest: HTTPSchedulableRequest {
 
     var poolKey: ConnectionPool.Key { preconditionFailure("Unimplemented") }
     var tlsConfiguration: TLSConfiguration? { nil }
+    var tlsPinning: SPKIPinningConfiguration? { nil }
     var logger: Logger { preconditionFailure("Unimplemented") }
     var connectionDeadline: NIODeadline { preconditionFailure("Unimplemented") }
     var preferredEventLoop: EventLoop { preconditionFailure("Unimplemented") }

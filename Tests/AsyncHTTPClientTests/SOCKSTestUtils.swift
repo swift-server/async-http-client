@@ -17,6 +17,7 @@ import NIOCore
 import NIOHTTP1
 import NIOPosix
 import NIOSOCKS
+import NIOSSL
 import XCTest
 
 struct MockSOCKSError: Error, Hashable {
@@ -44,6 +45,7 @@ class MockSOCKSServer {
         expectedURL: String,
         expectedResponse: String,
         misbehave: Bool = false,
+        tlsConfiguration: TLSConfiguration? = nil,
         file: String = #filePath,
         line: UInt = #line
     ) throws {
@@ -63,16 +65,53 @@ class MockSOCKSServer {
                 .childChannelInitializer { channel in
                     channel.eventLoop.makeCompletedFuture {
                         let handshakeHandler = SOCKSServerHandshakeHandler()
+                        let promise = channel.eventLoop.makePromise(of: Void.self)
+                        let socksTestHandler = SOCKSTestHandler(
+                            handshakeHandler: handshakeHandler,
+                            promise: promise
+                        )
+
                         try channel.pipeline.syncOperations.addHandlers([
                             handshakeHandler,
-                            SOCKSTestHandler(handshakeHandler: handshakeHandler),
-                            TestHTTPServer(
-                                expectedURL: expectedURL,
-                                expectedResponse: expectedResponse,
-                                file: file,
-                                line: line
-                            ),
+                            socksTestHandler,
                         ])
+
+                        // The SOCKS handlers must be fully torn down before the origin's TLS
+                        // handshake (if any) is set up: adding an `NIOSSLServerHandler` — which
+                        // proactively drives the handshake from `handlerAdded` — while the SOCKS
+                        // handlers are still mid-removal in the same call stack races with that
+                        // teardown and corrupts the connection. Deferring to a completion callback
+                        // (mirroring `HTTPBin`'s own HTTP-CONNECT-proxy teardown) avoids that.
+                        promise.futureResult.assumeIsolated().flatMap {
+                            channel.pipeline.syncOperations.removeHandler(socksTestHandler)
+                        }.flatMap { _ in
+                            channel.pipeline.syncOperations.removeHandler(handshakeHandler)
+                        }.nonisolated().whenComplete { result in
+                            switch result {
+                            case .failure:
+                                channel.close(mode: .all, promise: nil)
+                            case .success:
+                                do {
+                                    let sync = channel.pipeline.syncOperations
+                                    if let tlsConfiguration {
+                                        let sslContext = try NIOSSLContext(configuration: tlsConfiguration)
+                                        try sync.addHandler(NIOSSLServerHandler(context: sslContext))
+                                    }
+                                    try sync.addHandlers([
+                                        ByteToMessageHandler(HTTPRequestDecoder()),
+                                        HTTPResponseEncoder(),
+                                        TestHTTPServer(
+                                            expectedURL: expectedURL,
+                                            expectedResponse: expectedResponse,
+                                            file: file,
+                                            line: line
+                                        ),
+                                    ])
+                                } catch {
+                                    channel.close(mode: .all, promise: nil)
+                                }
+                            }
+                        }
                     }
                 }
         }
@@ -88,9 +127,11 @@ class SOCKSTestHandler: ChannelInboundHandler, RemovableChannelHandler {
     typealias InboundIn = ClientMessage
 
     let handshakeHandler: SOCKSServerHandshakeHandler
+    let promise: EventLoopPromise<Void>
 
-    init(handshakeHandler: SOCKSServerHandshakeHandler) {
+    init(handshakeHandler: SOCKSServerHandshakeHandler, promise: EventLoopPromise<Void>) {
         self.handshakeHandler = handshakeHandler
+        self.promise = promise
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -116,21 +157,13 @@ class SOCKSTestHandler: ChannelInboundHandler, RemovableChannelHandler {
                 ),
                 promise: nil
             )
-
-            do {
-                try context.channel.pipeline.syncOperations.addHandlers(
-                    [
-                        ByteToMessageHandler(HTTPRequestDecoder()),
-                        HTTPResponseEncoder(),
-                    ],
-                    position: .after(self)
-                )
-                context.channel.pipeline.syncOperations.removeHandler(self, promise: nil)
-                context.channel.pipeline.syncOperations.removeHandler(self.handshakeHandler, promise: nil)
-            } catch {
-                context.fireErrorCaught(error)
-            }
+            self.promise.succeed(())
         }
+    }
+
+    func errorCaught(context: ChannelHandlerContext, error: Error) {
+        self.promise.fail(error)
+        context.fireErrorCaught(error)
     }
 }
 

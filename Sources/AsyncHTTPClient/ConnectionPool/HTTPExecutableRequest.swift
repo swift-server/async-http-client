@@ -151,6 +151,9 @@ protocol HTTPSchedulableRequest: HTTPExecutableRequest {
     /// If you want to override the default `TLSConfiguration` ensure that this property is non nil
     var tlsConfiguration: TLSConfiguration? { get }
 
+    /// Optional SPKI pinning configuration for TLS certificate validation.
+    var tlsPinning: SPKIPinningConfiguration? { get }
+
     /// The task's logger
     var logger: Logger { get }
 

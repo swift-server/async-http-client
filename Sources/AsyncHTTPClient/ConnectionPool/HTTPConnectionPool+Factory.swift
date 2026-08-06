@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Logging
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
 import NIOHTTPCompression
@@ -30,12 +31,18 @@ extension HTTPConnectionPool {
     struct ConnectionFactory {
         let key: ConnectionPool.Key
         let clientConfiguration: HTTPClient.Configuration
+        let tlsPinning: SPKIPinningConfiguration?
         let tlsConfiguration: TLSConfiguration
         let sslContextCache: SSLContextCache
+
+        /// Guards against logging the weak-pinning warning once per physical connection —
+        /// shared across every connection created by this factory so it fires at most once per pool.
+        private let hasWarnedAboutWeakPinning = NIOLockedValueBox(false)
 
         init(
             key: ConnectionPool.Key,
             tlsConfiguration: TLSConfiguration?,
+            tlsPinning: SPKIPinningConfiguration?,
             clientConfiguration: HTTPClient.Configuration,
             sslContextCache: SSLContextCache
         ) {
@@ -44,6 +51,7 @@ extension HTTPConnectionPool {
             self.sslContextCache = sslContextCache
             self.tlsConfiguration =
                 tlsConfiguration ?? clientConfiguration.tlsConfiguration ?? .makeClientConfiguration()
+            self.tlsPinning = tlsPinning ?? clientConfiguration.tlsPinning
         }
     }
 }
@@ -411,6 +419,9 @@ extension HTTPConnectionPool.ConnectionFactory {
                         serverHostname: sslServerHostname
                     )
                     try channel.pipeline.syncOperations.addHandler(sslHandler)
+
+                    try setupSPKIPinningHandlerIfNeeded(channel.pipeline.syncOperations, logger: logger)
+
                     let tlsEventHandler = TLSEventsHandler(deadline: deadline)
                     try channel.pipeline.syncOperations.addHandler(tlsEventHandler)
 
@@ -432,6 +443,41 @@ extension HTTPConnectionPool.ConnectionFactory {
                 }
             }
         }
+    }
+
+    private func setupSPKIPinningHandlerIfNeeded(_ sync: ChannelPipeline.SynchronousOperations, logger: Logger) throws {
+        guard let tlsPinning else {
+            return
+        }
+
+        guard #available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *) else {
+            throw SPKIPinningHandlerError.platformNotSupported
+        }
+
+        if tlsPinning.pins.count < 2 && tlsPinning.policy == .strict {
+            let shouldWarn = self.hasWarnedAboutWeakPinning.withLockedValue { hasWarned in
+                let shouldWarn = !hasWarned
+                hasWarned = true
+                return shouldWarn
+            }
+
+            if shouldWarn {
+                logger.warning(
+                    "SPKIPinningHandler deployed with < 2 pins in strict mode — catastrophic lockout risk on certificate rotation!",
+                    metadata: [
+                        "current_pin_count": .stringConvertible(tlsPinning.pins.count),
+                        "recommendation": .string("Deploy multiple pins to enable safe certificate rotation"),
+                    ]
+                )
+            }
+        }
+
+        let pinningHandler = SPKIPinningHandler(
+            tlsPinning: tlsPinning,
+            logger: logger
+        )
+
+        try sync.addHandler(pinningHandler)
     }
 
     private func makePlainBootstrap<Requester: HTTPConnectionRequester>(
@@ -612,6 +658,10 @@ extension HTTPConnectionPool.ConnectionFactory {
                             try channel.pipeline.syncOperations.addHandler(
                                 NWWaitingHandler(requester: requester, connectionID: connectionID)
                             )
+
+                            if tlsPinning != nil {
+                                throw SPKIPinningHandlerError.networkFrameworkNotSupported
+                            }
                             // we don't need to set a TLS deadline for NIOTS connections, since the
                             // TLS handshake is part of the TS connection bootstrap. If the TLS
                             // handshake times out the complete connection creation will be failed.
@@ -672,7 +722,11 @@ extension HTTPConnectionPool.ConnectionFactory {
                             let tlsEventHandler = TLSEventsHandler(deadline: deadline)
 
                             try sync.addHandler(sslHandler)
+
+                            try setupSPKIPinningHandlerIfNeeded(sync, logger: logger)
+
                             try sync.addHandler(tlsEventHandler)
+
                             return channel.eventLoop.makeSucceededVoidFuture()
                         } catch {
                             return channel.eventLoop.makeFailedFuture(error)

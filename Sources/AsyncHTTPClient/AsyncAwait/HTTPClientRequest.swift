@@ -53,6 +53,9 @@ public struct HTTPClientRequest: Sendable {
     /// Request-specific TLS configuration, defaults to no request-specific TLS configuration.
     public var tlsConfiguration: TLSConfiguration?
 
+    /// Optional SPKI pinning configuration for TLS certificate validation.
+    public var tlsPinning: SPKIPinningConfiguration?
+
     /// The local IP address to bind this request's connection to.
     ///
     /// When set, overrides ``HTTPClient/Configuration/localAddress`` for this request.
