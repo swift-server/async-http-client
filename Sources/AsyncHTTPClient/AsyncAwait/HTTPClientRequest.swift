@@ -60,6 +60,22 @@ public struct HTTPClientRequest: Sendable {
     /// Defaults to `nil` (use client configuration default).
     public var localAddress: String?
 
+    /// The maximum duration any single phase of this request may sit without progress
+    /// before it is considered stalled and aborted.
+    ///
+    /// When set, overrides ``HTTPClient/Configuration/Timeout-swift.struct/connect``,
+    /// ``HTTPClient/Configuration/Timeout-swift.struct/read``, and
+    /// ``HTTPClient/Configuration/Timeout-swift.struct/write`` for this request:
+    /// - acts as the deadline for acquiring a connection (TCP connect + TLS handshake);
+    /// - bounds the idle gap between reads from the channel once the request is on the wire;
+    /// - bounds the idle gap between writes into the channel during body upload.
+    ///
+    /// The idle timers reset on every byte transferred in their direction, so a slow-but-steady
+    /// transfer will not trip them; only an actual gap longer than `stallTimeout` will.
+    /// This is independent of the per-call `deadline`/`timeout`, which bounds the request end-to-end.
+    /// Defaults to `nil` (use client configuration defaults).
+    public var stallTimeout: TimeAmount?
+
     public init(url: String) {
         self.url = url
         self.method = .GET
@@ -67,6 +83,7 @@ public struct HTTPClientRequest: Sendable {
         self.body = .none
         self.tlsConfiguration = nil
         self.localAddress = nil
+        self.stallTimeout = nil
     }
 }
 

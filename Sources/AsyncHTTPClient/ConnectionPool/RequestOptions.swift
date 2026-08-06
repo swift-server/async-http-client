@@ -19,6 +19,9 @@ struct RequestOptions {
     var idleReadTimeout: TimeAmount?
     /// The maximal `TimeAmount` that is allowed to pass between `write`s into the Channel.
     var idleWriteTimeout: TimeAmount?
+    /// The maximum time the request will wait for a usable connection to be established
+    /// (TCP connect + TLS handshake) before giving up.
+    var connectionCreationTimeout: TimeAmount
     /// DNS overrides.
     var dnsOverride: [String: String]
     /// The local IP address to bind outgoing connections to. This is typically used on multi-NIC
@@ -28,11 +31,13 @@ struct RequestOptions {
     init(
         idleReadTimeout: TimeAmount?,
         idleWriteTimeout: TimeAmount?,
+        connectionCreationTimeout: TimeAmount,
         dnsOverride: [String: String],
         localAddress: String? = nil
     ) {
         self.idleReadTimeout = idleReadTimeout
         self.idleWriteTimeout = idleWriteTimeout
+        self.connectionCreationTimeout = connectionCreationTimeout
         self.dnsOverride = dnsOverride
         self.localAddress = localAddress
     }
@@ -43,8 +48,19 @@ extension RequestOptions {
         RequestOptions(
             idleReadTimeout: configuration.timeout.read,
             idleWriteTimeout: configuration.timeout.write,
+            connectionCreationTimeout: configuration.timeout.connectionCreationTimeout,
             dnsOverride: configuration.dnsOverride,
             localAddress: configuration.localAddress
         )
+    }
+
+    /// Applies a per-request stall timeout that, when non-nil, replaces the connect, read, and
+    /// write timeouts derived from the client configuration. A `nil` value is a no-op so the
+    /// configured defaults stand.
+    mutating func apply(stallTimeout: TimeAmount?) {
+        guard let stallTimeout else { return }
+        self.idleReadTimeout = stallTimeout
+        self.idleWriteTimeout = stallTimeout
+        self.connectionCreationTimeout = stallTimeout
     }
 }

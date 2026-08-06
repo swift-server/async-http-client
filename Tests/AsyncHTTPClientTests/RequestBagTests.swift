@@ -1171,12 +1171,14 @@ extension RequestOptions {
     static func forTests(
         idleReadTimeout: TimeAmount? = nil,
         idleWriteTimeout: TimeAmount? = nil,
+        connectionCreationTimeout: TimeAmount = .seconds(10),
         dnsOverride: [String: String] = [:],
         localAddress: String? = nil
     ) -> Self {
         RequestOptions(
             idleReadTimeout: idleReadTimeout,
             idleWriteTimeout: idleWriteTimeout,
+            connectionCreationTimeout: connectionCreationTimeout,
             dnsOverride: dnsOverride,
             localAddress: localAddress
         )

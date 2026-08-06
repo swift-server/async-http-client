@@ -803,13 +803,14 @@ public final class HTTPClient: Sendable {
             )
 
         do {
+            let requestOptions = RequestOptions.fromClientConfiguration(self.configuration)
             let requestBag = try RequestBag(
                 request: request,
                 eventLoopPreference: eventLoopPreference,
                 task: task,
                 redirectHandler: redirectHandler,
-                connectionDeadline: .now() + (self.configuration.timeout.connectionCreationTimeout),
-                requestOptions: .fromClientConfiguration(self.configuration),
+                connectionDeadline: .now() + requestOptions.connectionCreationTimeout,
+                requestOptions: requestOptions,
                 delegate: delegate
             )
 

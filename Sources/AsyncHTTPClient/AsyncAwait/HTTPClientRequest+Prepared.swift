@@ -49,6 +49,7 @@ extension HTTPClientRequest {
         var head: HTTPRequestHead
         var body: Body?
         var tlsConfiguration: TLSConfiguration?
+        var stallTimeout: TimeAmount?
     }
 }
 
@@ -95,7 +96,8 @@ extension HTTPClientRequest.Prepared {
                 headers: headers
             ),
             body: request.body.map { .init($0) },
-            tlsConfiguration: request.tlsConfiguration
+            tlsConfiguration: request.tlsConfiguration,
+            stallTimeout: request.stallTimeout
         )
     }
 }
@@ -162,6 +164,7 @@ extension HTTPClientRequest {
         newRequest.headers = headers
         newRequest.body = body
         newRequest.localAddress = self.localAddress
+        newRequest.stallTimeout = self.stallTimeout
         return newRequest
     }
 }
