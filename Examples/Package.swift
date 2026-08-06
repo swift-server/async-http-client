@@ -26,6 +26,9 @@ let package = Package(
     products: [
         .executable(name: "GetHTML", targets: ["GetHTML"]),
         .executable(name: "GetJSON", targets: ["GetJSON"]),
+        .executable(name: "PostJSON", targets: ["PostJSON"]),
+        .executable(name: "PutJSON", targets: ["PutJSON"]),
+        .executable(name: "DeleteJSON", targets: ["DeleteJSON"]),
         .executable(name: "StreamingByteCounter", targets: ["StreamingByteCounter"]),
     ],
     dependencies: [
@@ -54,6 +57,33 @@ let package = Package(
                 .product(name: "NIOFoundationCompat", package: "swift-nio"),
             ],
             path: "GetJSON"
+        ),
+        .executableTarget(
+            name: "PostJSON",
+            dependencies: [
+                .product(name: "AsyncHTTPClient", package: "async-http-client"),
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOFoundationCompat", package: "swift-nio"),
+            ],
+            path: "PostJSON"
+        ),
+        .executableTarget(
+            name: "PutJSON",
+            dependencies: [
+                .product(name: "AsyncHTTPClient", package: "async-http-client"),
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOFoundationCompat", package: "swift-nio"),
+            ],
+            path: "PutJSON"
+        ),
+        .executableTarget(
+            name: "DeleteJSON",
+            dependencies: [
+                .product(name: "AsyncHTTPClient", package: "async-http-client"),
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOFoundationCompat", package: "swift-nio"),
+            ],
+            path: "DeleteJSON"
         ),
         .executableTarget(
             name: "StreamingByteCounter",
