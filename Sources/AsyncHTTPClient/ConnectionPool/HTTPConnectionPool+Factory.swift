@@ -28,6 +28,10 @@ import NIOTransportServices
 
 extension HTTPConnectionPool {
     struct ConnectionFactory {
+        /// The range of port numbers that can be bound as a local (source) port. `0` lets the OS
+        /// pick an ephemeral port.
+        static let validPortRange = 0...Int(UInt16.max)
+
         let key: ConnectionPool.Key
         let clientConfiguration: HTTPClient.Configuration
         let tlsConfiguration: TLSConfiguration
@@ -443,6 +447,9 @@ extension HTTPConnectionPool.ConnectionFactory {
         if let localAddress = self.key.localAddress, !localAddress.isIPAddress {
             throw HTTPClientError.invalidLocalAddress
         }
+        guard Self.validPortRange.contains(self.key.localPort) else {
+            throw HTTPClientError.invalidLocalPort
+        }
 
         #if canImport(Network)
         if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *),
@@ -572,6 +579,9 @@ extension HTTPConnectionPool.ConnectionFactory {
     ) -> EventLoopFuture<NIOClientTCPBootstrapProtocol> {
         if let localAddress = self.key.localAddress, !localAddress.isIPAddress {
             return eventLoop.makeFailedFuture(HTTPClientError.invalidLocalAddress)
+        }
+        guard Self.validPortRange.contains(self.key.localPort) else {
+            return eventLoop.makeFailedFuture(HTTPClientError.invalidLocalPort)
         }
 
         var tlsConfig = self.tlsConfiguration
