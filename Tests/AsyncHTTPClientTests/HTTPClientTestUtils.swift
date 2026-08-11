@@ -832,6 +832,19 @@ internal struct RequestInfo: Codable, Equatable {
     var connectionNumber: Int
 }
 
+/// Asks the OS for an ephemeral port on `host`, releases it again and returns the port number.
+///
+/// Used by tests that need to bind a *specific* local port: the returned port was free a moment
+/// ago, which makes it a much better candidate than a hard coded one.
+internal func reserveEphemeralPort(host: String = "127.0.0.1") throws -> Int {
+    let channel = try ServerBootstrap(group: MultiThreadedEventLoopGroup.singleton)
+        .bind(host: host, port: 0)
+        .wait()
+    let port = channel.localAddress!.port!
+    try channel.close().wait()
+    return port
+}
+
 internal final class HTTPBinHandler: ChannelInboundHandler {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
@@ -1055,6 +1068,13 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                 var builder = HTTPResponseBuilder(status: .ok)
                 let clientIP = context.channel.remoteAddress?.ipAddress ?? "unknown"
                 let buf = context.channel.allocator.buffer(string: clientIP)
+                builder.add(buf)
+                self.resps.append(builder)
+                return
+            case "/echo-client-port":
+                var builder = HTTPResponseBuilder(status: .ok)
+                let clientPort = context.channel.remoteAddress?.port.map { String($0) } ?? "unknown"
+                let buf = context.channel.allocator.buffer(string: clientPort)
                 builder.add(buf)
                 self.resps.append(builder)
                 return

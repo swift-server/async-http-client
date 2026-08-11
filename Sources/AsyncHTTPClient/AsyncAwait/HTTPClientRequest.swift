@@ -64,8 +64,9 @@ public struct HTTPClientRequest: Sendable {
     ///
     /// When set, overrides ``HTTPClient/Configuration/localPort`` for this
     /// request. Only consulted when a local address (request-level or
-    /// configuration-level) is also set. Defaults to `nil` (use client
-    /// configuration default).
+    /// configuration-level) is also set. Values outside of `0...65535` fail the
+    /// request with ``HTTPClientError/invalidLocalPort``. Defaults to `nil`
+    /// (use client configuration default).
     public var localPort: Int?
 
     public init(url: String) {
