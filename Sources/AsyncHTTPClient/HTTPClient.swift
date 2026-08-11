@@ -946,6 +946,9 @@ public final class HTTPClient: Sendable {
         /// Only consulted when ``localAddress`` is also set; otherwise the
         /// kernel picks both interface and port. Connections with different
         /// `(localAddress, localPort)` pairs are pooled separately.
+        ///
+        /// Values outside of `0...65535` fail the request with
+        /// ``HTTPClientError/invalidLocalPort``.
         public var localPort: Int = 0
 
         /// A method with access to the HTTP/1 connection channel that is called when creating the connection.
@@ -1539,6 +1542,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case invalidHTTPVersionConfiguration
         case invalidDNSOverridesConfiguration
         case invalidLocalAddress
+        case invalidLocalPort
         case invalidProxyConfiguration
         case internalStateFailure(file: String, line: UInt)
     }
@@ -1635,6 +1639,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
                 "The DNS overrides specified in the configuration are not valid. Please specify in the format hostname1:ip1,hostname2:ip2"
         case .invalidLocalAddress:
             return "Invalid local address"
+        case .invalidLocalPort:
+            return "Invalid local port. The local port must be in the range 0...65535"
         case .invalidProxyConfiguration:
             return "The proxy configuration is not valid"
         case .internalStateFailure(let file, let line):
@@ -1742,6 +1748,9 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
 
     /// The local address specified is not a valid IP address.
     public static let invalidLocalAddress = HTTPClientError(code: .invalidLocalAddress)
+
+    /// The local port specified is outside of the valid port range `0...65535`.
+    public static let invalidLocalPort = HTTPClientError(code: .invalidLocalPort)
 
     /// The proxy configuration is not valid.
     public static let invalidProxyConfiguration = HTTPClientError(code: .invalidProxyConfiguration)
