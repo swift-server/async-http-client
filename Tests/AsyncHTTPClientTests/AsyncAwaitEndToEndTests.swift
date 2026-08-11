@@ -1238,6 +1238,198 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         let requestInfo = try body.readJSONDecodable(RequestInfo.self, length: body.readableBytes)
         XCTAssertEqual(requestInfo?.data, localAddress)
     }
+
+    // MARK: - Integration tests: local port binding
+
+    func testLocalPortBinding_configLevel() async throws {
+        let bin = HTTPBin(.http1_1(ssl: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        let localPort = try reserveEphemeralPort()
+
+        var config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+        config.localAddress = "127.0.0.1"
+        config.localPort = localPort
+
+        let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        let request = HTTPClientRequest(url: "http://127.0.0.1:\(bin.port)/echo-client-port")
+        let response = try await client.execute(request, deadline: .now() + .seconds(10))
+        XCTAssertEqual(response.status, .ok)
+
+        var body = try await response.body.collect(upTo: 1024)
+        let requestInfo = try body.readJSONDecodable(RequestInfo.self, length: body.readableBytes)
+        XCTAssertEqual(requestInfo?.data, "\(localPort)")
+    }
+
+    func testLocalPortBinding_perRequest() async throws {
+        let bin = HTTPBin(.http1_1(ssl: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        let localPort = try reserveEphemeralPort()
+
+        let config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+
+        let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        var request = HTTPClientRequest(url: "http://127.0.0.1:\(bin.port)/echo-client-port")
+        request.localAddress = "127.0.0.1"
+        request.localPort = localPort
+
+        let response = try await client.execute(request, deadline: .now() + .seconds(10))
+        XCTAssertEqual(response.status, .ok)
+
+        var body = try await response.body.collect(upTo: 1024)
+        let requestInfo = try body.readJSONDecodable(RequestInfo.self, length: body.readableBytes)
+        XCTAssertEqual(requestInfo?.data, "\(localPort)")
+    }
+
+    func testLocalPortBinding_perRequestOverridesConfig() async throws {
+        let bin = HTTPBin(.http1_1(ssl: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        let configPort = try reserveEphemeralPort()
+        let requestPort = try reserveEphemeralPort()
+        XCTAssertNotEqual(configPort, requestPort)
+
+        var config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+        config.localAddress = "127.0.0.1"
+        config.localPort = configPort
+
+        let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        var request = HTTPClientRequest(url: "http://127.0.0.1:\(bin.port)/echo-client-port")
+        request.localPort = requestPort
+
+        let response = try await client.execute(request, deadline: .now() + .seconds(10))
+        XCTAssertEqual(response.status, .ok)
+
+        var body = try await response.body.collect(upTo: 1024)
+        let requestInfo = try body.readJSONDecodable(RequestInfo.self, length: body.readableBytes)
+        XCTAssertEqual(requestInfo?.data, "\(requestPort)")
+    }
+
+    func testLocalPortBinding_perRequestZeroOverridesConfigWithEphemeralPort() async throws {
+        let bin = HTTPBin(.http1_1(ssl: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        let configPort = try reserveEphemeralPort()
+
+        var config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+        config.localAddress = "127.0.0.1"
+        config.localPort = configPort
+
+        let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        var request = HTTPClientRequest(url: "http://127.0.0.1:\(bin.port)/echo-client-port")
+        request.localPort = 0
+
+        let response = try await client.execute(request, deadline: .now() + .seconds(10))
+        XCTAssertEqual(response.status, .ok)
+
+        var body = try await response.body.collect(upTo: 1024)
+        let requestInfo = try body.readJSONDecodable(RequestInfo.self, length: body.readableBytes)
+        let boundPort = requestInfo.flatMap { Int($0.data) }
+        XCTAssertNotNil(boundPort)
+        XCTAssertNotEqual(boundPort, 0)
+        XCTAssertNotEqual(boundPort, configPort)
+    }
+
+    func testLocalPortBinding_defaultsToEphemeralPort() async throws {
+        let bin = HTTPBin(.http1_1(ssl: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        var config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+        config.localAddress = "127.0.0.1"
+
+        let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        let request = HTTPClientRequest(url: "http://127.0.0.1:\(bin.port)/echo-client-port")
+        let response = try await client.execute(request, deadline: .now() + .seconds(10))
+        XCTAssertEqual(response.status, .ok)
+
+        var body = try await response.body.collect(upTo: 1024)
+        let requestInfo = try body.readJSONDecodable(RequestInfo.self, length: body.readableBytes)
+        let boundPort = requestInfo.flatMap { Int($0.data) }
+        XCTAssertNotNil(boundPort)
+        XCTAssertNotEqual(boundPort, 0)
+    }
+
+    func testLocalPortBinding_withTLS() async throws {
+        let bin = HTTPBin(.http2(compress: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        let localPort = try reserveEphemeralPort()
+
+        var config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+        config.tlsConfiguration = .clientDefault
+        config.tlsConfiguration?.certificateVerification = .none
+        config.localAddress = "127.0.0.1"
+        config.localPort = localPort
+
+        let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        let request = HTTPClientRequest(url: "https://127.0.0.1:\(bin.port)/echo-client-port")
+        let response = try await client.execute(request, deadline: .now() + .seconds(10))
+        XCTAssertEqual(response.status, .ok)
+
+        var body = try await response.body.collect(upTo: 1024)
+        let requestInfo = try body.readJSONDecodable(RequestInfo.self, length: body.readableBytes)
+        XCTAssertEqual(requestInfo?.data, "\(localPort)")
+    }
+
+    func testLocalPortBinding_portAlreadyInUseFailsRequest() async throws {
+        // Keep a listener on the port so that binding the client socket to it fails.
+        let blocker = try await ServerBootstrap(group: MultiThreadedEventLoopGroup.singleton)
+            .bind(host: "127.0.0.1", port: 0)
+            .get()
+        defer { XCTAssertNoThrow(try blocker.close().wait()) }
+        let localPort = blocker.localAddress!.port!
+
+        let bin = HTTPBin(.http1_1(ssl: false))
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+
+        var config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+        config.localAddress = "127.0.0.1"
+        config.localPort = localPort
+
+        let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        let request = HTTPClientRequest(url: "http://127.0.0.1:\(bin.port)/echo-client-port")
+        await XCTAssertThrowsError(try await client.execute(request, deadline: .now() + .seconds(10)))
+    }
+
+    func testLocalPortBinding_outOfRangePort() async throws {
+        var config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+        config.localAddress = "127.0.0.1"
+        config.localPort = 100_000
+
+        let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: config)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        let request = HTTPClientRequest(url: "http://127.0.0.1/ok")
+        do {
+            _ = try await client.execute(request, deadline: .now() + .seconds(10))
+            XCTFail("Expected error to be thrown")
+        } catch {
+            XCTAssertEqual(error as? HTTPClientError, .invalidLocalPort)
+        }
+    }
 }
 
 struct AnySendableSequence<Element>: @unchecked Sendable {

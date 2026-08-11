@@ -923,7 +923,7 @@ public final class HTTPClient: Sendable {
         ///
         /// When set, all outgoing connections will bind to this address before connecting.
         /// The value should be an IP address string (e.g. `"192.168.1.10"` or `"::1"`).
-        /// Port 0 (OS-assigned ephemeral port) is always used.
+        /// The local port comes from ``localPort`` (default `0` = OS-assigned ephemeral).
         ///
         /// This is most commonly used on multi-NIC systems where you want traffic to take a
         /// specific network path which is not the choice the routing table would make by
@@ -932,6 +932,24 @@ public final class HTTPClient: Sendable {
         /// This can be overridden on a per-request basis using ``HTTPClientRequest/localAddress``.
         /// Defaults to `nil` (OS default interface selection).
         public var localAddress: String?
+
+        /// The local TCP source port to bind outgoing connections to.
+        ///
+        /// `0` (the default) means the OS assigns an ephemeral port. Non-zero
+        /// values are useful for callers that need a specific source port —
+        /// for example, server-side trust signals that key off a privileged
+        /// (1–1023) source port. Bind failures (e.g. `EACCES` for
+        /// privileged ports without `CAP_NET_BIND_SERVICE`, or `EADDRINUSE`
+        /// for a port already held) surface as ``HTTPClientError`` /
+        /// channel errors at request time.
+        ///
+        /// Only consulted when ``localAddress`` is also set; otherwise the
+        /// kernel picks both interface and port. Connections with different
+        /// `(localAddress, localPort)` pairs are pooled separately.
+        ///
+        /// Values outside of `0...65535` fail the request with
+        /// ``HTTPClientError/invalidLocalPort``.
+        public var localPort: Int = 0
 
         /// A method with access to the HTTP/1 connection channel that is called when creating the connection.
         public var http1_1ConnectionDebugInitializer: (@Sendable (Channel) -> EventLoopFuture<Void>)?
@@ -1524,6 +1542,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case invalidHTTPVersionConfiguration
         case invalidDNSOverridesConfiguration
         case invalidLocalAddress
+        case invalidLocalPort
         case invalidProxyConfiguration
         case internalStateFailure(file: String, line: UInt)
     }
@@ -1620,6 +1639,8 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
                 "The DNS overrides specified in the configuration are not valid. Please specify in the format hostname1:ip1,hostname2:ip2"
         case .invalidLocalAddress:
             return "Invalid local address"
+        case .invalidLocalPort:
+            return "Invalid local port. The local port must be in the range 0...65535"
         case .invalidProxyConfiguration:
             return "The proxy configuration is not valid"
         case .internalStateFailure(let file, let line):
@@ -1727,6 +1748,9 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
 
     /// The local address specified is not a valid IP address.
     public static let invalidLocalAddress = HTTPClientError(code: .invalidLocalAddress)
+
+    /// The local port specified is outside of the valid port range `0...65535`.
+    public static let invalidLocalPort = HTTPClientError(code: .invalidLocalPort)
 
     /// The proxy configuration is not valid.
     public static let invalidProxyConfiguration = HTTPClientError(code: .invalidProxyConfiguration)
