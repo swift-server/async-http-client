@@ -189,4 +189,56 @@ class HTTPClientNIOTSTests: XCTestCase {
         }
         #endif
     }
+
+    func testNetworkPathRestrictionFieldsDontBreakRequests() {
+        guard isTestingNIOTS() else { return }
+        #if canImport(Network)
+        let httpBin = HTTPBin(.http1_1(ssl: false))
+        var config = HTTPClient.Configuration()
+        // Loopback isn't cellular/expensive/constrained, so none of these should block the request;
+        // this exercises the field plumbing (Configuration -> ConnectionFactory -> NWParameters)
+        // without needing a real cellular/constrained network path in CI.
+        config.prohibitedInterfaceTypes = [.cellular]
+        config.allowsExpensiveNetworkAccess = false
+        config.allowsConstrainedNetworkAccess = false
+        config.allowsUltraConstrainedPaths = false
+        // Also set localAddress, to cover the case that regressed `configureNWParameters`
+        // composition: local-address binding and interface restriction must both apply, since
+        // `NIOTSConnectionBootstrap.configureNWParameters(_:)` only keeps the most recent closure.
+        config.localAddress = "127.0.0.1"
+
+        let httpClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: config
+        )
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        XCTAssertNoThrow(try httpClient.get(url: "http://localhost:\(httpBin.port)/get").wait())
+        #endif
+    }
+
+    func testRequiredInterfaceTypeOtherDoesNotRestrictLoopback() {
+        guard isTestingNIOTS() else { return }
+        #if canImport(Network)
+        let httpBin = HTTPBin(.http1_1(ssl: false))
+        var config = HTTPClient.Configuration()
+        // `.other` mirrors NWParameters' own "unrestricted" default; setting it explicitly should
+        // behave the same as leaving `requiredInterfaceType` `nil`.
+        config.requiredInterfaceType = .other
+
+        let httpClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: config
+        )
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        XCTAssertNoThrow(try httpClient.get(url: "http://localhost:\(httpBin.port)/get").wait())
+        #endif
+    }
 }
