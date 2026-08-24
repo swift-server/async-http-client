@@ -440,9 +440,9 @@ extension HTTPConnectionPool.ConnectionFactory {
     /// closure rather than composing across calls, so every concern that needs `NWParameters` must
     /// be folded into a single call to this method instead of separate `configureNWParameters { }`
     /// invocations. Callers already run under `#available(OSX 10.14, iOS 12.0, tvOS 12.0,
-    /// watchOS 6.0, *)`, the minimum for `NWParameters` itself; fields with a higher minimum
-    /// (`prohibitConstrainedPaths`, `allowUltraConstrainedPaths`) are individually re-checked below
-    /// instead of raising that requirement for the whole method.
+    /// watchOS 6.0, *)`, the minimum for `NWParameters` itself; `prohibitConstrainedPaths`, which
+    /// has a higher minimum, is individually re-checked below instead of raising that requirement
+    /// for the whole method.
     @available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *)
     private func configureNWParameters(_ params: NWParameters, localAddress: String?) {
         if let localAddress {
@@ -451,32 +451,9 @@ extension HTTPConnectionPool.ConnectionFactory {
                 port: .any
             )
         }
-        if !self.clientConfiguration.prohibitedInterfaceTypes.isEmpty {
-            params.prohibitedInterfaceTypes = self.clientConfiguration.prohibitedInterfaceTypes.map {
-                switch $0.backing {
-                case .other: return .other
-                case .wifi: return .wifi
-                case .cellular: return .cellular
-                case .wiredEthernet: return .wiredEthernet
-                case .loopback: return .loopback
-                }
-            }
-        }
-        if let required = self.clientConfiguration.requiredInterfaceType {
-            switch required.backing {
-            case .other: params.requiredInterfaceType = .other
-            case .wifi: params.requiredInterfaceType = .wifi
-            case .cellular: params.requiredInterfaceType = .cellular
-            case .wiredEthernet: params.requiredInterfaceType = .wiredEthernet
-            case .loopback: params.requiredInterfaceType = .loopback
-            }
-        }
         params.prohibitExpensivePaths = !self.clientConfiguration.allowsExpensiveNetworkAccess
         if #available(OSX 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
             params.prohibitConstrainedPaths = !self.clientConfiguration.allowsConstrainedNetworkAccess
-        }
-        if #available(OSX 26.0, iOS 26.0, tvOS 26.0, watchOS 26.0, visionOS 26.0, *) {
-            params.allowUltraConstrainedPaths = self.clientConfiguration.allowsUltraConstrainedPaths
         }
     }
     #endif

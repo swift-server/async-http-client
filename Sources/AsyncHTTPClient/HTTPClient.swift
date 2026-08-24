@@ -903,19 +903,6 @@ public final class HTTPClient: Sendable {
         /// which is the recommended setting. Only set this to `false` when attempting to trigger a particular error path.
         public var networkFrameworkWaitForConnectivity: Bool
 
-        /// Interface types that connections must not use (e.g. `[.cellular]` to forbid cellular).
-        /// Defaults to empty — no restriction. Mirrors `NWParameters.prohibitedInterfaceTypes`.
-        /// Only applies when Network.framework is used as the transport (Darwin platforms);
-        /// ignored otherwise.
-        public var prohibitedInterfaceTypes: Set<NetworkInterfaceType> = []
-
-        /// The single interface type connections are restricted to (e.g. `.wifi` to forbid
-        /// everything but Wi-Fi). Defaults to `nil` — no restriction. Mirrors
-        /// `NWParameters.requiredInterfaceType`, but as an `Optional` instead of that property's
-        /// non-optional `.other`-means-"unrestricted" sentinel. Only applies when Network.framework
-        /// is used as the transport; ignored otherwise.
-        public var requiredInterfaceType: NetworkInterfaceType?
-
         /// Whether the connection may use an expensive network path (e.g. cellular, personal
         /// hotspot). Defaults to `true`. Mirrors `NWParameters.prohibitExpensivePaths` (inverted).
         /// Only applies when Network.framework is used as the transport; ignored otherwise.
@@ -925,14 +912,6 @@ public final class HTTPClient: Sendable {
         /// Defaults to `true`. Mirrors `NWParameters.prohibitConstrainedPaths` (inverted).
         /// Only applies when Network.framework is used as the transport; ignored otherwise.
         public var allowsConstrainedNetworkAccess: Bool = true
-
-        /// Whether the connection may use an ultra-constrained network path. Defaults to `false`.
-        /// Mirrors `NWParameters.allowUltraConstrainedPaths` directly (same polarity, unlike
-        /// ``allowsExpensiveNetworkAccess`` / ``allowsConstrainedNetworkAccess`` above). Only takes
-        /// effect on OS versions where `NWParameters.allowUltraConstrainedPaths` exists (macOS 26.0 /
-        /// iOS 26.0 / watchOS 26.0 / tvOS 26.0 / visionOS 26.0 and newer); a no-op everywhere else,
-        /// including older Network.framework-capable OS versions, not just non-Darwin platforms.
-        public var allowsUltraConstrainedPaths: Bool = false
 
         /// The maximum number of times each connection can be used before it is replaced with a new one. Use `nil` (the default)
         /// if no limit should be applied to each connection.
@@ -1509,38 +1488,6 @@ extension HTTPClient.Configuration {
         public static let automatic: Self = .init(configuration: .automatic)
 
         var configuration: Configuration
-    }
-
-    /// A network interface category, mirroring `NWInterface.InterfaceType` (`Network.framework`)
-    /// without requiring `Network` to be imported at this declaration site, so it can be declared
-    /// unconditionally like ``HTTPClient/Configuration-swift.struct/networkFrameworkWaitForConnectivity``.
-    /// Only meaningful when Network.framework is used as the transport (Darwin platforms); ignored
-    /// otherwise.
-    public struct NetworkInterfaceType: Sendable, Hashable {
-        enum Backing: Sendable, Hashable {
-            case other
-            case wifi
-            case cellular
-            case wiredEthernet
-            case loopback
-        }
-
-        let backing: Backing
-
-        private init(backing: Backing) {
-            self.backing = backing
-        }
-
-        /// Mirrors `NWInterface.InterfaceType.other`.
-        public static let other: Self = .init(backing: .other)
-        /// Mirrors `NWInterface.InterfaceType.wifi`.
-        public static let wifi: Self = .init(backing: .wifi)
-        /// Mirrors `NWInterface.InterfaceType.cellular`.
-        public static let cellular: Self = .init(backing: .cellular)
-        /// Mirrors `NWInterface.InterfaceType.wiredEthernet`.
-        public static let wiredEthernet: Self = .init(backing: .wiredEthernet)
-        /// Mirrors `NWInterface.InterfaceType.loopback`.
-        public static let loopback: Self = .init(backing: .loopback)
     }
 }
 
