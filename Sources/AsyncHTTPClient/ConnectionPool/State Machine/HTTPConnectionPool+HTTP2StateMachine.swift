@@ -37,13 +37,17 @@ extension HTTPConnectionPool {
         /// The property was introduced to fail fast during testing.
         /// Otherwise this should always be true and not turned off.
         private let retryConnectionEstablishment: Bool
+        private let maximumConcurrentConnections: Int
 
         init(
             idGenerator: Connection.ID.Generator,
             retryConnectionEstablishment: Bool,
             lifecycleState: StateMachine.LifecycleState,
-            maximumConnectionUses: Int?
+            maximumConnectionUses: Int?,
+            maximumConcurrentConnections: Int = 1
         ) {
+            precondition(maximumConcurrentConnections > 0)
+            self.maximumConcurrentConnections = maximumConcurrentConnections
             self.idGenerator = idGenerator
             self.requests = RequestQueue()
 
@@ -62,7 +66,7 @@ extension HTTPConnectionPool {
             newHTTP2Connection: Connection,
             maxConcurrentStreams: Int
         ) -> Action {
-            let migrationAction = self.migrateConnectionsAndRequestsFromHTTP1(
+            var migrationAction = self.migrateConnectionsAndRequestsFromHTTP1(
                 http1Connections: http1Connections,
                 http2Connections: http2Connections,
                 requests: requests
@@ -72,6 +76,16 @@ extension HTTPConnectionPool {
                 newHTTP2Connection,
                 maxConcurrentStreams: maxConcurrentStreams
             )
+
+            // The shared migration combiner discards HTTP/1 prewarming actions. HTTP/2 growth,
+            // however, represents queued demand and must survive the protocol migration.
+            switch newConnectionAction.connection {
+            case .createConnection(let connectionID, let eventLoop),
+                .scheduleTimeoutTimerAndCreateConnection(_, let connectionID, let eventLoop):
+                migrationAction.createConnections.append((connectionID, eventLoop))
+            default:
+                break
+            }
 
             return .init(
                 request: newConnectionAction.request,
@@ -163,14 +177,17 @@ extension HTTPConnectionPool {
             /// 2. No available stream so we definitely need to wait until we have one
             self.requests.push(request)
 
-            if self.connections.hasConnectionThatCanOrWillBeAbleToExecuteRequests(for: eventLoop) {
-                /// 3. we already have a connection, we just need to wait until until it becomes available
+            if !self.connections.canCreateConnection(
+                onRequired: eventLoop,
+                maximumConcurrentConnections: self.maximumConcurrentConnections
+            ) {
+                // Wait for an existing connection or for capacity within the soft limit.
                 return .init(
                     request: .scheduleRequestTimeout(for: request, on: eventLoop),
                     connection: .none
                 )
             } else {
-                /// 4. we do *not* have a connection, need to create a new one and wait until it is connected.
+                // Establish missing event loop coverage or expand a saturated pool.
                 let connectionId = self.connections.createNewConnection(on: eventLoop)
                 return .init(
                     request: .scheduleRequestTimeout(for: request, on: eventLoop),
@@ -200,14 +217,17 @@ extension HTTPConnectionPool {
             /// 2. No available stream so we definitely need to wait until we have one
             self.requests.push(request)
 
-            if self.connections.hasConnectionThatCanOrWillBeAbleToExecuteRequests {
-                /// 3. we already have a connection, we just need to wait until until it becomes available
+            if !self.connections.canCreateConnection(
+                onRequired: nil,
+                maximumConcurrentConnections: self.maximumConcurrentConnections
+            ) {
+                // Wait for an existing connection or for capacity within the soft limit.
                 return .init(
                     request: .scheduleRequestTimeout(for: request, on: eventLoop),
                     connection: .none
                 )
             } else {
-                /// 4. we do *not* have a connection, need to create a new one and wait until it is connected.
+                // Establish the first connection or expand a saturated pool.
                 let connectionId = self.connections.createNewConnection(on: eventLoop)
                 return .init(
                     request: .scheduleRequestTimeout(for: request, on: eventLoop),
@@ -227,11 +247,17 @@ extension HTTPConnectionPool {
             self.failedConsecutiveConnectionAttempts = 0
             self.lastConnectFailure = nil
             let doesConnectionExistsForEL = self.connections.hasActiveConnection(for: connection.eventLoop)
+            let reachedLimit = self.connections.hasReachedActiveConnectionLimit(self.maximumConcurrentConnections)
+            // Preserve the default's historical migration behavior. With a larger limit, keep
+            // connections beyond the limit only when required event loop requests need them.
+            let needsEventLoopCoverage =
+                !doesConnectionExistsForEL
+                && (self.maximumConcurrentConnections == 1 || !self.requests.isEmpty(for: connection.eventLoop))
             let (index, context) = self.connections.newHTTP2ConnectionEstablished(
                 connection,
                 maxConcurrentStreams: maxConcurrentStreams
             )
-            if doesConnectionExistsForEL {
+            if reachedLimit && !needsEventLoopCoverage {
                 let connection = self.connections.closeConnection(at: index)
                 return .init(
                     request: .none,
@@ -270,8 +296,18 @@ extension HTTPConnectionPool {
                 }()
 
                 let connectionAction = { () -> EstablishedConnectionAction in
+                    let newConnectionID = self.createConnectionForPendingRequests(on: context.eventLoop)
                     if context.isIdle, requestsToExecute.isEmpty {
+                        if let newConnectionID = newConnectionID {
+                            return .scheduleTimeoutTimerAndCreateConnection(
+                                timeoutID: context.connectionID,
+                                newConnectionID: newConnectionID,
+                                on: context.eventLoop
+                            )
+                        }
                         return .scheduleTimeoutTimer(context.connectionID, on: context.eventLoop)
+                    } else if let newConnectionID = newConnectionID {
+                        return .createConnection(connectionID: newConnectionID, on: context.eventLoop)
                     } else {
                         return .none
                     }
@@ -341,41 +377,30 @@ extension HTTPConnectionPool {
         private mutating func nextActionForFailedConnection(at index: Int, on eventLoop: EventLoop) -> Action {
             switch self.lifecycleState {
             case .running:
-                // we do not know if we have created this connection for a request with a required
-                // event loop or not. However, we do not need this information and can infer
-                // if we need to create a new connection because we will only ever create one connection
-                // per event loop for required event loop requests and only need one connection for
-                // general purpose requests.
-
-                // precompute if we have starting or active connections to only iterate once over `self.connections`
+                // Preserve retry ordering when no starting or active connection can serve the
+                // requests. Other backoff timers must not delay replacing this connection.
                 let context = self.connections.backingOffTimerDone(for: eventLoop)
-
-                // we need to start a new on connection in two cases:
-                let needGeneralPurposeConnection =
-                    // 1. if we have general purpose requests
+                let needsGeneralPurposeConnection =
                     !self.requests.isEmpty(for: nil)
-                    // and no connection starting or active
                     && !context.hasGeneralPurposeConnection
-
-                let needRequiredEventLoopConnection =
-                    // 2. or if we have requests for a required event loop
+                let needsRequiredConnection =
                     !self.requests.isEmpty(for: eventLoop)
-                    // and no connection starting or active for the given event loop
                     && !context.hasConnectionOnSpecifiedEventLoop
+                if needsGeneralPurposeConnection || needsRequiredConnection {
+                    let (connectionID, eventLoop) = self.connections
+                        .createNewConnectionByReplacingClosedConnection(at: index)
+                    return .init(request: .none, connection: .createConnection(connectionID, on: eventLoop))
+                }
 
-                guard needGeneralPurposeConnection || needRequiredEventLoopConnection else {
-                    // otherwise we can remove the connection
-                    self.connections.removeConnection(at: index)
+                self.connections.removeConnection(at: index)
+                guard let (newConnectionID, newEventLoop) = self.createConnectionAfterCapacityIsReleased(on: eventLoop)
+                else {
                     return .none
                 }
 
-                let (newConnectionID, previousEventLoop) = self.connections
-                    .createNewConnectionByReplacingClosedConnection(at: index)
-                precondition(previousEventLoop === eventLoop)
-
                 return .init(
                     request: .none,
-                    connection: .createConnection(newConnectionID, on: eventLoop)
+                    connection: .createConnection(newConnectionID, on: newEventLoop)
                 )
 
             case .shuttingDown(let unclean):
@@ -397,20 +422,55 @@ extension HTTPConnectionPool {
         private mutating func nextActionForClosingConnection(on eventLoop: EventLoop) -> Action {
             switch self.lifecycleState {
             case .running:
-                let hasPendingRequest = !self.requests.isEmpty(for: eventLoop) || !self.requests.isEmpty(for: nil)
-                guard hasPendingRequest else {
+                guard let (newConnectionID, newEventLoop) = self.createConnectionAfterCapacityIsReleased(on: eventLoop)
+                else {
                     return .none
                 }
 
-                let newConnectionID = self.connections.createNewConnection(on: eventLoop)
-
                 return .init(
                     request: .none,
-                    connection: .createConnection(newConnectionID, on: eventLoop)
+                    connection: .createConnection(newConnectionID, on: newEventLoop)
                 )
             case .shutDown, .shuttingDown:
                 return .none
             }
+        }
+
+        private mutating func createConnectionForPendingRequests(on eventLoop: EventLoop) -> Connection.ID? {
+            let needsRequiredConnection =
+                !self.requests.isEmpty(for: eventLoop)
+                && self.connections.canCreateConnection(
+                    onRequired: eventLoop,
+                    maximumConcurrentConnections: self.maximumConcurrentConnections
+                )
+            let needsGeneralPurposeConnection =
+                !self.requests.isEmpty(for: nil)
+                && self.connections.canCreateConnection(
+                    onRequired: nil,
+                    maximumConcurrentConnections: self.maximumConcurrentConnections
+                )
+            guard needsRequiredConnection || needsGeneralPurposeConnection else { return nil }
+            return self.connections.createNewConnection(on: eventLoop)
+        }
+
+        private mutating func createConnectionAfterCapacityIsReleased(
+            on eventLoop: EventLoop
+        ) -> (Connection.ID, EventLoop)? {
+            if let connectionID = self.createConnectionForPendingRequests(on: eventLoop) {
+                return (connectionID, eventLoop)
+            }
+            // The released slot belongs to the whole pool. Requests on another required event
+            // loop must not wait for a stream to close there before they can use this capacity.
+            for requiredEventLoop in self.requests.eventLoopsWithPendingRequests() where requiredEventLoop !== eventLoop
+            {
+                if self.connections.canCreateConnection(
+                    onRequired: requiredEventLoop,
+                    maximumConcurrentConnections: self.maximumConcurrentConnections
+                ) {
+                    return (self.connections.createNewConnection(on: requiredEventLoop), requiredEventLoop)
+                }
+            }
+            return nil
         }
 
         mutating func http2ConnectionStreamClosed(_ connectionID: Connection.ID) -> Action {
@@ -530,6 +590,18 @@ extension HTTPConnectionPool {
                 self.lifecycleState == .running,
                 "If we are shutting down, we must not have any idle connections"
             )
+
+            if let (newConnectionID, eventLoop) = self.createConnectionAfterCapacityIsReleased(on: connection.eventLoop)
+            {
+                return .init(
+                    request: .none,
+                    connection: .closeConnectionAndCreateConnection(
+                        closeConnection: connection,
+                        newConnectionID: newConnectionID,
+                        on: eventLoop
+                    )
+                )
+            }
 
             return .init(
                 request: .none,

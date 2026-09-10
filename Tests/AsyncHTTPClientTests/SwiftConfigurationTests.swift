@@ -39,6 +39,7 @@ struct HTTPClientConfigurationPropsTests {
 
             "connectionPool.idleTimeoutMs": 120_000,
             "connectionPool.concurrentHTTP1ConnectionsPerHostSoftLimit": 16,
+            "connectionPool.concurrentHTTP2ConnectionsPerHostSoftLimit": 3,
             "connectionPool.retryConnectionEstablishment": false,
             "connectionPool.preWarmedHTTP1ConnectionCount": 5,
 
@@ -77,6 +78,7 @@ struct HTTPClientConfigurationPropsTests {
 
         #expect(config.connectionPool.idleTimeout == .milliseconds(120000))
         #expect(config.connectionPool.concurrentHTTP1ConnectionsPerHostSoftLimit == 16)
+        #expect(config.connectionPool.concurrentHTTP2ConnectionsPerHostSoftLimit == 3)
         #expect(config.connectionPool.retryConnectionEstablishment == false)
         #expect(config.connectionPool.preWarmedHTTP1ConnectionCount == 5)
 
@@ -110,6 +112,7 @@ struct HTTPClientConfigurationPropsTests {
 
         #expect(config.connectionPool.idleTimeout == .seconds(60))
         #expect(config.connectionPool.concurrentHTTP1ConnectionsPerHostSoftLimit == 8)
+        #expect(config.connectionPool.concurrentHTTP2ConnectionsPerHostSoftLimit == 1)
         #expect(config.connectionPool.retryConnectionEstablishment == true)
         #expect(config.connectionPool.preWarmedHTTP1ConnectionCount == 0)
 
