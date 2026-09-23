@@ -1109,6 +1109,32 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         }
     }
 
+    func testRedirectPreservesPerRequestTLSConfiguration() {
+        XCTAsyncTest {
+            let bin = HTTPBin(.http2(compress: false))
+            defer { XCTAssertNoThrow(try bin.shutdown()) }
+            // No client-level TLS configuration: default verification rejects HTTPBin's self-signed certificate,
+            // so the redirected request only succeeds if the per-request configuration is carried over.
+            let client = HTTPClient(eventLoopGroupProvider: .singleton)
+            defer { XCTAssertNoThrow(try client.syncShutdown()) }
+            let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+
+            var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/redirect/302")
+            var tlsConfiguration = TLSConfiguration.makeClientConfiguration()
+            tlsConfiguration.certificateVerification = .none
+            request.tlsConfiguration = tlsConfiguration
+
+            guard
+                let response = await XCTAssertNoThrowWithResult(
+                    try await client.execute(request, deadline: .now() + .seconds(10), logger: logger)
+                )
+            else { return }
+
+            XCTAssertEqual(response.status, .ok)
+            XCTAssertEqual(response.history.count, 2)
+        }
+    }
+
     // MARK: - Integration tests: local address binding
 
     func testLocalAddressBinding_configLevel() async throws {

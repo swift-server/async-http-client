@@ -162,6 +162,7 @@ extension HTTPClientRequest {
         newRequest.headers = headers
         newRequest.body = body
         newRequest.localAddress = self.localAddress
+        newRequest.tlsConfiguration = self.tlsConfiguration
         return newRequest
     }
 }

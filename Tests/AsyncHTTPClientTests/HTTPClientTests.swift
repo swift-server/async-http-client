@@ -697,6 +697,32 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         )
     }
 
+    func testHttpRedirectPreservesPerRequestTLSConfiguration() throws {
+        let httpsBin = HTTPBin(.http1_1(ssl: true))
+        // No client-level TLS configuration: default verification rejects HTTPBin's self-signed certificate,
+        // so the redirected request only succeeds if the per-request configuration is carried over.
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: HTTPClient.Configuration(redirectConfiguration: .follow(max: 10, allowCycles: true))
+        )
+
+        defer {
+            XCTAssertNoThrow(try localClient.syncShutdown())
+            XCTAssertNoThrow(try httpsBin.shutdown())
+        }
+
+        var tlsConfiguration = TLSConfiguration.makeClientConfiguration()
+        tlsConfiguration.certificateVerification = .none
+        let request = try HTTPClient.Request(
+            url: "https://localhost:\(httpsBin.port)/redirect/302",
+            tlsConfiguration: tlsConfiguration
+        )
+
+        let response = try localClient.execute(request: request).wait()
+        XCTAssertEqual(response.status, .ok)
+        XCTAssertEqual(response.history.count, 2)
+    }
+
     func testHttpHostRedirect() {
         let localClient = HTTPClient(
             eventLoopGroupProvider: .shared(self.clientGroup),
