@@ -20,6 +20,8 @@ import func Darwin.pow
 import func Musl.pow
 #elseif canImport(Android)
 import func Android.pow
+#elseif canImport(ucrt)
+import func ucrt.pow
 #else
 import func Glibc.pow
 #endif
