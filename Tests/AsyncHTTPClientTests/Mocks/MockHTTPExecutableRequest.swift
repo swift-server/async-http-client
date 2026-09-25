@@ -63,7 +63,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
     let logger: Logging.Logger = Logger(label: "request")
     let requestHead: NIOHTTP1.HTTPRequestHead
     let requestFramingMetadata: RequestFramingMetadata
-    let requestOptions: RequestOptions = .forTests()
+    let requestOptions: RequestOptions
 
     /// if true and ``HTTPExecutableRequest`` method is called without setting a corresponding callback on `self` e.g.
     /// If ``HTTPExecutableRequest\.willExecuteRequest(_:)`` is called but ``willExecuteRequestCallback`` is not set,
@@ -146,12 +146,14 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
     init(
         head: NIOHTTP1.HTTPRequestHead = .init(version: .http1_1, method: .GET, uri: "http://localhost/"),
         framingMetadata: RequestFramingMetadata = .init(connectionClose: false, body: .fixedSize(0)),
+        requestOptions: RequestOptions = .forTests(),
         raiseErrorIfUnimplementedMethodIsCalled: Bool = true,
         file: StaticString = #file,
         line: UInt = #line
     ) {
         self.requestHead = head
         self.requestFramingMetadata = framingMetadata
+        self.requestOptions = requestOptions
         self.raiseErrorIfUnimplementedMethodIsCalled = raiseErrorIfUnimplementedMethodIsCalled
         self.file = file
         self.line = line
