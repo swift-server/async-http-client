@@ -124,6 +124,7 @@ extension HTTPClient.Configuration.ConnectionPool {
     /// ## Configuration keys:
     /// - `idleTimeoutMs` (int, optional, default: 60,000): Connection idle timeout in milliseconds.
     /// - `concurrentHTTP1ConnectionsPerHostSoftLimit` (int, optional, default: 8): Soft limit for concurrent HTTP/1.1 connections per host.
+    /// - `concurrentHTTP2ConnectionsPerHostSoftLimit` (positive int, optional, default: 1): Soft limit for concurrent HTTP/2 connections per host.
     /// - `retryConnectionEstablishment` (bool, optional, default: true): Retry failed connection establishment.
     /// - `preWarmedHTTP1ConnectionCount` (int, optional, default: 0): Number of pre-warmed HTTP/1.1 connections per host.
     public init(configReader: ConfigReader) {
@@ -132,6 +133,10 @@ extension HTTPClient.Configuration.ConnectionPool {
         self.concurrentHTTP1ConnectionsPerHostSoftLimit = configReader.int(
             forKey: "concurrentHTTP1ConnectionsPerHostSoftLimit",
             default: 8
+        )
+        self.concurrentHTTP2ConnectionsPerHostSoftLimit = configReader.int(
+            forKey: "concurrentHTTP2ConnectionsPerHostSoftLimit",
+            default: 1
         )
         self.retryConnectionEstablishment = configReader.bool(forKey: "retryConnectionEstablishment", default: true)
         self.preWarmedHTTP1ConnectionCount = configReader.int(forKey: "preWarmedHTTP1ConnectionCount", default: 0)

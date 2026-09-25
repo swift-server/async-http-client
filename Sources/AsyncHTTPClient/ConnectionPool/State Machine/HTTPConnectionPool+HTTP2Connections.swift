@@ -522,6 +522,28 @@ extension HTTPConnectionPool {
             }
         }
 
+        /// Prefer existing stream capacity and allow only one pending connection attempt for the
+        /// requests being considered. A missing required event loop may exceed the pool's soft limit.
+        func canCreateConnection(onRequired eventLoop: EventLoop?, maximumConcurrentConnections: Int) -> Bool {
+            var connectionCount = 0
+            var hasEligibleConnection = false
+            var hasAvailableOrPendingConnection = false
+            for connection in self.connections where connection.canOrWillBeAbleToExecuteRequests {
+                connectionCount += 1
+                guard eventLoop == nil || connection.eventLoop === eventLoop else { continue }
+                hasEligibleConnection = true
+                if connection.isAvailable || connection.isStartingOrBackingOff {
+                    hasAvailableOrPendingConnection = true
+                }
+            }
+            return !hasEligibleConnection
+                || (connectionCount < maximumConcurrentConnections && !hasAvailableOrPendingConnection)
+        }
+
+        func hasReachedActiveConnectionLimit(_ limit: Int) -> Bool {
+            self.connections.lazy.filter { $0.isActive }.count >= limit
+        }
+
         /// used after backoff is done to determine if we need to create a new connection
         /// - Parameters:
         ///   - eventLoop: connection `EventLoop` to search for
@@ -545,11 +567,6 @@ extension HTTPConnectionPool {
         }
 
         mutating func createNewConnection(on eventLoop: EventLoop) -> Connection.ID {
-            assert(
-                !self.hasConnectionThatCanOrWillBeAbleToExecuteRequests(for: eventLoop),
-                "we should not create more than one connection per event loop"
-            )
-
             let connection = HTTP2ConnectionState(
                 connectionID: self.generator.next(),
                 eventLoop: eventLoop,
