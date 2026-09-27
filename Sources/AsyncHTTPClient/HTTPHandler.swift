@@ -1242,7 +1242,8 @@ internal struct RedirectHandler<ResponseType: Sendable> {
                 url: redirectURL,
                 method: method,
                 headers: headers,
-                body: body
+                body: body,
+                tlsConfiguration: self.request.tlsConfiguration
             )
 
             return self.launch(newRequest, .follow(followState), promise: promise)
