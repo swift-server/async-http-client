@@ -289,8 +289,11 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
                 }
             }
 
-            context.writeAndFlush(self.wrapOutboundOut(.end(trailers)), promise: writePromise)
-
+            // We must update the idle timeout state machines before writing the request end. The
+            // write promise may be completed synchronously within `writeAndFlush`. If the final action
+            // is `.informConnectionIsIdle`, the pool might then synchronously schedule a new request
+            // onto this connection. The idle timeout state machines would then belong to the new
+            // request and must not be transitioned on behalf of the old one.
             if let readTimeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
                 self.runTimeoutAction(readTimeoutAction, context: context)
             }
@@ -298,6 +301,8 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             if let writeTimeoutAction = self.idleWriteTimeoutStateMachine?.requestEndSent() {
                 self.runTimeoutAction(writeTimeoutAction, context: context)
             }
+
+            context.writeAndFlush(self.wrapOutboundOut(.end(trailers)), promise: writePromise)
 
         case .pauseRequestBodyStream:
             // We can force unwrap the request here, as we have just validated in the state machine,
