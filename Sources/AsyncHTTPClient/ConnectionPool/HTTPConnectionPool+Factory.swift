@@ -606,7 +606,8 @@ extension HTTPConnectionPool.ConnectionFactory {
             let bootstrapFuture = tlsConfig.getNWProtocolTLSOptions(
                 on: eventLoop,
                 serverNameIndicatorOverride: key.serverNameIndicatorOverride,
-                customVerification: self.clientConfiguration.tlsCustomVerificationNetworkFramework
+                customVerification: self.clientConfiguration.tlsCustomVerificationNetworkFramework,
+                localIdentity: self.clientConfiguration.tlsLocalIdentityNetworkFramework
             ).map {
                 options -> NIOClientTCPBootstrapProtocol in
 

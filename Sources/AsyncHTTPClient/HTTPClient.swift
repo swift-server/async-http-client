@@ -27,6 +27,10 @@ import Tracing
 #if canImport(Network)
 import NIOTransportServices
 import Security
+
+// `SecIdentity` is an opaque reference to an immutable, already-looked-up Keychain item — safe to
+// hand across threads, but the Security framework overlay doesn't mark it `Sendable` itself.
+extension SecIdentity: @retroactive @unchecked Sendable {}
 #endif
 
 #if canImport(FoundationEssentials)
@@ -978,6 +982,19 @@ public final class HTTPClient: Sendable {
         ///   including trust-root validation.
         public var tlsCustomVerificationNetworkFramework:
             (@Sendable (SecTrust, @escaping @Sendable (Bool) -> Void) -> Void)?
+
+        /// A client identity (certificate + private key) to present for mTLS on direct (non-proxied)
+        /// connections that use Network.framework instead of NIOSSL. `tlsConfiguration.certificateChain`
+        /// and `.privateKey` are the equivalent for the NIOSSL backend used everywhere else (including
+        /// every proxied connection regardless of platform) — they are **not** supported here, and
+        /// setting them alongside a `nil` value here still fails at connection time.
+        ///
+        /// There is no public API on Apple platforms to build a `SecIdentity` from raw certificate/key
+        /// bytes purely in memory — only a Keychain round-trip (`SecItemAdd` the certificate and key,
+        /// then look them back up as a paired `kSecClassIdentity` item) produces one. AsyncHTTPClient
+        /// does not perform that round-trip itself; a caller who already has a Keychain-backed identity
+        /// (or has already done that round-trip) hands it over directly here.
+        public var tlsLocalIdentityNetworkFramework: SecIdentity?
         #endif
 
         public init(
@@ -1002,6 +1019,7 @@ public final class HTTPClient: Sendable {
             self.tlsCustomVerification = nil
             #if canImport(Network)
             self.tlsCustomVerificationNetworkFramework = nil
+            self.tlsLocalIdentityNetworkFramework = nil
             #endif
         }
 

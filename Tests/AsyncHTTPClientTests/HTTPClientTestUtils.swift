@@ -362,6 +362,22 @@ enum TestTLS {
         certificateChain: [.certificate(TestTLS.certificate)],
         privateKey: .privateKey(TestTLS.privateKey)
     )
+
+    /// DER-encoded form of `certificate`, for APIs (like `SecCertificateCreateWithData`) that need
+    /// raw bytes rather than a parsed `NIOSSLCertificate`.
+    static let certificateDER: [UInt8] = try! certificate.toDERBytes()
+
+    /// `key` (a PKCS#8-wrapped RSA private key, "BEGIN PRIVATE KEY") with its PEM armor stripped
+    /// down to the raw DER payload — the PKCS#8 envelope itself, not yet unwrapped to bare PKCS#1.
+    static let privateKeyPKCS8DER: [UInt8] = {
+        let base64 =
+            key
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.hasPrefix("-----") }
+            .joined()
+        return Array(Data(base64Encoded: base64)!)
+    }()
 }
 
 #if compiler(>=6.2)
