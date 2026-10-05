@@ -63,10 +63,12 @@ public struct HTTPClientRequest: Sendable {
     /// The local TCP source port to bind this request's connection to.
     ///
     /// When set, overrides ``HTTPClient/Configuration/localPort`` for this
-    /// request. Only consulted when a local address (request-level or
-    /// configuration-level) is also set. Values outside of `0...65535` fail the
-    /// request with ``HTTPClientError/invalidLocalPort``. Defaults to `nil`
-    /// (use client configuration default).
+    /// request. The port is only bound when a local address (request-level or
+    /// configuration-level) is also set; without one the kernel picks both
+    /// interface and port. The value is range-checked either way: values
+    /// outside of `0...65535` fail the request with
+    /// ``HTTPClientError/invalidLocalPort``. Defaults to `nil` (use client
+    /// configuration default).
     public var localPort: Int?
 
     public init(url: String) {

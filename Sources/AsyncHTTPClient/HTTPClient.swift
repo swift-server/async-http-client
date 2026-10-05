@@ -936,18 +936,18 @@ public final class HTTPClient: Sendable {
         /// The local TCP source port to bind outgoing connections to.
         ///
         /// `0` (the default) means the OS assigns an ephemeral port. Non-zero
-        /// values are useful for callers that need a specific source port —
-        /// for example, server-side trust signals that key off a privileged
-        /// (1–1023) source port. Bind failures (e.g. `EACCES` for
-        /// privileged ports without `CAP_NET_BIND_SERVICE`, or `EADDRINUSE`
-        /// for a port already held) surface as ``HTTPClientError`` /
-        /// channel errors at request time.
+        /// values are useful for callers that need a specific source port, for
+        /// example server-side trust signals that key off a privileged
+        /// (1 to 1023) source port. Bind failures (`EACCES` for privileged
+        /// ports without `CAP_NET_BIND_SERVICE`, or `EADDRINUSE` for a port
+        /// already held) surface as channel errors when the request runs.
         ///
-        /// Only consulted when ``localAddress`` is also set; otherwise the
-        /// kernel picks both interface and port. Connections with different
-        /// `(localAddress, localPort)` pairs are pooled separately.
+        /// The port is only bound when ``localAddress`` is also set; without
+        /// one the kernel picks both interface and port. Connections with
+        /// different `(localAddress, localPort)` pairs are pooled separately.
         ///
-        /// Values outside of `0...65535` fail the request with
+        /// The value is range-checked whether or not an address is set: values
+        /// outside of `0...65535` fail the request with
         /// ``HTTPClientError/invalidLocalPort``.
         public var localPort: Int = 0
 
