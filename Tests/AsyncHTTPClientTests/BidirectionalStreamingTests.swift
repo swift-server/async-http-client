@@ -69,7 +69,7 @@ struct BidirectionalStreamingTests {
     }
 }
 
-final class HTTPRequestStreamingChannel: ChannelInboundHandler & AHCTestSendableMetatype {
+final class HTTPRequestStreamingChannel: ChannelInboundHandler & SendableMetatype {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
 
