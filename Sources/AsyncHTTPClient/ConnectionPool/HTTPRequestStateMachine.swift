@@ -376,8 +376,6 @@ struct HTTPRequestStateMachine {
             .streaming(let expectedBodyLength, let sentBodyBytes, _),
             .receivingBody(let head, let streamState)
         ):
-            assert(head.status.code < 300)
-
             if let expected = expectedBodyLength, expected != sentBodyBytes {
                 let error = HTTPClientError.bodyLengthMismatch
                 self.state = .failed(error)
