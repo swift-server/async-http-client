@@ -964,6 +964,161 @@ final class RequestBagTests: XCTestCase {
         XCTAssertTrue(redirectTriggered)
     }
 
+    /// A `.strategy` redirect configuration deciding `.doNotFollow` for a redirect-eligible
+    /// response whose body is announced (`Content-Length`) as larger than `HTTPClient
+    /// .maxBodySizeRedirectResponse` (3KB) -- the case that, before `earlyStrategyDecision(head:)`
+    /// existed, was cancelled before any byte of the body was ever read, since the state machine
+    /// used to decide "redirect or not" only by size, not by asking the strategy first. Now the
+    /// strategy is asked immediately at head time, before touching the body at all, so
+    /// `.doNotFollow` delivers this response exactly like `testRaceBetweenConnectionCloseAndDemandMoreData`'s
+    /// plain, non-redirect one -- regardless of size.
+    @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+    func testRedirectStrategyDoesNotFollowWithLargeAnnouncedBodyDeliversResponseNormally() {
+        let embeddedEventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+        let logger = Logger(label: "test")
+
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://swift.org"))
+        guard let request = maybeRequest else { return XCTFail("Expected to have a request") }
+
+        struct RefusingStrategy: HTTPClientRedirectStrategy {
+            func redirectDecision(for context: HTTPClientRedirectContext) throws -> HTTPClientRedirectDecision {
+                .doNotFollow
+            }
+        }
+
+        let delegate = UploadCountingDelegate(eventLoop: embeddedEventLoop)
+        var maybeRequestBag: RequestBag<UploadCountingDelegate>?
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embeddedEventLoop),
+                task: .init(eventLoop: embeddedEventLoop, logger: logger),
+                redirectHandler: .init(
+                    request: request,
+                    redirectState: RedirectState(
+                        .strategy(RefusingStrategy()),
+                        initialURL: request.url.absoluteString
+                    )!,
+                    execute: { _, _ in
+                        XCTFail("`.doNotFollow` must not redirect")
+                        return HTTPClient.Task<UploadCountingDelegate.Response>(
+                            eventLoop: embeddedEventLoop,
+                            logger: logger
+                        )
+                    }
+                ),
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(),
+                delegate: delegate
+            )
+        )
+        guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
+
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
+        executor.runRequest(bag)
+
+        let responseHead = HTTPResponseHead(
+            version: .http1_1,
+            status: .found,
+            headers: ["content-length": "\(4 * 1024)", "location": "https://swift.org/sswg"]
+        )
+        bag.receiveResponseHead(responseHead)
+        XCTAssertFalse(executor.isCancelled)
+        XCTAssertFalse(executor.signalledDemandForResponseBody)
+        XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
+        XCTAssertTrue(executor.signalledDemandForResponseBody)
+        executor.resetResponseStreamDemandSignal()
+
+        XCTAssertEqual(delegate.hitDidReceiveBodyPart, 0)
+        bag.receiveResponseBodyParts([ByteBuffer(repeating: 0, count: 4 * 1024)])
+        XCTAssertFalse(executor.isCancelled)
+        XCTAssertEqual(delegate.hitDidReceiveBodyPart, 1)
+        XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
+        executor.resetResponseStreamDemandSignal()
+
+        bag.receiveResponseEnd([], trailers: nil)
+        XCTAssertEqual(delegate.hitDidReceiveResponse, 1)
+
+        XCTAssertFalse(executor.isCancelled)
+        XCTAssertEqual(delegate.receivedHead?.status, .found)
+    }
+
+    /// `strategy.redirectDecision(for:)` is arbitrary caller code, and a strategy that
+    /// synchronously reaches back into its own task (e.g. to abort rather than redirect) is a
+    /// realistic thing to write. `earlyStrategyDecision(head:)` must be safe to call this way --
+    /// specifically, it must be computed *before* `RequestBag`'s exclusive access to its own
+    /// state machine storage is taken, or a reentrant `task.cancel()` from inside the strategy
+    /// traps under Swift's exclusivity enforcement instead of just failing the task.
+    @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+    func testRedirectStrategyReentrantlyCancellingTheTaskDoesNotTrap() {
+        let embeddedEventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+        let logger = Logger(label: "test")
+
+        var maybeRequest: HTTPClient.Request?
+        XCTAssertNoThrow(maybeRequest = try HTTPClient.Request(url: "https://swift.org"))
+        guard let request = maybeRequest else { return XCTFail("Expected to have a request") }
+
+        let task = HTTPClient.Task<UploadCountingDelegate.Response>(eventLoop: embeddedEventLoop, logger: logger)
+
+        struct SelfCancellingStrategy: HTTPClientRedirectStrategy {
+            let task: HTTPClient.Task<UploadCountingDelegate.Response>
+
+            func redirectDecision(for context: HTTPClientRedirectContext) throws -> HTTPClientRedirectDecision {
+                self.task.cancel()
+                return .doNotFollow
+            }
+        }
+
+        let delegate = UploadCountingDelegate(eventLoop: embeddedEventLoop)
+        var maybeRequestBag: RequestBag<UploadCountingDelegate>?
+        XCTAssertNoThrow(
+            maybeRequestBag = try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: embeddedEventLoop),
+                task: task,
+                redirectHandler: .init(
+                    request: request,
+                    redirectState: RedirectState(
+                        .strategy(SelfCancellingStrategy(task: task)),
+                        initialURL: request.url.absoluteString
+                    )!,
+                    execute: { _, _ in
+                        XCTFail("Should not redirect")
+                        return HTTPClient.Task<UploadCountingDelegate.Response>(
+                            eventLoop: embeddedEventLoop,
+                            logger: logger
+                        )
+                    }
+                ),
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(),
+                delegate: delegate
+            )
+        )
+        guard let bag = maybeRequestBag else { return XCTFail("Expected to be able to create a request bag.") }
+
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
+        executor.runRequest(bag)
+
+        // Must not trap. The strategy cancels `task` from inside `redirectDecision(for:)`, which
+        // reenters this same task while `earlyStrategyDecision(head:)` is being computed --
+        // proving it runs outside the state machine's own exclusive access.
+        bag.receiveResponseHead(
+            .init(
+                version: .http1_1,
+                status: .found,
+                headers: ["content-length": "\(4 * 1024)", "location": "https://swift.org/sswg"]
+            )
+        )
+
+        XCTAssertThrowsError(try task.futureResult.wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .cancelled)
+        }
+    }
+
     func testWeDontLeakTheRequestIfTheRequestWriterWasCapturedByAPromise() {
         final class LeakDetector: Sendable {}
 

@@ -46,7 +46,7 @@ extension HTTPClient {
                 request,
                 deadline: deadline,
                 logger: logger ?? Self.loggingDisabled,
-                redirectState: RedirectState(self.configuration.redirectConfiguration.mode, initialURL: request.url)
+                redirectMode: self.configuration.redirectConfiguration.mode
             )
         }
     }
@@ -88,10 +88,11 @@ extension HTTPClient {
         _ request: HTTPClientRequest,
         deadline: NIODeadline,
         logger: Logger,
-        redirectState: RedirectState?
+        redirectMode: HTTPClient.Configuration.RedirectConfiguration.Mode
     ) async throws -> HTTPClientResponse {
         var currentRequest = request
-        var currentRedirectState = redirectState
+        var currentRedirectState = RedirectState(redirectMode, initialURL: request.url)
+        var customRedirectCount = 0
         var history: [HTTPClientRequestResponse] = []
 
         // this loop is there to follow potential redirects
@@ -122,39 +123,100 @@ extension HTTPClient {
                 return response
             }()
 
-            guard var redirectState = currentRedirectState else {
-                // a `nil` redirectState means we should not follow redirects
+            switch redirectMode {
+            case .disallow:
                 return response
-            }
 
-            guard
-                let redirectURL = response.headers.extractRedirectTarget(
+            case .follow:
+                guard case .follow(var followState)? = currentRedirectState else {
+                    // a `nil` redirectState means we should not follow redirects
+                    return response
+                }
+
+                guard
+                    let redirectURL = response.headers.extractRedirectTarget(
+                        status: response.status,
+                        originalURL: preparedRequest.url,
+                        originalScheme: preparedRequest.poolKey.scheme
+                    )
+                else {
+                    // response does not want a redirect
+                    return response
+                }
+
+                // validate that we do not exceed any limits or are running circles
+                try followState.redirect(to: redirectURL.absoluteString)
+                currentRedirectState = .follow(followState)
+
+                let newRequest = currentRequest.followingRedirect(
+                    from: preparedRequest.url,
+                    to: redirectURL,
                     status: response.status,
-                    originalURL: preparedRequest.url,
-                    originalScheme: preparedRequest.poolKey.scheme
+                    config: followState.config
                 )
-            else {
-                // response does not want a redirect
-                return response
+
+                guard newRequest.body.canBeConsumedMultipleTimes else {
+                    // we already send the request body and it cannot be send again
+                    return response
+                }
+
+                currentRequest = newRequest
+
+            case .strategy(let anyStrategy):
+                let strategy = anyStrategy as! any HTTPClientRedirectStrategy
+                guard
+                    let redirectURL = response.headers.extractRedirectTarget(
+                        status: response.status,
+                        originalURL: preparedRequest.url,
+                        originalScheme: preparedRequest.poolKey.scheme
+                    )
+                else {
+                    // response does not want a redirect
+                    return response
+                }
+
+                // Pre-build the request the same way `.follow` would, applying the standard
+                // method/header rewrite rules, so the strategy only needs to make further
+                // adjustments rather than reimplement those rules itself. `max`/`allowCycles`
+                // are irrelevant here: only the `retainHTTPMethodAndBodyOn30{1,2}` flags feed
+                // into this transformation, and there's no built-in limit in `.strategy` mode.
+                let candidateRequest = currentRequest.followingRedirect(
+                    from: preparedRequest.url,
+                    to: redirectURL,
+                    status: response.status,
+                    config: .init(
+                        max: 0,
+                        allowCycles: true,
+                        retainHTTPMethodAndBodyOn301: false,
+                        retainHTTPMethodAndBodyOn302: false
+                    )
+                )
+
+                let context = HTTPClientRedirectContext(
+                    redirectRequest: candidateRequest,
+                    response: HTTPResponseHead(
+                        version: response.version,
+                        status: response.status,
+                        headers: response.headers
+                    ),
+                    history: history,
+                    redirectCount: customRedirectCount
+                )
+
+                switch try strategy.redirectDecision(for: context) {
+                case .doNotFollow:
+                    return response
+
+                case .follow(let newRequest):
+                    guard newRequest.body.canBeConsumedMultipleTimes else {
+                        // we already send the request body and it cannot be send again
+                        return response
+                    }
+
+                    customRedirectCount += 1
+                    currentRequest = newRequest
+                }
             }
-
-            // validate that we do not exceed any limits or are running circles
-            try redirectState.redirect(to: redirectURL.absoluteString)
-            currentRedirectState = redirectState
-
-            let newRequest = currentRequest.followingRedirect(
-                from: preparedRequest.url,
-                to: redirectURL,
-                status: response.status,
-                config: redirectState.config
-            )
-
-            guard newRequest.body.canBeConsumedMultipleTimes else {
-                // we already send the request body and it cannot be send again
-                return response
-            }
-
-            currentRequest = newRequest
         }
     }
 

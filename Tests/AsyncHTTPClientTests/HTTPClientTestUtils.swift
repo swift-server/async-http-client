@@ -1031,6 +1031,19 @@ internal final class HTTPBinHandler: ChannelInboundHandler {
                 headers.add(name: "Location", value: targetURL)
                 self.resps.append(HTTPResponseBuilder(status: .found, headers: headers))
                 return
+            case "/redirect/302-with-body":
+                // `size` lets a test exercise a redirect-eligible response whose body is
+                // announced (`Content-Length`) as larger than `HTTPClient
+                // .maxBodySizeRedirectResponse` (3KB) -- none of the other `/redirect/*`
+                // endpoints here can produce that, since they're all bodyless.
+                let size = Int(self.value(for: "size", from: urlComponents.query ?? "")) ?? 4096
+                var headers = self.responseHeaders
+                headers.add(name: "location", value: "/ok")
+                headers.replaceOrAdd(name: "content-length", value: "\(size)")
+                var builder = HTTPResponseBuilder(status: .found, headers: headers)
+                builder.body = ByteBuffer(repeating: UInt8(ascii: "x"), count: size)
+                self.resps.append(builder)
+                return
             case "/percent%20encoded":
                 if req.method != .GET {
                     self.resps.append(HTTPResponseBuilder(status: .methodNotAllowed))

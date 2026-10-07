@@ -328,11 +328,32 @@ extension RequestBag.StateMachine {
         case redirect(HTTPRequestExecutor, RedirectHandler<Delegate.Response>, HTTPResponseHead, URL)
     }
 
+    /// The redirect handler awaiting this request's response head, if any -- for computing a
+    /// `.strategy` configuration's decision (`RedirectHandler.earlyStrategyDecision(head:)`)
+    /// *before* calling `receiveResponseHead`, since that call is arbitrary caller code that may
+    /// reenter this task synchronously, which `receiveResponseHead`'s exclusive access to
+    /// `self.state` cannot tolerate.
+    var redirectHandlerAwaitingResponseHead: RedirectHandler<Delegate.Response>? {
+        guard case .executing(_, _, .initialized(let handler)) = self.state else {
+            return nil
+        }
+        return handler
+    }
+
     /// The response head has been received.
     ///
-    /// - Parameter head: The response' head
+    /// - Parameters:
+    ///   - head: The response' head
+    ///   - earlyDecision: What `redirectHandlerAwaitingResponseHead?.earlyStrategyDecision(head:)`
+    ///     already decided for a `.strategy` redirect configuration, computed by the caller
+    ///     before this call (see that method's own doc comment for why it can't be computed in
+    ///     here). `.notApplicable` for `.follow` mode, no configured handler, or a non-redirect
+    ///     response -- proceeds exactly as if this parameter didn't exist.
     /// - Returns: Whether the response should be forwarded to the delegate. Will be `false` if the request follows a redirect.
-    mutating func receiveResponseHead(_ head: HTTPResponseHead) -> ReceiveResponseHeadAction {
+    mutating func receiveResponseHead(
+        _ head: HTTPResponseHead,
+        earlyDecision: RedirectHandler<Delegate.Response>.EarlyStrategyDecision
+    ) -> ReceiveResponseHeadAction {
         switch self.state {
         case .initialized, .queued, .deadlineExceededWhileQueued:
             preconditionFailure("How can we receive a response, if the request hasn't started yet.")
@@ -341,26 +362,40 @@ extension RequestBag.StateMachine {
                 preconditionFailure("If we receive a response, we must not have received something else before")
             }
 
-            if let redirectHandler = redirectHandler,
-                let redirectURL = redirectHandler.redirectTarget(
-                    status: head.status,
-                    responseHeaders: head.headers
-                )
-            {
-                // If we will redirect, we need to consume the response's body ASAP, to be able to
-                // reuse the existing connection. We will consume a response body, if the body is
-                // smaller than 3kb.
-                switch head.contentLength {
-                case .some(0...(HTTPClient.maxBodySizeRedirectResponse)), .none:
-                    self.state = .redirected(executor, redirectHandler, 0, head, redirectURL)
-                    return .signalBodyDemand(executor)
-                case .some:
-                    self.state = .finished(error: HTTPClientError.cancelled)
-                    return .redirect(executor, redirectHandler, head, redirectURL)
-                }
-            } else {
+            switch earlyDecision {
+            case .doNotFollow:
+                // Nothing about the body has been touched -- deliver this response exactly like
+                // any ordinary, non-redirect-candidate one, regardless of its size.
                 self.state = .executing(executor, requestState, .buffering(.init(), next: .askExecutorForMore))
                 return .forwardResponseHead(head)
+
+            case .decided(let decidedHandler, let redirectURL):
+                return self.redirectOrForward(
+                    executor: executor,
+                    requestState: requestState,
+                    redirectHandler: decidedHandler,
+                    redirectURL: redirectURL,
+                    head: head
+                )
+
+            case .notApplicable:
+                if let redirectHandler = redirectHandler,
+                    let redirectURL = redirectHandler.redirectTarget(
+                        status: head.status,
+                        responseHeaders: head.headers
+                    )
+                {
+                    return self.redirectOrForward(
+                        executor: executor,
+                        requestState: requestState,
+                        redirectHandler: redirectHandler,
+                        redirectURL: redirectURL,
+                        head: head
+                    )
+                } else {
+                    self.state = .executing(executor, requestState, .buffering(.init(), next: .askExecutorForMore))
+                    return .forwardResponseHead(head)
+                }
             }
         case .redirected:
             preconditionFailure("This state can only be reached after we have received a HTTP head")
@@ -370,6 +405,30 @@ extension RequestBag.StateMachine {
             preconditionFailure("How can the request be finished without error, before receiving response head?")
         case .modifying:
             preconditionFailure("Invalid state: \(self.state)")
+        }
+    }
+
+    /// Shared by `.follow` mode (which has always decided by the time this is reached) and a
+    /// `.strategy` mode `.follow(_:)` decision (already computed early, carried on
+    /// `redirectHandler`): reads up to `HTTPClient.maxBodySizeRedirectResponse` of body to try to
+    /// reuse the connection, or cancels immediately for a known-larger body.
+    private mutating func redirectOrForward(
+        executor: HTTPRequestExecutor,
+        requestState: RequestStreamState,
+        redirectHandler: RedirectHandler<Delegate.Response>,
+        redirectURL: URL,
+        head: HTTPResponseHead
+    ) -> ReceiveResponseHeadAction {
+        // If we will redirect, we need to consume the response's body ASAP, to be able to
+        // reuse the existing connection. We will consume a response body, if the body is
+        // smaller than 3kb.
+        switch head.contentLength {
+        case .some(0...(HTTPClient.maxBodySizeRedirectResponse)), .none:
+            self.state = .redirected(executor, redirectHandler, 0, head, redirectURL)
+            return .signalBodyDemand(executor)
+        case .some:
+            self.state = .finished(error: HTTPClientError.cancelled)
+            return .redirect(executor, redirectHandler, head, redirectURL)
         }
     }
 
