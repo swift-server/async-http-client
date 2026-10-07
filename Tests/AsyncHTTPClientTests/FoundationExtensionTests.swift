@@ -19,6 +19,21 @@ import Testing
 
 @Suite
 struct FoundationExtensionTests {
+    @Test
+    func httpClientErrorLocalizedDescriptionUsesDescription() {
+        let error = HTTPClientError.cancelled
+
+        #expect(error.localizedDescription == error.description)
+    }
+
+    @Test
+    func httpClientErrorLocalizedDescriptionPreservesAssociatedValues() {
+        let error = HTTPClientError.unsupportedScheme("custom")
+
+        #expect(error.localizedDescription == error.description)
+        #expect(error.localizedDescription.contains("custom"))
+    }
+
     @Test(arguments: [
         // Format: (input, expected)
         ("localhost", "localhost"),  // Alphanumerics (No encoding needed)
