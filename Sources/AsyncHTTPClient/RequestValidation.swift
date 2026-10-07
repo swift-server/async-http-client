@@ -47,6 +47,11 @@ extension HTTPHeaders {
 
     private func validateFieldNames() throws {
         let invalidFieldNames = self.compactMap { name, _ -> String? in
+            // [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html#name-field-names) defines
+            // `field-name = token`, and `token = 1*tchar`, so a field name must contain at least
+            // one character. `allSatisfy` alone is true for the empty name.
+            guard !name.isEmpty else { return name }
+
             let satisfy = name.utf8.allSatisfy { char -> Bool in
                 switch char {
                 case UInt8(ascii: "a")...UInt8(ascii: "z"),
