@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if compiler(>=6.2)
 import Configuration
 import Foundation
 import NIOCore
@@ -575,4 +574,3 @@ struct HTTPClientConfigurationPropsTests {
         }
     }
 }
-#endif
