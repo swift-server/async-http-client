@@ -39,8 +39,14 @@ final class Transaction_StateMachineTests: XCTestCase {
 
                 let failAction = state.fail(HTTPClientError.cancelled)
                 guard
-                    case .failResponseHead(_, let error, let scheduler, let rexecutor, let bodyStreamContinuation) =
-                        failAction
+                    case .failResponseHead(
+                        _,
+                        let error,
+                        let scheduler,
+                        let rexecutor,
+                        let bodyStreamContinuation,
+                        requestBodyTask: nil
+                    ) = failAction
                 else {
                     return XCTFail("Unexpected fail action: \(failAction)")
                 }
@@ -64,7 +70,7 @@ final class Transaction_StateMachineTests: XCTestCase {
                 let executor = MockRequestExecutor(eventLoop: eventLoop)
 
                 XCTAssertEqual(state.willExecuteRequest(executor), .none)
-                XCTAssertEqual(state.resumeRequestBodyStream(), .startStream(ByteBufferAllocator()))
+                XCTAssertEqual(state.resumeRequestBodyStream { _ in nil }, .startStream(ByteBufferAllocator()))
                 XCTAssertEqual(state.writeNextRequestPart(), .writeAndContinue(executor))
                 state.pauseRequestBodyStream()
                 XCTAssertEqual(state.writeNextRequestPart(), .writeAndWait(executor))
@@ -93,8 +99,14 @@ final class Transaction_StateMachineTests: XCTestCase {
 
                 let failAction = state.fail(MyError())
                 guard
-                    case .failResponseHead(let continuation, let error, nil, nil, bodyStreamContinuation: nil) =
-                        failAction
+                    case .failResponseHead(
+                        let continuation,
+                        let error,
+                        nil,
+                        nil,
+                        bodyStreamContinuation: nil,
+                        requestBodyTask: nil
+                    ) = failAction
                 else {
                     return XCTFail("Unexpected fail action: \(failAction)")
                 }
@@ -126,8 +138,14 @@ final class Transaction_StateMachineTests: XCTestCase {
 
                 let failAction = state.fail(MyError())
                 guard
-                    case .failResponseHead(let continuation, let error, nil, nil, bodyStreamContinuation: nil) =
-                        failAction
+                    case .failResponseHead(
+                        let continuation,
+                        let error,
+                        nil,
+                        nil,
+                        bodyStreamContinuation: nil,
+                        requestBodyTask: nil
+                    ) = failAction
                 else {
                     return XCTFail("Unexpected fail action: \(failAction)")
                 }
@@ -159,7 +177,7 @@ final class Transaction_StateMachineTests: XCTestCase {
                 state.requestWasQueued(queuer)
 
                 let failAction = state.deadlineExceeded()
-                guard case .cancel(let continuation, nil, let rexecutor, nil) = failAction else {
+                guard case .cancel(let continuation, nil, let rexecutor, nil, requestBodyTask: nil) = failAction else {
                     return XCTFail("Unexpected fail action: \(failAction)")
                 }
                 XCTAssertIdentical(rexecutor as? MockRequestExecutor, executor)

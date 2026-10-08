@@ -77,10 +77,10 @@ final class Transaction:
         self.requestBodyStreamFinished(trailers: nil)
     }
 
-    private func continueRequestBodyStream(
+    private func makeRequestBodyStreamTask(
         _ allocator: ByteBufferAllocator,
         makeAsyncIterator: @Sendable @escaping () -> ((ByteBufferAllocator) async throws -> ByteBuffer?)
-    ) {
+    ) -> Task<Void, Never> {
         Task {
             let next = makeAsyncIterator()
 
@@ -168,6 +168,12 @@ final class Transaction:
     private func requestBodyStreamFailed(_ error: Error) {
         self.fail(error)
     }
+
+    /// Waits until the task iterating an async sequence request body (if any) has exited.
+    func requestBodyTaskFinished() async {
+        let task = self.state.withLockedValue { $0.requestBodyTask }
+        await task?.value
+    }
 }
 
 // MARK: - Protocol Methods -
@@ -215,7 +221,14 @@ extension Transaction: HTTPExecutableRequest {
 
     func resumeRequestBodyStream() {
         let action = self.state.withLockedValue { state in
-            state.resumeRequestBodyStream()
+            // The task is created and stored while holding the lock, so that a concurrent `fail`
+            // is guaranteed to see (and cancel) it.
+            state.resumeRequestBodyStream { allocator in
+                guard case .asyncSequence(_, let makeAsyncIterator) = self.request.body else {
+                    return nil
+                }
+                return self.makeRequestBodyStreamTask(allocator, makeAsyncIterator: makeAsyncIterator)
+            }
         }
 
         switch action {
@@ -224,9 +237,9 @@ extension Transaction: HTTPExecutableRequest {
 
         case .startStream(let allocator):
             switch self.request.body {
-            case .asyncSequence(_, let makeAsyncIterator):
-                // it is safe to call this async here. it dispatches...
-                self.continueRequestBodyStream(allocator, makeAsyncIterator: makeAsyncIterator)
+            case .asyncSequence:
+                // the task streaming the body has been started by the state machine
+                break
 
             case .byteBuffer(let byteBuffer):
                 self.writeOnceAndOneTimeOnly(byteBuffer: byteBuffer)
@@ -348,26 +361,44 @@ extension Transaction: HTTPExecutableRequest {
     }
 
     private func performFailAction(_ action: StateMachine.FailAction) {
+        // The request body task is always cancelled before resuming any continuation.
         switch action {
         case .none:
             break
 
-        case .failResponseHead(let continuation, let error, let scheduler, let executor, let bodyStreamContinuation):
+        case .failResponseHead(
+            let continuation,
+            let error,
+            let scheduler,
+            let executor,
+            let bodyStreamContinuation,
+            let requestBodyTask
+        ):
+            requestBodyTask?.cancel()
             continuation.resume(throwing: error)
             bodyStreamContinuation?.resume(throwing: error)
             scheduler?.cancelRequest(self)  // NOTE: scheduler and executor are exclusive here
             executor?.cancelRequest(self)
 
-        case .failResponseStream(let source, let error, let executor, let requestBodyStreamContinuation):
+        case .failResponseStream(
+            let source,
+            let error,
+            let executor,
+            let requestBodyStreamContinuation,
+            let requestBodyTask
+        ):
+            requestBodyTask?.cancel()
             source.finish(error)
             requestBodyStreamContinuation?.resume(throwing: error)
             executor.cancelRequest(self)
 
-        case .failRequestStreamContinuation(let bodyStreamContinuation, let error, let executor):
+        case .failRequestStreamContinuation(let bodyStreamContinuation, let error, let executor, let requestBodyTask):
+            requestBodyTask?.cancel()
             bodyStreamContinuation.resume(throwing: error)
             executor.cancelRequest(self)
 
-        case .cancelExecutor(let executor):
+        case .cancelExecutor(let executor, let requestBodyTask):
+            requestBodyTask?.cancel()
             executor.cancelRequest(self)
         }
     }
@@ -381,7 +412,14 @@ extension Transaction: HTTPExecutableRequest {
 
     private func performDeadlineExceededAction(_ action: StateMachine.DeadlineExceededAction) {
         switch action {
-        case .cancel(let requestContinuation, let scheduler, let executor, let bodyStreamContinuation):
+        case .cancel(
+            let requestContinuation,
+            let scheduler,
+            let executor,
+            let bodyStreamContinuation,
+            let requestBodyTask
+        ):
+            requestBodyTask?.cancel()
             requestContinuation.resume(throwing: HTTPClientError.deadlineExceeded)
             scheduler?.cancelRequest(self)
             executor?.cancelRequest(self)

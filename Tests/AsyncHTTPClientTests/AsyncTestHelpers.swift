@@ -257,3 +257,60 @@ final class AsyncSequenceWriter<Element: Sendable>: AsyncSequence, @unchecked Se
         }
     }
 }
+
+/// An `AsyncSequence` that never produces an element and only finishes once the iterating task is cancelled.
+/// It reports when `next()` has been entered and whether the iteration has exited.
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+struct NeverEndingCancellableSequence: AsyncSequence, Sendable {
+    typealias Element = ByteBuffer
+
+    struct AsyncIterator: AsyncIteratorProtocol {
+        var base: AsyncStream<ByteBuffer>.AsyncIterator
+        let nextEntered: AsyncStream<Void>.Continuation
+        let iteratorExited: NIOLockedValueBox<Bool>
+        let exitDelay: Duration
+
+        mutating func next() async -> ByteBuffer? {
+            self.nextEntered.yield()
+            // `AsyncStream` returns `nil` once the iterating task is cancelled.
+            let element = await self.base.next()
+            if element == nil {
+                // Simulate a sequence that takes a while to wind down after cancellation. The sleep
+                // runs in a detached task so that it is not cut short by the cancellation.
+                let exitDelay = self.exitDelay
+                await Task.detached { try? await Task.sleep(for: exitDelay) }.value
+                self.iteratorExited.withLockedValue { $0 = true }
+            }
+            return element
+        }
+    }
+
+    private let stream: AsyncStream<ByteBuffer>
+    private let streamContinuation: AsyncStream<ByteBuffer>.Continuation
+    private let nextEnteredContinuation: AsyncStream<Void>.Continuation
+    private let iteratorExitedBox = NIOLockedValueBox(false)
+    private let exitDelay: Duration
+
+    /// Yields every time `next()` is entered.
+    let nextEntered: AsyncStream<Void>
+
+    /// Whether `next()` has returned `nil` after the iterating task was cancelled.
+    var iteratorExited: Bool {
+        self.iteratorExitedBox.withLockedValue { $0 }
+    }
+
+    init(exitDelay: Duration = .zero) {
+        self.exitDelay = exitDelay
+        (self.stream, self.streamContinuation) = AsyncStream.makeStream()
+        (self.nextEntered, self.nextEnteredContinuation) = AsyncStream.makeStream()
+    }
+
+    func makeAsyncIterator() -> AsyncIterator {
+        AsyncIterator(
+            base: self.stream.makeAsyncIterator(),
+            nextEntered: self.nextEnteredContinuation,
+            iteratorExited: self.iteratorExitedBox,
+            exitDelay: self.exitDelay
+        )
+    }
+}

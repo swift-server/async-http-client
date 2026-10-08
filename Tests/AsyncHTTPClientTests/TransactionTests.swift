@@ -446,6 +446,48 @@ final class TransactionTests: XCTestCase {
         }
     }
 
+    func testCancelWhileRequestBodyIsWaitingForNextElementCancelsBodyTask() {
+        XCTAsyncTest {
+            let loop = NIOAsyncTestingEventLoop()
+            defer { XCTAssertNoThrow(try loop.syncShutdownGracefully()) }
+
+            let body = NeverEndingCancellableSequence()
+
+            var request = HTTPClientRequest(url: "https://localhost/")
+            request.method = .POST
+            request.body = .stream(body, length: .unknown)
+            var maybePreparedRequest: PreparedRequest?
+            XCTAssertNoThrow(maybePreparedRequest = try PreparedRequest(request))
+            guard let preparedRequest = maybePreparedRequest else {
+                return XCTFail("Expected to have a request here.")
+            }
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
+                request: preparedRequest,
+                preferredEventLoop: loop
+            )
+
+            let executor = MockRequestExecutor(eventLoop: loop)
+            executor.runRequest(transaction)
+            await loop.run()
+            executor.resumeRequestBodyStream()
+
+            // wait until the body task is suspended in `next()`
+            var nextEntered = body.nextEntered.makeAsyncIterator()
+            _ = await nextEntered.next()
+            XCTAssertFalse(body.iteratorExited)
+
+            transaction.cancel()
+
+            await XCTAssertThrowsError(try await responseTask.value) { error in
+                XCTAssertTrue(error is CancellationError, "unexpected error \(error)")
+            }
+
+            // Without cancelling the body task this would wait forever.
+            await transaction.requestBodyTaskFinished()
+            XCTAssertTrue(body.iteratorExited)
+        }
+    }
+
     func testResponseStreamFails() {
         XCTAsyncTest(timeout: 30) {
             let loop = NIOAsyncTestingEventLoop()

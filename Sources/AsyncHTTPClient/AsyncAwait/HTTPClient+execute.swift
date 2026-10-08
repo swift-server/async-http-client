@@ -176,20 +176,28 @@ extension HTTPClient {
                 defer {
                     deadlineTask.cancel()
                 }
-                return try await withCheckedThrowingContinuation {
-                    (continuation: CheckedContinuation<HTTPClientResponse, Swift.Error>) -> Void in
-                    let transaction = Transaction(
-                        request: request,
-                        requestOptions: .fromClientConfiguration(self.configuration),
-                        logger: logger,
-                        connectionDeadline: .now() + (self.configuration.timeout.connectionCreationTimeout),
-                        preferredEventLoop: eventLoop,
-                        responseContinuation: continuation
-                    )
+                var transaction: Transaction?
+                do {
+                    return try await withCheckedThrowingContinuation {
+                        (continuation: CheckedContinuation<HTTPClientResponse, Swift.Error>) -> Void in
+                        let newTransaction = Transaction(
+                            request: request,
+                            requestOptions: .fromClientConfiguration(self.configuration),
+                            logger: logger,
+                            connectionDeadline: .now() + (self.configuration.timeout.connectionCreationTimeout),
+                            preferredEventLoop: eventLoop,
+                            responseContinuation: continuation
+                        )
+                        transaction = newTransaction
 
-                    cancelHandler.registerTransaction(transaction)
+                        cancelHandler.registerTransaction(newTransaction)
 
-                    self.poolManager.executeRequest(transaction)
+                        self.poolManager.executeRequest(newTransaction)
+                    }
+                } catch {
+                    // Don't return to the caller while we may still be iterating their request body.
+                    await transaction?.requestBodyTaskFinished()
+                    throw error
                 }
             },
             onCancel: {

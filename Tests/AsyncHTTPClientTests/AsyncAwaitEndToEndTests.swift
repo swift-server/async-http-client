@@ -443,6 +443,37 @@ final class AsyncAwaitEndToEndTests: XCTestCase {
         }
     }
 
+    func testCancelingStopsIteratingRequestBodyBeforeExecuteThrows() {
+        XCTAsyncTest(timeout: 5) {
+            let bin = HTTPBin(.http2(compress: false))
+            defer { XCTAssertNoThrow(try bin.shutdown()) }
+            let client = makeDefaultHTTPClient()
+            defer { XCTAssertNoThrow(try client.syncShutdown()) }
+            let logger = Logger(label: "HTTPClient", factory: StreamLogHandler.standardOutput(label:))
+            var request = HTTPClientRequest(url: "https://localhost:\(bin.port)/offline")
+            request.method = .POST
+            // the delay makes sure `execute` actually waits for the body iteration to end
+            let body = NeverEndingCancellableSequence(exitDelay: .milliseconds(200))
+            request.body = .stream(body, length: .unknown)
+
+            let task = Task<HTTPClientResponse, Error> { [request] in
+                try await client.execute(request, deadline: .now() + .seconds(2), logger: logger)
+            }
+
+            // wait until AHC is suspended in the body's `next()`
+            var nextEntered = body.nextEntered.makeAsyncIterator()
+            _ = await nextEntered.next()
+            XCTAssertFalse(body.iteratorExited)
+
+            task.cancel()
+            await XCTAssertThrowsError(try await task.value) { error in
+                XCTAssertTrue(error is CancellationError, "unexpected error \(error)")
+            }
+            // once `execute` has thrown, AHC must no longer be iterating the request body
+            XCTAssertTrue(body.iteratorExited)
+        }
+    }
+
     func testCancelingResponseBody() {
         XCTAsyncTest(timeout: 5) {
             let bin = HTTPBin(.http2(compress: false)) { _ in
