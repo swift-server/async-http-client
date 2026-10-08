@@ -426,13 +426,17 @@ class HTTP2ClientTests: XCTestCase {
         XCTAssertNoThrow(
             maybeServer = try ServerBootstrap(group: serverGroup)
                 .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-                .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
+                #if !os(Windows)
+            .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
+                #endif
                 .childChannelInitializer { channel in
                     channel.close()
                 }
-                .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-                .bind(host: "127.0.0.1", port: serverPort)
-                .wait()
+                #if !os(Windows)
+            .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            #endif
+            .bind(host: "127.0.0.1", port: serverPort)
+            .wait()
         )
         // shutting down the old server closes all connections immediately
         XCTAssertNoThrow(try bin.shutdown())
