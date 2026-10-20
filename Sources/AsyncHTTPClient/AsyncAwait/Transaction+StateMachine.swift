@@ -46,7 +46,7 @@ extension Transaction {
             // Waiting for response head. Valid transitions to: streamingBody.
             case waitingForResponseHead
             // streaming response body. Valid transitions to: finished.
-            case streamingBody(TransactionBody.Source)
+            case streamingBody(TransactionBody.Source, status: HTTPResponseStatus)
             case finished(HTTPHeaders?)
         }
 
@@ -148,7 +148,7 @@ extension Transaction {
                     )
                 }
 
-            case .executing(let context, let requestStreamState, .streamingBody(let source)):
+            case .executing(let context, let requestStreamState, .streamingBody(let source, _)):
                 self.state = .finished(.failure(error))
                 switch requestStreamState {
                 case .paused(let bodyStreamContinuation):
@@ -443,7 +443,7 @@ extension Transaction {
                     delegate: AnyAsyncSequenceProducerDelegate(delegate)
                 )
 
-                self.state = .executing(context, requestState, .streamingBody(body.source))
+                self.state = .executing(context, requestState, .streamingBody(body.source, status: head.status))
                 return .succeedResponseHead(body.sequence, context.continuation)
 
             case .finished(.failure):
@@ -492,7 +492,7 @@ extension Transaction {
             case .executing(_, _, .waitingForResponseHead):
                 preconditionFailure("If we receive a response body, we must have received a head before")
 
-            case .executing(let context, _, .streamingBody(let source)):
+            case .executing(let context, _, .streamingBody(let source, _)):
                 return .yieldResponseBodyParts(source, buffer, context.executor)
 
             case .finished:
@@ -507,7 +507,11 @@ extension Transaction {
         }
 
         enum ReceiveResponseEndAction {
-            case finishResponseStream(TransactionBody.Source, finalBody: CircularBuffer<ByteBuffer>?)
+            case finishResponseStream(
+                TransactionBody.Source,
+                finalBody: CircularBuffer<ByteBuffer>?,
+                bodyStreamContinuation: CheckedContinuation<Void, Error>?
+            )
             case none
         }
 
@@ -524,14 +528,22 @@ extension Transaction {
                     "Received no response head, but received a response end. Invalid state: \(self.state)"
                 )
 
-            case .executing(let context, let requestState, .streamingBody(let source)):
+            case .executing(let context, let requestState, .streamingBody(let source, let status)):
                 switch requestState {
                 case .finished:
                     self.state = .finished(.success(trailers))
+                    return .finishResponseStream(source, finalBody: newChunks, bodyStreamContinuation: nil)
+                case .paused(let bodyStreamContinuation) where status.code >= 300:
+                    self.state = .finished(.success(trailers))
+                    return .finishResponseStream(
+                        source,
+                        finalBody: newChunks,
+                        bodyStreamContinuation: bodyStreamContinuation
+                    )
                 case .paused, .producing, .requestHeadSent, .endForwarded:
                     self.state = .executing(context, requestState, .finished(trailers))
+                    return .finishResponseStream(source, finalBody: newChunks, bodyStreamContinuation: nil)
                 }
-                return .finishResponseStream(source, finalBody: newChunks)
 
             case .finished:
                 // the request failed or was cancelled before, we can ignore all events
