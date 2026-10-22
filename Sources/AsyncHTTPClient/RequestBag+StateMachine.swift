@@ -68,6 +68,7 @@ extension RequestBag {
 
         private var state: State
         private let requestFramingMetadata: RequestFramingMetadata
+        private var responseStatusIsAtLeast300 = false
 
         init(redirectHandler: RedirectHandler<Delegate.Response>?, requestFramingMetadata: RequestFramingMetadata) {
             self.state = .initialized(redirectHandler)
@@ -359,6 +360,7 @@ extension RequestBag.StateMachine {
                     return .redirect(executor, redirectHandler, head, redirectURL)
                 }
             } else {
+                self.responseStatusIsAtLeast300 = head.status.code >= 300
                 self.state = .executing(executor, requestState, .buffering(.init(), next: .askExecutorForMore))
                 return .forwardResponseHead(head)
             }
@@ -435,7 +437,7 @@ extension RequestBag.StateMachine {
     enum ReceiveResponseEndAction {
         case consume(ByteBuffer)
         case redirect(RedirectHandler<Delegate.Response>, HTTPResponseHead, URL)
-        case succeedRequest
+        case succeedRequest(failBackpressurePromise: EventLoopPromise<Void>?)
         case none
     }
 
@@ -465,13 +467,17 @@ extension RequestBag.StateMachine {
         case .executing(let executor, let requestState, .waitingForRemote):
             guard var newChunks = newChunks, !newChunks.isEmpty else {
                 switch requestState {
+                case .paused(let promise) where self.responseStatusIsAtLeast300:
+                    self.state = .finished(error: nil)
+                    return .succeedRequest(failBackpressurePromise: promise)
+
                 case .initialized, .paused, .producing:
                     self.state = .executing(executor, requestState, .endReceived)
                     return .none
 
                 case .finished:
                     self.state = .finished(error: nil)
-                    return .succeedRequest
+                    return .succeedRequest(failBackpressurePromise: nil)
                 }
             }
 
@@ -496,7 +502,7 @@ extension RequestBag.StateMachine {
     enum ConsumeAction {
         case requestMoreFromExecutor(HTTPRequestExecutor)
         case consume(ByteBuffer)
-        case finishStream
+        case finishStream(failBackpressurePromise: EventLoopPromise<Void>?)
         case failTask(Error, executorToCancel: HTTPRequestExecutor?)
         case doNothing
     }
@@ -584,7 +590,12 @@ extension RequestBag.StateMachine {
             }
 
             self.state = .finished(error: nil)
-            return .finishStream
+            switch requestState {
+            case .paused(let promise) where self.responseStatusIsAtLeast300:
+                return .finishStream(failBackpressurePromise: promise)
+            case .initialized, .producing, .paused, .finished:
+                return .finishStream(failBackpressurePromise: nil)
+            }
 
         case .executing(_, _, .buffering(_, next: .error(let error))):
             self.state = .finished(error: error)
