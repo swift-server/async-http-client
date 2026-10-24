@@ -25,7 +25,7 @@ let package = Package(
     ],
     products: [
         .executable(name: "GetHTML", targets: ["GetHTML"]),
-        .executable(name: "GetJSON", targets: ["GetJSON"]),
+        .executable(name: "JSON", targets: ["JSON"]),
         .executable(name: "StreamingByteCounter", targets: ["StreamingByteCounter"]),
     ],
     dependencies: [
@@ -47,13 +47,13 @@ let package = Package(
             path: "GetHTML"
         ),
         .executableTarget(
-            name: "GetJSON",
+            name: "JSON",
             dependencies: [
                 .product(name: "AsyncHTTPClient", package: "async-http-client"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOFoundationCompat", package: "swift-nio"),
             ],
-            path: "GetJSON"
+            path: "JSON"
         ),
         .executableTarget(
             name: "StreamingByteCounter",
