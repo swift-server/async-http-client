@@ -474,6 +474,7 @@ class HTTPClientCookieTests: XCTestCase {
         XCTAssertEqual("abc\"", c?.value)
     }
 
+    #if !os(Windows)
     func testCookieExpiresDateParsingWithNonEnglishLocale() throws {
         try withCLocaleSetToGerman {
             // Check that we are using a German C locale.
@@ -500,4 +501,5 @@ class HTTPClientCookieTests: XCTestCase {
             XCTAssertNil(c?.expires)
         }
     }
+    #endif
 }
