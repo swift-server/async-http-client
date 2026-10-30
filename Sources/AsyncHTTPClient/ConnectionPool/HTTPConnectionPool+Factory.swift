@@ -28,6 +28,10 @@ import NIOTransportServices
 
 extension HTTPConnectionPool {
     struct ConnectionFactory {
+        /// The range of port numbers that can be bound as a local (source) port. `0` lets the OS
+        /// pick an ephemeral port.
+        static let validPortRange = 0...Int(UInt16.max)
+
         let key: ConnectionPool.Key
         let clientConfiguration: HTTPClient.Configuration
         let tlsConfiguration: TLSConfiguration
@@ -443,6 +447,9 @@ extension HTTPConnectionPool.ConnectionFactory {
         if let localAddress = self.key.localAddress, !localAddress.isIPAddress {
             throw HTTPClientError.invalidLocalAddress
         }
+        guard Self.validPortRange.contains(self.key.localPort) else {
+            throw HTTPClientError.invalidLocalPort
+        }
 
         #if canImport(Network)
         if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *),
@@ -471,10 +478,11 @@ extension HTTPConnectionPool.ConnectionFactory {
                     }
                 }
             if let localAddress = self.key.localAddress {
+                let localPort = self.key.localPort
                 bootstrap = bootstrap.configureNWParameters { params in
                     params.requiredLocalEndpoint = NWEndpoint.hostPort(
                         host: NWEndpoint.Host(localAddress),
-                        port: .any
+                        port: localPort == 0 ? .any : .init(integerLiteral: UInt16(localPort))
                     )
                 }
             }
@@ -495,7 +503,7 @@ extension HTTPConnectionPool.ConnectionFactory {
             }
             if let localAddress = self.key.localAddress {
                 do {
-                    let socketAddress = try SocketAddress(ipAddress: localAddress, port: 0)
+                    let socketAddress = try SocketAddress(ipAddress: localAddress, port: self.key.localPort)
                     bootstrap = bootstrap.bind(to: socketAddress)
                 } catch {
                     throw HTTPClientError.invalidLocalAddress
@@ -572,6 +580,9 @@ extension HTTPConnectionPool.ConnectionFactory {
         if let localAddress = self.key.localAddress, !localAddress.isIPAddress {
             return eventLoop.makeFailedFuture(HTTPClientError.invalidLocalAddress)
         }
+        guard Self.validPortRange.contains(self.key.localPort) else {
+            return eventLoop.makeFailedFuture(HTTPClientError.invalidLocalPort)
+        }
 
         var tlsConfig = self.tlsConfiguration
         switch self.clientConfiguration.httpVersion.configuration {
@@ -589,6 +600,7 @@ extension HTTPConnectionPool.ConnectionFactory {
         if #available(OSX 10.14, iOS 12.0, tvOS 12.0, watchOS 6.0, *), eventLoop is QoSEventLoop {
             // create NIOClientTCPBootstrap with NIOTS TLS provider
             let localAddr = self.key.localAddress
+            let localPort = self.key.localPort
             let bootstrapFuture = tlsConfig.getNWProtocolTLSOptions(
                 on: eventLoop,
                 serverNameIndicatorOverride: key.serverNameIndicatorOverride
@@ -625,7 +637,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                     bootstrap = bootstrap.configureNWParameters { params in
                         params.requiredLocalEndpoint = NWEndpoint.hostPort(
                             host: NWEndpoint.Host(localAddress),
-                            port: .any
+                            port: localPort == 0 ? .any : .init(integerLiteral: UInt16(localPort))
                         )
                     }
                 }
@@ -653,7 +665,7 @@ extension HTTPConnectionPool.ConnectionFactory {
             }
             if let localAddress = key.localAddress {
                 do {
-                    let socketAddress = try SocketAddress(ipAddress: localAddress, port: 0)
+                    let socketAddress = try SocketAddress(ipAddress: localAddress, port: key.localPort)
                     bootstrap = bootstrap.bind(to: socketAddress)
                 } catch {
                     throw HTTPClientError.invalidLocalAddress

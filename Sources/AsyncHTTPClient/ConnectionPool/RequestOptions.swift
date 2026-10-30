@@ -24,17 +24,21 @@ struct RequestOptions {
     /// The local IP address to bind outgoing connections to. This is typically used on multi-NIC
     /// systems where we want to control where traffic goes.
     var localAddress: String?
+    /// The local TCP source port to bind outgoing connections to. `0` means OS-assigned.
+    var localPort: Int
 
     init(
         idleReadTimeout: TimeAmount?,
         idleWriteTimeout: TimeAmount?,
         dnsOverride: [String: String],
-        localAddress: String? = nil
+        localAddress: String? = nil,
+        localPort: Int = 0
     ) {
         self.idleReadTimeout = idleReadTimeout
         self.idleWriteTimeout = idleWriteTimeout
         self.dnsOverride = dnsOverride
         self.localAddress = localAddress
+        self.localPort = localPort
     }
 }
 
@@ -44,7 +48,8 @@ extension RequestOptions {
             idleReadTimeout: configuration.timeout.read,
             idleWriteTimeout: configuration.timeout.write,
             dnsOverride: configuration.dnsOverride,
-            localAddress: configuration.localAddress
+            localAddress: configuration.localAddress,
+            localPort: configuration.localPort
         )
     }
 }
