@@ -21,6 +21,12 @@ import FoundationEssentials
 import Foundation
 #endif
 
+extension HTTPClientError: LocalizedError {
+    public var errorDescription: String? {
+        self.description
+    }
+}
+
 extension HTTPClient.Cookie {
     /// The cookie's expiration date.
     public var expires: Date? {
