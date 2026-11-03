@@ -113,6 +113,40 @@ class HTTP2ClientTests: XCTestCase {
         XCTAssertNoThrow(try EventLoopFuture.whenAllComplete(requestPromises, on: el).wait())
     }
 
+    func testHTTP2ConnectionSoftLimitAllowsConcurrentRequestsBeyondServerStreamLimit() throws {
+        let bin = HTTPBin(.http2(settings: [.init(parameter: .maxConcurrentStreams, value: 1)])) { _ in
+            SendHeaderAndWaitChannelHandler()
+        }
+        defer { XCTAssertNoThrow(try bin.shutdown()) }
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { XCTAssertNoThrow(try group.syncShutdownGracefully()) }
+        var configuration = HTTPClient.Configuration()
+        configuration.tlsConfiguration = .clientDefault
+        configuration.tlsConfiguration?.certificateVerification = .none
+        configuration.connectionPool.concurrentHTTP2ConnectionsPerHostSoftLimit = 2
+        let client = HTTPClient(eventLoopGroupProvider: .shared(group), configuration: configuration)
+        defer { XCTAssertNoThrow(try client.syncShutdown()) }
+
+        // The server leaves responses open, so each received head proves one concurrently
+        // executing request. Two heads therefore require two connections with this SETTINGS limit.
+        let receivedHeads = self.expectation(description: "Two requests execute concurrently")
+        receivedHeads.expectedFulfillmentCount = 2
+        let request = try HTTPClient.Request(url: "https://localhost:\(bin.port)/wait")
+        let tasks = (0..<3).map { _ in
+            client.execute(
+                request: request,
+                delegate: HeadReceivedCallback { head in
+                    XCTAssertEqual(head.version, .http2)
+                    receivedHeads.fulfill()
+                }
+            )
+        }
+        self.wait(for: [receivedHeads], timeout: 5)
+        XCTAssertEqual(bin.createdConnections, 2)
+        // Keep all tasks alive until shutdown; cancelling one early would free a stream for the third.
+        withExtendedLifetime(tasks) {}
+    }
+
     func testConcurrentRequestsFromDifferentThreads() {
         let bin = HTTPBin(.http2(compress: false))
         defer { XCTAssertNoThrow(try bin.shutdown()) }

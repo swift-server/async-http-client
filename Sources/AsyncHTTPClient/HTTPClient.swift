@@ -1409,6 +1409,20 @@ extension HTTPClient.Configuration {
         /// an explicit eventLoopRequirement are sent, this number might be exceeded due to overflow connections.
         public var concurrentHTTP1ConnectionsPerHostSoftLimit: Int = 8
 
+        /// The maximum number of HTTP/2 connections per host that can accept new requests.
+        ///
+        /// Connections are created on demand when existing connections have no available streams,
+        /// up to this limit, waiting for a pending attempt before expanding further. Starting and
+        /// backing-off connections count towards the limit; draining connections do not.
+        /// Requests with an explicit event loop requirement can exceed the limit
+        /// to establish a connection on their required event loop. With the default limit, protocol
+        /// migration can also retain one connection per event loop. Defaults to `1` and must be positive.
+        public var concurrentHTTP2ConnectionsPerHostSoftLimit: Int = 1 {
+            didSet {
+                precondition(self.concurrentHTTP2ConnectionsPerHostSoftLimit > 0)
+            }
+        }
+
         /// If true, ``HTTPClient`` will try to create new connections on connection failure with an exponential backoff.
         /// Requests will only fail after the ``HTTPClient/Configuration/Timeout-swift.struct/connect`` timeout exceeded.
         /// If false, all requests that have no assigned connection will fail immediately after a connection could not be established.
