@@ -24,7 +24,12 @@ let benchmarks: @Sendable () -> Void = {
         ],
         scalingFactor: .kilo,
         maxDuration: .seconds(10),
-        maxIterations: 10
+        maxIterations: 10,
+        thresholds: [
+            .mallocCountTotal: .init(relative: [.p90: 0.5]),
+            .readSyscalls: .init(relative: [.p90: 5]),
+            .writeSyscalls: .init(relative: [.p90: 5]),
+        ]
     )
 
     Benchmark("Echo512B", configuration: configuration) { benchmark in
