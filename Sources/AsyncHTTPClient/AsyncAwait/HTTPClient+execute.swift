@@ -101,6 +101,7 @@ extension HTTPClient {
                     currentRequest,
                     dnsOverride: configuration.dnsOverride,
                     localAddress: configuration.localAddress,
+                    localPort: configuration.localPort,
                     tracing: self.configuration.tracing
                 )
             let response = try await {
