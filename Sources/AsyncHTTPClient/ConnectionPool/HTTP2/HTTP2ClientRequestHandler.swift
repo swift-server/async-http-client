@@ -244,9 +244,9 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             self.request!.receiveResponseBodyParts(parts)
 
         case .failRequest(let error, let finalAction):
-            // We can force unwrap the request here, as we have just validated in the state machine,
-            // that the request object is still present.
-            self.request!.fail(error)
+            // The request may already have completed after receiving a response end while its body
+            // was still streaming. A subsequent stream error must not fail that request twice.
+            self.request?.fail(error)
             self.request = nil
             self.runTimeoutAction(.clearIdleReadTimeoutTimer, context: context)
             self.runTimeoutAction(.clearIdleWriteTimeoutTimer, context: context)

@@ -622,4 +622,43 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
         )
     }
 
+    func testErrorAfterResponseEndWhileRequestBodyIsStreamingDoesNotCrash() throws {
+        struct TestError: Error {}
+
+        let eventLoop = EmbeddedEventLoop()
+        let handler = HTTP2ClientRequestHandler(eventLoop: eventLoop)
+        let channel = EmbeddedChannel(handlers: [handler], loop: eventLoop)
+        try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).wait()
+
+        let request = MockHTTPExecutableRequest(
+            head: .init(version: .http1_1, method: .POST, uri: "http://localhost/"),
+            framingMetadata: .init(connectionClose: false, body: .stream),
+            raiseErrorIfUnimplementedMethodIsCalled: false
+        )
+
+        channel.write(request, promise: nil)
+        XCTAssertEqual(try channel.readOutbound(as: HTTPClientRequestPart.self), .head(request.requestHead))
+
+        channel.read()
+        try channel.writeInbound(
+            HTTPClientResponsePart.head(
+                .init(version: .http1_1, status: .ok, headers: HTTPHeaders([("content-length", "0")]))
+            )
+        )
+        channel.read()
+        try channel.writeInbound(HTTPClientResponsePart.end(nil))
+        XCTAssertEqual(request.events.last?.kind, .receiveResponseEnd)
+
+        channel.pipeline.fireErrorCaught(TestError())
+
+        XCTAssertFalse(channel.isActive)
+        XCTAssertEqual(
+            request.events.map(\.kind),
+            [
+                .willExecuteRequest, .requestHeadSent, .resumeRequestBodyStream, .receiveResponseHead,
+                .receiveResponseEnd,
+            ]
+        )
+    }
+
 }
