@@ -446,6 +446,156 @@ final class TransactionTests: XCTestCase {
         }
     }
 
+    func testRequestBodyStreamIsReleasedIfResponseAtLeast300EndsWhileUploadIsPaused() {
+        XCTAsyncTest {
+            let loop = NIOAsyncTestingEventLoop()
+            defer { XCTAssertNoThrow(try loop.syncShutdownGracefully()) }
+            let releaseGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+            defer { XCTAssertNoThrow(try releaseGroup.syncShutdownGracefully()) }
+
+            let iteratorReleased = releaseGroup.next().makePromise(of: Void.self)
+            let chunks = (0..<4).map { ByteBuffer(integer: $0) }
+            let writer = AsyncSequenceWriter<ByteBuffer>()
+            chunks.forEach(writer.write)
+
+            var request = HTTPClientRequest(url: "https://localhost/")
+            request.method = .PUT
+            request.body = .stream(
+                ReleaseSignallingSequence(writer: writer, iteratorReleased: iteratorReleased),
+                length: .known(Int64(chunks.reduce(0) { $0 + $1.readableBytes }))
+            )
+
+            var maybePreparedRequest: PreparedRequest?
+            XCTAssertNoThrow(maybePreparedRequest = try PreparedRequest(request))
+            guard let preparedRequest = maybePreparedRequest else {
+                return XCTFail("Expected to have a request here.")
+            }
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
+                request: preparedRequest,
+                preferredEventLoop: loop
+            )
+
+            let executor = MockRequestExecutor(pauseRequestBodyPartStreamAfterASingleWrite: true, eventLoop: loop)
+            executor.runRequest(transaction)
+            await loop.run()
+            executor.resumeRequestBodyStream()
+
+            XCTAssertNoThrow(try executor.receiveRequestBody { XCTAssertEqual($0, chunks[0]) })
+            XCTAssertNoThrow(try executor.receiveRequestBody { XCTAssertEqual($0, chunks[1]) })
+
+            transaction.receiveResponseHead(HTTPResponseHead(version: .http2, status: .unauthorized))
+            let response = try await responseTask.value
+            XCTAssertEqual(response.status, .unauthorized)
+            transaction.receiveResponseEnd(nil, trailers: nil)
+
+            try await iteratorReleased.futureResult.timeout(after: .seconds(5)).get()
+            XCTAssertEqual(executor.requestBodyPartsCount, 0)
+
+            for try await _ in response.body {
+                XCTFail("Did not expect a response body part")
+            }
+        }
+    }
+
+    func testRequestBodyStreamIsReleasedIfResponseAtLeast300EndsWhileWaitingForNextBodyPart() {
+        XCTAsyncTest {
+            let loop = NIOAsyncTestingEventLoop()
+            defer { XCTAssertNoThrow(try loop.syncShutdownGracefully()) }
+            let releaseGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+            defer { XCTAssertNoThrow(try releaseGroup.syncShutdownGracefully()) }
+
+            let iteratorReleased = releaseGroup.next().makePromise(of: Void.self)
+            let writer = AsyncSequenceWriter<ByteBuffer>()
+
+            var request = HTTPClientRequest(url: "https://localhost/")
+            request.method = .PUT
+            request.body = .stream(
+                ReleaseSignallingSequence(writer: writer, iteratorReleased: iteratorReleased),
+                length: .unknown
+            )
+
+            var maybePreparedRequest: PreparedRequest?
+            XCTAssertNoThrow(maybePreparedRequest = try PreparedRequest(request))
+            guard let preparedRequest = maybePreparedRequest else {
+                return XCTFail("Expected to have a request here.")
+            }
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
+                request: preparedRequest,
+                preferredEventLoop: loop
+            )
+
+            let executor = MockRequestExecutor(eventLoop: loop)
+            executor.runRequest(transaction)
+            await loop.run()
+            executor.resumeRequestBodyStream()
+
+            await writer.demand()
+            writer.write(ByteBuffer(integer: 0))
+            await writer.demand()
+            XCTAssertNoThrow(try executor.receiveRequestBody { XCTAssertEqual($0, ByteBuffer(integer: 0)) })
+
+            transaction.pauseRequestBodyStream()
+            transaction.receiveResponseHead(HTTPResponseHead(version: .http1_1, status: .unauthorized))
+            let response = try await responseTask.value
+            XCTAssertEqual(response.status, .unauthorized)
+            transaction.receiveResponseEnd(nil, trailers: nil)
+
+            writer.write(ByteBuffer(integer: 1))
+            try await iteratorReleased.futureResult.timeout(after: .seconds(5)).get()
+            XCTAssertEqual(executor.requestBodyPartsCount, 0)
+        }
+    }
+
+    func testRequestBodyStreamResumesIfResponseBelow300EndsWhileUploadIsPaused() {
+        XCTAsyncTest {
+            let loop = NIOAsyncTestingEventLoop()
+            defer { XCTAssertNoThrow(try loop.syncShutdownGracefully()) }
+            let releaseGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+            defer { XCTAssertNoThrow(try releaseGroup.syncShutdownGracefully()) }
+
+            let iteratorReleased = releaseGroup.next().makePromise(of: Void.self)
+            let chunks = (0..<2).map { ByteBuffer(integer: $0) }
+            let writer = AsyncSequenceWriter<ByteBuffer>()
+            chunks.forEach(writer.write)
+            writer.end()
+
+            var request = HTTPClientRequest(url: "https://localhost/")
+            request.method = .PUT
+            request.body = .stream(
+                ReleaseSignallingSequence(writer: writer, iteratorReleased: iteratorReleased),
+                length: .known(Int64(chunks.reduce(0) { $0 + $1.readableBytes }))
+            )
+
+            var maybePreparedRequest: PreparedRequest?
+            XCTAssertNoThrow(maybePreparedRequest = try PreparedRequest(request))
+            guard let preparedRequest = maybePreparedRequest else {
+                return XCTFail("Expected to have a request here.")
+            }
+            let (transaction, responseTask) = await Transaction.makeWithResultTask(
+                request: preparedRequest,
+                preferredEventLoop: loop
+            )
+
+            let executor = MockRequestExecutor(pauseRequestBodyPartStreamAfterASingleWrite: true, eventLoop: loop)
+            executor.runRequest(transaction)
+            await loop.run()
+            executor.resumeRequestBodyStream()
+
+            XCTAssertNoThrow(try executor.receiveRequestBody { XCTAssertEqual($0, chunks[0]) })
+            XCTAssertNoThrow(try executor.receiveRequestBody { XCTAssertEqual($0, chunks[1]) })
+
+            transaction.receiveResponseHead(HTTPResponseHead(version: .http1_1, status: .ok))
+            let response = try await responseTask.value
+            XCTAssertEqual(response.status, .ok)
+            transaction.receiveResponseEnd(nil, trailers: nil)
+
+            executor.resumeRequestBodyStream()
+            XCTAssertNoThrow(try executor.receiveEndOfStream())
+            try await iteratorReleased.futureResult.timeout(after: .seconds(5)).get()
+            transaction.requestBodyStreamSent()
+        }
+    }
+
     func testResponseStreamFails() {
         XCTAsyncTest(timeout: 30) {
             let loop = NIOAsyncTestingEventLoop()
@@ -614,6 +764,39 @@ final class SharedIterator<Wrapped: AsyncSequence>: Sendable where Wrapped.Eleme
             }
         }
         return try await iter.next()
+    }
+}
+
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+private struct ReleaseSignallingSequence: AsyncSequence, Sendable {
+    typealias Element = ByteBuffer
+
+    let writer: AsyncSequenceWriter<ByteBuffer>
+    let iteratorReleased: EventLoopPromise<Void>
+
+    struct AsyncIterator: AsyncIteratorProtocol {
+        var base: AsyncSequenceWriter<ByteBuffer>.Iterator
+        let releaseSignal: ReleaseSignal
+
+        mutating func next() async throws -> ByteBuffer? {
+            try await self.base.next()
+        }
+    }
+
+    func makeAsyncIterator() -> AsyncIterator {
+        AsyncIterator(base: self.writer.makeAsyncIterator(), releaseSignal: ReleaseSignal(self.iteratorReleased))
+    }
+}
+
+private final class ReleaseSignal: Sendable {
+    private let promise: EventLoopPromise<Void>
+
+    init(_ promise: EventLoopPromise<Void>) {
+        self.promise = promise
+    }
+
+    deinit {
+        self.promise.succeed()
     }
 }
 
