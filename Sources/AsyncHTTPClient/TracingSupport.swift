@@ -119,7 +119,7 @@ struct TracingSupport {
 
 // MARK: - HTTPHeadersInjector
 
-struct HTTPHeadersInjector: Injector, @unchecked Sendable {
+struct HTTPHeadersInjector: Injector, Sendable {
     static let shared: HTTPHeadersInjector = HTTPHeadersInjector()
 
     private init() {}
