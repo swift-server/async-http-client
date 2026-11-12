@@ -15,7 +15,9 @@
 import Logging
 import NIOCore
 import NIOEmbedded
+import NIOHPACK
 import NIOHTTP1
+import NIOHTTP2
 import XCTest
 
 @testable import AsyncHTTPClient
@@ -622,4 +624,177 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
         )
     }
 
+    func testStreamIsClosedIfErrorResponseEndsBeforeRequestBodyIsSent() throws {
+        let eventLoop = EmbeddedEventLoop()
+        let handler = HTTP2ClientRequestHandler(eventLoop: eventLoop)
+        let channel = EmbeddedChannel(handlers: [handler], loop: eventLoop)
+        XCTAssertNoThrow(try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).wait())
+
+        let request = MockHTTPExecutableRequest(
+            head: .init(version: .http1_1, method: .PUT, uri: "http://localhost/"),
+            framingMetadata: RequestFramingMetadata(connectionClose: false, body: .fixedSize(10)),
+            raiseErrorIfUnimplementedMethodIsCalled: false
+        )
+
+        let executor = handler.requestExecutor
+        request.resumeRequestBodyStreamCallback = {
+            executor.writeRequestBodyPart(.byteBuffer(.init(string: "Hello")), request: request, promise: nil)
+        }
+
+        channel.write(request, promise: nil)
+
+        XCTAssertEqual(try channel.readOutbound(as: HTTPClientRequestPart.self), .head(request.requestHead))
+        XCTAssertEqual(
+            try channel.readOutbound(as: HTTPClientRequestPart.self),
+            .body(.byteBuffer(.init(string: "Hello")))
+        )
+
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .unauthorized)
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.head(responseHead)))
+        channel.read()
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.end(nil)))
+        eventLoop.run()
+
+        XCTAssertEqual(
+            request.events.map(\.kind),
+            [
+                .willExecuteRequest, .requestHeadSent, .resumeRequestBodyStream, .receiveResponseHead,
+                .pauseRequestBodyStream, .receiveResponseEnd,
+            ]
+        )
+        XCTAssertNil(try channel.readOutbound(as: HTTPClientRequestPart.self))
+        XCTAssertFalse(channel.isActive)
+    }
+
+    func testStreamIsNotClosedIfResponseEndsAfterRequestEnd() throws {
+        let eventLoop = EmbeddedEventLoop()
+        let handler = HTTP2ClientRequestHandler(eventLoop: eventLoop)
+        let channel = EmbeddedChannel(handlers: [handler], loop: eventLoop)
+        XCTAssertNoThrow(try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).wait())
+
+        let request = MockHTTPExecutableRequest(
+            head: .init(version: .http1_1, method: .GET, uri: "http://localhost/"),
+            framingMetadata: RequestFramingMetadata(connectionClose: false, body: .fixedSize(0)),
+            raiseErrorIfUnimplementedMethodIsCalled: false
+        )
+
+        channel.write(request, promise: nil)
+
+        XCTAssertEqual(try channel.readOutbound(as: HTTPClientRequestPart.self), .head(request.requestHead))
+        XCTAssertEqual(try channel.readOutbound(as: HTTPClientRequestPart.self), .end(nil))
+
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .unauthorized)
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.head(responseHead)))
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.end(nil)))
+        eventLoop.run()
+
+        XCTAssertEqual(
+            request.events.map(\.kind),
+            [.willExecuteRequest, .requestHeadSent, .receiveResponseHead, .receiveResponseEnd]
+        )
+        XCTAssertTrue(channel.isActive)
+    }
+
+    func testStreamIsResetIfErrorResponseEndsBeforeRequestBodyIsSent() throws {
+        XCTAssertEqual(try self.streamResetsSentAfterEarlyErrorResponse(serverResetsStream: false), [.cancel])
+    }
+
+    func testStreamIsNotResetIfServerResetsStreamInSameReadAsErrorResponseEnd() throws {
+        XCTAssertEqual(try self.streamResetsSentAfterEarlyErrorResponse(serverResetsStream: true), [])
+    }
+
+    private func streamResetsSentAfterEarlyErrorResponse(
+        serverResetsStream: Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> [HTTP2ErrorCode] {
+        let eventLoop = EmbeddedEventLoop()
+        let client = EmbeddedChannel(loop: eventLoop)
+        let server = EmbeddedChannel(loop: eventLoop)
+        let resetRecorder = StreamResetRecorder()
+        let multiplexer = HTTP2StreamMultiplexer(mode: .client, channel: client, inboundStreamInitializer: nil)
+        try client.pipeline.syncOperations.addHandlers([NIOHTTP2Handler(mode: .client), resetRecorder, multiplexer])
+        try server.pipeline.syncOperations.addHandler(NIOHTTP2Handler(mode: .server))
+        try client.connect(to: .init(ipAddress: "127.0.0.1", port: 443)).wait()
+        try server.connect(to: .init(ipAddress: "127.0.0.1", port: 443)).wait()
+        try self.interactInMemory(client, server)
+
+        let request = MockHTTPExecutableRequest(
+            head: .init(version: .http1_1, method: .PUT, uri: "/", headers: ["host": "localhost"]),
+            framingMetadata: RequestFramingMetadata(connectionClose: false, body: .fixedSize(10)),
+            raiseErrorIfUnimplementedMethodIsCalled: false
+        )
+        multiplexer.createStreamChannel(promise: nil) { channel in
+            channel.eventLoop.makeCompletedFuture {
+                let handler = HTTP2ClientRequestHandler(eventLoop: channel.eventLoop)
+                let executor = handler.requestExecutor
+                request.resumeRequestBodyStreamCallback = {
+                    executor.writeRequestBodyPart(.byteBuffer(.init(string: "Hello")), request: request, promise: nil)
+                }
+                try channel.pipeline.syncOperations.addHandlers([
+                    HTTP2FramePayloadToHTTP1ClientCodec(httpProtocol: .https), handler,
+                ])
+                channel.pipeline.syncOperations.write(NIOAny(request), promise: nil)
+            }
+        }
+        eventLoop.run()
+        try self.interactInMemory(client, server)
+
+        let streamID = HTTP2StreamID(1)
+        server.write(
+            HTTP2Frame(streamID: streamID, payload: .headers(.init(headers: [":status": "401"], endStream: true))),
+            promise: nil
+        )
+        if serverResetsStream {
+            server.write(HTTP2Frame(streamID: streamID, payload: .rstStream(.noError)), promise: nil)
+        }
+        server.flush()
+        var response = ByteBuffer()
+        while var bytes = try server.readOutbound(as: ByteBuffer.self) {
+            response.writeBuffer(&bytes)
+        }
+        try client.writeInbound(response)
+        eventLoop.run()
+        try self.interactInMemory(client, server)
+
+        XCTAssertEqual(
+            request.events.map(\.kind),
+            [
+                .willExecuteRequest, .requestHeadSent, .resumeRequestBodyStream, .receiveResponseHead,
+                .pauseRequestBodyStream, .receiveResponseEnd,
+            ],
+            file: file,
+            line: line
+        )
+        return resetRecorder.errorCodes
+    }
+
+    private func interactInMemory(_ first: EmbeddedChannel, _ second: EmbeddedChannel) throws {
+        var operated = true
+        while operated {
+            operated = false
+            if let bytes = try first.readOutbound(as: ByteBuffer.self) {
+                operated = true
+                try second.writeInbound(bytes)
+            }
+            if let bytes = try second.readOutbound(as: ByteBuffer.self) {
+                operated = true
+                try first.writeInbound(bytes)
+            }
+        }
+    }
+}
+
+private final class StreamResetRecorder: ChannelOutboundHandler {
+    typealias OutboundIn = HTTP2Frame
+    typealias OutboundOut = HTTP2Frame
+
+    private(set) var errorCodes: [HTTP2ErrorCode] = []
+
+    func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
+        if case .rstStream(let errorCode) = self.unwrapOutboundIn(data).payload {
+            self.errorCodes.append(errorCode)
+        }
+        context.write(data, promise: promise)
+    }
 }
