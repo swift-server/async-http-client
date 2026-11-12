@@ -654,6 +654,227 @@ final class RequestBagTests: XCTestCase {
         XCTAssertNoThrow(try bag.task.futureResult.wait())
     }
 
+    func testUploadIsCancelledIfResponseAtLeast300EndsWhileUploadIsPaused() throws {
+        let embeddedEventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+        let logger = Logger(label: "test")
+
+        let writeSecondPartPromise = embeddedEventLoop.makePromise(of: Void.self)
+        let uploadResult = NIOLockedValueBox<Result<Void, Error>?>(nil)
+        let request = try HTTPClient.Request(
+            url: "https://swift.org",
+            method: .POST,
+            body: .stream(contentLength: 8) { writer -> EventLoopFuture<Void> in
+                writer.write(.byteBuffer(.init(bytes: 0...3))).flatMap {
+                    writeSecondPartPromise.futureResult
+                }.flatMap {
+                    writer.write(.byteBuffer(.init(bytes: 4...7)))
+                }.always { result in
+                    uploadResult.withLockedValue { $0 = result }
+                }
+            }
+        )
+
+        let delegate = UploadCountingDelegate(eventLoop: embeddedEventLoop)
+        let bag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embeddedEventLoop),
+            task: .init(eventLoop: embeddedEventLoop, logger: logger),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(),
+            delegate: delegate
+        )
+
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
+        executor.runRequest(bag)
+        bag.resumeRequestBodyStream()
+        XCTAssertNoThrow(try executor.receiveRequestBody { XCTAssertEqual($0, ByteBuffer(bytes: 0...3)) })
+
+        bag.receiveResponseHead(.init(version: .http1_1, status: .payloadTooLarge))
+        bag.pauseRequestBodyStream()
+        XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
+        XCTAssertTrue(executor.signalledDemandForResponseBody)
+
+        writeSecondPartPromise.succeed(())
+        XCTAssertNil(uploadResult.withLockedValue { $0 })
+
+        bag.receiveResponseEnd(nil, trailers: nil)
+        XCTAssertEqual(delegate.hitDidReceiveResponse, 1)
+        let upload = try XCTUnwrap(uploadResult.withLockedValue { $0 })
+        XCTAssertThrowsError(try upload.get()) {
+            XCTAssertEqual($0 as? HTTPClientError, .requestStreamCancelled)
+        }
+        XCTAssertNoThrow(try bag.task.futureResult.wait())
+    }
+
+    func testUploadIsCancelledIfBufferedResponseAtLeast300EndsWhileUploadIsPaused() throws {
+        let embeddedEventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+        let logger = Logger(label: "test")
+
+        let writeSecondPartPromise = embeddedEventLoop.makePromise(of: Void.self)
+        let uploadResult = NIOLockedValueBox<Result<Void, Error>?>(nil)
+        let request = try HTTPClient.Request(
+            url: "https://swift.org",
+            method: .POST,
+            body: .stream(contentLength: 8) { writer -> EventLoopFuture<Void> in
+                writer.write(.byteBuffer(.init(bytes: 0...3))).flatMap {
+                    writeSecondPartPromise.futureResult
+                }.flatMap {
+                    writer.write(.byteBuffer(.init(bytes: 4...7)))
+                }.always { result in
+                    uploadResult.withLockedValue { $0 = result }
+                }
+            }
+        )
+
+        let delegate = UploadCountingDelegate(eventLoop: embeddedEventLoop)
+        let bag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embeddedEventLoop),
+            task: .init(eventLoop: embeddedEventLoop, logger: logger),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(),
+            delegate: delegate
+        )
+
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
+        executor.runRequest(bag)
+        bag.resumeRequestBodyStream()
+        XCTAssertNoThrow(try executor.receiveRequestBody { XCTAssertEqual($0, ByteBuffer(bytes: 0...3)) })
+
+        bag.receiveResponseHead(.init(version: .http1_1, status: .payloadTooLarge))
+        bag.pauseRequestBodyStream()
+        writeSecondPartPromise.succeed(())
+        bag.receiveResponseEnd([ByteBuffer(string: "foo")], trailers: nil)
+        XCTAssertNil(uploadResult.withLockedValue { $0 })
+
+        XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
+        XCTAssertEqual(delegate.hitDidReceiveBodyPart, 1)
+        XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
+        XCTAssertEqual(delegate.hitDidReceiveResponse, 1)
+        let upload = try XCTUnwrap(uploadResult.withLockedValue { $0 })
+        XCTAssertThrowsError(try upload.get()) {
+            XCTAssertEqual($0 as? HTTPClientError, .requestStreamCancelled)
+        }
+        XCTAssertNoThrow(try bag.task.futureResult.wait())
+    }
+
+    func testUploadIsCancelledIfResponseAtLeast300EndsWhileWaitingForNextBodyPart() throws {
+        let embeddedEventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+        let logger = Logger(label: "test")
+
+        let writeSecondPartPromise = embeddedEventLoop.makePromise(of: Void.self)
+        let uploadResult = NIOLockedValueBox<Result<Void, Error>?>(nil)
+        let request = try HTTPClient.Request(
+            url: "https://swift.org",
+            method: .POST,
+            body: .stream(contentLength: 8) { writer -> EventLoopFuture<Void> in
+                writer.write(.byteBuffer(.init(bytes: 0...3))).flatMap {
+                    writeSecondPartPromise.futureResult
+                }.flatMap {
+                    writer.write(.byteBuffer(.init(bytes: 4...7)))
+                }.always { result in
+                    uploadResult.withLockedValue { $0 = result }
+                }
+            }
+        )
+
+        let delegate = UploadCountingDelegate(eventLoop: embeddedEventLoop)
+        let bag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embeddedEventLoop),
+            task: .init(eventLoop: embeddedEventLoop, logger: logger),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(),
+            delegate: delegate
+        )
+
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
+        executor.runRequest(bag)
+        bag.resumeRequestBodyStream()
+        XCTAssertNoThrow(try executor.receiveRequestBody { XCTAssertEqual($0, ByteBuffer(bytes: 0...3)) })
+
+        bag.receiveResponseHead(.init(version: .http1_1, status: .payloadTooLarge))
+        bag.pauseRequestBodyStream()
+        XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
+        XCTAssertTrue(executor.signalledDemandForResponseBody)
+
+        let taskResult = NIOLockedValueBox<Result<Void, Error>?>(nil)
+        bag.task.futureResult.whenComplete { result in taskResult.withLockedValue { $0 = result } }
+        bag.receiveResponseEnd(nil, trailers: nil)
+        XCTAssertEqual(delegate.hitDidReceiveResponse, 1)
+        XCTAssertEqual(delegate.receivedHead?.status, .payloadTooLarge)
+        XCTAssertNoThrow(try XCTUnwrap(taskResult.withLockedValue { $0 }).get())
+
+        writeSecondPartPromise.succeed(())
+        XCTAssertEqual(executor.requestBodyPartsCount, 0)
+        let upload = try XCTUnwrap(uploadResult.withLockedValue { $0 })
+        XCTAssertThrowsError(try upload.get()) {
+            XCTAssertEqual($0 as? HTTPClientError, .requestStreamCancelled)
+        }
+        XCTAssertEqual(delegate.hitDidReceiveError, 0)
+    }
+
+    func testUploadResumesIfResponseBelow300EndsWhileUploadIsPaused() throws {
+        let embeddedEventLoop = EmbeddedEventLoop()
+        defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }
+        let logger = Logger(label: "test")
+
+        let writeSecondPartPromise = embeddedEventLoop.makePromise(of: Void.self)
+        let uploadResult = NIOLockedValueBox<Result<Void, Error>?>(nil)
+        let request = try HTTPClient.Request(
+            url: "https://swift.org",
+            method: .POST,
+            body: .stream(contentLength: 8) { writer -> EventLoopFuture<Void> in
+                writer.write(.byteBuffer(.init(bytes: 0...3))).flatMap {
+                    writeSecondPartPromise.futureResult
+                }.flatMap {
+                    writer.write(.byteBuffer(.init(bytes: 4...7)))
+                }.always { result in
+                    uploadResult.withLockedValue { $0 = result }
+                }
+            }
+        )
+
+        let delegate = UploadCountingDelegate(eventLoop: embeddedEventLoop)
+        let bag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embeddedEventLoop),
+            task: .init(eventLoop: embeddedEventLoop, logger: logger),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(),
+            delegate: delegate
+        )
+
+        let executor = MockRequestExecutor(eventLoop: embeddedEventLoop)
+        executor.runRequest(bag)
+        bag.resumeRequestBodyStream()
+        XCTAssertNoThrow(try executor.receiveRequestBody { XCTAssertEqual($0, ByteBuffer(bytes: 0...3)) })
+
+        bag.receiveResponseHead(.init(version: .http1_1, status: .ok))
+        bag.pauseRequestBodyStream()
+        XCTAssertNoThrow(try XCTUnwrap(delegate.backpressurePromise).succeed(()))
+        writeSecondPartPromise.succeed(())
+        XCTAssertNoThrow(try executor.receiveRequestBody { XCTAssertEqual($0, ByteBuffer(bytes: 4...7)) })
+
+        bag.receiveResponseEnd(nil, trailers: nil)
+        XCTAssertEqual(delegate.hitDidReceiveResponse, 0)
+        XCTAssertNil(uploadResult.withLockedValue { $0 })
+
+        bag.resumeRequestBodyStream()
+        XCTAssertNoThrow(try XCTUnwrap(uploadResult.withLockedValue { $0 }).get())
+        XCTAssertNoThrow(try executor.receiveEndOfStream())
+        XCTAssertEqual(delegate.hitDidSendRequest, 1)
+        XCTAssertEqual(delegate.hitDidReceiveResponse, 1)
+        XCTAssertNoThrow(try bag.task.futureResult.wait())
+    }
+
     func testRaceBetweenConnectionCloseAndDemandMoreData() {
         let embeddedEventLoop = EmbeddedEventLoop()
         defer { XCTAssertNoThrow(try embeddedEventLoop.syncShutdownGracefully()) }

@@ -1062,6 +1062,58 @@ class HTTP1ClientChannelHandlerTests: XCTestCase {
         )
     }
 
+    func testUploadIsCancelledIfResponseAtLeast300EndsWhileUploadIsPaused() throws {
+        let embedded = EmbeddedChannel()
+        let testUtils = try embedded.setupHTTP1Connection()
+
+        let writeSecondPartPromise = embedded.eventLoop.makePromise(of: Void.self)
+        let uploadResult = NIOLockedValueBox<Result<Void, Error>?>(nil)
+        let request = try HTTPClient.Request(
+            url: "http://localhost/",
+            method: .POST,
+            body: .stream(contentLength: 8) { writer in
+                writer.write(.byteBuffer(.init(bytes: 0...3))).flatMap {
+                    writeSecondPartPromise.futureResult
+                }.flatMap {
+                    writer.write(.byteBuffer(.init(bytes: 4...7)))
+                }.always { result in
+                    uploadResult.withLockedValue { $0 = result }
+                }
+            }
+        )
+
+        let requestBag = try RequestBag(
+            request: request,
+            eventLoopPreference: .delegate(on: embedded.eventLoop),
+            task: .init(eventLoop: embedded.eventLoop, logger: testUtils.logger),
+            redirectHandler: nil,
+            connectionDeadline: .now() + .seconds(30),
+            requestOptions: .forTests(),
+            delegate: ResponseAccumulator(request: request)
+        )
+
+        testUtils.connection.executeRequest(requestBag)
+        embedded.embeddedEventLoop.run()
+        XCTAssertNoThrow(try embedded.receiveHeadAndVerify { XCTAssertEqual($0.method, .POST) })
+        XCTAssertNoThrow(try embedded.receiveBodyAndVerify { XCTAssertEqual($0, .byteBuffer(.init(bytes: 0...3))) })
+
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .payloadTooLarge)
+        XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.head(responseHead)))
+        writeSecondPartPromise.succeed(())
+        embedded.embeddedEventLoop.run()
+        XCTAssertNil(try embedded.readOutbound(as: HTTPClientRequestPart.self))
+        XCTAssertNil(uploadResult.withLockedValue { $0 })
+
+        XCTAssertNoThrow(try embedded.writeInbound(HTTPClientResponsePart.end(nil)))
+        embedded.embeddedEventLoop.run()
+        XCTAssertEqual(testUtils.connectionDelegate.hitConnectionClosed, 1)
+        let upload = try XCTUnwrap(uploadResult.withLockedValue { $0 })
+        XCTAssertThrowsError(try upload.get()) {
+            XCTAssertEqual($0 as? HTTPClientError, .requestStreamCancelled)
+        }
+        XCTAssertEqual(try requestBag.task.futureResult.wait().status, .payloadTooLarge)
+    }
+
     func testDefaultMaxBufferSize() {
         if MemoryLayout<Int>.size == 8 {
             XCTAssertEqual(ResponseAccumulator.maxByteBufferSize, Int(UInt32.max))
