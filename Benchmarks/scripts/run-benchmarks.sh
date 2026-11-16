@@ -28,10 +28,13 @@ fatal() {
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
+is_running() { kill -0 "$1" 2>/dev/null; } # ignore-unacceptable-language
+terminate() { kill -TERM "$1" 2>/dev/null; } # ignore-unacceptable-language
+
 server_pid=""
 cleanup() {
-    if [[ -n "$server_pid" ]] && kill -0 "$server_pid" 2>/dev/null; then
-        kill -TERM "$server_pid" 2>/dev/null || true
+    if [[ -n "$server_pid" ]] && is_running "$server_pid"; then
+        terminate "$server_pid" || true
         wait "$server_pid" 2>/dev/null || true
     fi
 }
@@ -49,15 +52,15 @@ server="$(swift build --disable-sandbox -c release --package-path Benchmarks/Ben
 
 "$server" &
 server_pid=$!
-# Traps don't run when this script is killed with SIGKILL, so a watchdog stops the server once the script is gone.
+# Traps don't run when this script receives SIGKILL, so a watchdog stops the server once the script is gone.
 (
-    while kill -0 "$$" 2>/dev/null; do sleep 1; done
-    kill -TERM "$server_pid" 2>/dev/null
+    while is_running "$$"; do sleep 1; done
+    terminate "$server_pid"
 ) </dev/null >/dev/null 2>&1 &
 
 for _ in $(seq 300); do
     listening && break
-    kill -0 "$server_pid" 2>/dev/null || fatal "benchmark-server exited before it was ready"
+    is_running "$server_pid" || fatal "benchmark-server exited before it was ready"
     sleep 0.1
 done
 listening || fatal "benchmark-server wasn't ready after 30 seconds"
