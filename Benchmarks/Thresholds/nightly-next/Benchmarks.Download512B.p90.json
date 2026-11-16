@@ -1,5 +1,5 @@
 {
-  "mallocCountTotal" : 92034,
-  "readSyscalls" : 3695,
-  "writeSyscalls" : 4695
+  "mallocCountTotal" : 92028,
+  "readSyscalls" : 3655,
+  "writeSyscalls" : 4655
 }

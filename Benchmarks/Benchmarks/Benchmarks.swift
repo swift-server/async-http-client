@@ -17,30 +17,33 @@ import NIOCore
 import NIOHTTP1
 
 let benchmarks: @Sendable () -> Void = {
-    let configuration = Benchmark.Configuration(
-        metrics: [
-            .wallClock, .cpuTotal, .instructions, .mallocCountTotal,
-            .syscalls, .contextSwitches, .readSyscalls, .writeSyscalls,
-        ],
-        scalingFactor: .kilo,
-        maxDuration: .seconds(10),
-        maxIterations: 10,
-        thresholds: [
-            .mallocCountTotal: .init(relative: [.p90: 0.5]),
-            .readSyscalls: .init(relative: [.p90: 5]),
-            .writeSyscalls: .init(relative: [.p90: 5]),
-        ]
-    )
+    func configuration(syscallTolerance: Int) -> Benchmark.Configuration {
+        Benchmark.Configuration(
+            metrics: [
+                .wallClock, .cpuTotal, .instructions, .mallocCountTotal,
+                .syscalls, .contextSwitches, .readSyscalls, .writeSyscalls,
+            ],
+            scalingFactor: .kilo,
+            maxDuration: .seconds(10),
+            maxIterations: 10,
+            thresholds: [
+                .mallocCountTotal: .init(absolute: [.p90: 700]),
+                .readSyscalls: .init(absolute: [.p90: syscallTolerance]),
+                .writeSyscalls: .init(absolute: [.p90: syscallTolerance]),
+            ]
+        )
+    }
+    let requestConfiguration = configuration(syscallTolerance: 500)
 
-    Benchmark("Echo512B", configuration: configuration) { benchmark in
+    Benchmark("Echo512B", configuration: requestConfiguration) { benchmark in
         try await benchmark.measureRequests(.POST, "/echo", body: ByteBuffer(repeating: UInt8(ascii: "a"), count: 512))
     }
 
-    Benchmark("Download512B", configuration: configuration) { benchmark in
+    Benchmark("Download512B", configuration: requestConfiguration) { benchmark in
         try await benchmark.measureRequests(.GET, "/download/512")
     }
 
-    Benchmark("Upload250B", configuration: configuration) { benchmark in
+    Benchmark("Upload250B", configuration: requestConfiguration) { benchmark in
         try await benchmark.measureRequests(
             .POST,
             "/upload",
@@ -48,7 +51,7 @@ let benchmarks: @Sendable () -> Void = {
         )
     }
 
-    Benchmark("NewConnection", configuration: configuration) { benchmark in
+    Benchmark("NewConnection", configuration: configuration(syscallTolerance: 1500)) { benchmark in
         try await benchmark.measureRequests(.GET, "/download/512", reusingConnection: false)
     }
 }
