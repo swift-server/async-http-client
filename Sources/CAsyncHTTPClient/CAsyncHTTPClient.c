@@ -12,10 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if __APPLE__
-    #include <xlocale.h>
-#elif __linux__
-    #include <locale.h>
+#include <locale.h>
+#if __has_include(<xlocale.h>)
+#include <xlocale.h>
 #endif
 
 #include <stdbool.h>
