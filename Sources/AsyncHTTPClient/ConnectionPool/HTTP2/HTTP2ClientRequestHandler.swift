@@ -214,6 +214,13 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             if let writeTimeoutAction = self.idleWriteTimeoutStateMachine?.requestEndSent() {
                 self.runTimeoutAction(writeTimeoutAction, context: context)
             }
+
+            switch finalAction {
+            case .none:
+                break
+            case .close, .requestDone:
+                self.request = nil
+            }
             self.runSuccessfulFinalAction(finalAction, context: context)
 
         case .read:
@@ -260,7 +267,12 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             // We can force unwrap the request here, as we have just validated in the state machine,
             // that the request object is still present.
             self.request!.receiveResponseEnd(finalParts, trailers: trailers)
-            self.request = nil
+            switch finalAction {
+            case .none:
+                break
+            case .close, .requestDone:
+                self.request = nil
+            }
             self.runTimeoutAction(.clearIdleReadTimeoutTimer, context: context)
             self.runTimeoutAction(.clearIdleWriteTimeoutTimer, context: context)
             self.runSuccessfulFinalAction(finalAction, context: context)
