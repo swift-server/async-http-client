@@ -1059,6 +1059,18 @@ internal struct RedirectHandler<ResponseType: Sendable> {
     let redirectState: RedirectState
     let execute: (HTTPClient.Request, RedirectState) -> HTTPClient.Task<ResponseType>
 
+    /// Set only on a copy returned from `earlyStrategyDecision(head:)`, carrying what that
+    /// already decided so `redirect(head:to:promise:)` -- called later, once the state machine
+    /// gets around to it -- reissues/fails accordingly instead of asking the strategy again.
+    /// `.follow` mode never sets this; its decision (redirect-limit/cycle check) has nothing to
+    /// precompute and stays exactly as cheap to make late as early.
+    var precomputed: Precomputed?
+
+    enum Precomputed {
+        case launch(HTTPClient.Request, RedirectState)
+        case fail(Error)
+    }
+
     func redirectTarget(status: HTTPResponseStatus, responseHeaders: HTTPHeaders) -> URL? {
         responseHeaders.extractRedirectTarget(
             status: status,
@@ -1067,14 +1079,154 @@ internal struct RedirectHandler<ResponseType: Sendable> {
         )
     }
 
+    /// What `earlyStrategyDecision(head:)` decided, so `receiveResponseHead` (`RequestBag
+    /// +StateMachine.swift`) can act on it without re-deriving anything.
+    enum EarlyStrategyDecision {
+        /// `.follow` mode, or `head` isn't redirect-eligible at all -- proceed exactly as
+        /// before this existed.
+        case notApplicable
+        /// The response that triggered this should be delivered as the final response, same as
+        /// any ordinary (non-redirect-candidate) response -- nothing about its body has been
+        /// touched yet, so this works regardless of size.
+        case doNotFollow
+        /// Either what to launch, or what error to fail with -- both already computed, both
+        /// requiring the same redirect-eligible response's body to be drained-or-cancelled the
+        /// same way `.follow` does, hence going through the same `redirectURL`-tagged path.
+        case decided(RedirectHandler<ResponseType>, URL)
+    }
+
+    /// Computes a `.strategy` redirect configuration's decision for `head`, before any response
+    /// body byte has been read. Safe to call regardless of body size or whether it's even known
+    /// (`Content-Length` present, absent, or huge) -- `HTTPClientRedirectContext` never carries
+    /// a body, so nothing here needs one. (Adding a body field to that type later would break
+    /// this assumption.)
+    ///
+    /// - Important: `strategy.redirectDecision(for:)` is arbitrary caller code that may
+    ///   synchronously reenter this task (e.g. call `task.cancel()`). Call this from outside any
+    ///   exclusive access to the state machine that will go on to consume the result --
+    ///   `RequestBag.receiveResponseHead0` calls this first and hands the state machine only the
+    ///   already-computed answer, never the handler itself, for exactly this reason.
+    func earlyStrategyDecision(head: HTTPResponseHead) -> EarlyStrategyDecision {
+        guard case .strategy(let anyStrategyState) = self.redirectState else {
+            return .notApplicable
+        }
+
+        guard let redirectURL = self.redirectTarget(status: head.status, responseHeaders: head.headers) else {
+            return .notApplicable
+        }
+
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else {
+            // Unreachable in practice -- see `RedirectState.init?`'s own guard for why. Once the
+            // state machine eventually calls `redirect(head:to:promise:)` on this (unmodified)
+            // handler, `redirectByStrategy` fails it the same way `_execute`'s own top-level
+            // guard would have.
+            return .notApplicable
+        }
+
+        let strategyState = anyStrategyState as! RedirectState.Strategy
+
+        do {
+            let (method, headers, body) = transformRequestForRedirect(
+                from: request.url,
+                method: self.request.method,
+                headers: self.request.headers,
+                body: self.request.body,
+                to: redirectURL,
+                status: head.status,
+                // Matches the Concurrency API's own `.strategy` loop: `max`/`allowCycles` don't
+                // apply to `.strategy` mode (there's no built-in limit), only the
+                // `retainHTTPMethodAndBodyOn30{1,2}` flags feed into this rewrite.
+                config: .init(
+                    max: 0,
+                    allowCycles: true,
+                    retainHTTPMethodAndBodyOn301: false,
+                    retainHTTPMethodAndBodyOn302: false
+                )
+            )
+
+            let candidateRequest = try HTTPClient.Request(
+                url: redirectURL,
+                method: method,
+                headers: headers,
+                body: body,
+                tlsConfiguration: self.request.tlsConfiguration
+            )
+
+            let history =
+                strategyState.history + [
+                    HTTPClientRequestResponse(
+                        request: HTTPClientRequest(delegateRequest: self.request),
+                        responseHead: head
+                    )
+                ]
+
+            let context = HTTPClientRedirectContext(
+                redirectRequest: HTTPClientRequest(delegateRequest: candidateRequest),
+                response: head,
+                history: history,
+                redirectCount: strategyState.redirectCount
+            )
+
+            switch try strategyState.strategy.redirectDecision(for: context) {
+            case .doNotFollow:
+                return .doNotFollow
+
+            case .follow(let newRequest):
+                let newDelegateRequest = try newRequest.asDelegateRequest()
+
+                let newStrategyState = RedirectState.Strategy(
+                    strategy: strategyState.strategy,
+                    history: history,
+                    redirectCount: strategyState.redirectCount + 1
+                )
+
+                var decided = self
+                decided.precomputed = .launch(newDelegateRequest, .strategy(newStrategyState))
+                return .decided(decided, redirectURL)
+            }
+        } catch {
+            var decided = self
+            decided.precomputed = .fail(error)
+            return .decided(decided, redirectURL)
+        }
+    }
+
+    /// Reissues or fails according to whatever `earlyStrategyDecision(head:)` already decided
+    /// (`.strategy` mode), or makes `.follow` mode's decision now, for the first time (there is
+    /// nothing to precompute there -- the redirect-limit/cycle check is exactly as cheap late as
+    /// early, and always ends in "redirect" or "fail the task", never "delivered normally").
     func redirect(
+        head: HTTPResponseHead,
+        to redirectURL: URL,
+        promise: EventLoopPromise<ResponseType>
+    ) -> HTTPClient.Task<ResponseType>? {
+        if let precomputed = self.precomputed {
+            switch precomputed {
+            case .launch(let newRequest, let newRedirectState):
+                return self.launch(newRequest, newRedirectState, promise: promise)
+            case .fail(let error):
+                promise.fail(error)
+                return nil
+            }
+        }
+
+        switch self.redirectState {
+        case .follow(let followState):
+            return self.redirectByFollowing(followState, status: head.status, to: redirectURL, promise: promise)
+        case .strategy:
+            return self.redirectByStrategy(promise: promise)
+        }
+    }
+
+    private func redirectByFollowing(
+        _ followState: RedirectState.Follow,
         status: HTTPResponseStatus,
         to redirectURL: URL,
         promise: EventLoopPromise<ResponseType>
     ) -> HTTPClient.Task<ResponseType>? {
         do {
-            var redirectState = self.redirectState
-            try redirectState.redirect(to: redirectURL.absoluteString)
+            var followState = followState
+            try followState.redirect(to: redirectURL.absoluteString)
 
             let (method, headers, body) = transformRequestForRedirect(
                 from: request.url,
@@ -1083,7 +1235,7 @@ internal struct RedirectHandler<ResponseType: Sendable> {
                 body: self.request.body,
                 to: redirectURL,
                 status: status,
-                config: self.redirectState.config
+                config: followState.config
             )
 
             let newRequest = try HTTPClient.Request(
@@ -1094,19 +1246,38 @@ internal struct RedirectHandler<ResponseType: Sendable> {
                 tlsConfiguration: self.request.tlsConfiguration
             )
 
-            let newTask = self.execute(newRequest, redirectState)
-
-            newTask.futureResult.whenComplete { result in
-                promise.futureResult.eventLoop.execute {
-                    promise.completeWith(result)
-                }
-            }
-
-            return newTask
+            return self.launch(newRequest, .follow(followState), promise: promise)
         } catch {
             promise.fail(error)
             return nil
         }
+    }
+
+    /// Reached only when `earlyStrategyDecision(head:)` couldn't run the strategy at all --
+    /// i.e. an OS below the availability floor `.strategy(_:)`/`.custom(_:)` require to
+    /// construct in the first place. Unreachable in practice; see `RedirectState.init?`'s own
+    /// guard for why. Every other path through `.strategy` mode is decided by
+    /// `earlyStrategyDecision(head:)` at head-received time and carried here via
+    /// `precomputed`, above, before this method would ever be reached.
+    private func redirectByStrategy(promise: EventLoopPromise<ResponseType>) -> HTTPClient.Task<ResponseType>? {
+        promise.fail(HTTPClientError.invalidRedirectConfiguration)
+        return nil
+    }
+
+    private func launch(
+        _ newRequest: HTTPClient.Request,
+        _ newRedirectState: RedirectState,
+        promise: EventLoopPromise<ResponseType>
+    ) -> HTTPClient.Task<ResponseType> {
+        let newTask = self.execute(newRequest, newRedirectState)
+
+        newTask.futureResult.whenComplete { result in
+            promise.futureResult.eventLoop.execute {
+                promise.completeWith(result)
+            }
+        }
+
+        return newTask
     }
 }
 

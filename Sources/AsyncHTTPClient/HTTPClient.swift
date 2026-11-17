@@ -759,6 +759,27 @@ public final class HTTPClient: Sendable {
             ]
         )
 
+        if case .strategy = self.configuration.redirectConfiguration.mode,
+            #unavailable(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0)
+        {
+            // `.strategy(_:)`/`.custom(_:)` require this same availability floor to construct, so
+            // this is unreachable in practice -- kept as defense in depth rather than silently
+            // falling back to "no redirects are followed" (what `RedirectState.init?` returning
+            // `nil` here would otherwise mean). On an available OS, `.strategy` is now handled by
+            // `RedirectHandler` alongside `.follow`, driving the strategy through the
+            // delegate-based path via `RedirectStrategyDelegateBridge.swift`.
+            logger.debug(
+                "`.strategy` redirect configuration requires a newer OS than this process is running on, failing request"
+            )
+            return Task<Delegate.Response>.failedTask(
+                eventLoop: taskEL,
+                error: HTTPClientError.invalidRedirectConfiguration,
+                logger: logger,
+                tracing: tracing,
+                makeOrGetFileIOThreadPool: self.makeOrGetFileIOThreadPool
+            )
+        }
+
         let failedTask: Task<Delegate.Response>? = self.state.withLockedValue { state -> (Task<Delegate.Response>?) in
             switch state {
             case .upAndRunning:
@@ -1312,11 +1333,18 @@ extension HTTPClient.Configuration {
 
     /// Specifies redirect processing settings.
     public struct RedirectConfiguration: Sendable {
-        enum Mode: Hashable {
+        enum Mode {
             /// Redirects are not followed.
             case disallow
             /// Redirects are followed with a specified limit.
             case follow(FollowConfiguration)
+            /// Redirects are handed to a pluggable ``HTTPClientRedirectStrategy``.
+            ///
+            /// Stored as `any Sendable` (erasure trick so this case doesn't need to be marked
+            /// `@available`, which Swift disallows on enum cases with associated values) — always an
+            /// `any HTTPClientRedirectStrategy` underneath, since `.strategy(_:)`/`.custom(_:)` are the
+            /// only way to construct one.
+            case strategy(any Sendable)
         }
 
         /// Configuration for following redirects.
@@ -1396,6 +1424,33 @@ extension HTTPClient.Configuration {
         /// - Parameter: configuration: Configure how redirects are followed.
         public static func follow(configuration: FollowConfiguration) -> RedirectConfiguration {
             .init(configuration: .follow(configuration))
+        }
+
+        /// Redirects are handed to a pluggable strategy, which decides whether and how to follow each
+        /// one. See ``HTTPClientRedirectStrategy``.
+        ///
+        /// - warning: There is no built-in redirect-count or cycle limit for this mode — use the
+        ///   `redirectCount`/`history` passed to the strategy to enforce your own policy.
+        /// - note: Supported by both the Swift Concurrency `execute(_:deadline:logger:)` family and
+        ///   the delegate-based `execute(request:delegate:...)` API. On the latter, `.follow(_:)`
+        ///   reissues through the delegate API's own request/body types, and a body your strategy
+        ///   replaces with a new streaming (`.stream`/`AsyncSequence`-backed) representation throws
+        ///   ``HTTPClientError/redirectStrategyBodyNotSupported`` -- nothing at redirect-decision
+        ///   time is in a position to drain one. `context.redirectRequest` unchanged, or a
+        ///   `.bytes`/`.byteBuffer` replacement, works either way.
+        @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+        public static func strategy(_ strategy: any HTTPClientRedirectStrategy) -> RedirectConfiguration {
+            .init(configuration: .strategy(strategy))
+        }
+
+        /// Convenience over ``strategy(_:)`` for a policy that doesn't need its own type: redirects are
+        /// handed to `handler`, which decides whether and how to follow each one. See
+        /// ``HTTPClientRedirectContext`` for what `handler` receives.
+        @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+        public static func custom(
+            _ handler: @escaping @Sendable (HTTPClientRedirectContext) throws -> HTTPClientRedirectDecision
+        ) -> RedirectConfiguration {
+            .strategy(ClosureRedirectStrategy(handler: handler))
         }
     }
 
@@ -1525,6 +1580,7 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
         case invalidDNSOverridesConfiguration
         case invalidLocalAddress
         case invalidProxyConfiguration
+        case redirectStrategyBodyNotSupported
         case internalStateFailure(file: String, line: UInt)
     }
 
@@ -1622,6 +1678,9 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
             return "Invalid local address"
         case .invalidProxyConfiguration:
             return "The proxy configuration is not valid"
+        case .redirectStrategyBodyNotSupported:
+            return
+                "A redirect strategy returned a streaming request body over the delegate-based execute API, which can't drain it at redirect-decision time. Return a `.bytes`/`.byteBuffer` body, reuse `context.redirectRequest` unchanged, or use the Concurrency `execute(_:deadline:logger:)` API instead."
         case .internalStateFailure(let file, let line):
             return
                 "An internal state failure has occurred (File: \(file), line: \(line)). Please open an issue with a reproducer if possible"
@@ -1730,6 +1789,10 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
 
     /// The proxy configuration is not valid.
     public static let invalidProxyConfiguration = HTTPClientError(code: .invalidProxyConfiguration)
+
+    /// A ``HTTPClientRedirectStrategy`` returned a request body the delegate-based
+    /// `execute(request:delegate:...)` API can't drain at redirect-decision time.
+    public static let redirectStrategyBodyNotSupported = HTTPClientError(code: .redirectStrategyBodyNotSupported)
 
     /// A state machine has reached an unsupported state, that wasn't considered when implementing.
     public static func internalStateFailure(file: String = #fileID, line: UInt = #line) -> HTTPClientError {

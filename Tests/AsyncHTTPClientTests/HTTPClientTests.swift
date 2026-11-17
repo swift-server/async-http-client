@@ -448,6 +448,126 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         XCTAssertEqual("1234", data.data)
     }
 
+    func testCustomRedirectConfigurationDoesNotAffectNonRedirectingRequestsOverDelegateBasedExecute() throws {
+        // `.custom`/`.strategy` only kick in once the delegate-based `execute(request:delegate:...)`
+        // API (exercised here via `.get`) actually encounters a redirect-eligible response --
+        // configuring one doesn't reject every request outright, matching the Concurrency
+        // `execute(_:deadline:logger:)` API, which never consults its redirect mode for a request
+        // that never redirects either.
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: HTTPClient.Configuration(
+                redirectConfiguration: .custom { _ in .doNotFollow }
+            )
+        )
+        defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+
+        let response = try localClient.get(url: self.defaultHTTPBinURLPrefix + "ok").wait()
+        XCTAssertEqual(response.status, .ok)
+    }
+
+    func testCustomRedirectHandlerCanRefuseRedirectOverDelegateBasedExecute() throws {
+        // `.doNotFollow` is decided the moment the response head arrives
+        // (`RedirectHandler.earlyStrategyDecision(head:)`), before any byte of its body has been
+        // read -- so the 302 itself becomes the final response, delivered exactly like any
+        // ordinary (non-redirect-candidate) response, same as the Concurrency API.
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: HTTPClient.Configuration(
+                redirectConfiguration: .custom { _ in .doNotFollow }
+            )
+        )
+        defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+
+        let response = try localClient.get(url: "http://localhost:\(self.defaultHTTPBin.port)/redirect/302").wait()
+
+        XCTAssertEqual(response.status, .found)
+        XCTAssertEqual(response.history.count, 1)
+    }
+
+    func testCustomRedirectHandlerCanRewriteRedirectRequestOverDelegateBasedExecute() throws {
+        let port = self.defaultHTTPBin.port
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: HTTPClient.Configuration(
+                redirectConfiguration: .custom { context in
+                    XCTAssertEqual(context.response.status, .found)
+                    XCTAssertEqual(context.redirectCount, 0)
+                    XCTAssertEqual(context.history.count, 1)
+                    // The candidate request has already gone through the standard rewrite rules:
+                    // it should already point at the `Location` from the /redirect/302 response.
+                    XCTAssertEqual(context.redirectRequest.url, "http://localhost:\(port)/ok")
+
+                    var rewritten = context.redirectRequest
+                    rewritten.url = "http://localhost:\(port)/echo-uri"
+                    return .follow(rewritten)
+                }
+            )
+        )
+        defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+
+        let response = try localClient.get(url: "http://localhost:\(port)/redirect/302").wait()
+
+        XCTAssertEqual(response.status, .ok)
+        XCTAssertEqual(response.headers.first(name: "X-Calling-URI"), "/echo-uri")
+        XCTAssertEqual(
+            response.history.map(\.request.url.absoluteString),
+            ["http://localhost:\(port)/redirect/302", "http://localhost:\(port)/echo-uri"]
+        )
+    }
+
+    func testCustomRedirectHandlerCanRefuseRedirectWithLargeBodyOverDelegateBasedExecute() throws {
+        // End-to-end version of `RequestBagTests
+        // .testRedirectStrategyDoesNotFollowWithLargeAnnouncedBodyDeliversResponseNormally`:
+        // `/redirect/302-with-body` announces a body bigger than `HTTPClient
+        // .maxBodySizeRedirectResponse` (3KB), which used to be cancelled before any byte was
+        // read, before the strategy even got a chance to decide.
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: HTTPClient.Configuration(
+                redirectConfiguration: .custom { _ in .doNotFollow }
+            )
+        )
+        defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+
+        let response = try localClient.get(
+            url: "http://localhost:\(self.defaultHTTPBin.port)/redirect/302-with-body?size=8192"
+        ).wait()
+
+        XCTAssertEqual(response.status, .found)
+        XCTAssertEqual(response.history.count, 1)
+        XCTAssertEqual(response.body?.readableBytes, 8192)
+    }
+
+    func testCustomRedirectHandlerOverDelegateBasedExecuteInvokesStrategyExactlyOncePerRedirect() throws {
+        // The end-to-end guard against `earlyStrategyDecision(head:)` and the later
+        // `redirect(head:to:promise:)` both invoking the strategy for the same redirect: if
+        // `precomputed` weren't threaded through correctly, this would observe duplicate/repeated
+        // counts instead of a clean [0, 1, 2].
+        let port = self.defaultHTTPBin.port
+        let observedCounts = NIOLockedValueBox<[Int]>([])
+        let localClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: HTTPClient.Configuration(
+                redirectConfiguration: .custom { context in
+                    observedCounts.withLockedValue { $0.append(context.redirectCount) }
+                    guard context.redirectCount < 2 else {
+                        return .doNotFollow
+                    }
+                    return .follow(context.redirectRequest)
+                }
+            )
+        )
+        defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+
+        let response = try localClient.get(
+            url: "http://localhost:\(port)/redirect/infinite1"
+        ).wait()
+
+        XCTAssertEqual(response.status, .found)
+        XCTAssertEqual(observedCounts.withLockedValue { $0 }, [0, 1, 2])
+    }
+
     func testHttpRedirect() throws {
         let httpsBin = HTTPBin(.http1_1(ssl: true))
         let localClient = HTTPClient(
