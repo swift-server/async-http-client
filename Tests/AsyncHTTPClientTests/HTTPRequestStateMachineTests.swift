@@ -325,6 +325,42 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.requestDone, [], nil))
     }
 
+    func testRequestBodyStreamFinishedAfterServerSentHeadWithStatus413() {
+        var state = HTTPRequestStateMachine(isChannelWritable: true)
+        let requestHead = HTTPRequestHead(version: .http1_1, method: .POST, uri: "/")
+        let metadata = RequestFramingMetadata(connectionClose: false, body: .stream)
+        XCTAssertEqual(
+            state.startRequest(head: requestHead, metadata: metadata),
+            .sendRequestHead(requestHead, sendEnd: false)
+        )
+        // Promotes the producer to `.producing`, as the real pipeline does once the head is out.
+        XCTAssertEqual(
+            state.headSent(),
+            .notifyRequestHeadSendSuccessfully(resumeRequestBodyStream: true, startIdleTimer: false)
+        )
+
+        // One part is on the wire and the stream is still open.
+        let part0 = IOData.byteBuffer(ByteBuffer(bytes: 0...3))
+        XCTAssertEqual(state.requestStreamPartReceived(part0, promise: nil), .sendBodyPart(part0, nil))
+
+        // The server rejects the upload without reading the rest of it. The state machine takes
+        // this in stride and asks us to pause the body stream.
+        let responseHead = HTTPResponseHead(version: .http1_1, status: .payloadTooLarge)
+        XCTAssertEqual(
+            state.channelRead(.head(responseHead)),
+            .forwardResponseHead(responseHead, pauseRequestBodyStream: true)
+        )
+
+        // Pausing is not cancelling, so the producer may still finish. This is the trap: the
+        // action below is the correct one, and the assert crashes before it can be returned.
+        XCTAssertEqual(
+            state.requestStreamFinished(trailers: nil, promise: nil),
+            .sendRequestEnd(trailers: nil, nil, .none)
+        )
+
+        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.requestDone, [], nil))
+    }
+
     func testRequestIsFailedIfRequestBodySizeIsWrongEvenAfterServerRespondedWith200() {
         var state = HTTPRequestStateMachine(isChannelWritable: true)
         let requestHead = HTTPRequestHead(

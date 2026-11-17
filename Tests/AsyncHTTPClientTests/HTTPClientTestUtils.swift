@@ -364,13 +364,7 @@ enum TestTLS {
     )
 }
 
-#if compiler(>=6.2)
-typealias AHCTestSendableMetatype = SendableMetatype
-#else
-typealias AHCTestSendableMetatype = Any
-#endif
-
-internal final class HTTPBin<RequestHandler: ChannelInboundHandler & AHCTestSendableMetatype>: Sendable
+internal final class HTTPBin<RequestHandler: ChannelInboundHandler & SendableMetatype>: Sendable
 where
     RequestHandler.InboundIn == HTTPServerRequestPart,
     RequestHandler.OutboundOut == HTTPServerResponsePart

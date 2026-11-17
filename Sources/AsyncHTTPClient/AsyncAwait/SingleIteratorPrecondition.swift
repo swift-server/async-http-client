@@ -35,7 +35,7 @@ import Atomics
 }
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
-extension SingleIteratorPrecondition: @unchecked Sendable where Base: Sendable {}
+extension SingleIteratorPrecondition: Sendable where Base: Sendable {}
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension AsyncSequence {
