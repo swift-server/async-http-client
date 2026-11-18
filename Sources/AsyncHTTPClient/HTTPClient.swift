@@ -28,7 +28,7 @@ import Tracing
 import NIOTransportServices
 import Security
 
-// `SecIdentity` is an opaque reference to an immutable, already-looked-up Keychain item — safe to
+// `SecIdentity` is an opaque reference to an immutable item — safe to
 // hand across threads, but the Security framework overlay doesn't mark it `Sendable` itself.
 extension SecIdentity: @retroactive @unchecked Sendable {}
 #endif

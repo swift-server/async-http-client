@@ -115,9 +115,8 @@ final class LocalIdentityNetworkFrameworkTests: XCTestCase {
 
 #if canImport(Network)
 /// Minimal, test-only "raw bytes -> SecIdentity via a Keychain round-trip" builder for RSA/PKCS#8
-/// keys only — there is no public API on Apple platforms to pair a certificate and private key into
-/// a `SecIdentity` purely in memory, so this mirrors (in miniature) the same technique RequestDL's
-/// own `Internals.RawBytesIdentityBuilder` uses for its `.urlSession` executor.
+/// keys only — this mirrors (in miniature) the same technique RequestDL's own
+/// `Internals.RawBytesIdentityBuilder` uses for its `.urlSession` executor.
 enum TestIdentityBuilder {
     struct Handle {
         let identity: SecIdentity
