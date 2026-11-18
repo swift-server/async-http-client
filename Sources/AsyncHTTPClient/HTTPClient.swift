@@ -992,6 +992,9 @@ public final class HTTPClient: Sendable {
         /// A `SecIdentity` can be looked up in the Keychain, imported from a PKCS#12 file with
         /// `SecPKCS12Import`, or built in memory from a `SecCertificate` and a `SecKey` with
         /// `SecIdentityCreate`. AsyncHTTPClient does not build one itself.
+        ///
+        /// - Warning: The identity is presented to any server that asks for a client certificate,
+        ///   including the target of a redirect to a different host.
         public var tlsLocalIdentityNetworkFramework: SecIdentity?
         #endif
 
