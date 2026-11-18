@@ -188,10 +188,8 @@ extension TLSConfiguration {
         }
 
         // local identity (mTLS) — the Network.framework equivalent of certificateChain/privateKey
-        // above, which this backend doesn't support directly (see HTTPClient.Configuration's
-        // tlsLocalIdentityNetworkFramework doc comment for why: there's no way to build a SecIdentity
-        // from raw bytes without a Keychain round-trip, which is the caller's responsibility, not
-        // AsyncHTTPClient's).
+        // above, which this backend doesn't support directly. The caller supplies a ready-made
+        // SecIdentity (see HTTPClient.Configuration's tlsLocalIdentityNetworkFramework doc comment).
         if let localIdentity {
             guard let identity = sec_identity_create(localIdentity) else {
                 throw NWLocalIdentityError.identityCreationFailed

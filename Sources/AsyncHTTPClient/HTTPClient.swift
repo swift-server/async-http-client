@@ -989,11 +989,9 @@ public final class HTTPClient: Sendable {
         /// every proxied connection regardless of platform) — they are **not** supported here, and
         /// setting them alongside a `nil` value here still fails at connection time.
         ///
-        /// There is no public API on Apple platforms to build a `SecIdentity` from raw certificate/key
-        /// bytes purely in memory — only a Keychain round-trip (`SecItemAdd` the certificate and key,
-        /// then look them back up as a paired `kSecClassIdentity` item) produces one. AsyncHTTPClient
-        /// does not perform that round-trip itself; a caller who already has a Keychain-backed identity
-        /// (or has already done that round-trip) hands it over directly here.
+        /// A `SecIdentity` can be looked up in the Keychain, imported from a PKCS#12 file with
+        /// `SecPKCS12Import`, or built in memory from a `SecCertificate` and a `SecKey` with
+        /// `SecIdentityCreate`. AsyncHTTPClient does not build one itself.
         public var tlsLocalIdentityNetworkFramework: SecIdentity?
         #endif
 
