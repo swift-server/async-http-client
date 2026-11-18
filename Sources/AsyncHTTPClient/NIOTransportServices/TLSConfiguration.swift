@@ -64,8 +64,7 @@ extension TLSVersion {
 
 /// Wraps a non-`Sendable` value that is, in practice, safe to hand across threads — used to satisfy the
 /// compiler when passing the C-provided `sec_protocol_verify_complete_t` completion handler into a
-/// `@Sendable` closure. Network.framework's own contract for `sec_protocol_verify_block_t` guarantees
-/// this handler may be invoked from any queue.
+/// `@Sendable` closure.
 private struct UncheckedSendableBox<Value>: @unchecked Sendable {
     let value: Value
 }

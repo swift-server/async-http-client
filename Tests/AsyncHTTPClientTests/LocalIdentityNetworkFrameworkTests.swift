@@ -50,11 +50,9 @@ final class LocalIdentityNetworkFrameworkTests: XCTestCase {
     func testClientCertificateIsPresentedOverNetworkFramework() throws {
         guard isTestingNIOTS() else { return }
 
-        // Synthesizing a Keychain-backed SecIdentity from raw bytes inside an unsigned `swift test`
-        // process is itself unreliable — the same reason RequestDL's own RawBytesIdentityBuilder test
-        // suite only unit-tests its DER-parsing halves and never exercises the actual Keychain
-        // round-trip end-to-end. Skip rather than flake/fail when that round-trip itself can't
-        // complete in this environment; it says nothing about tlsLocalIdentityNetworkFramework or
+        // Building a Keychain-backed SecIdentity from raw bytes inside an unsigned `swift test`
+        // process can fail. Skip rather than fail when the Keychain round-trip can't complete in
+        // this environment; it says nothing about tlsLocalIdentityNetworkFramework or
         // sec_protocol_options_set_local_identity, which take a SecIdentity as a given.
         let handle: TestIdentityBuilder.Handle
         do {
@@ -115,8 +113,7 @@ final class LocalIdentityNetworkFrameworkTests: XCTestCase {
 
 #if canImport(Network)
 /// Minimal, test-only "raw bytes -> SecIdentity via a Keychain round-trip" builder for RSA/PKCS#8
-/// keys only — this mirrors (in miniature) the same technique RequestDL's own
-/// `Internals.RawBytesIdentityBuilder` uses for its `.urlSession` executor.
+/// keys only.
 enum TestIdentityBuilder {
     struct Handle {
         let identity: SecIdentity
@@ -170,10 +167,9 @@ enum TestIdentityBuilder {
             operation: "SecItemAdd(certificate)"
         )
 
-        // macOS-only shortcut (deliberately avoided by RequestDL's own RawBytesIdentityBuilder, which
-        // needs to generalize to iOS/tvOS/watchOS): pairs the certificate with a private key already
-        // in the keychain directly, instead of listing every identity and matching by certificate
-        // bytes. Test-only code, macOS being the only platform `swift test` runs on for this fork.
+        // macOS-only shortcut: pairs the certificate with a private key already in the keychain
+        // directly, instead of listing every identity and matching by certificate bytes.
+        // Test-only code, and macOS is the only platform these tests run on.
         var matchingIdentity: SecIdentity?
         let identityStatus = SecIdentityCreateWithCertificate(nil, certificate, &matchingIdentity)
         guard identityStatus == errSecSuccess, let matchingIdentity else {

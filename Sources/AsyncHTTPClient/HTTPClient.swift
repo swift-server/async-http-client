@@ -987,7 +987,7 @@ public final class HTTPClient: Sendable {
         /// connections that use Network.framework instead of NIOSSL. `tlsConfiguration.certificateChain`
         /// and `.privateKey` are the equivalent for the NIOSSL backend used everywhere else (including
         /// every proxied connection regardless of platform) — they are **not** supported here, and
-        /// setting them alongside a `nil` value here still fails at connection time.
+        /// setting them traps at connection time.
         ///
         /// A `SecIdentity` can be looked up in the Keychain, imported from a PKCS#12 file with
         /// `SecPKCS12Import`, or built in memory from a `SecCertificate` and a `SecKey` with
