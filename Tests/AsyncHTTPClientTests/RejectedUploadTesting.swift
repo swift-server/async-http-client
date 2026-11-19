@@ -24,15 +24,13 @@ import Testing
     /// body. The client then drops the body parts the caller still hands it. When the caller finishes
     /// the body afterwards, it must still get the server's whole response.
     @Test func contentLengthUploadRejectedMidStreamReturnsResponse() throws {
-        withKnownIssue("Finishing after dropped parts fails the request with bodyLengthMismatch") {
-            try withRejectedUpload(contentLength: 4) { task, server in
-                var response: HTTPClient.Response?
-                #expect(throws: Never.self) { response = try task.wait() }
-                #expect(throws: HTTPParserError.invalidEOFState) { try server.readInbound() }
-                guard let response else { return }
-                #expect(response.status == .payloadTooLarge)
-                #expect(response.body == ByteBuffer(string: "too large"))
-            }
+        try withRejectedUpload(contentLength: 4) { task, server in
+            var response: HTTPClient.Response?
+            #expect(throws: Never.self) { response = try task.wait() }
+            #expect(throws: HTTPParserError.invalidEOFState) { try server.readInbound() }
+            guard let response else { return }
+            #expect(response.status == .payloadTooLarge)
+            #expect(response.body == ByteBuffer(string: "too large"))
         }
     }
 
