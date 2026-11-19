@@ -12,6 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+import InMemoryLogging
+import Logging
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOPosix
@@ -83,6 +85,31 @@ class HTTPClientNIOTSTests: XCTestCase {
         #else
         XCTFail("wrong OS")
         #endif
+    }
+
+    func testTrustFailureIsLoggedToBackgroundActivityLogger() {
+        guard isTestingNIOTS() else { return }
+
+        let httpBin = HTTPBin(.http1_1(ssl: true))
+        let (backgroundLogStore, backgroundLogger) = InMemoryLogHandler.makeLogger(logLevel: .trace)
+        let config = HTTPClient.Configuration()
+            .enableFastFailureModeForTesting()
+        let httpClient = HTTPClient(
+            eventLoopGroupProvider: .shared(self.clientGroup),
+            configuration: config,
+            backgroundActivityLogger: backgroundLogger
+        )
+        defer {
+            XCTAssertNoThrow(try httpClient.syncShutdown(requiresCleanClose: true))
+            XCTAssertNoThrow(try httpBin.shutdown())
+        }
+
+        XCTAssertThrowsError(try httpClient.get(url: "https://localhost:\(httpBin.port)/get").wait())
+
+        let trustFailures = backgroundLogStore.entries.filter { $0.message == "trust evaluation failed" }
+        XCTAssertEqual(trustFailures.count, 1)
+        XCTAssertEqual(trustFailures.first?.level, .debug)
+        XCTAssertNotNil(trustFailures.first?.metadata["ahc-error"])
     }
 
     func testConnectionFailsFastError() {
