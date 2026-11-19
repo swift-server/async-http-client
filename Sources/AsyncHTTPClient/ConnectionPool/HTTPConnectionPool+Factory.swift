@@ -45,6 +45,20 @@ extension HTTPConnectionPool {
             self.tlsConfiguration =
                 tlsConfiguration ?? clientConfiguration.tlsConfiguration ?? .makeClientConfiguration()
         }
+
+        /// Builds a ``NIOSSLClientHandler`` for `context`/`serverHostname`, routing through
+        /// `clientConfiguration.tlsCustomVerification` when the caller has installed one — see that
+        /// property's documentation for what setting it implies for NIOSSL's own verification logic.
+        func makeNIOSSLClientHandler(context: NIOSSLContext, serverHostname: String?) throws -> NIOSSLClientHandler {
+            if let customVerification = self.clientConfiguration.tlsCustomVerification {
+                return try NIOSSLClientHandler(
+                    context: context,
+                    serverHostname: serverHostname,
+                    customVerificationCallback: customVerification
+                )
+            }
+            return try NIOSSLClientHandler(context: context, serverHostname: serverHostname)
+        }
     }
 }
 
@@ -406,7 +420,7 @@ extension HTTPConnectionPool.ConnectionFactory {
 
             return sslContextFuture.flatMap { sslContext -> EventLoopFuture<String?> in
                 do {
-                    let sslHandler = try NIOSSLClientHandler(
+                    let sslHandler = try self.makeNIOSSLClientHandler(
                         context: sslContext,
                         serverHostname: sslServerHostname
                     )
@@ -591,7 +605,9 @@ extension HTTPConnectionPool.ConnectionFactory {
             let localAddr = self.key.localAddress
             let bootstrapFuture = tlsConfig.getNWProtocolTLSOptions(
                 on: eventLoop,
-                serverNameIndicatorOverride: key.serverNameIndicatorOverride
+                serverNameIndicatorOverride: key.serverNameIndicatorOverride,
+                customVerification: self.clientConfiguration.tlsCustomVerificationNetworkFramework,
+                localIdentity: self.clientConfiguration.tlsLocalIdentityNetworkFramework
             ).map {
                 options -> NIOClientTCPBootstrapProtocol in
 
@@ -665,7 +681,7 @@ extension HTTPConnectionPool.ConnectionFactory {
                     sslContextFuture.flatMap { sslContext -> EventLoopFuture<Void> in
                         do {
                             let sync = channel.pipeline.syncOperations
-                            let sslHandler = try NIOSSLClientHandler(
+                            let sslHandler = try self.makeNIOSSLClientHandler(
                                 context: sslContext,
                                 serverHostname: self.key.serverNameIndicator
                             )
