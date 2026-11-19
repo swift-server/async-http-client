@@ -1335,6 +1335,36 @@ final class HTTPClientTests: XCTestCaseHTTPClientTestsBaseClass {
         }
     }
 
+    func testDelegateCanRewriteTheRequestOfEveryRedirectItIsAboutToFollow() throws {
+        final class Recorder: HTTPClientResponseDelegate, @unchecked Sendable {
+            typealias Response = [String?]
+
+            private let lock = NIOLockedValueBox<(hops: [String?], redirectTargets: [String])>(([], []))
+
+            func willFollowRedirect(request: inout HTTPClient.Request) {
+                self.lock.withLockedValue { $0.redirectTargets.append(request.url.path) }
+                request.headers.replaceOrAdd(name: "Cookie", value: "hop=\(request.url.path)")
+            }
+
+            func didVisitURL(task: HTTPClient.Task<Response>, _ request: HTTPClient.Request, _ head: HTTPResponseHead) {
+                self.lock.withLockedValue { $0.hops.append(request.headers.first(name: "Cookie")) }
+            }
+
+            func didFinishRequest(task: HTTPClient.Task<Response>) throws -> Response {
+                self.lock.withLockedValue { $0.hops + $0.redirectTargets }
+            }
+        }
+
+        let localClient = HTTPClient(eventLoopGroupProvider: .shared(self.clientGroup))
+        defer { XCTAssertNoThrow(try localClient.syncShutdown()) }
+
+        let request = try HTTPClient.Request(url: self.defaultHTTPBinURLPrefix + "redirect/302")
+        let result = try localClient.execute(request: request, delegate: Recorder()).wait()
+
+        // The first hop carries nothing; the hook ran once, for `/ok`, and what it set was sent.
+        XCTAssertEqual(result, [nil, "hop=/ok", "/ok"])
+    }
+
     func testRedirectToTheInitialURLDoesThrowOnFirstRedirect() throws {
         let localHTTPBin = HTTPBin(.http1_1(ssl: true))
         defer { XCTAssertNoThrow(try localHTTPBin.shutdown()) }
