@@ -82,6 +82,19 @@ class RequestValidationTests: XCTestCase {
         }
     }
 
+    func testEmptyHeaderFieldNameIsRejected() {
+        // RFC 9110 defines `field-name = token` and `token = 1*tchar`, so the empty
+        // name is not a valid field name.
+        var headers = HTTPHeaders([
+            ("", "Haha")
+        ])
+
+        XCTAssertThrowsError(try headers.validateAndSetTransportFraming(method: .GET, bodyLength: .known(0))) {
+            error in
+            XCTAssertEqual(error as? HTTPClientError, HTTPClientError.invalidHeaderFieldNames([""]))
+        }
+    }
+
     func testValidHeaderFieldNames() {
         var headers = HTTPHeaders([
             ("abcdefghijklmnopqrstuvwxyz", "Haha"),
