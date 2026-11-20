@@ -136,7 +136,12 @@ internal struct HTTPRequestCancellationError: Error {}
 extension URL {
     /// Returns the absolute string of `url` with any embedded credentials (username and password) removed to avoid logging secrets.
     fileprivate var stringWithUserAndPasswordStripped: String? {
-        if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
+        // NOTE: Deliberately gated on iOS 17 (not the iOS 16 the percent-encoded `user()`/`password()`
+        // APIs were introduced in). On iOS 16, calling these APIs can crash inside the shared URL
+        // component parsing code (the trap surfaces in `URL.host(percentEncoded:)` even though `host`
+        // is never called here) - see https://forums.swift.org/t/70452. The legacy, non-percent-encoded
+        // `user`/`password` properties below don't hit that bug and are used as a workaround on iOS 16.
+        if #available(macOS 14.0, iOS 17.0, tvOS 17.0, watchOS 10.0, *) {
             guard self.user() != nil || self.password() != nil else {
                 return self.absoluteString
             }
