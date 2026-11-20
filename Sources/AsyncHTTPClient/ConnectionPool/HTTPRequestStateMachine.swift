@@ -123,6 +123,8 @@ struct HTTPRequestStateMachine {
 
     private var isChannelWritable: Bool
 
+    private var droppedRequestBodyParts = false
+
     init(isChannelWritable: Bool) {
         self.isChannelWritable = isChannelWritable
     }
@@ -302,6 +304,7 @@ struct HTTPRequestStateMachine {
             // won't be interested. We expect that the producer has been informed to pause
             // producing.
             assert(producerState == .paused)
+            self.droppedRequestBodyParts = true
             return .failSendBodyPart(HTTPClientError.requestStreamCancelled, promise)
 
         case .running(.streaming(let expectedBodyLength, var sentBodyBytes, let producerState), let responseState):
@@ -376,6 +379,10 @@ struct HTTPRequestStateMachine {
             .streaming(let expectedBodyLength, let sentBodyBytes, _),
             .receivingBody(let head, let streamState)
         ):
+            if self.droppedRequestBodyParts {
+                return .failSendStreamFinished(HTTPClientError.requestStreamCancelled, promise)
+            }
+
             if let expected = expectedBodyLength, expected != sentBodyBytes {
                 let error = HTTPClientError.bodyLengthMismatch
                 self.state = .failed(error)
