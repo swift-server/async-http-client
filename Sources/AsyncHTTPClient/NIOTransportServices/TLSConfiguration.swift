@@ -20,6 +20,7 @@ import FoundationEssentials
 import Foundation
 #endif
 import Dispatch
+import Logging
 import Network
 import NIOCore
 import NIOSSL
@@ -73,12 +74,16 @@ extension TLSConfiguration {
     /// - Returns: Future holding NWProtocolTLS Options
     func getNWProtocolTLSOptions(
         on eventLoop: EventLoop,
-        serverNameIndicatorOverride: String?
+        serverNameIndicatorOverride: String?,
+        logger: Logger
     ) -> EventLoopFuture<NWProtocolTLS.Options> {
         let promise = eventLoop.makePromise(of: NWProtocolTLS.Options.self)
         Self.tlsDispatchQueue.async {
             do {
-                let options = try self.getNWProtocolTLSOptions(serverNameIndicatorOverride: serverNameIndicatorOverride)
+                let options = try self.getNWProtocolTLSOptions(
+                    serverNameIndicatorOverride: serverNameIndicatorOverride,
+                    logger: logger
+                )
                 promise.succeed(options)
             } catch {
                 promise.fail(error)
@@ -90,7 +95,10 @@ extension TLSConfiguration {
     /// create NWProtocolTLS.Options for use with NIOTransportServices from the NIOSSL TLSConfiguration
     ///
     /// - Returns: Equivalent NWProtocolTLS Options
-    func getNWProtocolTLSOptions(serverNameIndicatorOverride: String?) throws -> NWProtocolTLS.Options {
+    func getNWProtocolTLSOptions(
+        serverNameIndicatorOverride: String?,
+        logger: Logger = HTTPClient.loggingDisabled
+    ) throws -> NWProtocolTLS.Options {
         let options = NWProtocolTLS.Options()
 
         let useMTELGExplainer = """
@@ -201,7 +209,10 @@ extension TLSConfiguration {
                         dispatchPrecondition(condition: .onQueue(Self.tlsDispatchQueue))
                         SecTrustEvaluateAsyncWithError(trust, Self.tlsDispatchQueue) { _, result, error in
                             if let error = error {
-                                print("Trust failed: \(error.localizedDescription)")
+                                logger.debug(
+                                    "trust evaluation failed",
+                                    metadata: ["ahc-error": "\(error.localizedDescription)"]
+                                )
                             }
                             sec_protocol_verify_complete(result)
                         }
