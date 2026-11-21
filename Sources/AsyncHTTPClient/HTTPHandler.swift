@@ -768,6 +768,22 @@ public protocol HTTPClientResponseDelegate: AnyObject, Sendable {
     ///     - head: Received response head.
     func didVisitURL(task: HTTPClient.Task<Response>, _ request: HTTPClient.Request, _ head: HTTPResponseHead)
 
+    /// Called for every redirect the client is about to follow, with the request that will be sent
+    /// to the redirect target. It runs after the redirect configuration has decided to follow the
+    /// redirect and just before the new request is executed.
+    ///
+    /// A delegate may change `request` here, for example to set a `Cookie` header that depends on
+    /// the target URL and on what the redirecting responses carried. A delegate belongs to a single
+    /// request, so it can keep state that is per request.
+    ///
+    /// ``HTTPClientResponseDelegate/didVisitURL(task:_:_:)-2el9y`` is called for the target after this.
+    ///
+    /// By default, this does nothing.
+    ///
+    /// - parameters:
+    ///     - request: The request about to be sent to the redirect target.
+    func willFollowRedirect(request: inout HTTPClient.Request)
+
     /// Called when the final response head is received (after redirects).
     /// You must return an `EventLoopFuture<Void>` that you complete when you have finished processing the body part.
     /// You can create an already succeeded future by calling `task.eventLoop.makeSucceededFuture(())`.
@@ -838,6 +854,11 @@ extension HTTPClientResponseDelegate {
     ///
     /// By default, this does nothing.
     public func didVisitURL(task: HTTPClient.Task<Response>, _: HTTPClient.Request, _: HTTPResponseHead) {}
+
+    /// Default implementation of ``HTTPClientResponseDelegate/willFollowRedirect(request:)``.
+    ///
+    /// By default, this does nothing.
+    public func willFollowRedirect(request: inout HTTPClient.Request) {}
 
     /// Default implementation of ``HTTPClientResponseDelegate/didReceiveHead(task:_:)-9r4xd``.
     ///

@@ -782,8 +782,11 @@ public final class HTTPClient: Sendable {
         let redirectHandler: RedirectHandler<Delegate.Response>? = {
             guard let redirectState = redirectState else { return nil }
 
-            return .init(request: request, redirectState: redirectState) { newRequest, newRedirectState in
-                self._execute(
+            return .init(request: request, redirectState: redirectState) { redirectRequest, newRedirectState in
+                var newRequest = redirectRequest
+                delegate.willFollowRedirect(request: &newRequest)
+
+                return self._execute(
                     request: newRequest,
                     delegate: delegate,
                     eventLoop: eventLoopPreference,
