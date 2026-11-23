@@ -62,6 +62,7 @@ final class MockRequestExecutor {
     private struct State: Sendable {
         var request: HTTPExecutableRequest?
         var _signaledDemandForRequestBody: Bool = false
+        var finishRequestBodyStreamError: (any Error)?
     }
 
     private let state: NIOLockedValueBox<State>
@@ -70,6 +71,11 @@ final class MockRequestExecutor {
         self.state = NIOLockedValueBox(State())
         self.pauseRequestBodyPartStreamAfterASingleWrite = pauseRequestBodyPartStreamAfterASingleWrite
         self.eventLoop = eventLoop
+    }
+
+    /// Makes the promise passed to `finishRequestBodyStream` fail with `error`, instead of succeeding.
+    func failFinishRequestBodyStream(with error: any Error) {
+        self.state.withLockedValue { $0.finishRequestBodyStreamError = error }
     }
 
     func runRequest(_ request: HTTPExecutableRequest) {
@@ -219,7 +225,11 @@ extension MockRequestExecutor: HTTPRequestExecutor {
         promise: EventLoopPromise<Void>?
     ) {
         self.writeNextRequestPart(.endOfStream, request: request)
-        promise?.succeed(())
+        if let error = self.state.withLockedValue({ $0.finishRequestBodyStreamError }) {
+            promise?.fail(error)
+        } else {
+            promise?.succeed(())
+        }
     }
 
     private func writeNextRequestPart(_ part: RequestParts, request: HTTPExecutableRequest) {
