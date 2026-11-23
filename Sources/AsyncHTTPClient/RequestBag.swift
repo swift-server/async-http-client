@@ -349,13 +349,14 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
                     self.consumeMoreBodyData0(resultOfPreviousConsume: $0)
                 }
 
-        case .succeedRequest:
+        case .succeedRequest(let backpressurePromise):
             do {
                 let response = try self.delegate.didFinishRequest(task: self.task)
                 self.task.promise.succeed(response)
             } catch {
                 self.task.promise.fail(error)
             }
+            backpressurePromise?.fail(HTTPClientError.requestStreamCancelled)
 
         case .redirect(let handler, let head, let newURL):
             self.loopBoundState.value.redirectTask = handler.redirect(
@@ -405,13 +406,14 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
 
         case .doNothing:
             break
-        case .finishStream:
+        case .finishStream(let backpressurePromise):
             do {
                 let response = try self.delegate.didFinishRequest(task: self.task)
                 self.task.promise.assumeIsolated().succeed(response)
             } catch {
                 self.task.promise.fail(error)
             }
+            backpressurePromise?.fail(HTTPClientError.requestStreamCancelled)
 
         case .failTask(let error, let executor):
             executor?.cancelRequest(self)
