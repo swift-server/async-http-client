@@ -315,11 +315,12 @@ extension Transaction: HTTPExecutableRequest {
             state.receiveResponseEnd(buffer, trailers: trailers)
         }
         switch receiveResponseEndAction {
-        case .finishResponseStream(let source, let finalResponse):
+        case .finishResponseStream(let source, let finalResponse, let bodyStreamContinuation):
             if let finalResponse = finalResponse {
                 _ = source.yield(contentsOf: finalResponse)
             }
             source.finish()
+            bodyStreamContinuation?.resume(throwing: HTTPClientError.requestStreamCancelled)
 
         case .none:
             break
