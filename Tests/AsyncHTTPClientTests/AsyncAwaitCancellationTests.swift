@@ -34,9 +34,7 @@ import Testing
         }
         try await httpClient.shutdown()
 
-        withKnownIssue("the request still reaches the connection pool", isIntermittent: true) {
-            #expect(httpBin.createdConnections == 0)
-        }
+        #expect(httpBin.createdConnections == 0)
     }
 
     @Test func cancelWhileInFlightThrowsCancellationError() async throws {
