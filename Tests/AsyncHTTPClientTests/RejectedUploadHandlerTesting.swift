@@ -44,6 +44,58 @@ import Testing
             #expect(responseBody == .tooLarge)
         }
     }
+
+    @Test func asyncWriteWaitingAtRejectionReleasesBodySequence() async throws {
+        let connection = try await TestConnection()
+        let (parts, partsContinuation) = AsyncStream.makeStream(of: ByteBuffer.self)
+        let (released, releasedContinuation) = AsyncStream.makeStream(of: Void.self)
+        defer { partsContinuation.finish() }
+        let body = ReleaseSignallingSequence(base: parts, released: releasedContinuation)
+
+        try await connection.withTransaction(body: .stream(body, length: .unknown)) { transaction, response in
+            partsContinuation.yield(.firstPart)
+            #expect(try await connection.nextOutbound() == .body(.byteBuffer(.firstPart)))
+            try await connection.setWritable(false)
+            partsContinuation.yield(.secondPart)
+            #expect(try await connection.nextOutbound() == .body(.byteBuffer(.secondPart)))
+            try await connection.channel.writeInbound(HTTPClientResponsePart.head(.payloadTooLarge))
+            let rejection = try await response()
+
+            await withKnownIssue("A write waiting for demand at a rejection waits forever and keeps the body sequence")
+            {
+                try await withDeadline { await released.first { _ in true } }
+                await #expect(throws: HTTPClientError.requestStreamCancelled) {
+                    try await transaction.writeRequestBodyPart(.secondPart)
+                }
+            }
+
+            try await connection.channel.writeInbound(HTTPClientResponsePart.body(.tooLarge))
+            try await connection.channel.writeInbound(HTTPClientResponsePart.end(nil))
+            #expect(try await rejection.body.collect(upTo: 1024) == .tooLarge)
+        }
+    }
+
+    @Test func asyncBodySequenceFailingAfterRejectionReturnsResponse() async throws {
+        let connection = try await TestConnection()
+        let (parts, partsContinuation) = AsyncThrowingStream.makeStream(of: ByteBuffer.self)
+        defer { partsContinuation.finish() }
+
+        try await connection.withTransaction(body: .stream(parts, length: .unknown)) { _, response in
+            partsContinuation.yield(.firstPart)
+            #expect(try await connection.nextOutbound() == .body(.byteBuffer(.firstPart)))
+            try await connection.channel.writeInbound(HTTPClientResponsePart.head(.payloadTooLarge))
+            let rejection = try await response()
+
+            partsContinuation.finish(throwing: BodySequenceError())
+            _ = try? await connection.channel.writeInbound(HTTPClientResponsePart.body(.tooLarge))
+            _ = try? await connection.channel.writeInbound(HTTPClientResponsePart.end(nil))
+
+            await withKnownIssue("A body sequence error after a rejection fails the response body") {
+                let responseBody = try await withDeadline { try await rejection.body.collect(upTo: 1024) }
+                #expect(responseBody == .tooLarge)
+            }
+        }
+    }
 }
 
 private struct TestConnection {
@@ -76,6 +128,13 @@ private struct TestConnection {
 
     func nextOutbound() async throws -> HTTPClientRequestPart {
         try await self.channel.waitForOutboundWrite(as: HTTPClientRequestPart.self)
+    }
+
+    func setWritable(_ isWritable: Bool) async throws {
+        try await self.loop.executeInContext {
+            self.channel.isWritable = isWritable
+            self.channel.pipeline.fireChannelWritabilityChanged()
+        }
     }
 
     func withTransaction(
@@ -132,7 +191,43 @@ private struct TestConnection {
     }
 }
 
+private struct BodySequenceError: Error {}
+
 private struct MissingResponse: Error {}
+
+private struct ReleaseSignallingSequence<Base: AsyncSequence & Sendable>: AsyncSequence, Sendable
+where Base.Element == ByteBuffer {
+    typealias Element = ByteBuffer
+
+    let base: Base
+    let released: AsyncStream<Void>.Continuation
+
+    func makeAsyncIterator() -> Iterator {
+        Iterator(base: self.base.makeAsyncIterator(), token: ReleaseToken(released: self.released))
+    }
+
+    struct Iterator: AsyncIteratorProtocol {
+        var base: Base.AsyncIterator
+        let token: ReleaseToken
+
+        mutating func next() async throws -> ByteBuffer? {
+            try await self.base.next()
+        }
+    }
+}
+
+private final class ReleaseToken: Sendable {
+    private let released: AsyncStream<Void>.Continuation
+
+    init(released: AsyncStream<Void>.Continuation) {
+        self.released = released
+    }
+
+    deinit {
+        self.released.yield()
+        self.released.finish()
+    }
+}
 
 private struct DeadlineExceeded: Error {}
 
@@ -152,6 +247,7 @@ private func withDeadline<Result: Sendable>(
 
 extension ByteBuffer {
     fileprivate static let firstPart = ByteBuffer(bytes: [0, 1, 2, 3])
+    fileprivate static let secondPart = ByteBuffer(bytes: [4, 5, 6, 7])
     fileprivate static let tooLarge = ByteBuffer(string: "too large")
 }
 
