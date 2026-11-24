@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Logging
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOEmbedded
 import NIOHTTP1
@@ -21,6 +22,42 @@ import Testing
 @testable import AsyncHTTPClient
 
 @Suite struct RejectedUploadHandlerTesting {
+    @Test func delegateWriteWaitingAtRejectionFails() async throws {
+        let connection = try await TestConnection()
+        let afterFirstPart = connection.loop.makePromise(of: Void.self)
+        let laterWrite = CompletionRecorder<Void>()
+        let upload = try await connection.makeRequestBag(
+            body: .stream { writer in
+                writer.write(.byteBuffer(.firstPart)).flatMap {
+                    afterFirstPart.futureResult
+                }.flatMap {
+                    writer.write(.byteBuffer(.secondPart))
+                }.flatMapError { _ in
+                    let write = writer.write(.byteBuffer(.secondPart))
+                    laterWrite.record(write)
+                    return write
+                }
+            }
+        )
+        let response = CompletionRecorder<HTTPClient.Response>()
+        response.record(upload.task.futureResult)
+
+        try await connection.start(upload)
+        #expect(try await connection.nextOutbound() == .body(.byteBuffer(.firstPart)))
+        try await connection.setWritable(false)
+        try await connection.loop.executeInContext { afterFirstPart.succeed() }
+        #expect(try await connection.nextOutbound() == .body(.byteBuffer(.secondPart)))
+        try await connection.channel.writeInbound(HTTPClientResponsePart.head(.payloadTooLarge))
+        try await connection.deliverResponseBodyAndEnd(.tooLarge)
+
+        withKnownIssue("A write waiting for demand at a rejection waits forever") {
+            #expect(laterWrite.error as? HTTPClientError == .requestStreamCancelled)
+            let value = try #require(response.result).get()
+            #expect(value.status == .payloadTooLarge)
+            #expect(value.body == .tooLarge)
+        }
+    }
+
     @Test func asyncShortBodyAfterRejectionReturnsResponse() async throws {
         let connection = try await TestConnection()
         let (parts, partsContinuation) = AsyncStream.makeStream(of: ByteBuffer.self)
@@ -111,6 +148,22 @@ private struct TestConnection {
         try await self.channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).get()
     }
 
+    func makeRequestBag(body: HTTPClient.Body) async throws -> RequestBag<ResponseAccumulator> {
+        let request = try HTTPClient.Request(url: "http://localhost/upload", method: .POST, body: body)
+        let loop = self.loop
+        return try await loop.submit {
+            try RequestBag(
+                request: request,
+                eventLoopPreference: .delegate(on: loop),
+                task: .init(eventLoop: loop, logger: Logger(label: "test")),
+                redirectHandler: nil,
+                connectionDeadline: .now() + .seconds(30),
+                requestOptions: .forTests(),
+                delegate: ResponseAccumulator(request: request)
+            )
+        }.get()
+    }
+
     func start(_ request: some HTTPExecutableRequest) async throws {
         try await self.loop.executeInContext {
             self.channel.writeAndFlush(request, promise: nil)
@@ -130,6 +183,15 @@ private struct TestConnection {
             self.channel.isWritable = isWritable
             self.channel.pipeline.fireChannelWritabilityChanged()
         }
+    }
+
+    func deliverResponseBodyAndEnd(_ body: ByteBuffer) async throws {
+        await self.loop.run()
+        try await self.loop.executeInContext { self.channel.read() }
+        try await self.channel.writeInbound(HTTPClientResponsePart.body(body))
+        await self.loop.run()
+        try await self.channel.writeInbound(HTTPClientResponsePart.end(nil))
+        await self.loop.run()
     }
 
     func withTransaction(
@@ -189,6 +251,25 @@ private struct TestConnection {
 private struct BodySequenceError: Error {}
 
 private struct MissingResponse: Error {}
+
+private final class CompletionRecorder<Value: Sendable>: Sendable {
+    private let box = NIOLockedValueBox<Result<Value, any Error>?>(nil)
+
+    var result: Result<Value, any Error>? {
+        self.box.withLockedValue { $0 }
+    }
+
+    var error: (any Error)? {
+        guard case .failure(let error) = self.result else { return nil }
+        return error
+    }
+
+    func record(_ future: EventLoopFuture<Value>) {
+        future.whenComplete { result in
+            self.box.withLockedValue { $0 = result }
+        }
+    }
+}
 
 private struct ReleaseSignallingSequence<Base: AsyncSequence & Sendable>: AsyncSequence, Sendable
 where Base.Element == ByteBuffer {
