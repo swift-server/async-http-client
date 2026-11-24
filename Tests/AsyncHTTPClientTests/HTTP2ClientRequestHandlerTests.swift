@@ -16,6 +16,7 @@ import Logging
 import NIOCore
 import NIOEmbedded
 import NIOHTTP1
+import NIOHTTP2
 import XCTest
 
 @testable import AsyncHTTPClient
@@ -575,6 +576,198 @@ class HTTP2ClientRequestHandlerTests: XCTestCase {
         )
         channel.writeAndFlush(request, promise: nil)
         XCTAssertEqual(request.events.map(\.kind), [.willExecuteRequest, .requestHeadSent])
+    }
+
+    func testRequestBodyStreamResumesAfterEarlyResponseEnd() throws {
+        let eventLoop = EmbeddedEventLoop()
+        let handler = HTTP2ClientRequestHandler(eventLoop: eventLoop)
+        let channel = EmbeddedChannel(handlers: [handler], loop: eventLoop)
+        XCTAssertNoThrow(try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).wait())
+
+        let request = MockHTTPExecutableRequest(
+            head: .init(version: .http1_1, method: .POST, uri: "http://localhost/"),
+            framingMetadata: RequestFramingMetadata(connectionClose: false, body: .stream),
+            raiseErrorIfUnimplementedMethodIsCalled: false
+        )
+
+        channel.write(request, promise: nil)
+        XCTAssertEqual(try channel.readOutbound(as: HTTPClientRequestPart.self), .head(request.requestHead))
+
+        channel.isWritable = false
+        channel.pipeline.fireChannelWritabilityChanged()
+
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.head(.init(version: .http1_1, status: .ok))))
+        channel.read()
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.end(nil)))
+
+        channel.isWritable = true
+        channel.pipeline.fireChannelWritabilityChanged()
+
+        handler.requestExecutor.finishRequestBodyStream(trailers: nil, request: request, promise: nil)
+        XCTAssertEqual(try channel.readOutbound(as: HTTPClientRequestPart.self), .end(nil))
+
+        XCTAssertEqual(
+            request.events.map(\.kind),
+            [
+                .willExecuteRequest, .requestHeadSent, .resumeRequestBodyStream, .pauseRequestBodyStream,
+                .receiveResponseHead, .receiveResponseEnd, .resumeRequestBodyStream, .requestBodySent,
+            ]
+        )
+    }
+
+    func testStreamResetAfterEarlyResponseEndFailsRequest() throws {
+        let eventLoop = EmbeddedEventLoop()
+        let handler = HTTP2ClientRequestHandler(eventLoop: eventLoop)
+        let channel = EmbeddedChannel(handlers: [handler], loop: eventLoop)
+        XCTAssertNoThrow(try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).wait())
+
+        let request = MockHTTPExecutableRequest(
+            head: .init(version: .http1_1, method: .POST, uri: "http://localhost/"),
+            framingMetadata: RequestFramingMetadata(connectionClose: false, body: .stream),
+            raiseErrorIfUnimplementedMethodIsCalled: false
+        )
+
+        channel.write(request, promise: nil)
+        XCTAssertEqual(try channel.readOutbound(as: HTTPClientRequestPart.self), .head(request.requestHead))
+
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.head(.init(version: .http1_1, status: .ok))))
+        channel.read()
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.end(nil)))
+
+        let streamClosed = NIOHTTP2Errors.streamClosed(streamID: HTTP2StreamID(1), errorCode: .cancel)
+        channel.pipeline.fireErrorCaught(streamClosed)
+
+        XCTAssertEqual(
+            request.events.map(\.kind),
+            [
+                .willExecuteRequest, .requestHeadSent, .resumeRequestBodyStream, .receiveResponseHead,
+                .receiveResponseEnd, .fail,
+            ]
+        )
+        guard case .fail(let error) = request.events.last else { return XCTFail("Expected the request to fail") }
+        XCTAssertEqual(error as? NIOHTTP2Errors.StreamClosed, streamClosed)
+        XCTAssertFalse(channel.isActive)
+    }
+
+    func testConnectionCloseAfterEarlyResponseEndFailsRequest() throws {
+        let eventLoop = EmbeddedEventLoop()
+        let handler = HTTP2ClientRequestHandler(eventLoop: eventLoop)
+        let channel = EmbeddedChannel(handlers: [handler], loop: eventLoop)
+        XCTAssertNoThrow(try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).wait())
+
+        let request = MockHTTPExecutableRequest(
+            head: .init(version: .http1_1, method: .POST, uri: "http://localhost/"),
+            framingMetadata: RequestFramingMetadata(connectionClose: false, body: .stream),
+            raiseErrorIfUnimplementedMethodIsCalled: false
+        )
+
+        channel.write(request, promise: nil)
+        XCTAssertEqual(try channel.readOutbound(as: HTTPClientRequestPart.self), .head(request.requestHead))
+
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.head(.init(version: .http1_1, status: .ok))))
+        channel.read()
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.end(nil)))
+
+        channel.pipeline.fireChannelInactive()
+
+        XCTAssertEqual(
+            request.events.map(\.kind),
+            [
+                .willExecuteRequest, .requestHeadSent, .resumeRequestBodyStream, .receiveResponseHead,
+                .receiveResponseEnd, .fail,
+            ]
+        )
+        guard case .fail(let error) = request.events.last else { return XCTFail("Expected the request to fail") }
+        XCTAssertEqual(error as? HTTPClientError, .remoteConnectionClosed)
+        XCTAssertFalse(channel.isActive)
+    }
+
+    func testRequestBodyStreamEndIsSentAfterEarlyResponseEnd() throws {
+        let eventLoop = EmbeddedEventLoop()
+        let handler = HTTP2ClientRequestHandler(eventLoop: eventLoop)
+        let channel = EmbeddedChannel(handlers: [handler], loop: eventLoop)
+        XCTAssertNoThrow(try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).wait())
+
+        let request = MockHTTPExecutableRequest(
+            head: .init(version: .http1_1, method: .POST, uri: "http://localhost/"),
+            framingMetadata: RequestFramingMetadata(connectionClose: false, body: .stream),
+            raiseErrorIfUnimplementedMethodIsCalled: false
+        )
+
+        let executor = handler.requestExecutor
+        request.resumeRequestBodyStreamCallback = {
+            executor.writeRequestBodyPart(.byteBuffer(.init(string: "Hello")), request: request, promise: nil)
+        }
+
+        channel.write(request, promise: nil)
+        XCTAssertEqual(try channel.readOutbound(as: HTTPClientRequestPart.self), .head(request.requestHead))
+        XCTAssertEqual(
+            try channel.readOutbound(as: HTTPClientRequestPart.self),
+            .body(.byteBuffer(.init(string: "Hello")))
+        )
+
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.head(.init(version: .http1_1, status: .ok))))
+        channel.read()
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.end(nil)))
+
+        let bodyPartPromise = eventLoop.makePromise(of: Void.self)
+        executor.writeRequestBodyPart(.byteBuffer(.init(string: "World")), request: request, promise: bodyPartPromise)
+        executor.finishRequestBodyStream(trailers: nil, request: request, promise: nil)
+
+        XCTAssertNoThrow(try bodyPartPromise.futureResult.wait())
+        XCTAssertEqual(
+            try channel.readOutbound(as: HTTPClientRequestPart.self),
+            .body(.byteBuffer(.init(string: "World")))
+        )
+        XCTAssertEqual(try channel.readOutbound(as: HTTPClientRequestPart.self), .end(nil))
+
+        XCTAssertEqual(
+            request.events.map(\.kind),
+            [
+                .willExecuteRequest, .requestHeadSent, .resumeRequestBodyStream, .receiveResponseHead,
+                .receiveResponseEnd, .requestBodySent,
+            ]
+        )
+    }
+
+    func testRequestIsReleasedWhenRequestEndIsSentAfterEarlyResponseEnd() throws {
+        let eventLoop = EmbeddedEventLoop()
+        let handler = HTTP2ClientRequestHandler(eventLoop: eventLoop)
+        let channel = EmbeddedChannel(handlers: [handler], loop: eventLoop)
+        XCTAssertNoThrow(try channel.connect(to: .init(ipAddress: "127.0.0.1", port: 80)).wait())
+
+        let request = MockHTTPExecutableRequest(
+            head: .init(version: .http1_1, method: .POST, uri: "http://localhost/"),
+            framingMetadata: RequestFramingMetadata(connectionClose: false, body: .stream),
+            requestOptions: .forTests(idleWriteTimeout: .milliseconds(200)),
+            raiseErrorIfUnimplementedMethodIsCalled: false
+        )
+
+        channel.write(request, promise: nil)
+        XCTAssertEqual(try channel.readOutbound(as: HTTPClientRequestPart.self), .head(request.requestHead))
+
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.head(.init(version: .http1_1, status: .ok))))
+        channel.read()
+        XCTAssertNoThrow(try channel.writeInbound(HTTPClientResponsePart.end(nil)))
+
+        let executor = handler.requestExecutor
+        executor.finishRequestBodyStream(trailers: nil, request: request, promise: nil)
+        XCTAssertEqual(try channel.readOutbound(as: HTTPClientRequestPart.self), .end(nil))
+
+        let bodyPartPromise = eventLoop.makePromise(of: Void.self)
+        executor.writeRequestBodyPart(.byteBuffer(.init(string: "Hello")), request: request, promise: bodyPartPromise)
+
+        XCTAssertThrowsError(try bodyPartPromise.futureResult.wait()) {
+            XCTAssertEqual($0 as? HTTPClientError, .requestStreamCancelled)
+        }
+        XCTAssertNil(try channel.readOutbound(as: HTTPClientRequestPart.self))
+        XCTAssertEqual(
+            request.events.map(\.kind),
+            [
+                .willExecuteRequest, .requestHeadSent, .resumeRequestBodyStream, .receiveResponseHead,
+                .receiveResponseEnd, .requestBodySent,
+            ]
+        )
     }
 
     func testSendingAndReceivingTrailers() async throws {
