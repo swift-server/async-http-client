@@ -50,12 +50,10 @@ import Testing
         try await connection.channel.writeInbound(HTTPClientResponsePart.head(.payloadTooLarge))
         try await connection.deliverResponseBodyAndEnd(.tooLarge)
 
-        withKnownIssue("A write waiting for demand at a rejection waits forever") {
-            #expect(laterWrite.error as? HTTPClientError == .requestStreamCancelled)
-            let value = try #require(response.result).get()
-            #expect(value.status == .payloadTooLarge)
-            #expect(value.body == .tooLarge)
-        }
+        #expect(laterWrite.error as? HTTPClientError == .requestStreamCancelled)
+        let value = try #require(response.result).get()
+        #expect(value.status == .payloadTooLarge)
+        #expect(value.body == .tooLarge)
     }
 
     @Test func asyncShortBodyAfterRejectionReturnsResponse() async throws {
