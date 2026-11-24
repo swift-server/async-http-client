@@ -61,12 +61,9 @@ import Testing
             try await connection.channel.writeInbound(HTTPClientResponsePart.head(.payloadTooLarge))
             let rejection = try await response()
 
-            await withKnownIssue("A write waiting for demand at a rejection waits forever and keeps the body sequence")
-            {
-                try await withDeadline { await released.first { _ in true } }
-                await #expect(throws: HTTPClientError.requestStreamCancelled) {
-                    try await transaction.writeRequestBodyPart(.secondPart)
-                }
+            try await withDeadline { await released.first { _ in true } }
+            await #expect(throws: HTTPClientError.requestStreamCancelled) {
+                try await transaction.writeRequestBodyPart(.secondPart)
             }
 
             try await connection.channel.writeInbound(HTTPClientResponsePart.body(.tooLarge))
@@ -90,10 +87,8 @@ import Testing
             _ = try? await connection.channel.writeInbound(HTTPClientResponsePart.body(.tooLarge))
             _ = try? await connection.channel.writeInbound(HTTPClientResponsePart.end(nil))
 
-            await withKnownIssue("A body sequence error after a rejection fails the response body") {
-                let responseBody = try await withDeadline { try await rejection.body.collect(upTo: 1024) }
-                #expect(responseBody == .tooLarge)
-            }
+            let responseBody = try await withDeadline { try await rejection.body.collect(upTo: 1024) }
+            #expect(responseBody == .tooLarge)
         }
     }
 }

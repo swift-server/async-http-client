@@ -139,12 +139,12 @@ final class Transaction:
                     continuation.resume()
                 case .writeAndWait(let executor):
                     executor.writeRequestBodyPart(.byteBuffer(part), request: self, promise: nil)
-                case .fail:
-                    continuation.resume(throwing: BreakTheWriteLoopError())
+                case .fail(let error):
+                    continuation.resume(throwing: error)
                 }
             }
-        case .fail:
-            throw BreakTheWriteLoopError()
+        case .fail(let error):
+            throw error
         }
     }
 
@@ -166,7 +166,10 @@ final class Transaction:
     }
 
     private func requestBodyStreamFailed(_ error: Error) {
-        self.fail(error)
+        let action = self.state.withLockedValue { state in
+            state.requestBodyStreamFailed(error)
+        }
+        self.performFailAction(action)
     }
 }
 
@@ -256,9 +259,10 @@ extension Transaction: HTTPExecutableRequest {
     }
 
     func requestBodyStreamCancelled() {
-        self.state.withLockedValue { state in
+        let waitingWrite = self.state.withLockedValue { state in
             state.requestBodyStreamCancelled()
         }
+        waitingWrite?.resume(throwing: HTTPClientError.requestStreamCancelled)
     }
 
     func requestBodyStreamSent() {
