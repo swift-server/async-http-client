@@ -40,10 +40,8 @@ import Testing
             _ = try? await connection.channel.writeInbound(HTTPClientResponsePart.body(.tooLarge))
             _ = try? await connection.channel.writeInbound(HTTPClientResponsePart.end(nil))
 
-            await withKnownIssue("A short body after a rejection fails the response body") {
-                let responseBody = try await withDeadline { try await rejection.body.collect(upTo: 1024) }
-                #expect(responseBody == .tooLarge)
-            }
+            let responseBody = try await withDeadline { try await rejection.body.collect(upTo: 1024) }
+            #expect(responseBody == .tooLarge)
         }
     }
 }

@@ -335,15 +335,15 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
         case .wait:
             break
 
-        case .forwardResponseHead(let head, let pauseRequestBodyStream):
+        case .forwardResponseHead(let head, let cancelRequestBodyStream):
             // We can force unwrap the request here, as we have just validated in the state machine,
             // that the request is neither failed nor finished yet
             self.request!.receiveResponseHead(head)
-            if pauseRequestBodyStream, let request = self.request {
+            if cancelRequestBodyStream, self.request != nil {
                 // The above response head forward might lead the request to mark itself as
                 // cancelled, which in turn might pop the request of the handler. For this reason we
                 // must check if the request is still present here.
-                request.pauseRequestBodyStream()
+                self.cancelRequestBodyStream(context: context)
             }
 
         case .forwardResponseBodyParts(let buffer):
@@ -420,6 +420,16 @@ final class HTTP1ClientChannelHandler: ChannelDuplexHandler {
             context.writeAndFlush(self.wrapOutboundOut(.head(head)), promise: nil)
         }
         self.run(self.state.headSent(), context: context)
+    }
+
+    private func cancelRequestBodyStream(context: ChannelHandlerContext) {
+        if let writeTimeoutAction = self.idleWriteTimeoutStateMachine?.requestBodyStreamCancelled() {
+            self.runTimeoutAction(writeTimeoutAction, context: context)
+        }
+        if let readTimeoutAction = self.idleReadTimeoutStateMachine?.requestBodyStreamCancelled() {
+            self.runTimeoutAction(readTimeoutAction, context: context)
+        }
+        self.request!.requestBodyStreamCancelled()
     }
 
     private func runTimeoutAction(_ action: IdleReadStateMachine.Action, context: ChannelHandlerContext) {
@@ -642,6 +652,10 @@ struct IdleReadStateMachine {
         }
     }
 
+    mutating func requestBodyStreamCancelled() -> Action {
+        self.requestEndSent()
+    }
+
     mutating func channelRead(_ part: HTTPClientResponsePart) -> Action {
         switch self.state {
         case .waitingForRequestEnd:
@@ -680,6 +694,7 @@ struct IdleWriteStateMachine {
         case waitingForRequestEnd
         case waitingForWritabilityEnabled
         case requestEndSent
+        case requestBodyCancelled
     }
 
     private var state: State
@@ -699,7 +714,17 @@ struct IdleWriteStateMachine {
         case .waitingForRequestEnd, .waitingForWritabilityEnabled:
             self.state = .requestEndSent
             return .clearIdleWriteTimeoutTimer
-        case .requestEndSent:
+        case .requestEndSent, .requestBodyCancelled:
+            return .none
+        }
+    }
+
+    mutating func requestBodyStreamCancelled() -> Action {
+        switch self.state {
+        case .waitingForRequestEnd, .waitingForWritabilityEnabled:
+            self.state = .requestBodyCancelled
+            return .clearIdleWriteTimeoutTimer
+        case .requestEndSent, .requestBodyCancelled:
             return .none
         }
     }
@@ -712,6 +737,8 @@ struct IdleWriteStateMachine {
             return .none
         case .requestEndSent:
             preconditionFailure("If the request end has been sent, we can't write more data.")
+        case .requestBodyCancelled:
+            return .none
         }
     }
 
@@ -723,7 +750,7 @@ struct IdleWriteStateMachine {
         case .waitingForWritabilityEnabled:
             self.state = .requestEndSent
             return .none
-        case .requestEndSent:
+        case .requestEndSent, .requestBodyCancelled:
             return .none
         }
     }
@@ -736,7 +763,7 @@ struct IdleWriteStateMachine {
             case .waitingForWritabilityEnabled:
                 self.state = .waitingForRequestEnd
                 return .startIdleWriteTimeoutTimer(self.timeAmount)
-            case .requestEndSent:
+            case .requestEndSent, .requestBodyCancelled:
                 return .none
             }
         } else {
@@ -748,7 +775,7 @@ struct IdleWriteStateMachine {
                 preconditionFailure(
                     "If the channel was writable before, then we should have been waiting for more data."
                 )
-            case .requestEndSent:
+            case .requestEndSent, .requestBodyCancelled:
                 return .none
             }
         }

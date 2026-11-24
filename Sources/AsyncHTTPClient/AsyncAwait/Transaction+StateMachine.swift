@@ -282,6 +282,11 @@ extension Transaction {
             }
         }
 
+        mutating func requestBodyStreamCancelled() {
+            guard case .executing(let context, .producing, let responseState) = self.state else { return }
+            self.state = .executing(context, .paused(continuation: nil), responseState)
+        }
+
         enum NextWriteAction {
             case writeAndContinue(HTTPRequestExecutor)
             case writeAndWait(HTTPRequestExecutor)
