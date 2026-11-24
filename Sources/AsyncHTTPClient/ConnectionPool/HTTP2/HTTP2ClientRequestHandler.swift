@@ -227,15 +227,15 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
             // that the request is neither failed nor finished yet
             self.request!.resumeRequestBodyStream()
 
-        case .forwardResponseHead(let head, let pauseRequestBodyStream):
+        case .forwardResponseHead(let head, let cancelRequestBodyStream):
             // We can force unwrap the request here, as we have just validated in the state machine,
             // that the request is neither failed nor finished yet
             self.request!.receiveResponseHead(head)
-            if pauseRequestBodyStream, let request = self.request {
+            if cancelRequestBodyStream, self.request != nil {
                 // The above response head forward might lead the request to mark itself as
                 // cancelled, which in turn might pop the request of the handler. For this reason we
                 // must check if the request is still present here.
-                request.pauseRequestBodyStream()
+                self.cancelRequestBodyStream(context: context)
             }
 
         case .forwardResponseBodyParts(let parts):
@@ -286,9 +286,11 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         context: ChannelHandlerContext
     ) {
         switch action {
-        case .close, .none, .requestDone:
+        case .close:
+            context.close(promise: nil)
+        case .none, .requestDone:
             // The actions returned here come from an `HTTPRequestStateMachine` that assumes http/1.1
-            // semantics. For this reason we can ignore the close here, since an h2 stream is closed
+            // semantics. For this reason we can ignore them here, since an h2 stream is closed
             // after every request anyway.
             break
         }
@@ -311,6 +313,16 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         case .none:
             break
         }
+    }
+
+    private func cancelRequestBodyStream(context: ChannelHandlerContext) {
+        if let writeTimeoutAction = self.idleWriteTimeoutStateMachine?.requestBodyStreamCancelled() {
+            self.runTimeoutAction(writeTimeoutAction, context: context)
+        }
+        if let readTimeoutAction = self.idleReadTimeoutStateMachine?.requestBodyStreamCancelled() {
+            self.runTimeoutAction(readTimeoutAction, context: context)
+        }
+        self.request!.requestBodyStreamCancelled()
     }
 
     private func runTimeoutAction(_ action: IdleReadStateMachine.Action, context: ChannelHandlerContext) {

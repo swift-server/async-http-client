@@ -548,6 +548,16 @@ extension RequestBag: HTTPExecutableRequest {
         }
     }
 
+    func requestBodyStreamCancelled() {
+        if self.task.eventLoop.inEventLoop {
+            self.loopBoundState.value.state.requestBodyStreamCancelled()
+        } else {
+            self.task.eventLoop.execute {
+                self.loopBoundState.value.state.requestBodyStreamCancelled()
+            }
+        }
+    }
+
     func requestBodyStreamSent() {
         if self.task.eventLoop.inEventLoop {
             self.requestBodyStreamSent0()

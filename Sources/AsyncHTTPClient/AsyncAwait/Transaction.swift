@@ -255,6 +255,12 @@ extension Transaction: HTTPExecutableRequest {
         }
     }
 
+    func requestBodyStreamCancelled() {
+        self.state.withLockedValue { state in
+            state.requestBodyStreamCancelled()
+        }
+    }
+
     func requestBodyStreamSent() {
         let action = self.state.withLockedValue { state in
             state.requestBodyStreamSent()
