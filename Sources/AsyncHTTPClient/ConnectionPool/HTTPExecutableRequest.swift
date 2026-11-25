@@ -253,6 +253,12 @@ protocol HTTPExecutableRequest: AnyObject, Sendable {
     /// This will be called on the Channel's EventLoop. Do **not block** during your execution!
     func requestBodyStreamSent()
 
+    /// Will be called by the ChannelHandler if a response with a status of 300 or more cancelled the
+    /// request body stream.
+    ///
+    /// This will be called on the Channel's EventLoop. Do **not block** during your execution!
+    func requestBodyStreamCancelled()
+
     /// Receive a response head.
     ///
     /// Please note that `receiveResponseHead` and `receiveResponseBodyPart` may

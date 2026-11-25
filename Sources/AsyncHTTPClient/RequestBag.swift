@@ -193,6 +193,11 @@ final class RequestBag<Delegate: HTTPClientResponseDelegate & Sendable>: Sendabl
         self.loopBoundState.value.state.pauseRequestBodyStream()
     }
 
+    private func requestBodyStreamCancelled0() {
+        let waitingWrite = self.loopBoundState.value.state.requestBodyStreamCancelled()
+        waitingWrite?.fail(HTTPClientError.requestStreamCancelled)
+    }
+
     private func requestBodyStreamSent0() {
         // Intentionally empty: This hook is provided for consistency with the protocol
         // but requires no action in this implementation.
@@ -544,6 +549,16 @@ extension RequestBag: HTTPExecutableRequest {
         } else {
             self.task.eventLoop.execute {
                 self.pauseRequestBodyStream0()
+            }
+        }
+    }
+
+    func requestBodyStreamCancelled() {
+        if self.task.eventLoop.inEventLoop {
+            self.requestBodyStreamCancelled0()
+        } else {
+            self.task.eventLoop.execute {
+                self.requestBodyStreamCancelled0()
             }
         }
     }

@@ -109,7 +109,7 @@ struct HTTPRequestStateMachine {
         case pauseRequestBodyStream
         case resumeRequestBodyStream
 
-        case forwardResponseHead(HTTPResponseHead, pauseRequestBodyStream: Bool)
+        case forwardResponseHead(HTTPResponseHead, cancelRequestBodyStream: Bool)
         case forwardResponseBodyParts(CircularBuffer<ByteBuffer>)
         case forwardResponseEnd(FinalSuccessfulRequestAction, CircularBuffer<ByteBuffer>, HTTPHeaders?)
 
@@ -299,7 +299,7 @@ struct HTTPRequestStateMachine {
         case .running(.streaming(_, _, let producerState), .receivingBody(let head, _)) where head.status.code >= 300:
             // If we have already received a response head with status >= 300, we won't send out any
             // further request body bytes. Since the remote signaled with status >= 300, that it
-            // won't be interested. We expect that the producer has been informed to pause
+            // won't be interested. We expect that the producer has been informed to stop
             // producing.
             assert(producerState == .paused)
             return .failSendBodyPart(HTTPClientError.requestStreamCancelled, promise)
@@ -339,7 +339,7 @@ struct HTTPRequestStateMachine {
         case .finished:
             // A request may be finished, before we have send all parts. This might be the case if
             // the server responded with an HTTP status code that is equal or larger to 300
-            // (Redirection, Client Error or Server Error). In those cases we pause the request body
+            // (Redirection, Client Error or Server Error). In those cases we cancel the request body
             // stream as soon as we have received the response head and we succeed the request as
             // when response end is received. This may mean, that we succeed a request, even though
             // we have not sent all it's body parts.
@@ -372,6 +372,9 @@ struct HTTPRequestStateMachine {
             self.state = .running(.endSent, .waitingForHead)
             return .sendRequestEnd(trailers: trailers, promise, .none)
 
+        case .running(.streaming, .receivingBody(let head, _)) where head.status.code >= 300:
+            return .failSendStreamFinished(HTTPClientError.requestStreamCancelled, promise)
+
         case .running(
             .streaming(let expectedBodyLength, let sentBodyBytes, _),
             .receivingBody(let head, let streamState)
@@ -401,7 +404,7 @@ struct HTTPRequestStateMachine {
         case .finished:
             // A request may be finished, before we have send all parts. This might be the case if
             // the server responded with an HTTP status code that is equal or larger to 300
-            // (Redirection, Client Error or Server Error). In those cases we pause the request body
+            // (Redirection, Client Error or Server Error). In those cases we cancel the request body
             // stream as soon as we have received the response head and we succeed the request as
             // when response end is received. This may mean, that we succeed a request, even though
             // we have not sent all it's body parts.
@@ -547,7 +550,7 @@ struct HTTPRequestStateMachine {
                 .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: .paused),
                 .receivingBody(head, .init())
             )
-            return .forwardResponseHead(head, pauseRequestBodyStream: false)
+            return .forwardResponseHead(head, cancelRequestBodyStream: head.status.code >= 300)
 
         case .running(.streaming(let expectedBodyLength, let sentBodyBytes, producer: .producing), .waitingForHead):
             if head.status.code >= 300 {
@@ -555,7 +558,7 @@ struct HTTPRequestStateMachine {
                     .streaming(expectedBodyLength: expectedBodyLength, sentBodyBytes: sentBodyBytes, producer: .paused),
                     .receivingBody(head, .init())
                 )
-                return .forwardResponseHead(head, pauseRequestBodyStream: true)
+                return .forwardResponseHead(head, cancelRequestBodyStream: true)
             } else {
                 self.state = .running(
                     .streaming(
@@ -565,12 +568,12 @@ struct HTTPRequestStateMachine {
                     ),
                     .receivingBody(head, .init())
                 )
-                return .forwardResponseHead(head, pauseRequestBodyStream: false)
+                return .forwardResponseHead(head, cancelRequestBodyStream: false)
             }
 
         case .running(.endSent, .waitingForHead):
             self.state = .running(.endSent, .receivingBody(head, .init()))
-            return .forwardResponseHead(head, pauseRequestBodyStream: false)
+            return .forwardResponseHead(head, cancelRequestBodyStream: false)
 
         case .running(_, .receivingBody), .running(_, .endReceived), .finished:
             preconditionFailure(
@@ -726,6 +729,11 @@ struct HTTPRequestStateMachine {
 
     mutating func idleReadTimeoutTriggered() -> Action {
         switch self.state {
+        case .running(.streaming, .receivingBody(let head, _)) where head.status.code >= 300:
+            let error = HTTPClientError.readTimeout
+            self.state = .failed(error)
+            return .failRequest(error, .close(nil))
+
         case .initialized,
             .waitForChannelToBecomeWritable,
             .running(.streaming, _):

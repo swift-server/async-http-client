@@ -51,6 +51,7 @@ extension RequestBag {
             case producing
             case paused(EventLoopPromise<Void>?)
             case finished
+            case cancelled
         }
 
         fileprivate enum ResponseStreamState {
@@ -164,6 +165,9 @@ extension RequestBag.StateMachine {
             // request bytes. Can be ignored.
             return .none
 
+        case .executing(_, .cancelled, _):
+            return .none
+
         case .executing(_, .initialized, .buffering),
             .executing(_, .initialized, .waitingForRemote),
             .executing(_, .initialized, .endReceived):
@@ -201,6 +205,8 @@ extension RequestBag.StateMachine {
                 // the channels writability changed to not writable after we have forwarded the
                 // last bytes from our side.
                 break
+            case .cancelled:
+                break
             }
         case .redirected:
             // if we are redirected, we should cancel our request body stream anyway
@@ -208,6 +214,28 @@ extension RequestBag.StateMachine {
         case .finished:
             // the request is already finished nothing further to do
             break
+        case .modifying:
+            preconditionFailure("Invalid state: \(self.state)")
+        }
+    }
+
+    mutating func requestBodyStreamCancelled() -> EventLoopPromise<Void>? {
+        switch self.state {
+        case .initialized, .queued, .deadlineExceededWhileQueued:
+            preconditionFailure("A request stream can only be cancelled, if the request was started")
+        case .executing(let executor, let requestState, let responseState):
+            switch requestState {
+            case .initialized, .producing:
+                self.state = .executing(executor, .cancelled, responseState)
+                return nil
+            case .paused(let promise):
+                self.state = .executing(executor, .cancelled, responseState)
+                return promise
+            case .finished, .cancelled:
+                return nil
+            }
+        case .redirected, .finished:
+            return nil
         case .modifying:
             preconditionFailure("Invalid state: \(self.state)")
         }
@@ -247,6 +275,9 @@ extension RequestBag.StateMachine {
                 let error = HTTPClientError.writeAfterRequestSent
                 self.state = .finished(error: error)
                 return .failTask(error)
+
+            case .cancelled:
+                return .failFuture(HTTPClientError.requestStreamCancelled)
             }
         case .redirected:
             // if we are redirected we can cancel the upload stream
@@ -311,6 +342,9 @@ extension RequestBag.StateMachine {
 
             case .finished:
                 preconditionFailure("How can a finished request stream, be finished again?")
+
+            case .cancelled:
+                return .none
             }
         case .redirected:
             return .none
@@ -469,7 +503,7 @@ extension RequestBag.StateMachine {
                     self.state = .executing(executor, requestState, .endReceived)
                     return .none
 
-                case .finished:
+                case .finished, .cancelled:
                     self.state = .finished(error: nil)
                     return .succeedRequest
                 }

@@ -33,7 +33,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
         XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
@@ -85,7 +85,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
         XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
@@ -165,7 +165,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let responseHead = HTTPResponseHead(version: .http1_1, status: .movedPermanently)
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: true)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: true)
         )
         XCTAssertEqual(state.writabilityChanged(writable: false), .wait)
         XCTAssertEqual(state.writabilityChanged(writable: true), .wait)
@@ -173,6 +173,10 @@ class HTTPRequestStateMachineTests: XCTestCase {
             state.requestStreamPartReceived(part, promise: nil),
             .failSendBodyPart(HTTPClientError.requestStreamCancelled, nil),
             "Expected to drop all stream data after having received a response head, with status >= 300"
+        )
+        XCTAssertEqual(
+            state.requestStreamFinished(trailers: nil, promise: nil),
+            .failSendStreamFinished(HTTPClientError.requestStreamCancelled, nil)
         )
 
         XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.close, [], nil))
@@ -227,7 +231,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let responseHead = HTTPResponseHead(version: .http1_1, status: .movedPermanently)
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: true)
         )
         XCTAssertEqual(state.writabilityChanged(writable: true), .wait)
         XCTAssertEqual(
@@ -271,7 +275,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.none, [], nil))
 
@@ -310,7 +314,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
 
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: 4...7))
@@ -344,21 +348,19 @@ class HTTPRequestStateMachineTests: XCTestCase {
         XCTAssertEqual(state.requestStreamPartReceived(part0, promise: nil), .sendBodyPart(part0, nil))
 
         // The server rejects the upload without reading the rest of it. The state machine takes
-        // this in stride and asks us to pause the body stream.
+        // this in stride and cancels the body stream.
         let responseHead = HTTPResponseHead(version: .http1_1, status: .payloadTooLarge)
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: true)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: true)
         )
 
-        // Pausing is not cancelling, so the producer may still finish. This is the trap: the
-        // action below is the correct one, and the assert crashes before it can be returned.
         XCTAssertEqual(
             state.requestStreamFinished(trailers: nil, promise: nil),
-            .sendRequestEnd(trailers: nil, nil, .none)
+            .failSendStreamFinished(HTTPClientError.requestStreamCancelled, nil)
         )
 
-        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.requestDone, [], nil))
+        XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.close, [], nil))
     }
 
     func testRequestIsFailedIfRequestBodySizeIsWrongEvenAfterServerRespondedWith200() {
@@ -381,7 +383,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.none, [], nil))
 
@@ -414,7 +416,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
 
         let part1 = IOData.byteBuffer(ByteBuffer(bytes: 4...7))
@@ -437,7 +439,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
         XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
@@ -469,7 +471,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         )
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         let part0 = ByteBuffer(bytes: 0...3)
         let part1 = ByteBuffer(bytes: 4...7)
@@ -506,7 +508,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         )
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         let part0 = ByteBuffer(bytes: 0...3)
         let part1 = ByteBuffer(bytes: 4...7)
@@ -543,7 +545,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         )
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         let part0 = ByteBuffer(bytes: 0...3)
         let part1 = ByteBuffer(bytes: 4...7)
@@ -601,7 +603,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok, headers: ["content-length": "4"])
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         let responseBody = ByteBuffer(bytes: [1, 2, 3, 4])
         XCTAssertEqual(state.channelRead(.body(responseBody)), .wait)
@@ -656,7 +658,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         )
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         let part0 = ByteBuffer(bytes: 0...3)
         XCTAssertEqual(state.channelRead(.body(part0)), .wait)
@@ -682,7 +684,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.requestDone, [], nil))
         XCTAssertEqual(state.channelReadComplete(), .wait)
@@ -701,7 +703,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.requestDone, [], nil))
         XCTAssertEqual(state.idleReadTimeoutTriggered(), .wait, "A read timeout that fires to late must be ignored")
@@ -719,7 +721,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         XCTAssertEqual(state.channelRead(.end(nil)), .forwardResponseEnd(.requestDone, [], nil))
         XCTAssertEqual(state.requestCancelled(), .wait, "A cancellation that happens to late is ignored")
@@ -753,7 +755,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let responseHead = HTTPResponseHead(version: .http1_0, status: .internalServerError)
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
         XCTAssertEqual(state.channelReadComplete(), .wait)
@@ -776,7 +778,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let body = ByteBuffer(string: "foo bar")
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
         XCTAssertEqual(state.channelReadComplete(), .wait)
@@ -805,7 +807,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let body = ByteBuffer(string: "foo bar")
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
         XCTAssertEqual(state.channelReadComplete(), .wait)
@@ -829,7 +831,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let body = ByteBuffer(string: "foo bar")
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
         XCTAssertEqual(state.channelRead(.body(body)), .wait)
@@ -878,7 +880,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let body = ByteBuffer(string: "foo bar")
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
         XCTAssertEqual(state.read(), .read)
@@ -905,7 +907,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let body = ByteBuffer(string: "foo bar")
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
         XCTAssertEqual(state.channelReadComplete(), .wait)
@@ -932,7 +934,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let body = ByteBuffer(string: "foo bar")
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
         XCTAssertEqual(state.channelReadComplete(), .wait)
@@ -959,7 +961,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let body = ByteBuffer(string: "foo bar")
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
         XCTAssertEqual(state.channelReadComplete(), .wait)
@@ -985,7 +987,7 @@ class HTTPRequestStateMachineTests: XCTestCase {
         let body = ByteBuffer(string: "foo bar")
         XCTAssertEqual(
             state.channelRead(.head(responseHead)),
-            .forwardResponseHead(responseHead, pauseRequestBodyStream: false)
+            .forwardResponseHead(responseHead, cancelRequestBodyStream: false)
         )
         XCTAssertEqual(state.demandMoreResponseBodyParts(), .wait)
         XCTAssertEqual(state.channelReadComplete(), .wait)
@@ -1040,10 +1042,10 @@ extension HTTPRequestStateMachine.Action: Equatable {
             return true
 
         case (
-            .forwardResponseHead(let lhsHead, let lhsPauseRequestBodyStream),
-            .forwardResponseHead(let rhsHead, let rhsPauseRequestBodyStream)
+            .forwardResponseHead(let lhsHead, let lhsCancelRequestBodyStream),
+            .forwardResponseHead(let rhsHead, let rhsCancelRequestBodyStream)
         ):
-            return lhsHead == rhsHead && lhsPauseRequestBodyStream == rhsPauseRequestBodyStream
+            return lhsHead == rhsHead && lhsCancelRequestBodyStream == rhsCancelRequestBodyStream
 
         case (.forwardResponseBodyParts(let lhsData), .forwardResponseBodyParts(let rhsData)):
             return lhsData == rhsData

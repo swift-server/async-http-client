@@ -130,6 +130,10 @@ final private class MockScheduledRequest: HTTPSchedulableRequest {
         preconditionFailure("Unimplemented")
     }
 
+    func requestBodyStreamCancelled() {
+        preconditionFailure("Unimplemented")
+    }
+
     func receiveResponseHead(_: HTTPResponseHead) {
         preconditionFailure("Unimplemented")
     }
