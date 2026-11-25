@@ -64,7 +64,7 @@ struct HTTP1ConnectionStateMachine {
         case pauseRequestBodyStream
         case resumeRequestBodyStream
 
-        case forwardResponseHead(HTTPResponseHead, pauseRequestBodyStream: Bool)
+        case forwardResponseHead(HTTPResponseHead, cancelRequestBodyStream: Bool)
         case forwardResponseBodyParts(CircularBuffer<ByteBuffer>)
         case forwardResponseEnd(FinalSuccessfulStreamAction, CircularBuffer<ByteBuffer>, HTTPHeaders?)
 
@@ -452,8 +452,8 @@ extension HTTP1ConnectionStateMachine.State {
             }
             return .sendRequestEnd(trailers: trailers, writePromise, newFinalAction)
 
-        case .forwardResponseHead(let head, let pauseRequestBodyStream):
-            return .forwardResponseHead(head, pauseRequestBodyStream: pauseRequestBodyStream)
+        case .forwardResponseHead(let head, let cancelRequestBodyStream):
+            return .forwardResponseHead(head, cancelRequestBodyStream: cancelRequestBodyStream)
         case .forwardResponseBodyParts(let parts):
             return .forwardResponseBodyParts(parts)
         case .forwardResponseEnd(let finalAction, let finalParts, let trailers):

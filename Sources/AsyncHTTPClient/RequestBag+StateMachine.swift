@@ -213,6 +213,11 @@ extension RequestBag.StateMachine {
         }
     }
 
+    mutating func requestBodyStreamCancelled() {
+        guard case .executing(let executor, .producing, let responseState) = self.state else { return }
+        self.state = .executing(executor, .paused(nil), responseState)
+    }
+
     enum WriteAction {
         case write(IOData, HTTPRequestExecutor, EventLoopFuture<Void>)
 

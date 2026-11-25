@@ -29,6 +29,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
             case resumeRequestBodyStream
             case pauseRequestBodyStream
             case requestBodySent
+            case requestBodyStreamCancelled
             case receiveResponseHead
             case receiveResponseBodyParts
             case receiveResponseEnd
@@ -40,6 +41,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
         case resumeRequestBodyStream
         case pauseRequestBodyStream
         case requestBodySent
+        case requestBodyStreamCancelled
         case receiveResponseHead(HTTPResponseHead)
         case receiveResponseBodyParts(CircularBuffer<ByteBuffer>)
         case receiveResponseEnd(CircularBuffer<ByteBuffer>?, HTTPHeaders?)
@@ -52,6 +54,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
             case .resumeRequestBodyStream: return .resumeRequestBodyStream
             case .pauseRequestBodyStream: return .pauseRequestBodyStream
             case .requestBodySent: return .requestBodySent
+            case .requestBodyStreamCancelled: return .requestBodyStreamCancelled
             case .receiveResponseHead: return .receiveResponseHead
             case .receiveResponseBodyParts: return .receiveResponseBodyParts
             case .receiveResponseEnd: return .receiveResponseEnd
@@ -78,6 +81,7 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
         var resumeRequestBodyStreamCallback: (@Sendable () -> Void)? = nil
         var pauseRequestBodyStreamCallback: (@Sendable () -> Void)? = nil
         var requestBodyStreamSentCallback: (@Sendable () -> Void)? = nil
+        var requestBodyStreamCancelledCallback: (@Sendable () -> Void)? = nil
         var receiveResponseHeadCallback: (@Sendable (HTTPResponseHead) -> Void)? = nil
         var receiveResponseBodyPartsCallback: (@Sendable (CircularBuffer<ByteBuffer>) -> Void)? = nil
         var receiveResponseEndCallback: (@Sendable (CircularBuffer<ByteBuffer>?, HTTPHeaders?) -> Void)? = nil
@@ -109,6 +113,11 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
     var requestBodyStreamSentCallback: (@Sendable () -> Void)? {
         get { self.callbacks.withLockedValue { $0.requestBodyStreamSentCallback } }
         set { self.callbacks.withLockedValue { $0.requestBodyStreamSentCallback = newValue } }
+    }
+
+    var requestBodyStreamCancelledCallback: (@Sendable () -> Void)? {
+        get { self.callbacks.withLockedValue { $0.requestBodyStreamCancelledCallback } }
+        set { self.callbacks.withLockedValue { $0.requestBodyStreamCancelledCallback = newValue } }
     }
 
     var receiveResponseHeadCallback: (@Sendable (HTTPResponseHead) -> Void)? {
@@ -202,6 +211,14 @@ final class MockHTTPExecutableRequest: HTTPExecutableRequest {
             return self.calledUnimplementedMethod(#function)
         }
         requestBodyStreamSentCallback()
+    }
+
+    func requestBodyStreamCancelled() {
+        self.events.append(.requestBodyStreamCancelled)
+        guard let requestBodyStreamCancelledCallback = self.requestBodyStreamCancelledCallback else {
+            return self.calledUnimplementedMethod(#function)
+        }
+        requestBodyStreamCancelledCallback()
     }
 
     func receiveResponseHead(_ head: HTTPResponseHead) {
