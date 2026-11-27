@@ -113,6 +113,54 @@ HTTPClient.shared.execute(request: request).whenComplete { result in
 }
 ```
 
+#### Simple JSON request
+
+See [Examples/JSON/JSON.swift](./Examples/JSON/JSON.swift) for a simple JSON HTTP GET and POST example.
+
+```swift
+import AsyncHTTPClient
+import NIOFoundationCompat
+
+struct Car: Codable {
+    var make: String
+    var model: String
+    var year: Int
+}
+
+static func getJSON() async throws {
+    let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
+    let car: Car = Car(make: "Toyota", model: "Camry", year: 2023)
+    let request = HTTPClientRequest(url: "https://api.example.com/cars/123")
+    let response = try await httpClient.execute(request, timeout: .seconds(30))
+    
+    let carData = try await response.body.collect(upTo: 1024 * 1024) // 1 MB
+    let car: Car = try JSONDecoder().decode(Car.self, from: carData)
+    try await httpClient.shutdown()
+}
+
+static func postJSON() async throws {
+    let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
+    let car: Car = Car(make: "Toyota", model: "Camry", year: 2023)
+    let jsonData = try JSONEncoder().encode(car)
+
+    var request = HTTPClientRequest(url: "https://api.example.com/cars/123")
+    request.headers.add(name: "Content-Type", value: "application/json")
+    request.headers.add(name: "Accept", value: "application/json")
+    request.method = .POST
+    request.body = .bytes(jsonData)    
+    
+    // Execute the request
+    let response = try await httpClient.execute(request, timeout: .seconds(30))
+    
+    // Process the response
+    let responseData = try await response.body.collect(upTo: 1024 * 1024) // 1 MB
+    let returnedCar = try JSONDecoder().decode(Car.self, from: responseData)
+    
+    try await httpClient.shutdown()
+}
+```
+
+
 ### Redirects following
 
 The globally shared instance `HTTPClient.shared` follows redirects by default. If you create your own `HTTPClient`, you can enable the follow-redirects behavior using the client configuration:
