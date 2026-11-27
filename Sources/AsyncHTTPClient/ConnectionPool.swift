@@ -50,19 +50,22 @@ enum ConnectionPool {
         private var tlsConfiguration: BestEffortHashableTLSConfiguration?
         var serverNameIndicatorOverride: String?
         var localAddress: String?
+        var localPort: Int
 
         init(
             scheme: Scheme,
             connectionTarget: ConnectionTarget,
             tlsConfiguration: BestEffortHashableTLSConfiguration? = nil,
             serverNameIndicatorOverride: String?,
-            localAddress: String? = nil
+            localAddress: String? = nil,
+            localPort: Int = 0
         ) {
             self.scheme = scheme
             self.connectionTarget = connectionTarget
             self.tlsConfiguration = tlsConfiguration
             self.serverNameIndicatorOverride = serverNameIndicatorOverride
             self.localAddress = localAddress
+            self.localPort = localPort
         }
 
         var description: String {
@@ -82,6 +85,9 @@ enum ConnectionPool {
                 "\(self.scheme)://\(hostDescription)\(self.serverNameIndicatorOverride.map { " SNI: \($0)" } ?? "") TLS-hash: \(hash)"
             if let addr = self.localAddress {
                 result += " bind: \(addr)"
+                if self.localPort != 0 {
+                    result += ":\(self.localPort)"
+                }
             }
             return result
         }
@@ -108,7 +114,8 @@ extension ConnectionPool.Key {
         url: DeconstructedURL,
         tlsConfiguration: TLSConfiguration?,
         dnsOverride: [String: String],
-        localAddress: String? = nil
+        localAddress: String? = nil,
+        localPort: Int = 0
     ) {
         let (connectionTarget, serverNameIndicatorOverride) = url.applyDNSOverride(dnsOverride)
         self.init(
@@ -118,16 +125,23 @@ extension ConnectionPool.Key {
                 BestEffortHashableTLSConfiguration(wrapping: $0)
             },
             serverNameIndicatorOverride: serverNameIndicatorOverride,
-            localAddress: localAddress
+            localAddress: localAddress,
+            localPort: localPort
         )
     }
 
-    init(_ request: HTTPClient.Request, dnsOverride: [String: String] = [:], localAddress: String? = nil) {
+    init(
+        _ request: HTTPClient.Request,
+        dnsOverride: [String: String] = [:],
+        localAddress: String? = nil,
+        localPort: Int = 0
+    ) {
         self.init(
             url: request.deconstructedURL,
             tlsConfiguration: request.tlsConfiguration,
             dnsOverride: dnsOverride,
-            localAddress: localAddress
+            localAddress: localAddress,
+            localPort: localPort
         )
     }
 }
