@@ -24,6 +24,9 @@ import Musl
 import Android
 #elseif os(Linux) || os(FreeBSD)
 import Glibc
+#elseif os(Windows)
+import ucrt
+import WinSDK
 #else
 #error("unsupported target operating system")
 #endif
