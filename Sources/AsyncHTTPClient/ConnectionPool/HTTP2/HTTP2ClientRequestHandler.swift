@@ -30,6 +30,8 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         }
     }
 
+    private var requestEndSent = false
+
     /// while we are in a channel pipeline, this context can be used.
     private var channelContext: ChannelHandlerContext?
 
@@ -205,6 +207,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
                 request.requestBodyStreamSent()
             }
 
+            self.requestEndSent = true
             context.writeAndFlush(self.wrapOutboundOut(.end(trailers)), promise: promise)
 
             if let readTimeoutAction = self.idleReadTimeoutStateMachine?.requestEndSent() {
@@ -272,6 +275,7 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
 
     private func sendRequestHead(_ head: HTTPRequestHead, sendEnd: Bool, context: ChannelHandlerContext) {
         if sendEnd {
+            self.requestEndSent = true
             context.write(self.wrapOutboundOut(.head(head)), promise: nil)
             context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
             context.flush()
@@ -286,6 +290,11 @@ final class HTTP2ClientRequestHandler: ChannelDuplexHandler {
         context: ChannelHandlerContext
     ) {
         switch action {
+        case .close where !self.requestEndSent:
+            self.eventLoop.assumeIsolated().execute {
+                guard let context = self.channelContext, context.channel.isActive else { return }
+                context.close(promise: nil)
+            }
         case .close, .none, .requestDone:
             // The actions returned here come from an `HTTPRequestStateMachine` that assumes http/1.1
             // semantics. For this reason we can ignore the close here, since an h2 stream is closed
