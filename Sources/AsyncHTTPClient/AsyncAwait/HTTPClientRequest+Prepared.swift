@@ -60,6 +60,12 @@ extension HTTPClientRequest.Prepared {
         localAddress: String? = nil,
         tracing: HTTPClient.TracingConfiguration? = nil
     ) throws {
+        if case .delegateBody? = request.body?.mode {
+            // The body of a request a redirect strategy was handed by the delegate-based API. It can only go back
+            // to that API, so refuse it here instead of trapping further down.
+            throw HTTPClientError.redirectStrategyBodyNotSupported
+        }
+
         guard !request.url.isEmpty, let url = URL(string: request.url) else {
             throw HTTPClientError.invalidURL
         }
@@ -114,6 +120,14 @@ extension HTTPClientRequest.Prepared.Body {
             )
         case .byteBuffer(let byteBuffer):
             self = .byteBuffer(byteBuffer)
+        case .delegateBody:
+            // Only ever produced by the delegate-based redirect-strategy bridge
+            // (`RedirectStrategyDelegateBridge.swift`), which converts it back into a
+            // `HTTPClient.Body` (`asDelegateBody()`) rather than routing it through the
+            // Concurrency API's own request preparation.
+            fatalError(
+                "`.delegateBody` never reaches `HTTPClientRequest.Prepared` -- it is unwrapped via `asDelegateBody()` instead."
+            )
         #if UnstableHTTPAPIsSupport
         case .httpClientRequestBody(let length, let requestBody):
             self = .httpClientRequestBody(length, requestBody)
@@ -132,6 +146,10 @@ extension RequestBodyLength {
             self = .known(Int64(buffer.readableBytes))
         case .sequence(let length, _, _), .asyncSequence(let length, _):
             self = length
+        case .delegateBody:
+            fatalError(
+                "`.delegateBody` never reaches `HTTPClientRequest.Prepared` -- it is unwrapped via `asDelegateBody()` instead."
+            )
         #if UnstableHTTPAPIsSupport
         case .httpClientRequestBody(let length, _):
             self = length

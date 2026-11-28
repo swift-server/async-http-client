@@ -26,6 +26,17 @@ class HTTPClientRequestTests: XCTestCase {
 
     private typealias PreparedRequest = HTTPClientRequest.Prepared
 
+    func testPreparingARequestWithTheBodyOfADelegateRequestThrows() throws {
+        // The strategy of the delegate-based API is handed requests like this one. Executing it through the
+        // Swift Concurrency API must fail, not crash.
+        let delegateRequest = try HTTPClient.Request(url: "https://example.com/post", method: .POST, body: .string("a"))
+        let request = Request(delegateRequest: delegateRequest)
+
+        XCTAssertThrowsError(try PreparedRequest(request)) {
+            XCTAssertEqual($0 as? HTTPClientError, .redirectStrategyBodyNotSupported)
+        }
+    }
+
     func testCustomHeadersAreRespected() {
         XCTAsyncTest {
             var request = Request(url: "https://example.com/get")
