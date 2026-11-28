@@ -60,6 +60,12 @@ extension HTTPClientRequest.Prepared {
         localAddress: String? = nil,
         tracing: HTTPClient.TracingConfiguration? = nil
     ) throws {
+        if case .delegateBody? = request.body?.mode {
+            // The body of a request a redirect strategy was handed by the delegate-based API. It can only go back
+            // to that API, so refuse it here instead of trapping further down.
+            throw HTTPClientError.redirectStrategyBodyNotSupported
+        }
+
         guard !request.url.isEmpty, let url = URL(string: request.url) else {
             throw HTTPClientError.invalidURL
         }

@@ -1791,7 +1791,9 @@ public struct HTTPClientError: Error, Equatable, CustomStringConvertible {
     public static let invalidProxyConfiguration = HTTPClientError(code: .invalidProxyConfiguration)
 
     /// A ``HTTPClientRedirectStrategy`` returned a request body the delegate-based
-    /// `execute(request:delegate:...)` API can't drain at redirect-decision time.
+    /// `execute(request:delegate:...)` API can't drain at redirect-decision time. Also thrown by the
+    /// Swift Concurrency `execute(_:deadline:logger:)` if the request it is given still has the body of
+    /// the request that the delegate-based API offered to a strategy: that body can't be sent through it.
     public static let redirectStrategyBodyNotSupported = HTTPClientError(code: .redirectStrategyBodyNotSupported)
 
     /// A state machine has reached an unsupported state, that wasn't considered when implementing.
